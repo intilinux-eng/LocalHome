@@ -1,0 +1,13 @@
+secrets.json
+secrets_ewelink.json
+tinytuya.json
+devices.json
+snapshot.json
+positions.json
+history.db
+tuya-raw.json
+*.local.json
+.env
+__pycache__/
+*.pyc
+*.log
