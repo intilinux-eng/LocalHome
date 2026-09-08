@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d13;
+      --bg-glow: radial-gradient(circle at 20% 0%, #1c2740 0%, #0b0d13 55%);
+      --card: rgba(255,255,255,0.055);
+      --card-border: rgba(255,255,255,0.09);
+      --text: #eef1f8;
+      --text-dim: #8a90a3;
+      --accent-open: #30d158;
+      --accent-stop: #ff9f0a;
+      --accent-close: #ff453a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      background: var(--bg) var(--bg-glow);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+    #summary {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+    .global-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .pill {
+      flex: 1;
+      padding: 13px 0;
+      border: none;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: white;
+      transition: transform 0.1s ease, opacity 0.1s ease;
+    }
+    .pill:active { transform: scale(0.97); opacity: 0.85; }
+    .pill.open { background: linear-gradient(135deg, #30d158, #1fa746); }
+    .pill.close { background: linear-gradient(135deg, #ff453a, #d1362c); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .card-head h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    .state {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+
+    .visual {
+      position: relative;
+      height: 110px;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      background: linear-gradient(180deg, #2a4a7a 0%, #6fa3d8 45%, #cfe6f7 100%);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .visual::after {
+      /* window mullion */
+      content: "";
+      position: absolute;
+      top: 0; bottom: 0; left: 50%;
+      width: 2px;
+      background: rgba(255,255,255,0.35);
+    }
+    .cover {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 0%;
+      background: repeating-linear-gradient(
+        0deg,
+        #4a4f5c 0px, #4a4f5c 7px,
+        #5c6270 7px, #5c6270 14px
+      );
+      box-shadow: 0 3px 6px rgba(0,0,0,0.45) inset, 0 2px 3px rgba(0,0,0,0.3);
+      transition: height 0.4s ease;
+    }
+    .cover::after {
+      /* bottom bar of the shutter */
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 6px;
+      background: #363a44;
+    }
+    .pct-badge {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+      color: white;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .icon-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 0;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      color: white;
+      transition: transform 0.1s ease, opacity 0.1s ease;
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .icon-btn:active { transform: scale(0.94); opacity: 0.85; }
+    .icon-btn.open { background: rgba(48,209,88,0.18); color: var(--accent-open); }
+    .icon-btn.stop { background: rgba(255,159,10,0.18); color: var(--accent-stop); }
+    .icon-btn.close { background: rgba(255,69,58,0.18); color: var(--accent-close); }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    input[type=range] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    input[type=range]:disabled { opacity: 0.4; }
+    .pct {
+      width: 3em;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .energy-card {
+      background: linear-gradient(135deg, rgba(255,159,10,0.14), rgba(255,255,255,0.04));
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+    .energy-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .energy-title {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #555;
+      display: inline-block;
+    }
+    .dot.on { background: var(--accent-open); box-shadow: 0 0 6px var(--accent-open); }
+    .energy-power {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .energy-power span {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-left: 4px;
+    }
+    .energy-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .energy-stat {
+      text-align: center;
+    }
+    .energy-stat .value {
+      font-size: 0.86rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .energy-stat .value.critical { color: #e66767; }
+    .energy-stat .label {
+      font-size: 0.64rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .limit-note {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .limit-note .swatch {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      background: rgba(214,59,59,0.35);
+      border: 1px solid #d63b3b;
+      display: inline-block;
+    }
+
+    .chart-filters {
+      display: flex;
+      gap: 6px;
+      margin-top: 16px;
+    }
+    .range-btn {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-dim);
+      border: none;
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .range-btn.active {
+      background: rgba(57,135,229,0.28);
+      color: #ffffff;
+    }
+    .chart-wrap {
+      position: relative;
+      margin-top: 10px;
+    }
+    #power-chart {
+      width: 100%;
+      height: 120px;
+      display: block;
+      overflow: visible;
+    }
+    .chart-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(0,0,0,0.8);
+      color: #ffffff;
+      font-size: 0.72rem;
+      padding: 4px 9px;
+      border-radius: 7px;
+      white-space: nowrap;
+      transform: translate(-50%, -115%);
+      z-index: 2;
+    }
+    .chart-tooltip .val { font-weight: 700; }
+    .chart-empty {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 30px 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Home</h1>
+    <div id="summary"></div>
+  </header>
+
+  <div class="energy-card">
+    <div class="energy-top">
+      <span class="energy-title"><span class="dot" id="energy-dot"></span><span id="energy-name">Power</span></span>
+      <span class="state" id="energy-updated"></span>
+    </div>
+    <div class="energy-power" id="energy-power">-- <span>W</span></div>
+    <div class="energy-grid">
+      <div class="energy-stat"><div class="value" id="energy-voltage">--</div><div class="label">Volt</div></div>
+      <div class="energy-stat"><div class="value" id="energy-current">--</div><div class="label">Amp</div></div>
+      <div class="energy-stat"><div class="value" id="energy-peak">--</div><div class="label">Peak today</div></div>
+      <div class="energy-stat"><div class="value" id="energy-day">--</div><div class="label">Today kWh</div></div>
+      <div class="energy-stat"><div class="value" id="energy-month">--</div><div class="label">Month kWh</div></div>
+    </div>
+
+    <div class="chart-filters">
+      <button class="range-btn" data-range="6h">6h</button>
+      <button class="range-btn active" data-range="24h">24h</button>
+      <button class="range-btn" data-range="7d">7d</button>
+    </div>
+    <div class="chart-wrap">
+      <svg id="power-chart" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
+      <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+    </div>
+    <div class="limit-note"><span class="swatch"></span> 4.95 kW safe indefinitely · 4.95-6 kW ok for hours · above 6 kW trips in ~2 min</div>
+  </div>
+
+  <div class="global-buttons">
+    <button class="pill open" onclick="sendAction('all', 'open')">Open all</button>
+    <button class="pill close" onclick="sendAction('all', 'close')">Close all</button>
+  </div>
+  <div id="cards"></div>
+
+  <script>
+    const names = {{ names | tojson }};
+    const cardsEl = document.getElementById("cards");
+    const summaryEl = document.getElementById("summary");
+
+    const ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+    const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
+    const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+    function slug(name) {
+      return name.replace(/[^a-z0-9]/gi, "-");
+    }
+
+    function setVisual(name, percent) {
+      const cover = document.getElementById(`cover-${slug(name)}`);
+      const badge = document.getElementById(`badge-${slug(name)}`);
+      if (cover) cover.style.height = `${100 - percent}%`;
+      if (badge) badge.textContent = percent === 0 ? "Closed" : (percent === 100 ? "Open" : `${percent}%`);
+    }
+
+    function render() {
+      cardsEl.innerHTML = names.map(name => `
+        <div class="card">
+          <div class="card-head">
+            <h2>${name}</h2>
+            <span class="state" id="state-${slug(name)}">loading...</span>
+          </div>
+
+          <div class="visual">
+            <div class="cover" id="cover-${slug(name)}"></div>
+            <span class="pct-badge" id="badge-${slug(name)}">--</span>
+          </div>
+
+          <div class="buttons">
+            <button class="icon-btn open" onclick="sendAction('${name}', 'open')" title="Open">${ICON_OPEN}</button>
+            <button class="icon-btn stop" onclick="sendAction('${name}', 'stop')" title="Stop">${ICON_STOP}</button>
+            <button class="icon-btn close" onclick="sendAction('${name}', 'close')" title="Close">${ICON_CLOSE}</button>
+          </div>
+
+          <div class="slider-row">
+            <input type="range" min="0" max="100" value="0"
+                   class="pct-slider" id="slider-${slug(name)}" data-name="${name}">
+            <span class="pct" id="pct-${slug(name)}">0%</span>
+          </div>
+        </div>
+      `).join("");
+
+      // iOS Safari's native range input only responds to dragging the
+      // round thumb; tapping elsewhere on the track does nothing. Add
+      // manual tap-to-jump support so it behaves like on Android/desktop.
+      document.querySelectorAll(".pct-slider").forEach(slider => {
+        const name = slider.dataset.name;
+        const pctEl = document.getElementById(`pct-${slug(name)}`);
+
+        slider.addEventListener("input", () => {
+          pctEl.textContent = slider.value + "%";
+          setVisual(name, parseInt(slider.value, 10));
+        });
+        slider.addEventListener("change", () => {
+          movePercent(name, slider.value);
+        });
+
+        slider.addEventListener("pointerdown", (e) => {
+          const rect = slider.getBoundingClientRect();
+          const thumbX = rect.left + (slider.value / 100) * rect.width;
+          if (Math.abs(e.clientX - thumbX) > 20) {
+            const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+            const value = Math.round(ratio * 100);
+            slider.value = value;
+            pctEl.textContent = value + "%";
+            setVisual(name, value);
+            movePercent(name, value);
+          }
+        });
+      });
+    }
+
+    function updateSummary(percents) {
+      const openCount = percents.filter(p => p > 0).length;
+      summaryEl.textContent = `${openCount} of ${percents.length} open`;
+    }
+
+    async function refreshStatus() {
+      const percents = [];
+      for (const name of names) {
+        const stateEl = document.getElementById(`state-${slug(name)}`);
+        const sliderEl = document.getElementById(`slider-${slug(name)}`);
+        const pctEl = document.getElementById(`pct-${slug(name)}`);
+        try {
+          const res = await fetch(`/api/status/${encodeURIComponent(name)}`);
+          const data = await res.json();
+          if (data.ok) {
+            stateEl.textContent = data.state + (data.calibrated ? "" : " · uncalibrated");
+            percents.push(data.percent);
+            if (document.activeElement !== sliderEl) {
+              sliderEl.value = data.percent;
+              pctEl.textContent = `${data.percent}%`;
+              setVisual(name, data.percent);
+            }
+          } else {
+            stateEl.textContent = `error: ${data.error}`;
+          }
+        } catch (e) {
+          stateEl.textContent = "unreachable";
+        }
+      }
+      updateSummary(percents);
+    }
+
+    async function sendAction(name, action) {
+      const targets = name === "all" ? names : [name];
+      for (const n of targets) {
+        const stateEl = document.getElementById(`state-${slug(n)}`);
+        if (stateEl) stateEl.textContent = `${action}ing...`;
+        setVisual(n, action === "open" ? 100 : (action === "close" ? 0 : null));
+      }
+      try {
+        const res = await fetch(`/api/action/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+        const data = await res.json();
+        if (!data.ok) alert(`error: ${data.error}`);
+      } catch (e) {
+        alert("request failed");
+      }
+      setTimeout(refreshStatus, 1000);
+    }
+
+    async function movePercent(name, percent) {
+      const stateEl = document.getElementById(`state-${slug(name)}`);
+      const sliderEl = document.getElementById(`slider-${slug(name)}`);
+      stateEl.textContent = `moving to ${percent}%...`;
+      sliderEl.disabled = true;
+      try {
+        const res = await fetch(`/api/position/${encodeURIComponent(name)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ percent: parseInt(percent, 10) }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          alert(`error: ${data.error}`);
+          sliderEl.disabled = false;
+          refreshStatus();
+          return;
+        }
+        setTimeout(() => {
+          sliderEl.disabled = false;
+          refreshStatus();
+        }, (data.duration || 0) * 1000 + 500);
+      } catch (e) {
+        alert("request failed");
+        sliderEl.disabled = false;
+      }
+    }
+
+    async function refreshEnergy() {
+      const dot = document.getElementById("energy-dot");
+      const nameEl = document.getElementById("energy-name");
+      const powerEl = document.getElementById("energy-power");
+      const updatedEl = document.getElementById("energy-updated");
+      try {
+        const res = await fetch("/api/energy");
+        const data = await res.json();
+        if (data.ok) {
+          dot.classList.toggle("on", data.online);
+          nameEl.textContent = data.name || "Power";
+          powerEl.innerHTML = `${data.power_w.toFixed(0)} <span>W</span>`;
+          document.getElementById("energy-voltage").textContent = data.voltage_v.toFixed(0) + " V";
+          document.getElementById("energy-current").textContent = data.current_a.toFixed(2) + " A";
+          document.getElementById("energy-day").textContent = data.day_kwh.toFixed(2);
+          document.getElementById("energy-month").textContent = data.month_kwh.toFixed(1);
+
+          const peakEl = document.getElementById("energy-peak");
+          peakEl.textContent = data.peak_today_w.toFixed(0) + " W";
+          peakEl.classList.toggle("critical", data.trip_risk_w && data.peak_today_w >= data.trip_risk_w);
+
+          updatedEl.textContent = data.seconds_since_update != null ? `${data.seconds_since_update}s ago` : "";
+        } else {
+          updatedEl.textContent = data.error;
+        }
+      } catch (e) {
+        updatedEl.textContent = "unreachable";
+      }
+    }
+
+    // --- power history bar chart, with IRETI's real 3-zone tolerance ---
+    // Zone 1 (<= available_power_w): drawable indefinitely, no risk.
+    // Zone 2 (up to trip_risk_w): tolerated for >=3h, soft warning only.
+    // Zone 3 (above trip_risk_w): breaker trips within ~2 minutes.
+    const CHART_W = 400, CHART_H = 130, CHART_PAD_L = 34, CHART_PAD_TOP = 8, CHART_PAD_BOTTOM = 16;
+    const SERIES_COLOR = "#3987e5";
+    const WARNING_COLOR = "#fab219";
+    const CRITICAL_COLOR = "#d63b3b";
+    let currentRange = "24h";
+    let chartPoints = [];
+
+    function zoneColor(w, availableW, tripRiskW) {
+      if (w >= tripRiskW) return CRITICAL_COLOR;
+      if (w >= availableW) return WARNING_COLOR;
+      return SERIES_COLOR;
+    }
+
+    function niceMax(value) {
+      if (value <= 0) return 100;
+      const pow = Math.pow(10, Math.floor(Math.log10(value)));
+      const steps = [1, 2, 2.5, 5, 10];
+      for (const step of steps) {
+        if (value <= step * pow) return step * pow;
+      }
+      return 10 * pow;
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts * 1000);
+      if (currentRange === "7d") {
+        return d.toLocaleDateString([], { weekday: "short", hour: "2-digit" });
+      }
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function drawChart(points, availableW, tripRiskW) {
+      chartPoints = points;
+      const svg = document.getElementById("power-chart");
+      svg.innerHTML = "";
+
+      if (!points || points.length < 2) {
+        svg.innerHTML = `<foreignObject x="0" y="0" width="${CHART_W}" height="${CHART_H}">
+          <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">not enough data yet</div>
+        </foreignObject>`;
+        return;
+      }
+
+      // The y-axis always reaches past the trip-risk line, even when usage
+      // is low right now — that headroom is exactly what the reader wants to see.
+      const dataMax = Math.max(...points.map(p => p.power_w));
+      const maxVal = Math.max(niceMax(dataMax * 1.2), tripRiskW * 1.1);
+      const minTs = points[0].ts, maxTs = points[points.length - 1].ts;
+      const plotW = CHART_W - CHART_PAD_L;
+      const plotH = CHART_H - CHART_PAD_TOP - CHART_PAD_BOTTOM;
+      const baseY = CHART_PAD_TOP + plotH;
+
+      const xOf = ts => CHART_PAD_L + ((ts - minTs) / Math.max(1, maxTs - minTs)) * plotW;
+      const yOf = w => CHART_PAD_TOP + plotH - (Math.min(w, maxVal) / maxVal) * plotH;
+
+      const ns = "http://www.w3.org/2000/svg";
+      const svgEl = (tag, attrs) => {
+        const el = document.createElementNS(ns, tag);
+        for (const k in attrs) el.setAttribute(k, attrs[k]);
+        return el;
+      };
+
+      // gridlines + axis labels (0, mid, max)
+      [0, 0.5, 1].forEach(frac => {
+        const y = CHART_PAD_TOP + plotH * (1 - frac);
+        svg.appendChild(svgEl("line", {
+          x1: CHART_PAD_L, x2: CHART_W, y1: y, y2: y,
+          stroke: "#2c2c2a", "stroke-width": 1,
+        }));
+        const label = svgEl("text", {
+          x: CHART_PAD_L - 6, y: y + 3, "text-anchor": "end",
+          fill: "#898781", "font-size": 9,
+        });
+        label.textContent = Math.round(maxVal * frac);
+        svg.appendChild(label);
+      });
+
+      // zone 2 band (tolerated for hours): available_power_w -> trip_risk_w
+      const availY = yOf(availableW), tripY = yOf(tripRiskW);
+      svg.appendChild(svgEl("rect", {
+        x: CHART_PAD_L, y: tripY, width: plotW, height: Math.max(0, availY - tripY),
+        fill: WARNING_COLOR, opacity: 0.08,
+      }));
+      // zone 3 band (trip risk within ~2min): above trip_risk_w
+      svg.appendChild(svgEl("rect", {
+        x: CHART_PAD_L, y: CHART_PAD_TOP, width: plotW, height: Math.max(0, tripY - CHART_PAD_TOP),
+        fill: CRITICAL_COLOR, opacity: 0.10,
+      }));
+
+      // dashed reference lines
+      const refLine = (val, color, label) => {
+        if (val > maxVal) return;
+        const y = yOf(val);
+        svg.appendChild(svgEl("line", {
+          x1: CHART_PAD_L, x2: CHART_W, y1: y, y2: y,
+          stroke: color, "stroke-width": 1, "stroke-dasharray": "4,3", opacity: 0.85,
+        }));
+        const t = svgEl("text", {
+          x: CHART_W, y: y - 3, "text-anchor": "end",
+          fill: color, "font-size": 8.5, "font-weight": 700,
+        });
+        t.textContent = label;
+        svg.appendChild(t);
+      };
+      refLine(tripRiskW, CRITICAL_COLOR, `trip risk (${(tripRiskW / 1000).toFixed(1)}kW)`);
+      refLine(availableW, WARNING_COLOR, `safe limit (${(availableW / 1000).toFixed(2)}kW)`);
+
+      // bars — 70% of each time slot's width, rounded top, square baseline;
+      // colored by which of the three IRETI zones the reading falls in.
+      const slotW = points.length > 1 ? xOf(points[1].ts) - xOf(points[0].ts) : plotW;
+      const barW = Math.max(2, Math.min(24, slotW * 0.7));
+      points.forEach(p => {
+        const x = xOf(p.ts) - barW / 2;
+        const y = yOf(p.power_w);
+        const h = Math.max(1, baseY - y);
+        svg.appendChild(svgEl("rect", {
+          x, y, width: barW, height: h, rx: Math.min(4, barW / 2),
+          fill: zoneColor(p.power_w, availableW, tripRiskW), "data-ts": p.ts, "data-w": p.power_w,
+          class: "power-bar",
+        }));
+      });
+
+      // hit layer for pointer tracking
+      const hit = svgEl("rect", {
+        x: CHART_PAD_L, y: 0, width: plotW, height: CHART_H,
+        fill: "transparent",
+      });
+      hit.addEventListener("pointermove", (e) => onChartHover(e, svg, xOf));
+      hit.addEventListener("pointerleave", hideTooltip);
+      svg.appendChild(hit);
+    }
+
+    function onChartHover(e, svg, xOf) {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = CHART_W / rect.width;
+      const x = (e.clientX - rect.left) * scaleX;
+
+      let nearest = chartPoints[0];
+      let best = Infinity;
+      for (const p of chartPoints) {
+        const dist = Math.abs(xOf(p.ts) - x);
+        if (dist < best) { best = dist; nearest = p; }
+      }
+
+      svg.querySelectorAll(".power-bar").forEach(bar => {
+        bar.style.filter = Number(bar.dataset.ts) === nearest.ts ? "brightness(1.3)" : "";
+      });
+
+      const tooltip = document.getElementById("chart-tooltip");
+      tooltip.hidden = false;
+      tooltip.innerHTML = "";
+      const valSpan = document.createElement("span");
+      valSpan.className = "val";
+      valSpan.textContent = `${nearest.power_w.toFixed(0)} W`;
+      tooltip.appendChild(valSpan);
+      tooltip.appendChild(document.createTextNode(" · " + formatTime(nearest.ts)));
+
+      const pxRatio = rect.width / CHART_W;
+      tooltip.style.left = (xOf(nearest.ts) * pxRatio) + "px";
+      tooltip.style.top = "0px";
+    }
+
+    function hideTooltip() {
+      document.getElementById("chart-tooltip").hidden = true;
+      document.querySelectorAll(".power-bar").forEach(bar => { bar.style.filter = ""; });
+    }
+
+    async function loadChart() {
+      try {
+        const res = await fetch(`/api/energy/history?range=${currentRange}`);
+        const data = await res.json();
+        if (data.ok) drawChart(data.points, data.available_power_w, data.trip_risk_w);
+      } catch (e) {
+        // keep previous render on failure
+      }
+    }
+
+    document.querySelectorAll(".range-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentRange = btn.dataset.range;
+        loadChart();
+      });
+    });
+
+    render();
+    refreshStatus();
+    refreshEnergy();
+    loadChart();
+    setInterval(refreshStatus, 8000);
+    setInterval(refreshEnergy, 5000);
+    setInterval(loadChart, 60000);
+  </script>
+</body>
+</html>
