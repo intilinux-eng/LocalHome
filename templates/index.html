@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Home</title>
+  <title>Casa</title>
   <style>
     :root {
       color-scheme: dark;
@@ -20,18 +20,21 @@
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      max-width: 480px;
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 20px 16px 40px;
+      padding: 20px 16px 48px;
       background: var(--bg) var(--bg-glow);
       color: var(--text);
       min-height: 100vh;
+    }
+    @media (min-width: 720px) {
+      body { padding: 32px 32px 56px; }
     }
     header {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
     h1 {
       font-size: 1.5rem;
@@ -42,33 +45,82 @@
       font-size: 0.85rem;
       color: var(--text-dim);
     }
-    .global-buttons {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 8px;
     }
-    .pill {
-      flex: 1;
-      padding: 13px 0;
+    .dashboard-grid .energy-card,
+    .dashboard-grid .aq-card {
+      margin-bottom: 0;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 30px 0 14px;
+    }
+    .section-head h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: -0.01em;
+    }
+    .section-head h2 svg {
+      width: 19px;
+      height: 19px;
+      color: var(--text-dim);
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+    .tbtn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       border: none;
-      border-radius: 14px;
-      font-size: 0.95rem;
+      border-radius: 12px;
+      padding: 9px 14px;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       color: white;
       transition: transform 0.1s ease, opacity 0.1s ease;
     }
-    .pill:active { transform: scale(0.97); opacity: 0.85; }
-    .pill.open { background: linear-gradient(135deg, #30d158, #1fa746); }
-    .pill.close { background: linear-gradient(135deg, #ff453a, #d1362c); }
+    .tbtn svg { width: 14px; height: 14px; }
+    .tbtn:active { transform: scale(0.96); opacity: 0.85; }
+    .tbtn.open { background: linear-gradient(135deg, #30d158, #1fa746); }
+    .tbtn.close { background: linear-gradient(135deg, #ff453a, #d1362c); }
+
+    .shutters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
 
     .card {
       background: var(--card);
       border: 1px solid var(--card-border);
       backdrop-filter: blur(20px);
       border-radius: 20px;
-      padding: 16px;
-      margin-bottom: 14px;
+      padding: 14px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    @media (hover: hover) {
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255,255,255,0.16);
+        box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+      }
     }
     .card-head {
       display: flex;
@@ -77,7 +129,7 @@
       margin-bottom: 10px;
     }
     .card-head h2 {
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       margin: 0;
     }
@@ -88,12 +140,22 @@
 
     .visual {
       position: relative;
-      height: 110px;
+      height: 96px;
       border-radius: 14px;
       overflow: hidden;
-      margin-bottom: 14px;
-      background: linear-gradient(180deg, #2a4a7a 0%, #6fa3d8 45%, #cfe6f7 100%);
+      margin-bottom: 12px;
+      background: linear-gradient(180deg, #1e3a5f 0%, #4a7ab8 42%, #a8d4e8 75%, #cfe6f7 100%);
       border: 1px solid rgba(255,255,255,0.12);
+    }
+    .visual::before {
+      /* little sun, purely decorative */
+      content: "";
+      position: absolute;
+      top: 10px; right: 12px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ffe9a8, #ffd166 70%);
+      box-shadow: 0 0 12px 3px rgba(255,209,102,0.45);
     }
     .visual::after {
       /* window mullion */
@@ -243,8 +305,8 @@
     }
     .energy-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+      gap: 10px 6px;
     }
     .energy-stat {
       text-align: center;
@@ -255,6 +317,12 @@
       font-variant-numeric: tabular-nums;
     }
     .energy-stat .value.critical { color: #e66767; }
+    .energy-stat .value-sub {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+      margin-top: 1px;
+    }
     .energy-stat .label {
       font-size: 0.64rem;
       color: var(--text-dim);
@@ -274,6 +342,13 @@
       background: rgba(214,59,59,0.35);
       border: 1px solid #d63b3b;
       display: inline-block;
+    }
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 3px;
     }
 
     .chart-filters {
@@ -305,6 +380,12 @@
       display: block;
       overflow: visible;
     }
+    #climate-chart {
+      width: 100%;
+      height: 104px;
+      display: block;
+      overflow: visible;
+    }
     .chart-tooltip {
       position: absolute;
       pointer-events: none;
@@ -324,45 +405,246 @@
       text-align: center;
       padding: 30px 0;
     }
+
+    .aq-card {
+      background: linear-gradient(135deg, rgba(57,135,229,0.14), rgba(255,255,255,0.04));
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+    .aq-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .aq-headline {
+      display: flex;
+      gap: 22px;
+      margin-bottom: 14px;
+    }
+    .aq-headline .big {
+      font-size: 1.9rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .aq-headline .big span {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-left: 2px;
+    }
+    .aq-headline .label {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .aq-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+      gap: 8px 6px;
+      border-top: 1px solid var(--card-border);
+      padding-top: 12px;
+    }
+    .aq-grid .value.warn {
+      color: #fab219;
+    }
+    .aq-grid .value.critical {
+      color: #e66767;
+    }
+
+    .plug-card {
+      background: linear-gradient(135deg, rgba(48,209,88,0.14), rgba(255,255,255,0.04));
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+    .plug-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .plug-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .plug-power {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .plug-power span {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-left: 4px;
+    }
+    .plug-sub {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .switch {
+      position: relative;
+      width: 52px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+    .switch input { display: none; }
+    .switch .track {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.18);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .switch .track::before {
+      content: "";
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      transition: transform 0.15s ease;
+    }
+    .switch input:checked + .track {
+      background: var(--accent-open);
+    }
+    .switch input:checked + .track::before {
+      transform: translateX(22px);
+    }
+    .switch input:disabled + .track {
+      opacity: 0.5;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>Home</h1>
+    <h1>Casa</h1>
     <div id="summary"></div>
   </header>
 
+  <div class="dashboard-grid">
   <div class="energy-card">
     <div class="energy-top">
-      <span class="energy-title"><span class="dot" id="energy-dot"></span><span id="energy-name">Power</span></span>
+      <span class="energy-title"><span class="dot" id="energy-dot"></span><span id="energy-name">Consumo Casa</span></span>
       <span class="state" id="energy-updated"></span>
     </div>
     <div class="energy-power" id="energy-power">-- <span>W</span></div>
     <div class="energy-grid">
-      <div class="energy-stat"><div class="value" id="energy-voltage">--</div><div class="label">Volt</div></div>
-      <div class="energy-stat"><div class="value" id="energy-current">--</div><div class="label">Amp</div></div>
-      <div class="energy-stat"><div class="value" id="energy-peak">--</div><div class="label">Peak today</div></div>
-      <div class="energy-stat"><div class="value" id="energy-day">--</div><div class="label">Today kWh</div></div>
-      <div class="energy-stat"><div class="value" id="energy-month">--</div><div class="label">Month kWh</div></div>
+      <div class="energy-stat"><div class="value" id="energy-voltage">--</div><div class="label">Tensione</div></div>
+      <div class="energy-stat"><div class="value" id="energy-current">--</div><div class="label">Corrente</div></div>
+      <div class="energy-stat">
+        <div class="value" id="energy-peak">--</div>
+        <div class="value-sub" id="energy-peak-time"></div>
+        <div class="label">Picco oggi</div>
+      </div>
+      <div class="energy-stat"><div class="value" id="energy-day">--</div><div class="label">Oggi kWh</div></div>
+      <div class="energy-stat"><div class="value" id="energy-month">--</div><div class="label">Mese kWh</div></div>
     </div>
 
     <div class="chart-filters">
       <button class="range-btn" data-range="6h">6h</button>
       <button class="range-btn active" data-range="24h">24h</button>
-      <button class="range-btn" data-range="7d">7d</button>
+      <button class="range-btn" data-range="7d">7g</button>
     </div>
     <div class="chart-wrap">
       <svg id="power-chart" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
       <div class="chart-tooltip" id="chart-tooltip" hidden></div>
     </div>
-    <div class="limit-note"><span class="swatch"></span> 4.95 kW safe indefinitely · 4.95-6 kW ok for hours · above 6 kW trips in ~2 min</div>
+    <div class="limit-note"><span class="swatch"></span> 4.95 kW sicuro senza limiti · 4.95-6 kW ok per alcune ore · oltre 6 kW scatta in ~2 min</div>
   </div>
 
-  <div class="global-buttons">
-    <button class="pill open" onclick="sendAction('all', 'open')">Open all</button>
-    <button class="pill close" onclick="sendAction('all', 'close')">Close all</button>
+  <div class="aq-card">
+    <div class="aq-top">
+      <span class="energy-title"><span class="dot" id="aq-dot"></span><span id="aq-name">Qualità aria</span></span>
+      <span class="state" id="aq-updated"></span>
+    </div>
+    <div class="aq-headline">
+      <div>
+        <div class="big" id="aq-index">--</div>
+        <div class="label">Qualità aria</div>
+      </div>
+      <div>
+        <div class="big" id="aq-temp">-- <span>&deg;C</span></div>
+        <div class="label">Temperatura</div>
+      </div>
+      <div>
+        <div class="big" id="aq-hum">-- <span>%</span></div>
+        <div class="label">Umidità</div>
+      </div>
+    </div>
+    <div class="aq-grid">
+      <div class="energy-stat"><div class="value" id="aq-co2">--</div><div class="label">CO2 ppm</div></div>
+      <div class="energy-stat"><div class="value" id="aq-ch2o">--</div><div class="label">CH2O mg/m3</div></div>
+      <div class="energy-stat"><div class="value" id="aq-voc">--</div><div class="label">VOC mg/m3</div></div>
+      <div class="energy-stat"><div class="value" id="aq-pm25">--</div><div class="label">PM2.5</div></div>
+      <div class="energy-stat"><div class="value" id="aq-pm10">--</div><div class="label">PM10</div></div>
+      <div class="energy-stat"><div class="value" id="aq-batt">--</div><div class="label">Batteria</div></div>
+    </div>
+
+    <div class="chart-filters">
+      <button class="range-btn climate-range-btn" data-range="6h">6h</button>
+      <button class="range-btn climate-range-btn active" data-range="24h">24h</button>
+      <button class="range-btn climate-range-btn" data-range="7d">7g</button>
+    </div>
+    <div class="chart-wrap">
+      <svg id="climate-chart" viewBox="0 0 400 110" preserveAspectRatio="none"></svg>
+      <div class="chart-tooltip" id="climate-tooltip" hidden></div>
+    </div>
+    <div class="limit-note">
+      <span class="legend-dot" style="background:#ff9f0a"></span> Temperatura
+      <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> Umidità
+    </div>
   </div>
-  <div id="cards"></div>
+
+  <div class="plug-card">
+    <div class="plug-top">
+      <span class="energy-title"><span class="dot" id="plug-dot"></span><span id="plug-name">Presa</span></span>
+      <span class="state" id="plug-updated"></span>
+    </div>
+    <div class="plug-body">
+      <div>
+        <div class="plug-power" id="plug-power">-- <span>W</span></div>
+        <div class="plug-sub" id="plug-sub"></div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="plug-switch" onchange="onPlugSwitch(this)">
+        <span class="track"></span>
+      </label>
+    </div>
+  </div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="11" x2="21" y2="11"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+        Tapparelle
+      </h2>
+      <div class="toolbar">
+        <button class="tbtn open" onclick="sendAction('all', 'open')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          Apri tutte
+        </button>
+        <button class="tbtn close" onclick="sendAction('all', 'close')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          Chiudi tutte
+        </button>
+      </div>
+    </div>
+    <div id="cards" class="shutters-grid"></div>
+  </section>
 
   <script>
     const names = {{ names | tojson }};
@@ -381,15 +663,17 @@
       const cover = document.getElementById(`cover-${slug(name)}`);
       const badge = document.getElementById(`badge-${slug(name)}`);
       if (cover) cover.style.height = `${100 - percent}%`;
-      if (badge) badge.textContent = percent === 0 ? "Closed" : (percent === 100 ? "Open" : `${percent}%`);
+      if (badge) badge.textContent = percent === 0 ? "Chiusa" : (percent === 100 ? "Aperta" : `${percent}%`);
     }
+
+    const STATE_LABELS = { open: "apertura", close: "chiusura", stop: "ferma", unknown: "sconosciuto" };
 
     function render() {
       cardsEl.innerHTML = names.map(name => `
         <div class="card">
           <div class="card-head">
             <h2>${name}</h2>
-            <span class="state" id="state-${slug(name)}">loading...</span>
+            <span class="state" id="state-${slug(name)}">caricamento...</span>
           </div>
 
           <div class="visual">
@@ -398,9 +682,9 @@
           </div>
 
           <div class="buttons">
-            <button class="icon-btn open" onclick="sendAction('${name}', 'open')" title="Open">${ICON_OPEN}</button>
+            <button class="icon-btn open" onclick="sendAction('${name}', 'open')" title="Apri">${ICON_OPEN}</button>
             <button class="icon-btn stop" onclick="sendAction('${name}', 'stop')" title="Stop">${ICON_STOP}</button>
-            <button class="icon-btn close" onclick="sendAction('${name}', 'close')" title="Close">${ICON_CLOSE}</button>
+            <button class="icon-btn close" onclick="sendAction('${name}', 'close')" title="Chiudi">${ICON_CLOSE}</button>
           </div>
 
           <div class="slider-row">
@@ -443,7 +727,7 @@
 
     function updateSummary(percents) {
       const openCount = percents.filter(p => p > 0).length;
-      summaryEl.textContent = `${openCount} of ${percents.length} open`;
+      summaryEl.textContent = `${openCount} su ${percents.length} aperte`;
     }
 
     async function refreshStatus() {
@@ -456,7 +740,8 @@
           const res = await fetch(`/api/status/${encodeURIComponent(name)}`);
           const data = await res.json();
           if (data.ok) {
-            stateEl.textContent = data.state + (data.calibrated ? "" : " · uncalibrated");
+            const label = STATE_LABELS[data.state] || data.state;
+            stateEl.textContent = label + (data.calibrated ? "" : " · non calibrata");
             percents.push(data.percent);
             if (document.activeElement !== sliderEl) {
               sliderEl.value = data.percent;
@@ -464,28 +749,30 @@
               setVisual(name, data.percent);
             }
           } else {
-            stateEl.textContent = `error: ${data.error}`;
+            stateEl.textContent = `errore: ${data.error}`;
           }
         } catch (e) {
-          stateEl.textContent = "unreachable";
+          stateEl.textContent = "non raggiungibile";
         }
       }
       updateSummary(percents);
     }
 
+    const ACTION_LABELS = { open: "apertura in corso...", close: "chiusura in corso...", stop: "arresto in corso..." };
+
     async function sendAction(name, action) {
       const targets = name === "all" ? names : [name];
       for (const n of targets) {
         const stateEl = document.getElementById(`state-${slug(n)}`);
-        if (stateEl) stateEl.textContent = `${action}ing...`;
+        if (stateEl) stateEl.textContent = ACTION_LABELS[action] || "";
         setVisual(n, action === "open" ? 100 : (action === "close" ? 0 : null));
       }
       try {
         const res = await fetch(`/api/action/${encodeURIComponent(name)}/${action}`, { method: "POST" });
         const data = await res.json();
-        if (!data.ok) alert(`error: ${data.error}`);
+        if (!data.ok) alert(`errore: ${data.error}`);
       } catch (e) {
-        alert("request failed");
+        alert("richiesta fallita");
       }
       setTimeout(refreshStatus, 1000);
     }
@@ -493,7 +780,7 @@
     async function movePercent(name, percent) {
       const stateEl = document.getElementById(`state-${slug(name)}`);
       const sliderEl = document.getElementById(`slider-${slug(name)}`);
-      stateEl.textContent = `moving to ${percent}%...`;
+      stateEl.textContent = `spostamento al ${percent}%...`;
       sliderEl.disabled = true;
       try {
         const res = await fetch(`/api/position/${encodeURIComponent(name)}`, {
@@ -503,7 +790,7 @@
         });
         const data = await res.json();
         if (!data.ok) {
-          alert(`error: ${data.error}`);
+          alert(`errore: ${data.error}`);
           sliderEl.disabled = false;
           refreshStatus();
           return;
@@ -513,7 +800,7 @@
           refreshStatus();
         }, (data.duration || 0) * 1000 + 500);
       } catch (e) {
-        alert("request failed");
+        alert("richiesta fallita");
         sliderEl.disabled = false;
       }
     }
@@ -528,7 +815,7 @@
         const data = await res.json();
         if (data.ok) {
           dot.classList.toggle("on", data.online);
-          nameEl.textContent = data.name || "Power";
+          nameEl.textContent = data.name || "Consumo Casa";
           powerEl.innerHTML = `${data.power_w.toFixed(0)} <span>W</span>`;
           document.getElementById("energy-voltage").textContent = data.voltage_v.toFixed(0) + " V";
           document.getElementById("energy-current").textContent = data.current_a.toFixed(2) + " A";
@@ -539,13 +826,120 @@
           peakEl.textContent = data.peak_today_w.toFixed(0) + " W";
           peakEl.classList.toggle("critical", data.trip_risk_w && data.peak_today_w >= data.trip_risk_w);
 
-          updatedEl.textContent = data.seconds_since_update != null ? `${data.seconds_since_update}s ago` : "";
+          const peakTimeEl = document.getElementById("energy-peak-time");
+          peakTimeEl.textContent = data.peak_today_ts
+            ? new Date(data.peak_today_ts * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })
+            : "";
+
+          updatedEl.textContent = data.seconds_since_update != null ? `${data.seconds_since_update}s fa` : "";
         } else {
           updatedEl.textContent = data.error;
         }
       } catch (e) {
-        updatedEl.textContent = "unreachable";
+        updatedEl.textContent = "non raggiungibile";
       }
+    }
+
+    const AQ_LEVELS = {
+      level_1: { label: "Ottima", cls: "" },
+      level_2: { label: "Buona", cls: "" },
+      level_3: { label: "Moderata", cls: "" },
+      level_4: { label: "Inquinamento lieve", cls: "warn" },
+      level_5: { label: "Inquinamento elevato", cls: "critical" },
+      level_6: { label: "Inquinamento grave", cls: "critical" },
+    };
+
+    async function refreshAirQuality() {
+      const dot = document.getElementById("aq-dot");
+      const nameEl = document.getElementById("aq-name");
+      const updatedEl = document.getElementById("aq-updated");
+      try {
+        const res = await fetch("/api/air-quality");
+        const data = await res.json();
+        if (data.ok) {
+          dot.classList.add("on");
+          nameEl.textContent = data.name || "Qualità aria";
+
+          const level = AQ_LEVELS[data.air_quality_index] || { label: data.air_quality_index || "--", cls: "" };
+          const indexEl = document.getElementById("aq-index");
+          indexEl.textContent = level.label;
+          indexEl.className = "big " + level.cls;
+
+          document.getElementById("aq-temp").innerHTML = `${data.temperature_c.toFixed(1)} <span>&deg;C</span>`;
+          document.getElementById("aq-hum").innerHTML = `${data.humidity_pct.toFixed(0)} <span>%</span>`;
+          document.getElementById("aq-co2").textContent = data.co2_ppm;
+          document.getElementById("aq-ch2o").textContent = data.ch2o_mgm3.toFixed(3);
+          document.getElementById("aq-voc").textContent = data.voc_mgm3.toFixed(3);
+          document.getElementById("aq-pm25").textContent = data.pm25_ugm3;
+          document.getElementById("aq-pm10").textContent = data.pm10_ugm3;
+          document.getElementById("aq-batt").textContent = data.battery_pct + "%";
+
+          updatedEl.textContent = data.seconds_since_update != null ? `${data.seconds_since_update}s fa` : "";
+        } else {
+          dot.classList.remove("on");
+          updatedEl.textContent = data.error || "errore";
+        }
+      } catch (e) {
+        dot.classList.remove("on");
+        updatedEl.textContent = "non raggiungibile";
+      }
+    }
+
+    let plugBusy = false;
+
+    async function refreshPlug() {
+      if (plugBusy) return;
+      const dot = document.getElementById("plug-dot");
+      const nameEl = document.getElementById("plug-name");
+      const powerEl = document.getElementById("plug-power");
+      const subEl = document.getElementById("plug-sub");
+      const updatedEl = document.getElementById("plug-updated");
+      const switchEl = document.getElementById("plug-switch");
+      try {
+        const res = await fetch("/api/plug");
+        const data = await res.json();
+        if (data.ok) {
+          dot.classList.toggle("on", data.online === "ONLINE" || data.is_on);
+          nameEl.textContent = data.name || "Presa";
+          powerEl.innerHTML = data.power_w != null ? `${data.power_w.toFixed(0)} <span>W</span>` : `<span>${data.is_on ? "accesa" : "spenta"}</span>`;
+          subEl.textContent = data.voltage_v != null ? `${data.voltage_v.toFixed(0)} V · ${data.current_a.toFixed(2)} A` : "";
+          switchEl.checked = !!data.is_on;
+          switchEl.disabled = false;
+          updatedEl.textContent = data.seconds_since_update != null ? `${data.seconds_since_update}s fa` : "";
+        } else {
+          dot.classList.remove("on");
+          updatedEl.textContent = data.error || "errore";
+        }
+      } catch (e) {
+        dot.classList.remove("on");
+        updatedEl.textContent = "non raggiungibile";
+      }
+    }
+
+    async function onPlugSwitch(el) {
+      const turningOff = !el.checked;
+      if (turningOff) {
+        const ok = confirm("Sei sicuro di voler spegnere questa presa? Controlla prima cosa alimenta.");
+        if (!ok) {
+          el.checked = true;
+          return;
+        }
+      }
+      plugBusy = true;
+      el.disabled = true;
+      try {
+        const res = await fetch(`/api/plug/${el.checked ? "on" : "off"}`, { method: "POST" });
+        const data = await res.json();
+        if (!data.ok) {
+          alert(`errore: ${data.error}`);
+          el.checked = !el.checked;
+        }
+      } catch (e) {
+        alert("richiesta fallita");
+        el.checked = !el.checked;
+      }
+      plugBusy = false;
+      setTimeout(refreshPlug, 1000);
     }
 
     // --- power history bar chart, with IRETI's real 3-zone tolerance ---
@@ -575,12 +969,12 @@
       return 10 * pow;
     }
 
-    function formatTime(ts) {
+    function formatTime(ts, range) {
       const d = new Date(ts * 1000);
-      if (currentRange === "7d") {
-        return d.toLocaleDateString([], { weekday: "short", hour: "2-digit" });
+      if (range === "7d") {
+        return d.toLocaleDateString("it-IT", { weekday: "short", hour: "2-digit" });
       }
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
     }
 
     function drawChart(points, availableW, tripRiskW) {
@@ -590,7 +984,7 @@
 
       if (!points || points.length < 2) {
         svg.innerHTML = `<foreignObject x="0" y="0" width="${CHART_W}" height="${CHART_H}">
-          <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">not enough data yet</div>
+          <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">dati non ancora sufficienti</div>
         </foreignObject>`;
         return;
       }
@@ -656,8 +1050,8 @@
         t.textContent = label;
         svg.appendChild(t);
       };
-      refLine(tripRiskW, CRITICAL_COLOR, `trip risk (${(tripRiskW / 1000).toFixed(1)}kW)`);
-      refLine(availableW, WARNING_COLOR, `safe limit (${(availableW / 1000).toFixed(2)}kW)`);
+      refLine(tripRiskW, CRITICAL_COLOR, `rischio scatto (${(tripRiskW / 1000).toFixed(1)}kW)`);
+      refLine(availableW, WARNING_COLOR, `limite sicuro (${(availableW / 1000).toFixed(2)}kW)`);
 
       // bars — 70% of each time slot's width, rounded top, square baseline;
       // colored by which of the three IRETI zones the reading falls in.
@@ -707,7 +1101,7 @@
       valSpan.className = "val";
       valSpan.textContent = `${nearest.power_w.toFixed(0)} W`;
       tooltip.appendChild(valSpan);
-      tooltip.appendChild(document.createTextNode(" · " + formatTime(nearest.ts)));
+      tooltip.appendChild(document.createTextNode(" · " + formatTime(nearest.ts, currentRange)));
 
       const pxRatio = rect.width / CHART_W;
       tooltip.style.left = (xOf(nearest.ts) * pxRatio) + "px";
@@ -729,22 +1123,179 @@
       }
     }
 
-    document.querySelectorAll(".range-btn").forEach(btn => {
+    // --- climate history: dual-axis line chart (temperature + humidity) ---
+    const CLIMATE_H = 110, CLIMATE_PAD_R = 34;
+    const TEMP_COLOR = "#ff9f0a";
+    const HUM_COLOR = "#3987e5";
+    let currentClimateRange = "24h";
+    let climatePoints = [];
+
+    function niceBounds(values, pad, step) {
+      const min = Math.min(...values) - pad;
+      const max = Math.max(...values) + pad;
+      return [Math.floor(min / step) * step, Math.ceil(max / step) * step];
+    }
+
+    function drawClimateChart(points) {
+      climatePoints = points;
+      const svg = document.getElementById("climate-chart");
+      svg.innerHTML = "";
+
+      if (!points || points.length < 2) {
+        svg.innerHTML = `<foreignObject x="0" y="0" width="${CHART_W}" height="${CLIMATE_H}">
+          <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">dati non ancora sufficienti</div>
+        </foreignObject>`;
+        return;
+      }
+
+      const [tMin, tMax] = niceBounds(points.map(p => p.temperature_c), 1, 2);
+      const [hMin, hMax] = niceBounds(points.map(p => p.humidity_pct), 5, 10);
+      const minTs = points[0].ts, maxTs = points[points.length - 1].ts;
+      const plotW = CHART_W - CHART_PAD_L - CLIMATE_PAD_R;
+      const plotH = CLIMATE_H - CHART_PAD_TOP - CHART_PAD_BOTTOM;
+
+      const xOf = ts => CHART_PAD_L + ((ts - minTs) / Math.max(1, maxTs - minTs)) * plotW;
+      const yOfTemp = t => CHART_PAD_TOP + plotH - ((t - tMin) / (tMax - tMin)) * plotH;
+      const yOfHum = h => CHART_PAD_TOP + plotH - ((h - hMin) / (hMax - hMin)) * plotH;
+
+      const ns = "http://www.w3.org/2000/svg";
+      const svgEl = (tag, attrs) => {
+        const el = document.createElementNS(ns, tag);
+        for (const k in attrs) el.setAttribute(k, attrs[k]);
+        return el;
+      };
+
+      // gridlines shared across both axes, each side labeled with its own scale
+      [0, 0.5, 1].forEach(frac => {
+        const y = CHART_PAD_TOP + plotH * (1 - frac);
+        svg.appendChild(svgEl("line", {
+          x1: CHART_PAD_L, x2: CHART_W - CLIMATE_PAD_R, y1: y, y2: y,
+          stroke: "#2c2c2a", "stroke-width": 1,
+        }));
+        const tempLabel = svgEl("text", {
+          x: CHART_PAD_L - 6, y: y + 3, "text-anchor": "end",
+          fill: TEMP_COLOR, "font-size": 9,
+        });
+        tempLabel.textContent = Math.round(tMin + (tMax - tMin) * frac) + "°";
+        svg.appendChild(tempLabel);
+        const humLabel = svgEl("text", {
+          x: CHART_W - CLIMATE_PAD_R + 6, y: y + 3, "text-anchor": "start",
+          fill: HUM_COLOR, "font-size": 9,
+        });
+        humLabel.textContent = Math.round(hMin + (hMax - hMin) * frac) + "%";
+        svg.appendChild(humLabel);
+      });
+
+      const lineFor = (values, yOf, color) => {
+        const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.ts).toFixed(1)},${yOf(values[i]).toFixed(1)}`).join(" ");
+        svg.appendChild(svgEl("path", {
+          d, fill: "none", stroke: color, "stroke-width": 2,
+          "stroke-linecap": "round", "stroke-linejoin": "round",
+        }));
+      };
+      lineFor(points.map(p => p.temperature_c), yOfTemp, TEMP_COLOR);
+      lineFor(points.map(p => p.humidity_pct), yOfHum, HUM_COLOR);
+
+      const hoverLine = svgEl("line", {
+        x1: 0, x2: 0, y1: CHART_PAD_TOP, y2: CHART_PAD_TOP + plotH,
+        stroke: "rgba(255,255,255,0.25)", "stroke-width": 1, id: "climate-hover-line", visibility: "hidden",
+      });
+      svg.appendChild(hoverLine);
+
+      const hit = svgEl("rect", {
+        x: CHART_PAD_L, y: 0, width: plotW, height: CLIMATE_H,
+        fill: "transparent",
+      });
+      hit.addEventListener("pointermove", (e) => onClimateChartHover(e, svg, xOf));
+      hit.addEventListener("pointerleave", hideClimateTooltip);
+      svg.appendChild(hit);
+    }
+
+    function onClimateChartHover(e, svg, xOf) {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = CHART_W / rect.width;
+      const x = (e.clientX - rect.left) * scaleX;
+
+      let nearest = climatePoints[0];
+      let best = Infinity;
+      for (const p of climatePoints) {
+        const dist = Math.abs(xOf(p.ts) - x);
+        if (dist < best) { best = dist; nearest = p; }
+      }
+
+      const hoverLine = document.getElementById("climate-hover-line");
+      hoverLine.setAttribute("x1", xOf(nearest.ts));
+      hoverLine.setAttribute("x2", xOf(nearest.ts));
+      hoverLine.setAttribute("visibility", "visible");
+
+      const tooltip = document.getElementById("climate-tooltip");
+      tooltip.hidden = false;
+      tooltip.innerHTML = "";
+      const tempSpan = document.createElement("span");
+      tempSpan.className = "val";
+      tempSpan.style.color = TEMP_COLOR;
+      tempSpan.textContent = `${nearest.temperature_c.toFixed(1)}°C`;
+      const humSpan = document.createElement("span");
+      humSpan.className = "val";
+      humSpan.style.color = HUM_COLOR;
+      humSpan.textContent = `${nearest.humidity_pct.toFixed(0)}%`;
+      tooltip.appendChild(tempSpan);
+      tooltip.appendChild(document.createTextNode(" · "));
+      tooltip.appendChild(humSpan);
+      tooltip.appendChild(document.createTextNode(" · " + formatTime(nearest.ts, currentClimateRange)));
+
+      const pxRatio = rect.width / CHART_W;
+      tooltip.style.left = (xOf(nearest.ts) * pxRatio) + "px";
+      tooltip.style.top = "0px";
+    }
+
+    function hideClimateTooltip() {
+      document.getElementById("climate-tooltip").hidden = true;
+      const hoverLine = document.getElementById("climate-hover-line");
+      if (hoverLine) hoverLine.setAttribute("visibility", "hidden");
+    }
+
+    async function loadClimateChart() {
+      try {
+        const res = await fetch(`/api/climate/history?range=${currentClimateRange}`);
+        const data = await res.json();
+        if (data.ok) drawClimateChart(data.points);
+      } catch (e) {
+        // keep previous render on failure
+      }
+    }
+
+    document.querySelectorAll(".range-btn:not(.climate-range-btn)").forEach(btn => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".range-btn:not(.climate-range-btn)").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         currentRange = btn.dataset.range;
         loadChart();
       });
     });
 
+    document.querySelectorAll(".climate-range-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".climate-range-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentClimateRange = btn.dataset.range;
+        loadClimateChart();
+      });
+    });
+
     render();
     refreshStatus();
     refreshEnergy();
+    refreshAirQuality();
+    refreshPlug();
     loadChart();
+    loadClimateChart();
     setInterval(refreshStatus, 8000);
     setInterval(refreshEnergy, 5000);
+    setInterval(refreshAirQuality, 30000);
+    setInterval(refreshPlug, 10000);
     setInterval(loadChart, 60000);
+    setInterval(loadClimateChart, 60000);
   </script>
 </body>
 </html>
