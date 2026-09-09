@@ -1,5 +1,8 @@
 secrets.json
 secrets_ewelink.json
+secrets_meross.json
+meross_devices.json
+secrets_telegram.json
 tinytuya.json
 devices.json
 snapshot.json

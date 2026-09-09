@@ -1,3 +1,5 @@
 tinytuya
 flask
 aiohttp
+meross-iot
+requests
