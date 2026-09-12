@@ -15,6 +15,11 @@
 web:
   host: "0.0.0.0"
   port: 5000
+  # Dashboard UI language. Default: "en". Any code with a matching
+  # src/localhome/web/locales/<code>.json file works - "it" ships
+  # out of the box; add your own by copying that directory's en.json
+  # and translating the values. See docs/configuration.md#language.
+  # language: "it"
   # Optional HTTP Basic Auth, off by default (this project assumes a
   # trusted LAN). See docs/configuration.md#web-auth-optional before
   # relying on this over anything but plain HTTP on your own network.

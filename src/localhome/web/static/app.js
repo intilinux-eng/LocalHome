@@ -8,30 +8,44 @@
 // change, as long as it's one of those kinds - see
 // docs/adding-a-driver.md for what a genuinely new kind needs here.
 
+// Looks up a dotted key (e.g. "covers.summary") in window.I18N - the
+// translations object rendered server-side from locales/<lang>.json -
+// and substitutes any {placeholder} in it from `vars`. Falls back to the
+// key itself if a translation is missing, so a stale/partial locale file
+// never breaks rendering.
+function tr(path, vars) {
+  const value = path.split(".").reduce((node, key) => (node == null ? undefined : node[key]), window.I18N);
+  let str = value != null ? value : path;
+  if (vars) for (const k in vars) str = str.replace(`{${k}}`, vars[k]);
+  return str;
+}
+
+const LOCALE = (window.I18N && window.I18N.locale) || undefined;
+
 const FIELD_META = {
-  power_w: { label: "Power", unit: "W", digits: 0 },
-  voltage_v: { label: "Voltage", unit: "V", digits: 0 },
-  current_a: { label: "Current", unit: "A", digits: 2 },
-  day_kwh: { label: "Today", unit: "kWh", digits: 2 },
-  yesterday_kwh: { label: "Yesterday", unit: "kWh", digits: 2 },
-  month_kwh: { label: "This month", unit: "kWh", digits: 1 },
-  temperature_c: { label: "Temperature", unit: "°C", digits: 1 },
-  humidity_pct: { label: "Humidity", unit: "%", digits: 0 },
-  co2_ppm: { label: "CO2", unit: "ppm", digits: 0 },
-  ch2o_mgm3: { label: "CH2O", unit: "mg/m3", digits: 3 },
-  voc_mgm3: { label: "VOC", unit: "mg/m3", digits: 3 },
-  pm25_ugm3: { label: "PM2.5", unit: "µg/m3", digits: 0 },
-  pm10_ugm3: { label: "PM10", unit: "µg/m3", digits: 0 },
-  battery_pct: { label: "Battery", unit: "%", digits: 0 },
+  power_w: { label: tr("fields.power_w"), unit: "W", digits: 0 },
+  voltage_v: { label: tr("fields.voltage_v"), unit: "V", digits: 0 },
+  current_a: { label: tr("fields.current_a"), unit: "A", digits: 2 },
+  day_kwh: { label: tr("fields.day_kwh"), unit: "kWh", digits: 2 },
+  yesterday_kwh: { label: tr("fields.yesterday_kwh"), unit: "kWh", digits: 2 },
+  month_kwh: { label: tr("fields.month_kwh"), unit: "kWh", digits: 1 },
+  temperature_c: { label: tr("fields.temperature_c"), unit: "°C", digits: 1 },
+  humidity_pct: { label: tr("fields.humidity_pct"), unit: "%", digits: 0 },
+  co2_ppm: { label: tr("fields.co2_ppm"), unit: "ppm", digits: 0 },
+  ch2o_mgm3: { label: tr("fields.ch2o_mgm3"), unit: "mg/m3", digits: 3 },
+  voc_mgm3: { label: tr("fields.voc_mgm3"), unit: "mg/m3", digits: 3 },
+  pm25_ugm3: { label: tr("fields.pm25_ugm3"), unit: "µg/m3", digits: 0 },
+  pm10_ugm3: { label: tr("fields.pm10_ugm3"), unit: "µg/m3", digits: 0 },
+  battery_pct: { label: tr("fields.battery_pct"), unit: "%", digits: 0 },
 };
 
 const AIR_QUALITY_LEVELS = {
-  level_1: { label: "Excellent", cls: "" },
-  level_2: { label: "Good", cls: "" },
-  level_3: { label: "Moderate", cls: "" },
-  level_4: { label: "Mild pollution", cls: "warn" },
-  level_5: { label: "Heavy pollution", cls: "critical" },
-  level_6: { label: "Severe pollution", cls: "critical" },
+  level_1: { label: tr("air_quality.level_1"), cls: "" },
+  level_2: { label: tr("air_quality.level_2"), cls: "" },
+  level_3: { label: tr("air_quality.level_3"), cls: "" },
+  level_4: { label: tr("air_quality.level_4"), cls: "warn" },
+  level_5: { label: tr("air_quality.level_5"), cls: "critical" },
+  level_6: { label: tr("air_quality.level_6"), cls: "critical" },
 };
 
 const HIDDEN_FIELDS = new Set(["ok", "name", "online", "seconds_since_update", "is_on", "value", "error"]);
@@ -57,16 +71,16 @@ function renderCovers(names) {
     <div class="card">
       <div class="card-head">
         <h2>${name}</h2>
-        <span class="state" id="cover-state-${slug(name)}">loading...</span>
+        <span class="state" id="cover-state-${slug(name)}">${tr("covers.loading")}</span>
       </div>
       <div class="visual">
         <div class="cover" id="cover-fill-${slug(name)}"></div>
         <span class="pct-badge" id="cover-badge-${slug(name)}">--</span>
       </div>
       <div class="buttons">
-        <button class="icon-btn open" onclick="sendCoverAction('${name}', 'open')" title="Open">${ICON_OPEN}</button>
-        <button class="icon-btn stop" onclick="sendCoverAction('${name}', 'stop')" title="Stop">${ICON_STOP}</button>
-        <button class="icon-btn close" onclick="sendCoverAction('${name}', 'close')" title="Close">${ICON_CLOSE}</button>
+        <button class="icon-btn open" onclick="sendCoverAction('${name}', 'open')" title="${tr("covers.btn_open")}">${ICON_OPEN}</button>
+        <button class="icon-btn stop" onclick="sendCoverAction('${name}', 'stop')" title="${tr("covers.btn_stop")}">${ICON_STOP}</button>
+        <button class="icon-btn close" onclick="sendCoverAction('${name}', 'close')" title="${tr("covers.btn_close")}">${ICON_CLOSE}</button>
       </div>
       <div class="slider-row">
         <input type="range" min="0" max="100" value="0" class="pct-slider" id="cover-slider-${slug(name)}" data-name="${name}">
@@ -106,10 +120,15 @@ function setCoverVisual(name, percent) {
   const fill = document.getElementById(`cover-fill-${slug(name)}`);
   const badge = document.getElementById(`cover-badge-${slug(name)}`);
   if (fill && percent !== null) fill.style.height = `${100 - percent}%`;
-  if (badge) badge.textContent = percent === 0 ? "Closed" : percent === 100 ? "Open" : `${percent}%`;
+  if (badge) badge.textContent = percent === 0 ? tr("covers.badge_closed") : percent === 100 ? tr("covers.badge_open") : `${percent}%`;
 }
 
-const COVER_STATE_LABELS = { open: "opening", close: "closing", stop: "stopped", unknown: "unknown" };
+const COVER_STATE_LABELS = {
+  open: tr("covers.state_open"),
+  close: tr("covers.state_close"),
+  stop: tr("covers.state_stop"),
+  unknown: tr("covers.state_unknown"),
+};
 
 async function refreshCovers(names) {
   const percents = [];
@@ -121,7 +140,7 @@ async function refreshCovers(names) {
       const res = await fetch(`/api/covers/${encodeURIComponent(name)}/status`);
       const data = await res.json();
       if (data.ok) {
-        stateEl.textContent = (COVER_STATE_LABELS[data.state] || data.state) + (data.calibrated ? "" : " · not calibrated");
+        stateEl.textContent = (COVER_STATE_LABELS[data.state] || data.state) + (data.calibrated ? "" : tr("covers.not_calibrated"));
         percents.push(data.percent);
         if (document.activeElement !== sliderEl) {
           sliderEl.value = data.percent;
@@ -129,17 +148,21 @@ async function refreshCovers(names) {
           setCoverVisual(name, data.percent);
         }
       } else {
-        stateEl.textContent = `error: ${data.error}`;
+        stateEl.textContent = tr("covers.error", { error: data.error });
       }
     } catch (e) {
-      stateEl.textContent = "unreachable";
+      stateEl.textContent = tr("covers.unreachable");
     }
   }
   const summaryEl = document.getElementById("summary");
-  if (percents.length) summaryEl.textContent = `${percents.filter(p => p > 0).length} of ${percents.length} open`;
+  if (percents.length) summaryEl.textContent = tr("covers.summary", { open: percents.filter(p => p > 0).length, total: percents.length });
 }
 
-const COVER_ACTION_LABELS = { open: "opening...", close: "closing...", stop: "stopping..." };
+const COVER_ACTION_LABELS = {
+  open: tr("covers.action_open"),
+  close: tr("covers.action_close"),
+  stop: tr("covers.action_stop"),
+};
 
 async function sendCoverAction(name, action) {
   const targets = name === "all" ? window.COVER_NAMES : [name];
@@ -151,9 +174,9 @@ async function sendCoverAction(name, action) {
   try {
     const res = await fetch(`/api/covers/${encodeURIComponent(name)}/action/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) alert(`Error: ${data.error}`);
+    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
   } catch (e) {
-    alert("Request failed");
+    alert(tr("sensors.request_failed"));
   }
   setTimeout(() => refreshCovers(window.COVER_NAMES), 1000);
 }
@@ -161,7 +184,7 @@ async function sendCoverAction(name, action) {
 async function movePercent(name, percent) {
   const stateEl = document.getElementById(`cover-state-${slug(name)}`);
   const sliderEl = document.getElementById(`cover-slider-${slug(name)}`);
-  stateEl.textContent = `moving to ${percent}%...`;
+  stateEl.textContent = tr("covers.moving_to", { percent });
   sliderEl.disabled = true;
   try {
     const res = await fetch(`/api/covers/${encodeURIComponent(name)}/position`, {
@@ -171,7 +194,7 @@ async function movePercent(name, percent) {
     });
     const data = await res.json();
     if (!data.ok) {
-      alert(`Error: ${data.error}`);
+      alert(tr("sensors.error_prefix") + data.error);
       sliderEl.disabled = false;
       refreshCovers(window.COVER_NAMES);
       return;
@@ -181,7 +204,7 @@ async function movePercent(name, percent) {
       refreshCovers(window.COVER_NAMES);
     }, (data.duration || 0) * 1000 + 500);
   } catch (e) {
-    alert("Request failed");
+    alert(tr("sensors.request_failed"));
     sliderEl.disabled = false;
   }
 }
@@ -231,9 +254,9 @@ async function setNumberValue(name, value) {
       body: JSON.stringify({ value: parseFloat(value) }),
     });
     const data = await res.json();
-    if (!data.ok) alert(`Error: ${data.error}`);
+    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
   } catch (e) {
-    alert("Request failed");
+    alert(tr("sensors.request_failed"));
   }
 }
 
@@ -309,15 +332,15 @@ function updateSensorCard(sensor, reading) {
   } else if (sensor.kind === "climate") {
     const level = reading.air_quality_index ? AIR_QUALITY_LEVELS[reading.air_quality_index] : null;
     html += `<div class="headline">`;
-    if (level) html += `<div><div class="big ${level.cls}">${level.label}</div><div class="label">Air quality</div></div>`;
-    if ("temperature_c" in reading) html += `<div><div class="big">${fmt(reading.temperature_c, 1)} <span>°C</span></div><div class="label">Temperature</div></div>`;
-    if ("humidity_pct" in reading) html += `<div><div class="big">${fmt(reading.humidity_pct, 0)} <span>%</span></div><div class="label">Humidity</div></div>`;
+    if (level) html += `<div><div class="big ${level.cls}">${level.label}</div><div class="label">${tr("air_quality.label")}</div></div>`;
+    if ("temperature_c" in reading) html += `<div><div class="big">${fmt(reading.temperature_c, 1)} <span>°C</span></div><div class="label">${tr("fields.temperature_c")}</div></div>`;
+    if ("humidity_pct" in reading) html += `<div><div class="big">${fmt(reading.humidity_pct, 0)} <span>%</span></div><div class="label">${tr("fields.humidity_pct")}</div></div>`;
     html += `</div>`;
   } else if (sensor.kind === "switch") {
     html += `
       <div class="switch-body">
         <div>
-          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : (reading.is_on ? "on" : "off")}</div></div>
+          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
           <div class="switch-sub">${reading.voltage_v != null ? fmt(reading.voltage_v, 0) + " V · " + fmt(reading.current_a, 2) + " A" : ""}</div>
         </div>
         <label class="toggle">
@@ -352,8 +375,8 @@ function updateSensorCard(sensor, reading) {
       cells.splice(1, 0, `
         <div class="metric">
           <div class="value ${sensor.power_budget && peak.value >= sensor.power_budget.trip_risk_w ? "critical" : ""}">${fmt(peak.value, 0)} W</div>
-          <div class="value-sub">${peak.ts ? new Date(peak.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</div>
-          <div class="label">Peak today</div>
+          <div class="value-sub">${peak.ts ? new Date(peak.ts * 1000).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }) : ""}</div>
+          <div class="label">${tr("sensors.peak_today")}</div>
         </div>
       `);
     }
@@ -363,9 +386,9 @@ function updateSensorCard(sensor, reading) {
 
   if (sensor.kind === "power_meter" && sensor.power_budget) {
     const b = sensor.power_budget;
-    html += `<div class="limit-note"><span class="swatch"></span> ${(b.available_power_w / 1000).toFixed(2)} kW safe indefinitely · up to ${(b.trip_risk_w / 1000).toFixed(1)} kW tolerated briefly · breaker trips quickly above that</div>`;
+    html += `<div class="limit-note"><span class="swatch"></span> ${tr("sensors.power_budget_note", { available: (b.available_power_w / 1000).toFixed(2), trip: (b.trip_risk_w / 1000).toFixed(1) })}</div>`;
   } else if (sensor.kind === "climate" && "humidity_pct" in reading) {
-    html += `<div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> Temperature <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> Humidity</div>`;
+    html += `<div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")}</div>`;
   }
 
   metrics.innerHTML = html;
@@ -373,7 +396,7 @@ function updateSensorCard(sensor, reading) {
 
 async function onSwitchToggle(name, el) {
   if (!el.checked) {
-    const ok = confirm("Turn this plug off? Make sure you know what it's powering.");
+    const ok = confirm(tr("sensors.confirm_turn_off"));
     if (!ok) {
       el.checked = true;
       return;
@@ -384,11 +407,11 @@ async function onSwitchToggle(name, el) {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${el.checked ? "on" : "off"}`, { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      alert(`Error: ${data.error}`);
+      alert(tr("sensors.error_prefix") + data.error);
       el.checked = !el.checked;
     }
   } catch (e) {
-    alert("Request failed");
+    alert(tr("sensors.request_failed"));
     el.checked = !el.checked;
   }
   el.disabled = false;
@@ -420,8 +443,8 @@ function niceMax(value) {
 function formatTime(ts, range) {
   const d = new Date(ts * 1000);
   return range === "7d"
-    ? d.toLocaleDateString([], { weekday: "short", hour: "2-digit" })
-    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    ? d.toLocaleDateString(LOCALE, { weekday: "short", hour: "2-digit" })
+    : d.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
 }
 
 async function loadChart(sensor) {
@@ -455,7 +478,7 @@ function zoneColor(w, availableW, tripRiskW) {
 
 function drawEmpty(svg) {
   svg.innerHTML = `<foreignObject x="0" y="0" width="${CHART_W}" height="${CHART_H}">
-    <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">not enough data yet</div>
+    <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">${tr("sensors.not_enough_data")}</div>
   </foreignObject>`;
 }
 
@@ -497,8 +520,8 @@ function drawPowerChart(id, points, range, budget) {
       t.textContent = label;
       svg.appendChild(t);
     };
-    refLine(tripRiskW, CRITICAL_COLOR, `trip risk (${(tripRiskW / 1000).toFixed(1)}kW)`);
-    refLine(availableW, WARNING_COLOR, `safe limit (${(availableW / 1000).toFixed(2)}kW)`);
+    refLine(tripRiskW, CRITICAL_COLOR, tr("sensors.trip_risk", { value: (tripRiskW / 1000).toFixed(1) }));
+    refLine(availableW, WARNING_COLOR, tr("sensors.safe_limit", { value: (availableW / 1000).toFixed(2) }));
   }
 
   const slotW = points.length > 1 ? xOf(points[1].ts) - xOf(points[0].ts) : plotW;

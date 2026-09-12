@@ -1,0 +1,66 @@
+{
+  "locale": "en-US",
+  "app": {
+    "title": "LocalHome"
+  },
+  "covers": {
+    "heading": "Covers",
+    "open_all": "Open all",
+    "close_all": "Close all",
+    "btn_open": "Open",
+    "btn_stop": "Stop",
+    "btn_close": "Close",
+    "loading": "loading...",
+    "not_calibrated": " · not calibrated",
+    "state_open": "opening",
+    "state_close": "closing",
+    "state_stop": "stopped",
+    "state_unknown": "unknown",
+    "action_open": "opening...",
+    "action_close": "closing...",
+    "action_stop": "stopping...",
+    "moving_to": "moving to {percent}%...",
+    "badge_closed": "Closed",
+    "badge_open": "Open",
+    "summary": "{open} of {total} open",
+    "error": "error: {error}",
+    "unreachable": "unreachable"
+  },
+  "fields": {
+    "power_w": "Power",
+    "voltage_v": "Voltage",
+    "current_a": "Current",
+    "day_kwh": "Today",
+    "yesterday_kwh": "Yesterday",
+    "month_kwh": "This month",
+    "temperature_c": "Temperature",
+    "humidity_pct": "Humidity",
+    "co2_ppm": "CO2",
+    "ch2o_mgm3": "CH2O",
+    "voc_mgm3": "VOC",
+    "pm25_ugm3": "PM2.5",
+    "pm10_ugm3": "PM10",
+    "battery_pct": "Battery"
+  },
+  "air_quality": {
+    "label": "Air quality",
+    "level_1": "Excellent",
+    "level_2": "Good",
+    "level_3": "Moderate",
+    "level_4": "Mild pollution",
+    "level_5": "Heavy pollution",
+    "level_6": "Severe pollution"
+  },
+  "sensors": {
+    "peak_today": "Peak today",
+    "switch_on": "on",
+    "switch_off": "off",
+    "confirm_turn_off": "Turn this plug off? Make sure you know what it's powering.",
+    "request_failed": "Request failed",
+    "error_prefix": "Error: ",
+    "not_enough_data": "not enough data yet",
+    "power_budget_note": "{available} kW safe indefinitely · up to {trip} kW tolerated briefly · breaker trips quickly above that",
+    "trip_risk": "trip risk ({value}kW)",
+    "safe_limit": "safe limit ({value}kW)"
+  }
+}

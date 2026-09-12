@@ -27,8 +27,12 @@ editable install, or from a systemd unit with a different working
 directory.
 
 Point at a config file somewhere else entirely (a second home, a test
-fixture) with `--config` on the CLI or the `LOCALHOME_CONFIG` environment
-variable - both take precedence over `config/config.yaml`.
+fixture) with the `LOCALHOME_CONFIG` environment variable, which takes
+precedence over `config/config.yaml` for both the web dashboard and
+`localhome-cli`. `localhome-cli` additionally accepts a `--config` flag
+for the same purpose (`web/app.py`'s entry point doesn't parse any CLI
+arguments, so `--config` only works for the CLI, not `python run.py` /
+`localhome`).
 
 ## Top-level keys
 
@@ -36,6 +40,7 @@ variable - both take precedence over `config/config.yaml`.
 web:
   host: "0.0.0.0"    # default: 0.0.0.0
   port: 5000          # default: 5000
+  language: "en"       # optional, default: "en" - see "Language" below
   auth:                # optional, off by default - see "Web auth" below
     secrets_file: "secrets_web.json"
 
@@ -100,6 +105,25 @@ condition persists, and once more when it clears. See
 how to adjust its ratios - the 1.10/1.33 defaults approximate a typical
 European residential contract's tolerance, not a universal constant;
 check your own meter/breaker/utility documentation.
+
+## Language
+
+The dashboard's UI text (labels, buttons, alerts) comes from a JSON file
+under `src/localhome/web/locales/`, picked by `web.language`. Ships with
+`en` (default) and `it`:
+
+```yaml
+web:
+  language: "it"
+```
+
+An unknown code falls back to `en` with a warning logged at startup.
+
+To add another language, copy `src/localhome/web/locales/en.json` to
+`<code>.json` in that same directory and translate the values - keep
+every `{placeholder}` (e.g. `{percent}`, `{error}`) exactly as it is,
+since app.js substitutes those at render time. No other file needs to
+change; `web.language: "<code>"` picks it up.
 
 ## Web auth (optional)
 
