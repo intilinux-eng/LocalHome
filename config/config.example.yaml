@@ -59,6 +59,21 @@ integrations:
     devices_file: "meross_devices.json"
     secrets_file: "secrets_meross.json"
 
+  # A TP-Link Kasa/Tapo LED strip, controlled entirely over the LAN - see
+  # docs/integrations/tplink.md for finding its IP and (Tapo devices only)
+  # its account credentials. One switch entry per strip for on/off; add a
+  # number entry with a *different* name for a brightness slider.
+  # - kind: switch
+  #   name: "Living Room LED Strip"
+  #   type: tplink_led_strip
+  #   host: "192.168.1.60"
+  #   secrets_file: "secrets_tplink.json"   # omit for Kasa-branded devices
+  # - kind: number
+  #   name: "Living Room LED Strip Brightness"
+  #   type: tplink_led_strip
+  #   host: "192.168.1.60"
+  #   secrets_file: "secrets_tplink.json"
+
   # Generic MQTT examples - covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc.
   # without a brand-specific driver. See docs/integrations/mqtt.md for
   # many more shapes (plain-string payloads, JSON booleans, ...).

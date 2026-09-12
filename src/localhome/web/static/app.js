@@ -37,6 +37,7 @@ const FIELD_META = {
   pm25_ugm3: { label: tr("fields.pm25_ugm3"), unit: "µg/m3", digits: 0 },
   pm10_ugm3: { label: tr("fields.pm10_ugm3"), unit: "µg/m3", digits: 0 },
   battery_pct: { label: tr("fields.battery_pct"), unit: "%", digits: 0 },
+  brightness: { label: tr("fields.brightness"), unit: "%", digits: 0 },
 };
 
 const AIR_QUALITY_LEVELS = {
@@ -213,10 +214,53 @@ async function movePercent(name, percent) {
 
 const peakCache = {};
 
+// A `number` sensor whose config sets `paired_switch` to a real switch's
+// name renders its slider inside that switch's card instead of its own -
+// see docs/integrations/tplink.md. Precomputed once per /api/devices
+// fetch, before any card is built or polled.
+function attachPairings(sensors) {
+  const byName = {};
+  sensors.forEach(s => { byName[s.name] = s; });
+  sensors.forEach(s => {
+    const target = s.kind === "number" && byName[s.paired_switch];
+    if (target) {
+      target.pairedBrightness = s;
+      s.embedded = true;
+    }
+  });
+}
+
+function sliderRowHtml(sensor) {
+  const id = slug(sensor.name);
+  const range = sensor.range || { min: 0, max: 100, unit: "%" };
+  return `
+    <div class="slider-row" style="margin-top:4px">
+      <input type="range" min="${range.min}" max="${range.max}" value="${range.min}"
+             class="number-slider" id="number-slider-${id}" data-name="${sensor.name}">
+      <span class="pct" id="number-value-${id}">-- ${range.unit}</span>
+    </div>
+  `;
+}
+
 function buildSensorCard(sensor) {
   const id = slug(sensor.name);
   const hasChart = sensor.kind === "power_meter" || sensor.kind === "climate";
-  const range = sensor.range || { min: 0, max: 100, unit: "%" };
+
+  if (sensor.embedded) {
+    // No card of its own - refreshSensor()/updateSensorCard() still need
+    // somewhere to write the reading, just not anywhere visible; the
+    // slider itself is what actually shows up, nested in the paired
+    // switch's card below.
+    return `
+      <div hidden>
+        <span class="dot" id="dot-${id}"></span>
+        <span id="updated-${id}"></span>
+        <div id="metrics-${id}"></div>
+      </div>
+      ${sliderRowHtml(sensor)}
+    `;
+  }
+
   return `
     <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}">
       <div class="sensor-top">
@@ -224,13 +268,8 @@ function buildSensorCard(sensor) {
         <span class="state" id="updated-${id}"></span>
       </div>
       <div id="metrics-${id}"></div>
-      ${sensor.kind === "number" ? `
-        <div class="slider-row" style="margin-top:4px">
-          <input type="range" min="${range.min}" max="${range.max}" value="${range.min}"
-                 class="number-slider" id="number-slider-${id}" data-name="${sensor.name}">
-          <span class="pct" id="number-value-${id}">-- ${range.unit}</span>
-        </div>
-      ` : ""}
+      ${sensor.kind === "number" ? sliderRowHtml(sensor) : ""}
+      ${sensor.kind === "switch" && sensor.pairedBrightness ? buildSensorCard(sensor.pairedBrightness) : ""}
       ${hasChart ? `
         <div class="chart-filters">
           <button class="range-btn" data-sensor="${id}" data-range="6h">6h</button>
@@ -262,7 +301,7 @@ async function setNumberValue(name, value) {
 
 function renderSensors(sensors) {
   const el = document.getElementById("sensor-cards");
-  el.innerHTML = sensors.map(buildSensorCard).join("");
+  el.innerHTML = sensors.filter(s => !s.embedded).map(buildSensorCard).join("");
 
   document.querySelectorAll(".range-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -362,7 +401,11 @@ function updateSensorCard(sensor, reading) {
     ? knownFields.filter(f => !["temperature_c", "humidity_pct", "air_quality_index"].includes(f))
     : sensor.kind === "power_meter"
       ? knownFields.filter(f => f !== "power_w")
-      : knownFields.filter(f => !["power_w", "voltage_v", "current_a", "is_on"].includes(f));
+      : knownFields.filter(f => {
+          if (["power_w", "voltage_v", "current_a", "is_on"].includes(f)) return false;
+          if (f === "brightness" && sensor.pairedBrightness) return false; // shown via the slider instead
+          return true;
+        });
 
   const cells = [...gridFields, ...extraFields].map(f => {
     const meta = FIELD_META[f] || { label: f, unit: "", digits: 0 };
@@ -633,6 +676,7 @@ async function boot() {
 
   const res = await fetch("/api/devices");
   const data = await res.json();
+  attachPairings(data.sensors);
   renderSensors(data.sensors);
   setInterval(() => data.sensors.forEach(refreshSensor), 5000);
   setInterval(() => data.sensors.forEach(loadChart), 60000);

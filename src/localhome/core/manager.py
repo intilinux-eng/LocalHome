@@ -36,6 +36,10 @@ class DeviceManager:
         self.numbers: dict[str, NumberDriver] = {}
         self.pollers: dict[str, "SyncPoller | AsyncPoller"] = {}
         self.sensor_kinds: dict[str, str] = {}
+        # number-sensor name -> switch name, for a `number` integration entry
+        # that sets `paired_switch` - lets the dashboard show its slider
+        # inside that switch's own card instead of as a separate one.
+        self.paired_switch: dict[str, str] = {}
         self.notifier: Notifier | None = None
         self._build()
 
@@ -49,6 +53,8 @@ class DeviceManager:
                 continue
             for driver in drivers:
                 self._register(entry.kind, driver)
+                if entry.kind == "number" and options.get("paired_switch"):
+                    self.paired_switch[driver.name] = options["paired_switch"]
 
         if self.config.notifier:
             options = _resolve_paths(self.config, self.config.notifier.options)
@@ -58,6 +64,13 @@ class DeviceManager:
                 logger.exception("Failed to create notifier, alerts will be silently dropped")
 
     def _register(self, kind: str, driver) -> None:
+        if driver.name in self.sensor_kinds or driver.name in self.covers:
+            logger.warning(
+                "Integration name %r is used by more than one entry - only the last one "
+                "registered will be reachable (pollers/sensor_kinds are keyed by name across "
+                "every kind). Give each entry its own name.",
+                driver.name,
+            )
         if kind == "cover":
             self.covers[driver.name] = driver
             return

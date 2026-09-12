@@ -40,7 +40,8 @@
     "voc_mgm3": "VOC",
     "pm25_ugm3": "PM2.5",
     "pm10_ugm3": "PM10",
-    "battery_pct": "Batteria"
+    "battery_pct": "Batteria",
+    "brightness": "Luminosità"
   },
   "air_quality": {
     "label": "Qualità dell'aria",

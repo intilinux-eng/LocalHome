@@ -85,6 +85,7 @@ after installing to list what your checkout actually has registered):
 | `climate`     | `tuya_air_quality`    | [integrations/tuya.md](integrations/tuya.md) |
 | `power_meter` | `ewelink_powct`       | [integrations/ewelink.md](integrations/ewelink.md) |
 | `switch`      | `meross_plug`         | [integrations/meross.md](integrations/meross.md) |
+| `switch`/`number` | `tplink_led_strip`| [integrations/tplink.md](integrations/tplink.md) |
 | `cover`/`climate`/`power_meter`/`switch`/`number` | `mqtt_json` | [integrations/mqtt.md](integrations/mqtt.md) - generic, covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc. |
 | `notifier`    | `telegram`            | [integrations/telegram.md](integrations/telegram.md) |
 

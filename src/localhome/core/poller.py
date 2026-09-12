@@ -39,6 +39,14 @@ class ReadingCache:
             if reading.get("ok"):
                 self._last_update_ts = time.time()
 
+    def merge(self, partial: dict[str, Any]) -> None:
+        """Patch a few keys into the latest reading without waiting for the
+        next poll - used right after a successful command (turn_on/off,
+        set_value) so the dashboard reflects it immediately instead of
+        showing a stale cached reading for up to poll_interval_seconds."""
+        with self._lock:
+            self._latest = {**self._latest, **partial}
+
     def get(self) -> dict[str, Any]:
         with self._lock:
             reading = dict(self._latest)
