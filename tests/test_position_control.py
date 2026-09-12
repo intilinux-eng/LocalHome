@@ -1,3 +1,5 @@
+import time
+
 from localhome.services.position_control import PositionStore
 
 
@@ -61,6 +63,41 @@ def test_observe_state_records_completed_external_move(tmp_path):
     store.observe_state(cover, "open")
     store.observe_state(cover, "stop")
 
+    assert store.get(cover.id) == 100
+
+
+def test_get_interpolates_towards_the_target_while_a_move_is_in_flight(tmp_path):
+    # Regression test: a status poll partway through a slider-triggered move
+    # used to still report the pre-move position (the stored value only
+    # updates when the motor timer fires), which made the dashboard slider
+    # snap back to its old spot until the whole move finished.
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=1.0)
+    store.set(cover.id, 100)
+
+    store.move_to_percent(cover, 0)
+    time.sleep(0.4)
+
+    mid = store.get(cover.id)
+    assert 0 < mid < 100
+
+    time.sleep(0.8)  # past the 1s travel time - the timer has fired by now
+    assert store.get(cover.id) == 0
+
+
+def test_cancel_pending_move_stops_interpolating(tmp_path):
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=10.0)
+    store.set(cover.id, 100)
+
+    store.move_to_percent(cover, 0)
+    time.sleep(0.1)
+    assert store.get(cover.id) < 100
+
+    store.cancel_pending_move(cover.id)
+
+    # No sensor to confirm how far it actually got, so this falls back to
+    # the last committed value rather than a frozen mid-flight guess.
     assert store.get(cover.id) == 100
 
 

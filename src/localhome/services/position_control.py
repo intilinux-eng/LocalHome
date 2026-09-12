@@ -27,6 +27,7 @@ class PositionStore:
         self.path = path
         self._lock = threading.Lock()
         self._active_timers: dict[str, threading.Timer] = {}
+        self._active_moves: dict[str, dict] = {}
         self._own_command_until: dict[str, float] = {}
         self._last_seen_state: dict[str, str] = {}
         self._pending_external_move: dict[str, str] = {}
@@ -43,6 +44,16 @@ class PositionStore:
             json.dump(positions, f, indent=2)
 
     def get(self, cover_id: str, default: int = 100) -> int:
+        """Current best-effort position. While a move_to_percent() move is
+        still running, this interpolates between where it started and its
+        target based on elapsed time, rather than returning the pre-move
+        value until the motor timer fires - otherwise a status poll mid-move
+        looks like the cover hasn't budged yet."""
+        with self._lock:
+            move = self._active_moves.get(cover_id)
+        if move is not None:
+            frac = min(1.0, (time.time() - move["start"]) / move["duration"]) if move["duration"] > 0 else 1.0
+            return round(move["start_percent"] + (move["target_percent"] - move["start_percent"]) * frac)
         return self._load().get(cover_id, default)
 
     def is_calibrated(self, cover_id: str) -> bool:
@@ -56,6 +67,7 @@ class PositionStore:
     def cancel_pending_move(self, cover_id: str) -> None:
         with self._lock:
             timer = self._active_timers.pop(cover_id, None)
+            self._active_moves.pop(cover_id, None)
         if timer:
             timer.cancel()
 
@@ -119,6 +131,7 @@ class PositionStore:
                 self.set(cover_id, target_percent)
                 with self._lock:
                     self._active_timers.pop(cover_id, None)
+                    self._active_moves.pop(cover_id, None)
 
         # Register the timer (marking this as our own move) before sending
         # the command, so a concurrent observe_state() poll can't see the
@@ -126,6 +139,12 @@ class PositionStore:
         timer = threading.Timer(duration, finish)
         with self._lock:
             self._active_timers[cover_id] = timer
+            self._active_moves[cover_id] = {
+                "start": time.time(),
+                "start_percent": current,
+                "target_percent": target_percent,
+                "duration": duration,
+            }
         cover.send(direction)
         timer.start()
 
