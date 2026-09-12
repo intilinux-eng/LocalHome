@@ -1,16 +1,37 @@
-secrets.json
-secrets_ewelink.json
-secrets_meross.json
-meross_devices.json
-secrets_telegram.json
-tinytuya.json
-devices.json
-snapshot.json
-positions.json
-history.db
-tuya-raw.json
-*.local.json
-.env
+# Personal configuration, device inventories and credentials.
+# Only the *.example.* files under config/ are meant to be published -
+# see docs/configuration.md. This pattern-based approach means a new
+# per-brand config/secrets file you add later is gitignored automatically,
+# with no edit needed here.
+config/*.json
+config/*.yaml
+!config/*.example.json
+!config/config.example.yaml
+
+# tinytuya wizard/scan artifacts and the old flat layout's runtime files,
+# in case they get generated/left at the repo root instead of config/.
+/snapshot.json
+/tinytuya.json
+/tuya-raw.json
+/devices.json
+/history.db
+*.db
+
+# Runtime state (sqlite history db, etc) - matches both a root-level
+# data/ and config/data/, since history.db_file is written relative to
+# wherever config.yaml points it.
+data/
+
+# Python
 __pycache__/
 *.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+*.local.json
+.env
+
+# Logs
 *.log

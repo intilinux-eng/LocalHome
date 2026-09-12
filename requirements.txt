@@ -1,5 +1,7 @@
-tinytuya
-flask
-aiohttp
-meross-iot
-requests
+flask>=3.0
+tinytuya>=1.13
+aiohttp>=3.9
+meross-iot>=0.4
+requests>=2.31
+PyYAML>=6.0
+paho-mqtt>=2.0

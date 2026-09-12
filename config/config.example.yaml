@@ -1,0 +1,105 @@
+# LocalHome configuration.
+#
+# Copy this file to config.yaml (in this same directory) and edit it to
+# match your own devices. config.yaml is gitignored - your real setup
+# never gets published. See docs/configuration.md for the full reference
+# and docs/integrations/ for how to get each device's config/secrets
+# files in the first place.
+#
+# Every relative path in this file (devices_file, secrets_file,
+# positions_file, history.db_file) is resolved against this file's own
+# directory - i.e. against config/ itself, not the repo root or your
+# current working directory. So a device file that lives right next to
+# this one is just "devices.json", not "config/devices.json".
+
+web:
+  host: "0.0.0.0"
+  port: 5000
+  # Optional HTTP Basic Auth, off by default (this project assumes a
+  # trusted LAN). See docs/configuration.md#web-auth-optional before
+  # relying on this over anything but plain HTTP on your own network.
+  # auth:
+  #   secrets_file: "secrets_web.json"
+
+# Each entry below turns on one driver. `kind` + `type` select which
+# built-in driver handles it (see docs/adding-a-driver.md for the full
+# list, or add your own). Every other key is passed straight to that
+# driver's factory function.
+integrations:
+  # Tuya-based curtain switches (e.g. LoraTap WiFi roller shutter
+  # modules). One entry here loads *every* matching device found in
+  # devices_file - the file produced by `python -m tinytuya wizard` - so
+  # you don't need to list each shutter by hand.
+  - kind: cover
+    type: tuya_curtain_switch
+    devices_file: "devices.json"
+
+  # Tuya's "9-in-1"/"12-in-1" air-quality sensor, same devices_file.
+  - kind: climate
+    type: tuya_air_quality
+    devices_file: "devices.json"
+
+  # A Sonoff POWCT power-monitoring relay, read through the eWeLink cloud
+  # (see docs/integrations/ewelink.md for why this one isn't fully local).
+  - kind: power_meter
+    name: "Home Power Meter"
+    type: ewelink_powct
+    devices_file: "ewelink_devices.json"
+    secrets_file: "secrets_ewelink.json"
+
+  # A Meross smartplug, controlled via the Meross cloud (MQTT).
+  - kind: switch
+    name: "Desk Plug"
+    type: meross_plug
+    devices_file: "meross_devices.json"
+    secrets_file: "secrets_meross.json"
+
+  # Generic MQTT examples - covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc.
+  # without a brand-specific driver. See docs/integrations/mqtt.md for
+  # many more shapes (plain-string payloads, JSON booleans, ...).
+  # - kind: power_meter
+  #   name: "Workshop Plug"
+  #   type: mqtt_json
+  #   broker_file: "mqtt_broker.json"
+  #   state_topic: "tele/tasmota_workshop/SENSOR"
+  #   fields:
+  #     power_w: "ENERGY.Power"
+  #     voltage_v: "ENERGY.Voltage"
+
+  # A controllable analog value - a dimmer, a fan speed, a 0-10V output -
+  # anything set to a number in a range rather than toggled or driven
+  # open/closed. This is the shape a future MQTT-bridged 0-10V dimmer
+  # would use; uncomment and point it at your own device once you have
+  # one, it's otherwise inert.
+  # - kind: number
+  #   name: "VMC Dimmer"
+  #   type: mqtt_json
+  #   broker_file: "mqtt_broker.json"
+  #   state_topic: "shellies/vmc-dimmer/status"
+  #   command_topic: "shellies/vmc-dimmer/set"
+  #   value_field: "brightness"
+  #   command_payload_field: "brightness"
+  #   min_value: 0
+  #   max_value: 100
+  #   unit: "%"
+
+# Optional: push notifications for the power-budget alert below.
+notifications:
+  type: telegram
+  secrets_file: "secrets_telegram.json"
+
+# Optional: power-budget alerting for one power_meter sensor (by name,
+# matching an integration above). Trips a notification when power draw
+# leaves the "safe indefinitely" zone - see services/history.py for the
+# three-zone model. contract_limit_w should match your actual utility
+# contract or breaker rating.
+energy:
+  sensor: "Home Power Meter"
+  contract_limit_w: 3000
+
+# Where per-cover estimated position and the sqlite history database are
+# stored.
+positions_file: "positions.json"
+history:
+  db_file: "data/history.db"
+  poll_interval_seconds: 30

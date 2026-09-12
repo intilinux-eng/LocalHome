@@ -1,0 +1,37 @@
+; Example systemd unit for running LocalHome as a bare-metal service (a
+; Raspberry Pi, an old laptop, whatever's next to your router) instead of
+; Docker. Copy to /etc/systemd/system/localhome.service and adjust the
+; paths/user, then:
+;
+;   sudo systemctl daemon-reload
+;   sudo systemctl enable --now localhome
+;   sudo journalctl -u localhome -f      # logs
+;
+; Assumes the repo is checked out at /opt/localhome and set up with:
+;   cd /opt/localhome && python3 -m venv .venv && .venv/bin/pip install .
+; and that /opt/localhome/config/config.yaml already exists (see
+; docs/configuration.md) - create/edit it before starting the service.
+
+[Unit]
+Description=LocalHome smart-home dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=localhome
+Group=localhome
+WorkingDirectory=/opt/localhome
+ExecStart=/opt/localhome/.venv/bin/localhome
+Restart=on-failure
+RestartSec=5
+
+; Basic hardening - relax if a driver you add needs more (e.g. writing
+; somewhere outside WorkingDirectory).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/localhome/config
+
+[Install]
+WantedBy=multi-user.target

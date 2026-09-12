@@ -1,0 +1,60 @@
+[
+  {
+    "name": "Living Room Shutter",
+    "id": "bf1234567890abcdef0001",
+    "key": "0123456789abcdef",
+    "mac": "38:2c:e5:00:00:01",
+    "uuid": "aaaa1111bbbb2222",
+    "category": "clkg",
+    "product_name": "Curtain switch",
+    "product_id": "nnfrmb3val45av1n",
+    "model": "qcsc500wv2n2",
+    "mapping": {
+      "1": { "code": "control", "type": "Enum", "values": { "range": ["open", "stop", "close"] } },
+      "8": { "code": "control_back_mode", "type": "Enum", "values": { "range": ["forward", "back"] } },
+      "10": { "code": "tr_timecon", "type": "Integer", "values": { "unit": "s", "min": 1, "max": 120, "scale": 0, "step": 1 } }
+    },
+    "ip": "192.0.2.11"
+  },
+  {
+    "name": "Bedroom Shutter",
+    "id": "bf1234567890abcdef0002",
+    "key": "fedcba9876543210",
+    "mac": "38:2c:e5:00:00:02",
+    "uuid": "aaaa1111bbbb2223",
+    "category": "clkg",
+    "product_name": "Curtain switch",
+    "product_id": "nnfrmb3val45av1n",
+    "model": "qcsc500wv2n2",
+    "mapping": {
+      "1": { "code": "control", "type": "Enum", "values": { "range": ["open", "stop", "close"] } },
+      "8": { "code": "control_back_mode", "type": "Enum", "values": { "range": ["forward", "back"] } },
+      "10": { "code": "tr_timecon", "type": "Integer", "values": { "unit": "s", "min": 1, "max": 120, "scale": 0, "step": 1 } }
+    },
+    "ip": "192.0.2.12"
+  },
+  {
+    "name": "Kitchen Air Quality Sensor",
+    "id": "bf1234567890abcdef0003",
+    "key": "aabbccddeeff0011",
+    "mac": "80:64:7c:00:00:03",
+    "uuid": "aaaa1111bbbb2224",
+    "category": "hjjcy",
+    "product_name": "9in1/12in1/14in1",
+    "product_id": "b7alv1ety7u19i9d",
+    "model": "QTF-A+C",
+    "mapping": {
+      "1": { "code": "air_quality_index", "type": "Enum", "values": { "range": ["level_1", "level_2", "level_3", "level_4", "level_5", "level_6"] } },
+      "2": { "code": "temp_current", "type": "Integer", "values": { "unit": "°C", "min": -400, "max": 2000, "scale": 1, "step": 1 } },
+      "3": { "code": "humidity_value", "type": "Integer", "values": { "unit": "%", "min": 0, "max": 100, "scale": 0, "step": 1 } },
+      "4": { "code": "co2_value", "type": "Integer", "values": { "unit": "PPM", "min": 0, "max": 5000, "scale": 0, "step": 1 } },
+      "5": { "code": "ch2o_value", "type": "Integer", "values": { "unit": "mg/m3", "min": 0, "max": 2000, "scale": 3, "step": 1 } },
+      "6": { "code": "voc_value", "type": "Integer", "values": { "unit": "mg/m3", "min": 0, "max": 9999, "scale": 3, "step": 1 } },
+      "7": { "code": "pm25_value", "type": "Integer", "values": { "unit": "ug/m3", "min": 0, "max": 999, "scale": 0, "step": 1 } },
+      "9": { "code": "pm10", "type": "Integer", "values": { "unit": "ug/m3", "min": 0, "max": 999, "scale": 0, "step": 1 } },
+      "22": { "code": "battery_percentage", "type": "Integer", "values": { "unit": "%", "min": 0, "max": 100, "scale": 0, "step": 1 } }
+    },
+    "ip": "192.0.2.22",
+    "version": 3.5
+  }
+]
