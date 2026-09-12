@@ -1,0 +1,26 @@
+.git
+.github
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docs/
+deploy/
+ARCHITECTURE.md
+CONTRIBUTING.md
+THIRD_PARTY_NOTICES.md
+
+# Personal config/secrets never enter the build context either - the
+# image is generic, config is mounted at runtime (see Dockerfile).
+config/*.json
+config/*.yaml
+!config/*.example.json
+!config/config.example.yaml
+data/
+*.db
+*.log
+
+.venv/
+build/
+dist/
+*.egg-info/

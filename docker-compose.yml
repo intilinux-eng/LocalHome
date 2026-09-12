@@ -1,0 +1,17 @@
+services:
+  localhome:
+    # Builds from source by default - works immediately after cloning,
+    # no registry needed. Once you've pushed this repo to GitHub, a
+    # multi-arch image also gets published automatically to GHCR (see
+    # .github/workflows/docker.yml and docs/deployment.md) - swap the
+    # line below for `image: ghcr.io/<owner>/<repo>:latest` to use that
+    # instead of building locally on every device.
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      # Your real config/ directory (config.yaml, devices.json, secrets,
+      # and the data/ subfolder it points history.db at) - never baked
+      # into the image itself.
+      - ./config:/app/config
+    restart: unless-stopped

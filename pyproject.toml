@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localhome"
+version = "0.1.0"
+description = "A local-first, no-cloud-required framework for small smart-home setups: roller shutters, power meters, climate sensors, smart plugs and alerts, talked to over your LAN wherever possible."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+    "flask>=3.0",
+    "tinytuya>=1.13",
+    "aiohttp>=3.9",
+    "meross-iot>=0.4",
+    "requests>=2.31",
+    "PyYAML>=6.0",
+    "paho-mqtt>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+localhome = "localhome.web.app:main"
+localhome-cli = "localhome.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"localhome.web" = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

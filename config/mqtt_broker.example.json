@@ -1,0 +1,6 @@
+{
+  "host": "192.168.1.5",
+  "port": 1883,
+  "username": "mqtt_user",
+  "password": "mqtt_password"
+}
