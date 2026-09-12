@@ -102,6 +102,9 @@ def _register_routes(app: Flask) -> None:
             number = manager.numbers.get(name)
             if number is not None:
                 entry["range"] = {"min": number.min_value, "max": number.max_value, "unit": number.unit}
+                paired_switch = manager.paired_switch.get(name)
+                if paired_switch in manager.switches:
+                    entry["paired_switch"] = paired_switch
             sensors.append(entry)
 
         return jsonify(covers=list(manager.covers), sensors=sensors)
@@ -189,6 +192,7 @@ def _register_routes(app: Flask) -> None:
             switch.turn_on() if action == "on" else switch.turn_off()
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 502
+        manager.pollers[name].cache.merge({"is_on": action == "on"})
         return jsonify(ok=True)
 
     @app.route("/api/sensors/<name>/set-value", methods=["POST"])
@@ -204,6 +208,7 @@ def _register_routes(app: Flask) -> None:
             number.set_value(data["value"])
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 502
+        manager.pollers[name].cache.merge({"value": data["value"]})
         return jsonify(ok=True)
 
     @app.route("/api/sensors/<name>/history")

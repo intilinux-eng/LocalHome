@@ -18,6 +18,7 @@ dependencies = [
     "requests>=2.31",
     "PyYAML>=6.0",
     "paho-mqtt>=2.0",
+    "python-kasa>=0.7",
 ]
 
 [project.optional-dependencies]
