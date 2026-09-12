@@ -10,6 +10,7 @@ def test_load_example_config_end_to_end(tmp_path):
 web:
   host: "127.0.0.1"
   port: 9000
+  language: "it"
 
 integrations:
   - kind: cover
@@ -31,6 +32,7 @@ energy:
 
     assert config.web_host == "127.0.0.1"
     assert config.web_port == 9000
+    assert config.web_language == "it"
     assert len(config.integrations) == 1
     assert config.integrations[0].kind == "cover"
     assert config.integrations[0].options["devices_file"] == "devices.json"

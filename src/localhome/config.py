@@ -33,6 +33,7 @@ class LocalHomeConfig:
     path: Path
     web_host: str
     web_port: int
+    web_language: str
     integrations: list[Integration]
     notifier: Integration | None
     raw: dict
@@ -84,6 +85,7 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
         path=config_path,
         web_host=web.get("host", "0.0.0.0"),
         web_port=int(web.get("port", 5000)),
+        web_language=web.get("language", "en"),
         integrations=integrations,
         notifier=notifier,
         raw=raw,

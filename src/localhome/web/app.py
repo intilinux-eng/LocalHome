@@ -13,11 +13,12 @@ import logging
 
 from flask import Flask, jsonify, render_template, request
 
-from localhome.config import load_config
+from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.position_control import PositionStore
 from localhome.web.auth import register_auth
+from localhome.web.i18n import load_translations
 
 
 def create_app(config_path: str | None = None) -> Flask:
@@ -29,7 +30,7 @@ def create_app(config_path: str | None = None) -> Flask:
     if auth_cfg:
         register_auth(app, config.resolve(auth_cfg["secrets_file"]))
 
-    positions_path = config.resolve(config.raw.get("positions_file", "config/positions.json"))
+    positions_path = config.resolve(config.raw.get("positions_file", "positions.json"))
     positions = PositionStore(positions_path)
 
     history_cfg = config.raw.get("history", {})
@@ -56,6 +57,7 @@ def create_app(config_path: str | None = None) -> Flask:
     recorder.start()
 
     app.config["LOCALHOME_CONFIG"] = config
+    app.config["TRANSLATIONS"] = load_translations(config.web_language)
     app.config["MANAGER"] = manager
     app.config["POSITIONS"] = positions
     app.config["HISTORY"] = store
@@ -70,7 +72,13 @@ def _register_routes(app: Flask) -> None:
     @app.route("/")
     def index():
         manager: DeviceManager = app.config["MANAGER"]
-        return render_template("index.html", cover_names=list(manager.covers))
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        return render_template(
+            "index.html",
+            cover_names=list(manager.covers),
+            t=app.config["TRANSLATIONS"],
+            lang=config.web_language,
+        )
 
     @app.route("/api/devices")
     def api_devices():

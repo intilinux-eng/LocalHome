@@ -34,7 +34,10 @@ The web dashboard renders whatever combination of these you have
 enabled, plus estimated 0-100% position for covers that only report a
 raw open/close/stop motor command, plus a sqlite-backed history/chart for
 any numeric field a driver exposes, plus an optional power-budget alert,
-plus optional HTTP Basic Auth if you want it (off by default).
+plus optional HTTP Basic Auth if you want it (off by default), plus a
+UI language you can switch with one config line (English and Italian
+ship today; see [docs/configuration.md#language](docs/configuration.md#language)
+for adding your own).
 
 Don't own any of the devices above? The point of this project is that
 adding your own driver is a self-contained, half-hour change - see
@@ -91,10 +94,11 @@ similar next to your router) instead of a dev machine? See
 ```
 config/            Your device inventories, secrets and config.yaml (gitignored, except *.example.*)
 src/localhome/
-  core/            Driver interfaces, the plugin registry, background pollers, config loading
+  core/            Driver interfaces, the plugin registry, background pollers
   drivers/         One subpackage per brand/protocol (tuya, ewelink, meross, mqtt, notifiers, ...)
   services/        Cross-driver logic: cover position estimation, sqlite history + alerting
-  web/             Flask app (+ optional Basic Auth) and the dashboard's templates/static files
+  web/             Flask app (+ optional Basic Auth), dashboard templates/static files, and locales/ (UI language files, see docs/configuration.md#language)
+  config.py        Loads config.yaml and resolves its relative paths
   cli.py           Command-line cover control
 docs/              Full documentation (see below)
 tests/             Hardware-independent unit tests

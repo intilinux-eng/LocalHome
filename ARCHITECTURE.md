@@ -132,6 +132,15 @@ Authentication ([`web/auth.py`](src/localhome/web/auth.py)) is a single
 set in config.yaml - off by default, so it adds no code path at all for
 the common "trusted LAN" case.
 
+UI text is never hardcoded in English in the templates or in `app.js`:
+[`web/i18n.py`](src/localhome/web/i18n.py) loads one JSON file from
+`web/locales/<web.language>.json` and `create_app()` hands it to
+`index.html` as `t`, which both renders it server-side (`{{ t.covers.heading }}`)
+and dumps it into `window.I18N` for `app.js`'s `tr("some.key", vars)`
+helper to read client-side. Adding a language is only ever "add a JSON
+file with the same keys" - no template or JS change - see
+[docs/configuration.md#language](docs/configuration.md#language).
+
 ## What this isn't
 
 There's no dependency injection framework, no plugin manifest format, no

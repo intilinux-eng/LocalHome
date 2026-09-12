@@ -19,7 +19,10 @@ through the exact interface to implement. In short:
    you the longest, and the part most worth writing down.
 5. If it's a `power_meter`, `climate` or `switch` that reports fields the
    dashboard doesn't already know how to label, add them to `FIELD_META`
-   in `web/static/app.js`.
+   in `web/static/app.js`, and add the label under `fields` in
+   `web/locales/en.json` (and any other locale file you can translate it
+   into - see docs/configuration.md#language) rather than hardcoding the
+   English text in `FIELD_META` itself.
 6. A test under `tests/` for anything that isn't a thin wrapper around a
    vendor SDK call (position math, parsing, registry wiring - not "does
    the real device respond").

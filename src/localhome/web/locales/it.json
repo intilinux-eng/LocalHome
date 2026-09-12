@@ -1,0 +1,66 @@
+{
+  "locale": "it-IT",
+  "app": {
+    "title": "LocalHome"
+  },
+  "covers": {
+    "heading": "Tapparelle",
+    "open_all": "Apri tutte",
+    "close_all": "Chiudi tutte",
+    "btn_open": "Apri",
+    "btn_stop": "Ferma",
+    "btn_close": "Chiudi",
+    "loading": "caricamento...",
+    "not_calibrated": " · non calibrata",
+    "state_open": "apertura",
+    "state_close": "chiusura",
+    "state_stop": "fermata",
+    "state_unknown": "sconosciuto",
+    "action_open": "apertura...",
+    "action_close": "chiusura...",
+    "action_stop": "arresto...",
+    "moving_to": "spostamento a {percent}%...",
+    "badge_closed": "Chiusa",
+    "badge_open": "Aperta",
+    "summary": "{open} su {total} aperte",
+    "error": "errore: {error}",
+    "unreachable": "non raggiungibile"
+  },
+  "fields": {
+    "power_w": "Potenza",
+    "voltage_v": "Tensione",
+    "current_a": "Corrente",
+    "day_kwh": "Oggi",
+    "yesterday_kwh": "Ieri",
+    "month_kwh": "Questo mese",
+    "temperature_c": "Temperatura",
+    "humidity_pct": "Umidità",
+    "co2_ppm": "CO2",
+    "ch2o_mgm3": "CH2O",
+    "voc_mgm3": "VOC",
+    "pm25_ugm3": "PM2.5",
+    "pm10_ugm3": "PM10",
+    "battery_pct": "Batteria"
+  },
+  "air_quality": {
+    "label": "Qualità dell'aria",
+    "level_1": "Eccellente",
+    "level_2": "Buona",
+    "level_3": "Moderata",
+    "level_4": "Inquinamento lieve",
+    "level_5": "Inquinamento elevato",
+    "level_6": "Inquinamento grave"
+  },
+  "sensors": {
+    "peak_today": "Picco odierno",
+    "switch_on": "acceso",
+    "switch_off": "spento",
+    "confirm_turn_off": "Spegnere questa presa? Assicurati di sapere cosa alimenta.",
+    "request_failed": "Richiesta non riuscita",
+    "error_prefix": "Errore: ",
+    "not_enough_data": "dati non ancora sufficienti",
+    "power_budget_note": "{available} kW sostenibili senza limiti · fino a {trip} kW tollerati brevemente · oltre, l'interruttore scatta rapidamente",
+    "trip_risk": "rischio scatto ({value}kW)",
+    "safe_limit": "limite sicuro ({value}kW)"
+  }
+}
