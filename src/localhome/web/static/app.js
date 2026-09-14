@@ -1343,6 +1343,10 @@ async function boot() {
   attachPairings(devicesData.sensors);
   const homeSensors = devicesData.sensors.filter(s => s.tab !== "climate" && !zoneMemberNames.has(s.name));
   const climateExtraSensors = devicesData.sensors.filter(s => s.tab === "climate" && !zoneMemberNames.has(s.name));
+  // Home-tab order is admin-panel-editable (drag-and-drop) - the backend
+  // already defaults it to today's visual order when nothing's been
+  // customized, so this sort is a no-op until someone actually reorders.
+  homeSensors.sort((a, b) => a.order - b.order);
 
   renderSensors(homeSensors, "sensor-cards");
   renderSensors(climateExtraSensors, "climate-extra");

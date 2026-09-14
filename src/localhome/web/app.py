@@ -17,6 +17,7 @@ from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.services.device_overrides import DeviceOverrideStore
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController
@@ -61,6 +62,8 @@ def create_app(config_path: str | None = None) -> Flask:
 
     positions_path = config.resolve(config.raw.get("positions_file", "positions.json"))
     positions = PositionStore(positions_path)
+
+    device_overrides = DeviceOverrideStore(config.resolve("device_overrides.json"))
 
     history_cfg = config.raw.get("history", {})
     db_path = config.resolve(history_cfg.get("db_file", "data/history.db"))
@@ -127,6 +130,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["TRANSLATIONS"] = load_translations(config.web_language)
     app.config["MANAGER"] = manager
     app.config["POSITIONS"] = positions
+    app.config["DEVICE_OVERRIDES"] = device_overrides
     app.config["HISTORY"] = store
     app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
     app.config["POWER_BUDGET"] = power_budget
@@ -156,15 +160,29 @@ def _register_routes(app: Flask) -> None:
         power_budget: PowerBudget | None = app.config["POWER_BUDGET"]
         power_sensor = app.config["POWER_SENSOR"]
         interlock_followers: dict[str, str] = app.config["INTERLOCK_FOLLOWERS"]
+        overrides: DeviceOverrideStore = app.config["DEVICE_OVERRIDES"]
+        all_overrides = overrides.get_all()  # one read for the whole request, not one per device
 
         sensors = []
-        for name in manager.pollers:
+        for index, name in enumerate(manager.pollers):
+            override = all_overrides.get(name, {})
+            if override.get("hidden", False):
+                # Hidden devices are dropped entirely rather than sent
+                # with a flag - the main dashboard has no use for them,
+                # same reasoning as the existing zoneMemberNames exclusion
+                # in app.js for a zone's own sensor/valve.
+                continue
             entry = {
                 "name": name,
                 "kind": manager.sensor_kinds.get(name, "unknown"),
                 "controllable": name in manager.switches or name in manager.numbers,
-                "tab": manager.dashboard_tab.get(name, "home"),
-                "visible_in_mode": manager.visible_in_mode.get(name),
+                "tab": override.get("tab", manager.dashboard_tab.get(name, "home")),
+                "visible_in_mode": override.get("visible_in_mode", manager.visible_in_mode.get(name)),
+                # Default order is just today's existing visual order (this
+                # device's position in manager.pollers) - introducing the
+                # override store is a no-op for anyone who's never touched
+                # the admin panel.
+                "order": override.get("order", index),
             }
             if name in interlock_followers:
                 entry["linked_valve"] = interlock_followers[name]
@@ -177,7 +195,7 @@ def _register_routes(app: Flask) -> None:
             number = manager.numbers.get(name)
             if number is not None:
                 entry["range"] = {"min": number.min_value, "max": number.max_value, "unit": number.unit}
-                paired_switch = manager.paired_switch.get(name)
+                paired_switch = override.get("paired_switch", manager.paired_switch.get(name))
                 if paired_switch in manager.switches:
                     entry["paired_switch"] = paired_switch
             sensors.append(entry)
