@@ -7,19 +7,11 @@ date rather than by tag.
 ## Unreleased
 
 ### Fixed
-- `tuya_air_quality` treats a status snapshot reporting both
-  `temperature_c` and `humidity_pct` as exactly zero as a failed read
-  instead of recording it - a rare but real stale/incomplete response
-  from the device (indoor air can't physically be 0C and 0% RH at once),
-  found auditing real collected history data. Previously showed up as a
-  brief zero spike on the chart.
-- The thermostat schedule now rejects a non-numeric hour value on save
-  instead of persisting it - it would otherwise crash the entire
-  `/api/climate/zones` endpoint (not just one zone) the moment that hour
-  was reached. Also sanitizes any such value already on disk back to
-  "no target" on read, so one bad legacy cell can't permanently block
-  every future save of that zone (schedules always round-trip the whole
-  week, not a diff). Found via automated UI/API stress-testing.
+- Every route now falls back to a clean `{"ok": false, "error": ...}`
+  JSON response (logged server-side) for any exception nobody
+  anticipated, instead of Flask's default HTML error page - which broke
+  every frontend `fetch().then(r => r.json())` call with a JSON parse
+  error instead of a clear message. A normal 404/405 is unaffected.
 
 ## 2026-09-14
 
@@ -110,6 +102,19 @@ date rather than by tag.
   columns (it previously used `justify-content: space-between` on a
   handful of labels, which visually looked like the schedule stopped at
   18:00 instead of running to 24:00).
+- `tuya_air_quality` treats a status snapshot reporting both
+  `temperature_c` and `humidity_pct` as exactly zero as a failed read
+  instead of recording it - a rare but real stale/incomplete response
+  from the device (indoor air can't physically be 0C and 0% RH at once),
+  found auditing real collected history data. Previously showed up as a
+  brief zero spike on the chart.
+- The thermostat schedule now rejects a non-numeric hour value on save
+  instead of persisting it - it would otherwise crash the entire
+  `/api/climate/zones` endpoint (not just one zone) the moment that hour
+  was reached. Also sanitizes any such value already on disk back to
+  "no target" on read, so one bad legacy cell can't permanently block
+  every future save of that zone (schedules always round-trip the whole
+  week, not a diff). Found via automated UI/API stress-testing.
 
 ### Changed
 - Each zone's temperature/humidity chart now overlays when its valve

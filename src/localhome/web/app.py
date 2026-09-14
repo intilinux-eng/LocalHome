@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timedelta
 
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
@@ -23,9 +24,34 @@ from localhome.services.thermostat import ScheduleStore, ThermostatController, Z
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(config_path: str | None = None) -> Flask:
     app = Flask(__name__)
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(exc):
+        # Flask's own default for an uncaught exception is an HTML error
+        # page - fine for a browser navigating directly, but every route
+        # here is JSON, and the frontend's fetch().then(r => r.json())
+        # calls expect that shape even on failure (an {ok, error} object,
+        # same as every route's own handled error paths already return).
+        # Getting HTML back instead is a JSON parse error in the browser
+        # console that gives no hint what actually went wrong - and, more
+        # importantly, this is the backstop for a bug nobody anticipated
+        # yet (like a bad persisted value crashing one specific route),
+        # not a substitute for handling errors close to where they can
+        # happen. Logging here means it's still visible in the console/
+        # journalctl output even though the user just sees a clean error.
+        if isinstance(exc, HTTPException):
+            # A normal 404/405/etc. (unmatched route, wrong method) is
+            # not "unexpected" - let Flask handle it exactly as it
+            # would with no errorhandler registered at all.
+            return exc
+        logger.exception("Unhandled error handling %s %s", request.method, request.path)
+        return jsonify(ok=False, error="internal error - see server logs"), 500
+
     config = load_config(config_path)
     manager = DeviceManager(config)
 
