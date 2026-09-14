@@ -53,6 +53,7 @@
   },
   "sensors": {
     "peak_today": "Peak today",
+    "updated_ago": "{time} ago",
     "switch_on": "on",
     "switch_off": "off",
     "confirm_turn_off": "Turn this plug off? Make sure you know what it's powering.",

@@ -298,8 +298,12 @@ def _register_routes(app: Flask) -> None:
                 "temperature_c": sensor_reading.get("temperature_c"),
                 "humidity_pct": sensor_reading.get("humidity_pct"),
                 "sensor_ok": sensor_reading.get("ok", False),
+                "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
+                "sensor_error": sensor_reading.get("error"),
                 "valve_on": valve_reading.get("is_on", False),
                 "valve_ok": valve_reading.get("ok", False),
+                "valve_seconds_since_update": valve_reading.get("seconds_since_update"),
+                "valve_error": valve_reading.get("error"),
                 "target_c": thermostat.schedule_store.get_target(zone.name, now),
             })
         away_until = thermostat.schedule_store.get_away_until()

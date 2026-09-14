@@ -643,6 +643,12 @@ input[type="range"]:disabled {
   font-size: 1.6rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  text-align: right;
+}
+.zone-updated {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: right;
 }
 .zone-sub {
   display: inline-block;

@@ -64,6 +64,23 @@ function fmt(value, digits) {
   return typeof value === "number" ? value.toFixed(digits) : "--";
 }
 
+// A raw seconds_since_update (see core/poller.py's ReadingCache) is
+// meaningless to glance at once it's more than a couple minutes old -
+// "743s ago" takes real effort to parse. This is the one formatter every
+// "last updated"/staleness display in the app goes through.
+function formatAge(seconds) {
+  if (seconds == null) return null;
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+function formatUpdatedAgo(seconds) {
+  const age = formatAge(seconds);
+  return age == null ? "" : tr("sensors.updated_ago", { time: age });
+}
+
 // ---------------------------------------------------------------- covers ---
 
 function renderCovers(names) {
@@ -365,7 +382,7 @@ function updateSensorCard(sensor, reading, linkedReading) {
 
   const online = reading.online === undefined || reading.online === true || reading.online === "ONLINE";
   dot.classList.toggle("on", online && (reading.is_on === undefined || reading.is_on));
-  updated.textContent = reading.seconds_since_update != null ? `${reading.seconds_since_update}s ago` : "";
+  updated.textContent = formatUpdatedAgo(reading.seconds_since_update);
 
   const headlineField = HEADLINE_FIELDS[sensor.kind];
   const knownFields = Object.keys(FIELD_META).filter(f => f in reading && f !== headlineField);
@@ -968,6 +985,17 @@ function hourAxisHtml() {
   return cells;
 }
 
+// What the sensor slot shows when the reading itself is broken: the
+// driver's own error string if there is one (e.g. an MQTT staleness
+// timeout - see drivers/mqtt/base.py's require_payload() - or a Tuya/
+// Meross/Tapo network failure, since those poll the device directly and
+// already surface a real error the same way), falling back to the
+// generic "unreachable" label if a driver didn't set one.
+function zoneFreshnessText(zone) {
+  if (!zone.sensor_ok) return zone.sensor_error || tr("climate.unreachable");
+  return formatUpdatedAgo(zone.sensor_seconds_since_update);
+}
+
 function buildZoneCard(zone) {
   const id = slug(zone.name);
   const chartId = slug(zone.sensor);
@@ -978,7 +1006,10 @@ function buildZoneCard(zone) {
     <div class="zone-card" id="zone-${id}">
       <div class="zone-head">
         <div class="sensor-title"><span class="dot ${zone.valve_on ? "on" : ""}"></span><span class="zone-name">${zone.name}</span></div>
-        <div class="zone-current">${currentText}</div>
+        <div>
+          <div class="zone-current">${currentText}</div>
+          <div class="zone-updated" id="zone-updated-${id}" title="${zone.sensor_error || ""}">${zoneFreshnessText(zone)}</div>
+        </div>
       </div>
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
 
@@ -1237,6 +1268,11 @@ async function refreshClimateZonesLive() {
       card.querySelector(".zone-current").textContent = zone.sensor_ok && zone.temperature_c != null
         ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
         : tr("climate.unreachable");
+      const updated = card.querySelector(".zone-updated");
+      if (updated) {
+        updated.textContent = zoneFreshnessText(zone);
+        updated.title = zone.sensor_error || "";
+      }
       const sub = card.querySelector(".zone-sub");
       sub.textContent = zoneStatusText(zone);
       sub.className = `zone-sub state-${zoneStatusClass(zone)}`;
