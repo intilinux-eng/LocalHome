@@ -69,11 +69,17 @@ class SyncPoller:
 
     def _loop(self) -> None:
         while True:
-            try:
-                self.cache.set(self.driver.read())
-            except Exception as exc:
-                self.cache.set({"ok": False, "error": str(exc)})
+            self.poll_once()
             time.sleep(self.driver.poll_interval_seconds)
+
+    def poll_once(self) -> None:
+        """One read -> cache cycle, split out of _loop() so a test can
+        drive several iterations directly instead of starting a real
+        thread and sleeping through real poll intervals to observe them."""
+        try:
+            self.cache.set(self.driver.read())
+        except Exception as exc:
+            self.cache.set({"ok": False, "error": str(exc)})
 
     def get(self) -> dict[str, Any]:
         return self.cache.get()
@@ -92,17 +98,34 @@ class AsyncPoller:
         threading.Thread(target=lambda: asyncio.run(self._run()), daemon=True).start()
 
     async def _run(self) -> None:
+        # A one-shot setup failure used to kill this poller for the rest of
+        # the process's life - fatal if it just races something at boot
+        # (e.g. the MQTT broker or the network itself not up yet when
+        # LocalHome starts), since nothing ever retried it afterwards.
+        # Retrying here, same as a read failure, means a slow-starting
+        # dependency delays this poller instead of disabling it forever.
+        while not await self.setup_once():
+            await asyncio.sleep(self.driver.poll_interval_seconds)
+        while True:
+            await self.poll_once()
+            await asyncio.sleep(self.driver.poll_interval_seconds)
+
+    async def setup_once(self) -> bool:
+        """Returns True once driver.async_setup() has succeeded. Split out
+        of _run() so a test can drive setup/poll cycles directly instead of
+        starting a real asyncio loop and sleeping through poll intervals."""
         try:
             await self.driver.async_setup()
+            return True
         except Exception as exc:
             self.cache.set({"ok": False, "error": f"setup failed: {exc}"})
-            return
-        while True:
-            try:
-                self.cache.set(await self.driver.async_read())
-            except Exception as exc:
-                self.cache.set({"ok": False, "error": str(exc)})
-            await asyncio.sleep(self.driver.poll_interval_seconds)
+            return False
+
+    async def poll_once(self) -> None:
+        try:
+            self.cache.set(await self.driver.async_read())
+        except Exception as exc:
+            self.cache.set({"ok": False, "error": str(exc)})
 
     def get(self) -> dict[str, Any]:
         return self.cache.get()

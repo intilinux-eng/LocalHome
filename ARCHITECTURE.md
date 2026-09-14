@@ -78,6 +78,17 @@ class attribute. Either way, the rest of the app calls `.get()` and gets
 back a plain dict with an `"ok"` key plus `seconds_since_update` - it
 never needs to know which flavor of poller is underneath.
 
+Both flavors guarantee the same thing over the long run, not just on a
+quick check: a poller never permanently stops just because one read (or,
+for `AsyncPoller`, the one-time `async_setup()`) fails once. Every read
+is wrapped in try/except that caches `{"ok": False, ...}` and tries again
+next interval; `async_setup()` failing (e.g. the MQTT broker or the
+network itself not up yet when LocalHome starts) retries on the same
+interval instead of disabling that poller for the rest of the process's
+life. `sensor_reading()`/`.get()` therefore never raises, however broken
+the underlying device or connection is - callers only ever need to check
+`"ok"`, never wrap that call in their own try/except.
+
 ## A driver family that shares a resource: MQTT
 
 Most drivers own their connection outright (one Tuya device, one eWeLink
@@ -112,7 +123,57 @@ else that speaks MQTT+JSON, instead of one driver per brand.
   a schema migration - it just starts producing new rows. It also runs
   the optional power-budget alert (a three-zone tolerance model: safe
   indefinitely / tolerated briefly / trips soon) against one named
-  `power_meter` sensor.
+  `power_meter` sensor, and (for the thermostat) counts how many recorded
+  samples of a switch's `is_on` were "on" to approximate hours-on over a
+  day/week/month - no separate schema for that either, same table. Rows
+  older than `retention_days` (config.yaml, default 30) are pruned once a
+  day - the dashboard only ever charts up to 7 days, but nothing removed
+  older rows on its own before this, so the database would otherwise grow
+  for as long as the process stays up. Its background loop follows the
+  same "one failed cycle must not kill this forever" rule as the pollers
+  above and the thermostat/interlock loops below - a transient SQLite
+  error (e.g. a lock under concurrent access) is caught and retried next
+  interval, not left to silently stop history recording for good.
+- **`services/thermostat.py`** is a small closed-loop controller built
+  entirely on the two interfaces above: it reads a `climate` sensor
+  (temperature), consults a per-zone weekly schedule, and commands a
+  `switch` (the valve) - the same way a human flipping a real thermostat
+  would, just automated. It doesn't know or care whether the sensor/valve
+  behind those names are real Tuya/MQTT/simulated drivers; see
+  [docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones).
+  A zone can opt out of one mode entirely (`Zone.cool_enabled`) - the
+  loop then doesn't touch that zone's valve at all in that mode, on
+  purpose, so it never fights with whatever else might legitimately need
+  to drive that same switch. A separate "away until" deadline
+  (`ScheduleStore.get_away_until()`/`set_away_until()`) overrides the
+  schedule for every zone at once without editing it - the loop forces
+  every valve closed while a deadline is set and in the future, and
+  clears it and resumes normal per-zone logic on its own on the first
+  tick after it passes, the same self-healing idea as the poller
+  guarantees above: nothing needs to remember to turn it back off.
+- **`services/interlock.py`** is that "whatever else": a second, much
+  smaller loop that forces one switch to mirror another's on-state,
+  independent of any zone's temperature - see
+  [docs/configuration.md](docs/configuration.md#interlocks-one-switch-forced-to-follow-another)
+  for the motivating case (a dehumidifier sharing a bathroom zone's valve
+  circuit). Two controllers can safely share ownership of one switch only
+  because each backs off completely outside the conditions where it's
+  meant to act, rather than both trying to assert a value every tick.
+
+## Testing without hardware: the `simulated` driver
+
+[`drivers/simulated/`](src/localhome/drivers/simulated/) implements
+`climate` and `switch` with no real device at all - useful on its own for
+poking at the dashboard, and load-bearing for developing something like
+the thermostat before owning the valves/sensors it needs. Two simulated
+instances can react to each other (a climate driver drifting toward a
+target while a named switch driver is on) through a tiny shared
+in-memory dict in `drivers/simulated/world.py` - the same
+shared-module-state pattern `drivers/mqtt/client.py` uses for its
+connection pool, just for coordination between two fakes instead of one
+real connection. Nothing outside `drivers/simulated/` ever needs to know
+this coordination exists; swapping `type: simulated` for a real driver's
+type later touches config.yaml only.
 
 ## Web layer
 

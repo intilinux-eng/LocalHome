@@ -49,6 +49,17 @@ through the exact interface to implement. In short:
   that kind of comment is exactly the point; a comment restating what the
   next line of code already says is not.
 
+## Developing without the real hardware
+
+Don't own the device you're building a feature or driver against yet (or
+building something, like the thermostat, that spans several devices)?
+Point it at the `climate`/`switch` `simulated` driver instead - see
+[docs/integrations/simulated.md](docs/integrations/simulated.md) - and
+`localhome-cli doctor` to catch a typo'd zone/sensor/switch name in
+config.yaml before it fails silently. Both are exactly how the thermostat
+and its scheduling UI were built and tested end to end before any real
+valve/sensor was involved.
+
 ## Running tests
 
 ```bash

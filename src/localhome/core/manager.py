@@ -40,6 +40,16 @@ class DeviceManager:
         # that sets `paired_switch` - lets the dashboard show its slider
         # inside that switch's own card instead of as a separate one.
         self.paired_switch: dict[str, str] = {}
+        # sensor name -> dashboard tab, for an integration entry that sets
+        # `dashboard_tab` (e.g. "climate") - lets a purpose-built tab claim
+        # a sensor/switch instead of it showing on the generic Home grid.
+        # Defaults to "home" for anything that doesn't set it.
+        self.dashboard_tab: dict[str, str] = {}
+        # sensor name -> "heat"/"cool", for an integration entry that sets
+        # `visible_in_mode` - hides its card whenever the thermostat's
+        # current mode doesn't match (e.g. a dehumidifier that only makes
+        # sense to show while cooling). Unset means always visible.
+        self.visible_in_mode: dict[str, str] = {}
         self.notifier: Notifier | None = None
         self._build()
 
@@ -55,6 +65,10 @@ class DeviceManager:
                 self._register(entry.kind, driver)
                 if entry.kind == "number" and options.get("paired_switch"):
                     self.paired_switch[driver.name] = options["paired_switch"]
+                if options.get("dashboard_tab"):
+                    self.dashboard_tab[driver.name] = options["dashboard_tab"]
+                if options.get("visible_in_mode"):
+                    self.visible_in_mode[driver.name] = options["visible_in_mode"]
 
         if self.config.notifier:
             options = _resolve_paths(self.config, self.config.notifier.options)
