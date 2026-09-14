@@ -12,6 +12,13 @@ date rather than by tag.
   anticipated, instead of Flask's default HTML error page - which broke
   every frontend `fetch().then(r => r.json())` call with a JSON parse
   error instead of a clear message. A normal 404/405 is unaffected.
+- `meross_plug`'s setup/read calls are now wrapped in an explicit
+  timeout - meross-iot's own HTTP client doesn't document one, so
+  during an internet outage a hung request (rather than one that
+  fails/times out on its own) could have stuck that poller's
+  retry-forever loop waiting indefinitely instead of actually retrying
+  every interval. Tuya (LAN), eWeLink and Telegram already bounded
+  every network call the same way.
 
 ## 2026-09-14
 
