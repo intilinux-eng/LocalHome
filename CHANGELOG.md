@@ -14,6 +14,11 @@ date rather than by tag.
   switch that only publishes on state change can legitimately go quiet
   for a long time without being offline - see
   [docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
+- A "last updated" age (e.g. "5m ago") on every sensor card, formatted
+  as a human-friendly duration instead of raw seconds, and now also
+  shown on each thermostat zone card (previously only on the generic
+  Home-tab cards) alongside the sensor's own error message when it's
+  unreachable.
 
 ## 2026-09-14
 

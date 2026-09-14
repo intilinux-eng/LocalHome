@@ -53,6 +53,7 @@
   },
   "sensors": {
     "peak_today": "Picco odierno",
+    "updated_ago": "{time} fa",
     "switch_on": "acceso",
     "switch_off": "spento",
     "confirm_turn_off": "Spegnere questa presa? Assicurati di sapere cosa alimenta.",
