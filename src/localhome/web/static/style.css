@@ -43,11 +43,6 @@ h1 {
   margin: 0;
   letter-spacing: -0.02em;
 }
-#summary {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -72,6 +67,7 @@ h1 {
   margin: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   letter-spacing: -0.01em;
 }
@@ -413,6 +409,15 @@ input[type="range"]:disabled {
   display: inline-block;
   vertical-align: middle;
   margin-right: 3px;
+}
+.legend-band {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 3px;
+  background: rgba(48, 209, 88, 0.35);
 }
 
 .switch-body {
@@ -808,9 +813,14 @@ input[type="range"]:disabled {
   padding: 7px 14px;
   font-size: 0.78rem;
   font-weight: 700;
-  cursor: pointer;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-dim);
+}
+/* #climate-mode-badge is a plain <span> now - purely informational (see
+   the settings gear icon for the one and only place to change it), so it
+   gets no pointer cursor. .away-badge is a real <button>, so it does. */
+.away-badge {
+  cursor: pointer;
 }
 .mode-badge.heat {
   background: rgba(255, 159, 10, 0.18);
