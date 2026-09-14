@@ -22,6 +22,8 @@ from localhome.core.registry import register_driver
 from localhome.util.jsonfile import load_json
 
 COMMAND_TIMEOUT_SECONDS = 10
+SETUP_TIMEOUT_SECONDS = 20
+READ_TIMEOUT_SECONDS = 15
 
 
 class MerossPlugDriver(SwitchDriver):
@@ -48,15 +50,25 @@ class MerossPlugDriver(SwitchDriver):
         return ("power_w", "voltage_v", "current_a") if isinstance(self._plug, ElectricityMixin) else ()
 
     async def async_setup(self) -> None:
+        # meross-iot's own HTTP client doesn't document a timeout on
+        # these calls - wrapping them here guarantees AsyncPoller's
+        # retry-every-interval loop (see core/poller.py) can never get
+        # stuck waiting forever on one hung request during an internet
+        # outage, regardless of what the library does internally.
         self._loop = asyncio.get_running_loop()
-        http_client = await MerossHttpClient.async_from_user_password(
-            api_base_url=self._credentials.get("api_base_url", "https://iotx-eu.meross.com"),
-            email=self._credentials["email"],
-            password=self._credentials["password"],
-        )
-        manager = MerossManager(http_client=http_client)
-        await manager.async_init()
-        await manager.async_device_discovery()
+
+        async def _setup():
+            http_client = await MerossHttpClient.async_from_user_password(
+                api_base_url=self._credentials.get("api_base_url", "https://iotx-eu.meross.com"),
+                email=self._credentials["email"],
+                password=self._credentials["password"],
+            )
+            manager = MerossManager(http_client=http_client)
+            await manager.async_init()
+            await manager.async_device_discovery()
+            return manager
+
+        manager = await asyncio.wait_for(_setup(), timeout=SETUP_TIMEOUT_SECONDS)
 
         devices = manager.find_devices(
             device_uuids=[self._uuid] if self._uuid else None,
@@ -67,19 +79,22 @@ class MerossPlugDriver(SwitchDriver):
         self._plug = devices[0]
 
     async def async_read(self) -> dict[str, Any]:
-        await self._plug.async_update()
-        reading: dict[str, Any] = {
-            "ok": True,
-            "name": self.name,
-            "online": self._plug.online_status.name,
-            "is_on": self._plug.is_on(),
-        }
-        if isinstance(self._plug, ElectricityMixin):
-            metrics = await self._plug.async_get_instant_metrics()
-            reading["power_w"] = metrics.power
-            reading["voltage_v"] = metrics.voltage
-            reading["current_a"] = metrics.current
-        return reading
+        async def _read():
+            await self._plug.async_update()
+            reading: dict[str, Any] = {
+                "ok": True,
+                "name": self.name,
+                "online": self._plug.online_status.name,
+                "is_on": self._plug.is_on(),
+            }
+            if isinstance(self._plug, ElectricityMixin):
+                metrics = await self._plug.async_get_instant_metrics()
+                reading["power_w"] = metrics.power
+                reading["voltage_v"] = metrics.voltage
+                reading["current_a"] = metrics.current
+            return reading
+
+        return await asyncio.wait_for(_read(), timeout=READ_TIMEOUT_SECONDS)
 
     def turn_on(self) -> None:
         self._submit(self._plug.async_turn_on())
