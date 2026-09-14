@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -50,6 +51,53 @@ def test_set_week_rejects_wrong_length(tmp_path):
     bad_week["mon"] = [20.0] * 23  # not 24 hours
     with pytest.raises(ValueError):
         store.set_week("Rooms", bad_week)
+
+
+def test_set_week_rejects_a_non_numeric_hour_value(tmp_path):
+    # Found via UI stress-testing: an hour value that isn't a number or
+    # null used to be accepted and persisted here, only to blow up later
+    # in get_target()'s float(value) - from the thermostat's background
+    # tick, hours after whoever sent it is gone, with no useful error.
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    bad_week = ScheduleStore.empty_week()
+    bad_week["mon"][10] = "hot"
+    with pytest.raises(ValueError, match="mon.*10"):
+        store.set_week("Rooms", bad_week)
+
+
+def test_get_week_sanitizes_a_non_numeric_value_already_on_disk(tmp_path):
+    # Complements the get_target() test below: get_week() is what the
+    # dashboard's schedule editor actually loads, and saveSchedule() in
+    # app.js always resubmits the *whole* week on any edit - if get_week()
+    # didn't clean this up, a single legacy bad cell would ride along on
+    # every future save of that zone and get rejected every time, with no
+    # way to fix it short of hand-editing the JSON file.
+    path = tmp_path / "schedules.json"
+    week = ScheduleStore.empty_week()
+    week["mon"][10] = "hot"
+    week["mon"][11] = 21.0  # a real neighbor - must survive untouched
+    path.write_text(json.dumps({"mode": "heat", "zones": {"Rooms": week}}), encoding="utf-8")
+    store = ScheduleStore(str(path))
+
+    cleaned = store.get_week("Rooms")
+
+    assert cleaned["mon"][10] is None
+    assert cleaned["mon"][11] == 21.0
+
+
+def test_get_target_degrades_gracefully_on_a_non_numeric_value_already_on_disk(tmp_path):
+    # set_week() now rejects this on the way in, but get_target() is read
+    # on every /api/climate/zones request and every tick - it must not
+    # raise for a bad value that's already on disk (a hand-edited file,
+    # or data written before that check existed), or the whole endpoint
+    # (not just this one zone) breaks for as long as it sits there.
+    path = tmp_path / "schedules.json"
+    week = ScheduleStore.empty_week()
+    week["mon"][10] = "hot"
+    path.write_text(json.dumps({"mode": "heat", "zones": {"Rooms": week}}), encoding="utf-8")
+    store = ScheduleStore(str(path))
+
+    assert store.get_target("Rooms", datetime(2026, 9, 14, 10, 0)) is None
 
 
 def test_mode_defaults_and_persists(tmp_path):
