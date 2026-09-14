@@ -24,6 +24,62 @@ Every `mqtt_json` entry:
 Multiple `mqtt_json` entries pointed at the same `broker_file` share one
 real MQTT connection - see `drivers/mqtt/client.py`.
 
+## DHCP devices, and detecting one that's gone offline
+
+If your devices get their IP from DHCP (the common case, and no
+different from any other WiFi gadget on your LAN), you don't need
+static IPs or DHCP reservations for MQTT specifically - LocalHome never
+talks to a device's IP at all. Each device pushes its own state to the
+*broker* (whatever fixed host you set in `mqtt_broker.json`), and
+LocalHome only ever talks to that broker; if a device's IP changes, it
+just reconnects to the same broker from the new one and nothing here
+needs to know. The one address that has to stay reachable is the
+broker's own - typically something you run yourself (Mosquitto on the
+same machine as LocalHome, or on a small always-on box), so keeping
+that one on a static IP/DHCP reservation is enough.
+
+That said, on its own this can't tell "device is offline" from "device
+just hasn't changed state in a while" - MQTT only pushes when the
+device decides to, so by default LocalHome trusts the last message it
+ever received indefinitely (`read()` returns `"ok": True` off a payload
+from an hour, or a week, ago). For a device you know reports on a
+regular interval regardless of state changes (most sensors; some
+relays, depending on firmware), set `stale_after_seconds` a bit above
+that interval - a reading older than that becomes `"ok": False`
+("unreachable" on the dashboard, and skipped by the thermostat/interlock
+the same way any other sensor failure is) instead of silently going
+stale forever:
+
+```yaml
+- kind: climate
+  type: mqtt_json
+  name: "Shed Sensor"
+  broker_file: "mqtt_broker.json"
+  state_topic: "zigbee2mqtt/Shed Sensor"
+  stale_after_seconds: 900   # this one reports every ~10 min - flag it after ~3 missed reports
+  fields:
+    temperature_c: "temperature"
+```
+
+Leave it unset for anything that only publishes on change (most
+switches) - a light that's been off for six hours isn't "unreachable",
+it's just off, and a timeout here would wrongly flag it. This is a
+best-effort timeout, not the "smart" way to detect an offline device;
+some Shelly/Zigbee2MQTT setups also publish a dedicated availability/LWT
+topic the broker updates the instant a device's connection actually
+drops (`true`/`false`, independent of the device's own reporting
+interval) - `mqtt_json` doesn't wire that up yet (there's no single
+convention across brands/firmware the way there is for `fields`), but
+nothing stops a future option doing that per-device if you need it more
+precisely than a timeout gives you.
+
+There's no network cost either way: `poll_interval_seconds` below only
+controls how often the *already-cached* value is read into the
+dashboard/history, not a request sent to the device - see the table at
+the bottom of this page. A dead device doesn't get hammered with
+retries; it just sits there not publishing, same as if it were healthy
+and quiet.
+
 ## 1. Configure the broker connection
 
 ```bash
@@ -200,3 +256,4 @@ for any brand.
 | `id` | cover | stable id for position tracking (default: `name`) |
 | `history_fields` | sensor kinds | subset of `fields` worth recording (default: all of them) |
 | `poll_interval_seconds` | all | how often the cached MQTT value is snapshotted into a reading/history row (default 20s - this doesn't trigger new network traffic, MQTT already pushes) |
+| `stale_after_seconds` | sensor, switch, number | mark the reading `"ok": False` once the last MQTT message is older than this (default: unset, never expires) - see "Detecting an offline device" above |

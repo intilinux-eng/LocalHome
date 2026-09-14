@@ -7,6 +7,17 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- `stale_after_seconds` on the generic MQTT driver (`sensor`/`switch`/
+  `number`) - since MQTT only pushes when a device decides to, without
+  this a dead device's last message was cached and returned as a fine,
+  current reading forever. Opt-in (default: never expires), since a
+  switch that only publishes on state change can legitimately go quiet
+  for a long time without being offline - see
+  [docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
+
+## 2026-09-14
+
+### Added
 - A heating/cooling thermostat: a multi-zone valve control loop for a
   shared-plant radiant-panel setup (or anything similar) - a
   click-and-drag weekly setpoint schedule per zone, a shared heat/cool
@@ -77,6 +88,17 @@ date rather than by tag.
   columns (it previously used `justify-content: space-between` on a
   handful of labels, which visually looked like the schedule stopped at
   18:00 instead of running to 24:00).
+
+### Changed
+- Each zone's temperature/humidity chart now overlays when its valve
+  was on (a translucent band, plus the state in the hover tooltip),
+  reusing the on/off history already recorded for the on-hours metric.
+- The heat/cool mode indicator in the Climate tab is now a plain,
+  non-interactive label next to the heading instead of a second button
+  that duplicated the settings gear icon's job - the gear icon is the
+  only place that actually changes it now.
+- Dropped the covers "N of M open" header summary - redundant with each
+  cover card's own state, and out of place while on the Climate tab.
 
 ## 2026-09-12
 - Restructured the project into LocalHome, a generic, extensible

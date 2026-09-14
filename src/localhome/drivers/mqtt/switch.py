@@ -49,6 +49,7 @@ class MqttSwitchDriver(SwitchDriver):
         payload_off: str = "OFF",
         command_payload_field: str | None = None,
         poll_interval_seconds: float = 20.0,
+        stale_after_seconds: float | None = None,
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
@@ -59,7 +60,7 @@ class MqttSwitchDriver(SwitchDriver):
         self._payload_on = payload_on
         self._payload_off = payload_off
         self._command_payload_field = command_payload_field
-        self._state = MqttJsonState(broker, state_topic)
+        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds)
 
     def read(self) -> dict[str, Any]:
         payload = require_payload(self._state)
@@ -93,6 +94,7 @@ def _create(options: dict) -> MqttSwitchDriver:
         payload_off=options.get("payload_off", "OFF"),
         command_payload_field=options.get("command_payload_field"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
+        stale_after_seconds=options.get("stale_after_seconds"),
     )
 
 

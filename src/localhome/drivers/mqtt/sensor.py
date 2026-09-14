@@ -46,12 +46,13 @@ class MqttSensorDriver(PollingDriver):
         fields: dict[str, str],
         history_fields: tuple[str, ...] | None = None,
         poll_interval_seconds: float = 20.0,
+        stale_after_seconds: float | None = None,
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
         self._fields = fields
         self.history_fields = tuple(history_fields) if history_fields else tuple(fields)
-        self._state = MqttJsonState(broker, state_topic)
+        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds)
 
     def read(self) -> dict[str, Any]:
         payload = require_payload(self._state)
@@ -71,6 +72,7 @@ def _create(options: dict) -> MqttSensorDriver:
         fields=options["fields"],
         history_fields=options.get("history_fields"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
+        stale_after_seconds=options.get("stale_after_seconds"),
     )
 
 
