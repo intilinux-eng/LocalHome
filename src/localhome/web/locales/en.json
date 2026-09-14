@@ -22,7 +22,6 @@
     "moving_to": "moving to {percent}%...",
     "badge_closed": "Closed",
     "badge_open": "Open",
-    "summary": "{open} of {total} open",
     "error": "error: {error}",
     "unreachable": "unreachable"
   },
@@ -83,6 +82,7 @@
     "target_off": "Off",
     "valve_open": "Valve open",
     "valve_closed": "Valve closed",
+    "valve_on_band": "Valve on",
     "no_target": "No target set for this hour",
     "status_active": "Target {target} · valve open",
     "status_reached": "Target {target} reached · valve closed",

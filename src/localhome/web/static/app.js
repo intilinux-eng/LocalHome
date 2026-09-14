@@ -132,7 +132,6 @@ const COVER_STATE_LABELS = {
 };
 
 async function refreshCovers(names) {
-  const percents = [];
   for (const name of names) {
     const stateEl = document.getElementById(`cover-state-${slug(name)}`);
     const sliderEl = document.getElementById(`cover-slider-${slug(name)}`);
@@ -142,7 +141,6 @@ async function refreshCovers(names) {
       const data = await res.json();
       if (data.ok) {
         stateEl.textContent = (COVER_STATE_LABELS[data.state] || data.state) + (data.calibrated ? "" : tr("covers.not_calibrated"));
-        percents.push(data.percent);
         if (document.activeElement !== sliderEl) {
           sliderEl.value = data.percent;
           pctEl.textContent = `${data.percent}%`;
@@ -155,8 +153,6 @@ async function refreshCovers(names) {
       stateEl.textContent = tr("covers.unreachable");
     }
   }
-  const summaryEl = document.getElementById("summary");
-  if (percents.length) summaryEl.textContent = tr("covers.summary", { open: percents.filter(p => p > 0).length, total: percents.length });
 }
 
 const COVER_ACTION_LABELS = {
@@ -482,7 +478,7 @@ async function onSwitchToggle(name, el) {
 
 const CHART_W = 400, CHART_H = 130, CHART_PAD_L = 34, CHART_PAD_TOP = 8, CHART_PAD_BOTTOM = 16;
 const SERIES_COLOR = "#3987e5", WARNING_COLOR = "#fab219", CRITICAL_COLOR = "#d63b3b";
-const TEMP_COLOR = "#ff9f0a", HUM_COLOR = "#3987e5";
+const TEMP_COLOR = "#ff9f0a", HUM_COLOR = "#3987e5", VALVE_BAND_COLOR = "#30d158";
 const chartRanges = {};
 const chartPointsCache = {};
 
@@ -529,9 +525,19 @@ async function loadChart(sensor) {
     } catch (e) { /* keep previous render */ }
   } else if (sensor.kind === "climate") {
     try {
-      const res = await fetch(`/api/sensors/${encodeURIComponent(sensor.name)}/history?field=temperature_c&field=humidity_pct&range=${range}`);
+      // A thermostat zone's chart (sensor.valve set) also overlays when
+      // its valve was on, fetched the same generic way as the
+      // temperature/humidity series - is_on is just another recorded
+      // history_fields entry on that switch (see services/history.py),
+      // keyed by the valve's own name instead of the sensor's.
+      const fetches = [fetch(`/api/sensors/${encodeURIComponent(sensor.name)}/history?field=temperature_c&field=humidity_pct&range=${range}`)];
+      if (sensor.valve) fetches.push(fetch(`/api/sensors/${encodeURIComponent(sensor.valve)}/history?field=is_on&range=${range}`));
+      const [res, valveRes] = await Promise.all(fetches);
       const data = await res.json();
-      if (data.ok) drawClimateChart(id, data.series.temperature_c, data.series.humidity_pct, range);
+      const valveData = valveRes ? await valveRes.json() : null;
+      if (data.ok) {
+        drawClimateChart(id, data.series.temperature_c, data.series.humidity_pct, range, valveData && valveData.ok ? valveData.series.is_on : null);
+      }
     } catch (e) { /* keep previous render */ }
   }
 }
@@ -662,7 +668,7 @@ function niceBounds(values, pad, step) {
 // independent Y scale - °C on the left, % on the right - since the two
 // units have nothing to do with each other and forcing them onto one
 // scale would make at least one line uselessly flat.
-function drawClimateChart(id, tempPoints, humPoints, range) {
+function drawClimateChart(id, tempPoints, humPoints, range, valvePoints) {
   const svg = document.getElementById(`chart-${id}`);
   if (!svg) return;
   svg.innerHTML = "";
@@ -676,6 +682,26 @@ function drawClimateChart(id, tempPoints, humPoints, range) {
   const xOf = ts => CHART_PAD_L + ((ts - minTs) / Math.max(1, maxTs - minTs)) * plotW;
   const yOfTemp = t => CHART_PAD_TOP + plotH - ((t - tMin) / (tMax - tMin)) * plotH;
   const yOfHum = h => CHART_PAD_TOP + plotH - ((h - hMin) / (hMax - hMin)) * plotH;
+
+  // Valve on/off bands go in first, so they sit behind the gridlines and
+  // the temp/humidity lines instead of covering them. `is_on` is
+  // recorded as 0/1 and averaged per bucket by the same query() every
+  // other history field goes through, so a bucket isn't cleanly on/off
+  // if the valve flipped mid-bucket - >=0.5 treats "on for most of this
+  // bucket" as on. Each band runs from that sample to the next one (a
+  // step function), since that's the best guess at how long it stayed
+  // in that state between two recorded points.
+  if (valvePoints && valvePoints.length) {
+    for (let i = 0; i < valvePoints.length; i++) {
+      if (valvePoints[i].value < 0.5) continue;
+      const x1 = xOf(valvePoints[i].ts);
+      const x2 = i + 1 < valvePoints.length ? xOf(valvePoints[i + 1].ts) : CHART_W - CLIMATE_PAD_R;
+      svg.appendChild(svgEl("rect", {
+        x: x1, y: CHART_PAD_TOP, width: Math.max(1, x2 - x1), height: plotH,
+        fill: VALVE_BAND_COLOR, opacity: 0.16,
+      }));
+    }
+  }
 
   [0, 0.5, 1].forEach(frac => {
     const y = CHART_PAD_TOP + plotH * (1 - frac);
@@ -696,12 +722,12 @@ function drawClimateChart(id, tempPoints, humPoints, range) {
   lineFor(humPoints, yOfHum, HUM_COLOR);
 
   const hit = svgEl("rect", { x: CHART_PAD_L, y: 0, width: plotW, height: CHART_H, fill: "transparent" });
-  hit.addEventListener("pointermove", e => onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range));
+  hit.addEventListener("pointermove", e => onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints));
   hit.addEventListener("pointerleave", () => hideTooltip(id));
   svg.appendChild(hit);
 }
 
-function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range) {
+function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints) {
   const rect = svg.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (CHART_W / rect.width);
   let nearest = tempPoints[0], nearestHum = humPoints[0], best = Infinity;
@@ -709,9 +735,18 @@ function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range) {
     const dist = Math.abs(xOf(tempPoints[i].ts) - x);
     if (dist < best) { best = dist; nearest = tempPoints[i]; nearestHum = humPoints[i]; }
   }
+  let valveOn = null;
+  if (valvePoints && valvePoints.length) {
+    let vBest = Infinity;
+    for (const p of valvePoints) {
+      const dist = Math.abs(xOf(p.ts) - x);
+      if (dist < vBest) { vBest = dist; valveOn = p.value >= 0.5; }
+    }
+  }
   const tooltip = document.getElementById(`tooltip-${id}`);
   tooltip.hidden = false;
-  tooltip.innerHTML = `<span class="val" style="color:${TEMP_COLOR}">${nearest.value.toFixed(1)}°C</span> · <span class="val" style="color:${HUM_COLOR}">${nearestHum.value.toFixed(0)}%</span> · ${formatTime(nearest.ts, range)}`;
+  const valveLabel = valveOn == null ? "" : ` · <span class="val" style="color:${VALVE_BAND_COLOR}">${valveOn ? tr("climate.valve_open") : tr("climate.valve_closed")}</span>`;
+  tooltip.innerHTML = `<span class="val" style="color:${TEMP_COLOR}">${nearest.value.toFixed(1)}°C</span> · <span class="val" style="color:${HUM_COLOR}">${nearestHum.value.toFixed(0)}%</span>${valveLabel} · ${formatTime(nearest.ts, range)}`;
   tooltip.style.left = (xOf(nearest.ts) * (rect.width / CHART_W)) + "px";
   tooltip.style.top = "0px";
 }
@@ -984,7 +1019,7 @@ function buildZoneCard(zone) {
         <svg id="chart-${chartId}" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
         <div class="chart-tooltip" id="tooltip-${chartId}" hidden></div>
       </div>
-      <div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")}</div>
+      <div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")} <span class="legend-band" style="margin-left:10px"></span> ${tr("climate.valve_on_band")}</div>
     </div>
   `;
 }
@@ -1023,13 +1058,13 @@ function renderClimateZones() {
       btn.classList.add("active");
       chartRanges[chartId] = btn.dataset.range;
       const zone = climateZones.find(z => slug(z.sensor) === chartId);
-      if (zone) loadChart({ name: zone.sensor, kind: "climate" });
+      if (zone) loadChart({ name: zone.sensor, kind: "climate", valve: zone.valve });
     });
   });
 
   visibleZones.forEach(zone => {
     chartRanges[slug(zone.sensor)] = "24h";
-    loadChart({ name: zone.sensor, kind: "climate" });
+    loadChart({ name: zone.sensor, kind: "climate", valve: zone.valve });
   });
 }
 
@@ -1298,7 +1333,7 @@ async function boot() {
     updateNowHighlight();
     setInterval(refreshClimateZonesLive, 5000);
     setInterval(() => climateZones.forEach(z => refreshOnHours(z.name)), 30000);
-    setInterval(() => climateZones.forEach(z => loadChart({ name: z.sensor, kind: "climate" })), 60000);
+    setInterval(() => climateZones.forEach(z => loadChart({ name: z.sensor, kind: "climate", valve: z.valve })), 60000);
     setInterval(updateNowHighlight, 30000);
   }
   applyClimateModeVisibility();
