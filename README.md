@@ -15,6 +15,15 @@ smaller, hackable base meant to be read end to end in one sitting and
 extended with exactly the drivers your home needs. If you outgrow it,
 you've outgrown it - that's a fine outcome for a project this size.
 
+## Screenshots
+
+Both captured against the `simulated` driver (see below) - no real
+hardware needed to see this for yourself.
+
+| Home | Heating & Cooling |
+|---|---|
+| ![Home tab: sensor cards and covers](docs/screenshots/home.png) | ![Heating & Cooling tab: per-zone schedule, on-time history and chart](docs/screenshots/climate.png) |
+
 ## What's included
 
 | Kind          | Driver                | Talks to                          | Local? |

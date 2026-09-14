@@ -19,6 +19,8 @@ date rather than by tag.
   shown on each thermostat zone card (previously only on the generic
   Home-tab cards) alongside the sensor's own error message when it's
   unreachable.
+- README screenshots (`docs/screenshots/`), captured against the
+  `simulated` driver.
 
 ## 2026-09-14
 
