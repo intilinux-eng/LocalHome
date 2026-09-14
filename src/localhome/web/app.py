@@ -440,6 +440,90 @@ def _register_routes(app: Flask) -> None:
             month=round(store.sum_on_hours_range(zone.valve, "is_on", "month", interval), 2),
         )
 
+    # ------------------------------------------------------------- admin --
+    # Experimental (feature/web-admin-config): no auth of its own,
+    # reachable only via index.html's low-key .admin-link - if web.auth
+    # is configured, register_auth()'s before_request hook already
+    # covers every route including these, same as the rest of the app.
+
+    @app.route("/admin")
+    def admin_page():
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        return render_template("admin.html", t=app.config["TRANSLATIONS"], lang=config.web_language)
+
+    @app.route("/api/admin/devices")
+    def api_admin_devices():
+        manager: DeviceManager = app.config["MANAGER"]
+        overrides: DeviceOverrideStore = app.config["DEVICE_OVERRIDES"]
+        all_overrides = overrides.get_all()
+
+        devices = []
+        for index, name in enumerate(manager.pollers):
+            override = all_overrides.get(name, {})
+            entry = {
+                "name": name,
+                "kind": manager.sensor_kinds.get(name, "unknown"),
+                "tab": override.get("tab", manager.dashboard_tab.get(name, "home")),
+                "hidden": override.get("hidden", False),
+                "order": override.get("order", index),
+                "visible_in_mode": override.get("visible_in_mode", manager.visible_in_mode.get(name)),
+            }
+            if name in manager.numbers:
+                entry["paired_switch"] = override.get("paired_switch", manager.paired_switch.get(name))
+            devices.append(entry)
+        devices.sort(key=lambda d: d["order"])
+
+        return jsonify(ok=True, devices=devices, switch_names=sorted(manager.switches))
+
+    @app.route("/api/admin/devices/<name>/override", methods=["POST"])
+    def api_admin_set_override(name):
+        manager: DeviceManager = app.config["MANAGER"]
+        overrides: DeviceOverrideStore = app.config["DEVICE_OVERRIDES"]
+        if name not in manager.pollers:
+            return jsonify(ok=False, error=f"unknown device '{name}'"), 404
+
+        data = request.get_json(silent=True) or {}
+        fields: dict = {}
+        if "tab" in data:
+            if data["tab"] not in ("home", "climate"):
+                return jsonify(ok=False, error="tab must be 'home' or 'climate'"), 400
+            fields["tab"] = data["tab"]
+        if "hidden" in data:
+            # False clears the override entirely (falls back to visible)
+            # rather than storing a literal false - see set_override()'s
+            # own None-clears-the-field convention.
+            fields["hidden"] = True if data["hidden"] else None
+        if "visible_in_mode" in data:
+            mode = data["visible_in_mode"]
+            if mode not in (None, "heat", "cool"):
+                return jsonify(ok=False, error="visible_in_mode must be 'heat', 'cool' or null"), 400
+            fields["visible_in_mode"] = mode
+        if "paired_switch" in data:
+            switch_name = data["paired_switch"]
+            if switch_name is not None and switch_name not in manager.switches:
+                return jsonify(ok=False, error=f"'{switch_name}' is not a known switch"), 400
+            fields["paired_switch"] = switch_name
+        if not fields:
+            return jsonify(ok=False, error="no recognized fields in request body"), 400
+
+        overrides.set_override(name, **fields)
+        return jsonify(ok=True)
+
+    @app.route("/api/admin/devices/order", methods=["POST"])
+    def api_admin_set_order():
+        manager: DeviceManager = app.config["MANAGER"]
+        overrides: DeviceOverrideStore = app.config["DEVICE_OVERRIDES"]
+        data = request.get_json(silent=True) or {}
+        order = data.get("order")
+        if not isinstance(order, list) or not order:
+            return jsonify(ok=False, error="'order' must be a non-empty list of device names"), 400
+        unknown = [name for name in order if name not in manager.pollers]
+        if unknown:
+            return jsonify(ok=False, error=f"unknown device name(s): {unknown}"), 400
+
+        overrides.set_order(order)
+        return jsonify(ok=True)
+
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)

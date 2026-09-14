@@ -73,6 +73,24 @@
     "close": "Close",
     "mode_label": "Heating / cooling season"
   },
+  "admin": {
+    "heading": "Admin",
+    "link_label": "admin",
+    "back_to_dashboard": "← Back to dashboard",
+    "home_layout_heading": "Home tab layout",
+    "home_layout_hint": "Drag to reorder. Changes save automatically.",
+    "show_on_label": "Show on",
+    "show_on_home": "Home",
+    "show_on_climate": "Heating & Cooling",
+    "show_on_hidden": "Hidden",
+    "visible_in_mode_label": "Visible in mode",
+    "visible_in_mode_always": "Always",
+    "visible_in_mode_heat": "Heating only",
+    "visible_in_mode_cool": "Cooling only",
+    "paired_switch_label": "Pair with switch",
+    "paired_switch_none": "None",
+    "save_failed": "Couldn't save that change"
+  },
   "climate": {
     "heading": "Heating & Cooling",
     "mode_heat": "Heating",
