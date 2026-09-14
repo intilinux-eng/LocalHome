@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t.admin.heading }} - {{ t.app.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+  <header>
+    <h1>{{ t.admin.heading }}</h1>
+    <div class="header-right">
+      <a href="/" class="admin-link">{{ t.admin.back_to_dashboard }}</a>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <h2>{{ t.admin.home_layout_heading }}</h2>
+    </div>
+    <p class="hint-text">{{ t.admin.home_layout_hint }}</p>
+    <ul id="device-list" class="device-list"></ul>
+  </section>
+
+  <script>
+    window.I18N = {{ t | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

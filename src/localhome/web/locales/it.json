@@ -73,6 +73,24 @@
     "close": "Chiudi",
     "mode_label": "Stagione riscaldamento / raffrescamento"
   },
+  "admin": {
+    "heading": "Amministrazione",
+    "link_label": "admin",
+    "back_to_dashboard": "← Torna alla dashboard",
+    "home_layout_heading": "Layout tab Home",
+    "home_layout_hint": "Trascina per riordinare. Le modifiche si salvano automaticamente.",
+    "show_on_label": "Mostra in",
+    "show_on_home": "Home",
+    "show_on_climate": "Riscaldamento e raffrescamento",
+    "show_on_hidden": "Nascosto",
+    "visible_in_mode_label": "Visibile in modalità",
+    "visible_in_mode_always": "Sempre",
+    "visible_in_mode_heat": "Solo riscaldamento",
+    "visible_in_mode_cool": "Solo raffrescamento",
+    "paired_switch_label": "Abbina a interruttore",
+    "paired_switch_none": "Nessuno",
+    "save_failed": "Salvataggio non riuscito"
+  },
   "climate": {
     "heading": "Riscaldamento e raffrescamento",
     "mode_heat": "Riscaldamento",

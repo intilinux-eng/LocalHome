@@ -38,6 +38,18 @@ header {
   align-items: center;
   gap: 10px;
 }
+.admin-link {
+  /* Deliberately low-key - a text link, not an icon button, matching
+     the settings/away badges' visual weight - so it's reachable if you
+     know to look, without inviting every visitor to click it. */
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  opacity: 0.6;
+}
+.admin-link:hover {
+  opacity: 1;
+}
 h1 {
   font-size: 1.5rem;
   margin: 0;
