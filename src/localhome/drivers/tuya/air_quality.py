@@ -47,6 +47,17 @@ class TuyaAirQualityDriver(PollingDriver):
         for dp_id, (key, transform) in FIELDS.items():
             if dp_id in dps:
                 reading[key] = transform(dps[dp_id])
+
+        # Seen rarely in practice: a stale/incomplete status snapshot
+        # with real dps keys present but every value zeroed out. Indoor
+        # air can't physically be 0C and 0% RH at the same time, so this
+        # specific combination means a bad read, not a real measurement -
+        # without this it shows up as a brief zero spike in the history
+        # chart. Treating it as a failure lets the normal retry-next-poll
+        # behavior (see core/poller.py) recover instead of recording it.
+        if reading.get("temperature_c") == 0 and reading.get("humidity_pct") == 0:
+            raise RuntimeError("device returned an all-zero status snapshot (likely a stale/incomplete read)")
+
         return reading
 
 

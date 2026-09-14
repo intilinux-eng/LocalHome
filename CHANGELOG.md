@@ -6,6 +6,16 @@ date rather than by tag.
 
 ## Unreleased
 
+### Fixed
+- `tuya_air_quality` treats a status snapshot reporting both
+  `temperature_c` and `humidity_pct` as exactly zero as a failed read
+  instead of recording it - a rare but real stale/incomplete response
+  from the device (indoor air can't physically be 0C and 0% RH at once),
+  found auditing real collected history data. Previously showed up as a
+  brief zero spike on the chart.
+
+## 2026-09-14
+
 ### Added
 - `stale_after_seconds` on the generic MQTT driver (`sensor`/`switch`/
   `number`) - since MQTT only pushes when a device decides to, without
@@ -21,8 +31,6 @@ date rather than by tag.
   unreachable.
 - README screenshots (`docs/screenshots/`), captured against the
   `simulated` driver.
-
-## 2026-09-14
 
 ### Added
 - A heating/cooling thermostat: a multi-zone valve control loop for a
