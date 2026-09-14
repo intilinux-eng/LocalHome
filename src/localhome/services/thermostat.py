@@ -88,13 +88,45 @@ class ScheduleStore:
     def get_week(self, zone_name: str) -> dict[str, list]:
         data = self._load()
         week = data.get("zones", {}).get(zone_name)
-        return week if week else self.empty_week()
+        if not week:
+            return self.empty_week()
+        # set_week() rejects a non-numeric value going forward, but this
+        # sanitizes anything already on disk from before that check
+        # existed (or a hand-edited file) - without it, the dashboard
+        # round-trips the *whole* week on every save (see saveSchedule()
+        # in app.js), so one bad legacy cell would silently ride along on
+        # every future save of that zone and get rejected every time,
+        # with no way to fix it short of editing the JSON file by hand.
+        # Reading it back as null instead means the very next save
+        # overwrites it with a clean value for good.
+        clean: dict[str, list] = {}
+        for day, hours in week.items():
+            clean_hours = []
+            for hour, value in enumerate(hours):
+                if value is not None and not isinstance(value, (int, float)):
+                    logger.warning(
+                        "Zone %r has a non-numeric schedule value %r for %s %d:00 - clearing it",
+                        zone_name, value, day, hour,
+                    )
+                    value = None
+                clean_hours.append(value)
+            clean[day] = clean_hours
+        return clean
 
     def set_week(self, zone_name: str, week: dict[str, list]) -> None:
         for day in DAYS:
             hours = week.get(day)
             if not isinstance(hours, list) or len(hours) != HOURS_PER_DAY:
                 raise ValueError(f"week['{day}'] must be a list of exactly {HOURS_PER_DAY} values")
+            for hour, value in enumerate(hours):
+                # Rejected here, not left for get_target()'s float(value)
+                # to discover later - that runs from the thermostat's
+                # background tick, several hours after whoever posted a
+                # bad value is long gone, and would only be caught by the
+                # generic "log and retry next tick" fallback rather than
+                # ever telling anyone what was actually wrong.
+                if value is not None and not isinstance(value, (int, float)):
+                    raise ValueError(f"week['{day}'][{hour}] must be a number or null, got {value!r}")
         data = self._load()
         data.setdefault("zones", {})[zone_name] = week
         self._save(data)
@@ -102,7 +134,23 @@ class ScheduleStore:
     def get_target(self, zone_name: str, when: datetime) -> float | None:
         week = self.get_week(zone_name)
         value = week[DAYS[when.weekday()]][when.hour]
-        return float(value) if value is not None else None
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            # set_week() rejects a non-numeric value up front, but this
+            # is the second line of defense for anything already on disk
+            # from before that check existed, or hand-edited directly -
+            # this is read on every /api/climate/zones request and every
+            # tick, so raising here would take the whole zones API (not
+            # just this one zone) down for as long as the bad value sits
+            # in the file, not just skip a tick.
+            logger.warning(
+                "Zone %r has a non-numeric schedule value %r for %s %d:00 - treating as no target",
+                zone_name, value, DAYS[when.weekday()], when.hour,
+            )
+            return None
 
     def get_away_until(self) -> datetime | None:
         """Away mode is a temporary override, separate from the weekly
