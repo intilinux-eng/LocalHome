@@ -25,20 +25,34 @@ you've outgrown it - that's a fine outcome for a project this size.
 | `switch`      | `meross_plug`          | Meross smartplugs                  | No - Meross cloud (MQTT), see [docs/integrations/meross.md](docs/integrations/meross.md) |
 | `switch` / `number` | `tplink_led_strip` | TP-Link Kasa/Tapo LED strips (on/off + brightness) | Yes (LAN) - see [docs/integrations/tplink.md](docs/integrations/tplink.md) |
 | `cover` / `climate` / `power_meter` / `switch` / `number` | `mqtt_json` | **Generic** - any device that publishes JSON (or plain-string) state over MQTT: Shelly, Tasmota, Zigbee2MQTT, ESPHome, DIY sketches... | Yes (LAN, to your own broker) - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
+| `climate` / `switch` | `simulated`       | **No hardware required** - a fake sensor/switch for trying out the dashboard (or a whole thermostat setup) before you own the real thing | N/A - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
 | `notifier`    | `telegram`             | Telegram bot API                   | Cloud by nature (push notifications) |
 
 `number` is a controllable analog value - a dimmer, a fan speed, a 0-10V
 output - for anything set to a level rather than toggled or driven
 open/closed.
 
-The web dashboard renders whatever combination of these you have
-enabled, plus estimated 0-100% position for covers that only report a
-raw open/close/stop motor command, plus a sqlite-backed history/chart for
-any numeric field a driver exposes, plus an optional power-budget alert,
-plus optional HTTP Basic Auth if you want it (off by default), plus a
-UI language you can switch with one config line (English and Italian
-ship today; see [docs/configuration.md#language](docs/configuration.md#language)
-for adding your own).
+The web dashboard has two tabs: **Home** (whatever combination of the
+above you have enabled, plus estimated 0-100% position for covers that
+only report a raw open/close/stop motor command, plus a sqlite-backed
+history/chart, with automatic old-row cleanup, for any numeric field a
+driver exposes, plus an optional power-budget alert) and **Heating &
+Cooling** - a multi-zone valve thermostat for a shared-plant
+radiant-panel setup (or anything similar): a click-and-drag weekly
+setpoint schedule per zone, editable straight from the dashboard, how
+many hours each zone's valve was on today/this week/this month, a
+one-tap "away for N days" override that closes every valve and resumes
+the normal schedule on its own, a zone that can opt out of one mode
+entirely (e.g. a bathroom that can't safely be cooled), and a generic
+"switch A forces switch B" rule for a device whose own operation depends
+on a specific valve (e.g. a dehumidifier sharing a zone's water
+circuit). See
+[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones).
+Both tabs get optional HTTP Basic Auth if you want it (off by default),
+and a UI language you can switch with one config line (English and
+Italian ship today; see
+[docs/configuration.md#language](docs/configuration.md#language) for
+adding your own).
 
 Don't own any of the devices above? The point of this project is that
 adding your own driver is a self-contained, half-hour change - see
@@ -74,6 +88,8 @@ cp config/config.example.yaml config/config.yaml
 # see docs/configuration.md and docs/integrations/ for how to get each
 # device's IDs/keys/credentials.
 
+pip install -e . && localhome-cli doctor   # sanity-checks config.yaml - see docs/configuration.md
+
 python run.py
 # -> dashboard at http://localhost:5000
 ```
@@ -96,8 +112,8 @@ similar next to your router) instead of a dev machine? See
 config/            Your device inventories, secrets and config.yaml (gitignored, except *.example.*)
 src/localhome/
   core/            Driver interfaces, the plugin registry, background pollers
-  drivers/         One subpackage per brand/protocol (tuya, ewelink, meross, mqtt, notifiers, ...)
-  services/        Cross-driver logic: cover position estimation, sqlite history + alerting
+  drivers/         One subpackage per brand/protocol (tuya, ewelink, meross, mqtt, simulated, notifiers, ...)
+  services/        Cross-driver logic: cover position estimation, sqlite history + alerting, the heating/cooling thermostat, and its switch-follows-switch interlock
   web/             Flask app (+ optional Basic Auth), dashboard templates/static files, and locales/ (UI language files, see docs/configuration.md#language)
   config.py        Loads config.yaml and resolves its relative paths
   cli.py           Command-line cover control
@@ -114,7 +130,7 @@ and why they're split this way.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - the driver/registry/manager design and why it looks like this
 - [docs/configuration.md](docs/configuration.md) - full config.yaml reference, including optional web auth
 - [docs/adding-a-driver.md](docs/adding-a-driver.md) - how to add a new brand or device kind
-- [docs/integrations/](docs/integrations/) - per-brand setup guides (Tuya, eWeLink, Meross, MQTT, Telegram)
+- [docs/integrations/](docs/integrations/) - per-brand setup guides (Tuya, eWeLink, Meross, MQTT, Telegram, Simulated)
 - [docs/deployment.md](docs/deployment.md) - Docker / systemd for running this unattended
 - [docs/troubleshooting.md](docs/troubleshooting.md) - known error messages and fixes
 - [CONTRIBUTING.md](CONTRIBUTING.md) - how to propose changes, coding conventions

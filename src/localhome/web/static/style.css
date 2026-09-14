@@ -33,6 +33,11 @@ header {
   justify-content: space-between;
   margin-bottom: 20px;
 }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 h1 {
   font-size: 1.5rem;
   margin: 0;
@@ -421,6 +426,11 @@ input[type="range"]:disabled {
   color: var(--text-dim);
   margin-top: 4px;
 }
+.linked-valve-note {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border);
+}
 .toggle {
   position: relative;
   width: 52px;
@@ -509,4 +519,375 @@ input[type="range"]:disabled {
   color: var(--text-dim);
   text-align: center;
   padding: 30px 0;
+}
+
+/* ----------------------------------------------------------------- tabs -- */
+
+.tab-nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--card-border);
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 10px 4px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--accent-open);
+}
+.tab-panel[hidden] {
+  display: none;
+}
+.hint-text {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin: 4px 0 14px;
+}
+
+/* ------------------------------------------------------------- mode toggle */
+
+.mode-toggle {
+  display: inline-block;
+  cursor: pointer;
+}
+.mode-toggle input {
+  display: none;
+}
+.mode-track {
+  position: relative;
+  display: flex;
+  width: 180px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.mode-track span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  z-index: 1;
+  transition: color 0.15s ease;
+}
+.mode-label-heat {
+  color: white;
+}
+.mode-label-cool {
+  color: var(--text-dim);
+}
+.mode-track::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff9f0a, #d1362c);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.mode-toggle input:checked ~ .mode-track::before {
+  transform: translateX(100%);
+  background: linear-gradient(135deg, #3987e5, #1fa746);
+}
+.mode-toggle input:checked ~ .mode-track .mode-label-heat {
+  color: var(--text-dim);
+}
+.mode-toggle input:checked ~ .mode-track .mode-label-cool {
+  color: white;
+}
+
+/* ---------------------------------------------------------------- zones -- */
+
+#climate-zones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.zone-card {
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.1), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 18px;
+}
+.zone-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.zone-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.zone-current {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.zone-sub {
+  display: inline-block;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+/* Three states, not just "open"/"closed" - see zoneStatusClass() in
+   app.js: "off" (no target this hour), "active" (valve open, working
+   toward the target) and "reached" (target met, valve closed) read very
+   differently even though the last two both mean "valve is closed". */
+.zone-sub.state-off {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+}
+.zone-sub.state-active {
+  background: rgba(48, 209, 88, 0.18);
+  color: var(--accent-open);
+}
+.zone-sub.state-reached {
+  background: rgba(57, 135, 229, 0.18);
+  color: #3987e5;
+}
+
+.sched-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.sched-swatch {
+  width: 34px;
+  height: 28px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.sched-swatch.active {
+  border-color: white;
+}
+
+.sched-hour-axis-wrap {
+  /* No padding here - the axis grid inside must stay exactly as wide as
+     .sched-grid below it (see its comment) for the hour labels to line
+     up with their columns. "24h" is just absolutely positioned at the
+     wrapper's right edge instead, which lands it exactly at the boundary
+     after hour 23's column - nothing needs to make room for it. */
+  position: relative;
+}
+.sched-hour-axis {
+  /* Same 25-column template as .sched-grid below (a leading spacer for
+     the day-label column, then one column per hour), so each label sits
+     exactly above its hour instead of just being spread evenly across
+     the row - see hourAxisHtml() in app.js for why that distinction
+     matters here. */
+  display: grid;
+  grid-template-columns: 34px repeat(24, 1fr);
+  gap: 3px;
+  font-size: 0.56rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.sched-hour-axis span {
+  text-align: center;
+}
+.sched-hour-axis span.now {
+  color: var(--text);
+  font-weight: 800;
+}
+.sched-hour-axis-end {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-size: 0.56rem;
+  color: var(--text-dim);
+}
+.sched-grid {
+  display: grid;
+  grid-template-columns: 34px repeat(24, 1fr);
+  gap: 3px;
+  touch-action: none;
+  margin-bottom: 12px;
+}
+.sched-day-label {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+}
+.sched-day-label.now {
+  color: var(--text);
+  font-weight: 700;
+}
+.sched-cell {
+  height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+  transition: filter 0.1s ease;
+}
+.sched-cell:hover {
+  filter: brightness(1.35);
+}
+.sched-cell.off {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.05) 0px,
+    rgba(255, 255, 255, 0.05) 3px,
+    rgba(255, 255, 255, 0.1) 3px,
+    rgba(255, 255, 255, 0.1) 6px
+  );
+}
+.sched-cell.now::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.zone-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+/* --------------------------------------------------- settings / modal -- */
+
+.icon-btn-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.icon-btn-sm svg {
+  width: 17px;
+  height: 17px;
+}
+.icon-btn-sm:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.mode-badge {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+}
+.mode-badge.heat {
+  background: rgba(255, 159, 10, 0.18);
+  color: #ff9f0a;
+}
+.mode-badge.cool {
+  background: rgba(57, 135, 229, 0.18);
+  color: #3987e5;
+}
+.away-badge.active {
+  background: rgba(255, 69, 58, 0.18);
+  color: var(--accent-close);
+}
+
+.away-banner {
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.away-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+.modal-overlay[hidden] {
+  display: none;
+}
+.modal-panel {
+  background: #14161f;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.modal-head h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-row .hint-text {
+  margin: 4px 0 0;
+}
+.settings-label {
+  font-size: 0.88rem;
+  font-weight: 600;
 }

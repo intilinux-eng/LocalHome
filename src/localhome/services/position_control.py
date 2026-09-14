@@ -13,11 +13,15 @@ having sent that command, and later stops, assume it ran to completion.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
 
 from localhome.core.interfaces import CoverDriver
+from localhome.util.jsonfile import load_json, save_json_atomic
+
+logger = logging.getLogger(__name__)
 
 OWN_COMMAND_GRACE_SECONDS = 60
 
@@ -35,13 +39,14 @@ class PositionStore:
     def _load(self) -> dict:
         if not os.path.exists(self.path):
             return {}
-        with open(self.path, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            return load_json(self.path)
+        except (json.JSONDecodeError, OSError):
+            logger.exception("Failed to read %s - treating all covers as uncalibrated", self.path)
+            return {}
 
     def _save(self, positions: dict) -> None:
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(positions, f, indent=2)
+        save_json_atomic(self.path, positions)
 
     def get(self, cover_id: str, default: int = 100) -> int:
         """Current best-effort position. While a move_to_percent() move is

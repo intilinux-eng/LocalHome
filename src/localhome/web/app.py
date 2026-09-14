@@ -10,6 +10,7 @@ docs/adding-a-driver.md.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from flask import Flask, jsonify, render_template, request
 
@@ -17,6 +18,8 @@ from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.position_control import PositionStore
+from localhome.services.interlock import Interlock, InterlockController
+from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -45,24 +48,65 @@ def create_app(config_path: str | None = None) -> Flask:
     )
     power_sensor = energy_cfg.get("sensor")
 
+    history_poll_interval = history_cfg.get("poll_interval_seconds", 30)
     recorder = HistoryRecorder(
         manager,
         store,
-        poll_interval_seconds=history_cfg.get("poll_interval_seconds", 30),
+        poll_interval_seconds=history_poll_interval,
         power_budget=power_budget,
         power_sensor=power_sensor,
+        retention_days=history_cfg.get("retention_days", 30),
     )
+
+    thermostat = None
+    interlock = None
+    interlock_followers: dict[str, str] = {}
+    thermostat_cfg = config.raw.get("thermostat")
+    if thermostat_cfg:
+        schedules_path = config.resolve(thermostat_cfg.get("schedules_file", "schedules.json"))
+        schedule_store = ScheduleStore(schedules_path, default_mode=thermostat_cfg.get("mode", "heat"))
+        zones = [
+            Zone(name=z["name"], sensor=z["sensor"], valve=z["valve"], cool_enabled=z.get("cool_enabled", True))
+            for z in thermostat_cfg.get("zones", [])
+        ]
+        thermostat = ThermostatController(
+            manager,
+            schedule_store,
+            zones,
+            hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.3),
+            poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
+        )
+
+        interlocks = [
+            Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
+            for link in thermostat_cfg.get("interlocks", [])
+        ]
+        if interlocks:
+            interlock = InterlockController(
+                manager,
+                interlocks,
+                mode_provider=schedule_store.get_mode,
+                poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
+            )
+            interlock_followers = {link.leader: link.follower for link in interlocks}
 
     manager.start()
     recorder.start()
+    if thermostat:
+        thermostat.start()
+    if interlock:
+        interlock.start()
 
     app.config["LOCALHOME_CONFIG"] = config
     app.config["TRANSLATIONS"] = load_translations(config.web_language)
     app.config["MANAGER"] = manager
     app.config["POSITIONS"] = positions
     app.config["HISTORY"] = store
+    app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
     app.config["POWER_BUDGET"] = power_budget
     app.config["POWER_SENSOR"] = power_sensor
+    app.config["THERMOSTAT"] = thermostat
+    app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
 
     _register_routes(app)
     return app
@@ -85,6 +129,7 @@ def _register_routes(app: Flask) -> None:
         manager: DeviceManager = app.config["MANAGER"]
         power_budget: PowerBudget | None = app.config["POWER_BUDGET"]
         power_sensor = app.config["POWER_SENSOR"]
+        interlock_followers: dict[str, str] = app.config["INTERLOCK_FOLLOWERS"]
 
         sensors = []
         for name in manager.pollers:
@@ -92,7 +137,11 @@ def _register_routes(app: Flask) -> None:
                 "name": name,
                 "kind": manager.sensor_kinds.get(name, "unknown"),
                 "controllable": name in manager.switches or name in manager.numbers,
+                "tab": manager.dashboard_tab.get(name, "home"),
+                "visible_in_mode": manager.visible_in_mode.get(name),
             }
+            if name in interlock_followers:
+                entry["linked_valve"] = interlock_followers[name]
             if power_budget is not None and name == power_sensor:
                 entry["power_budget"] = {
                     "contract_limit_w": power_budget.contract_limit_w,
@@ -229,6 +278,119 @@ def _register_routes(app: Flask) -> None:
         if not field:
             return jsonify(ok=False, error="missing 'field' parameter"), 400
         return jsonify(ok=True, **store.query_peak_today(name, field))
+
+    @app.route("/api/climate/zones")
+    def api_climate_zones():
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=True, mode=None, zones=[])
+        manager: DeviceManager = app.config["MANAGER"]
+        now = datetime.now()
+        zones = []
+        for zone in thermostat.zones:
+            sensor_reading = manager.sensor_reading(zone.sensor)
+            valve_reading = manager.sensor_reading(zone.valve)
+            zones.append({
+                "name": zone.name,
+                "sensor": zone.sensor,
+                "valve": zone.valve,
+                "cool_enabled": zone.cool_enabled,
+                "temperature_c": sensor_reading.get("temperature_c"),
+                "humidity_pct": sensor_reading.get("humidity_pct"),
+                "sensor_ok": sensor_reading.get("ok", False),
+                "valve_on": valve_reading.get("is_on", False),
+                "valve_ok": valve_reading.get("ok", False),
+                "target_c": thermostat.schedule_store.get_target(zone.name, now),
+            })
+        away_until = thermostat.schedule_store.get_away_until()
+        return jsonify(
+            ok=True,
+            mode=thermostat.schedule_store.get_mode(),
+            away_until=away_until.isoformat() if away_until else None,
+            zones=zones,
+        )
+
+    @app.route("/api/climate/mode", methods=["POST"])
+    def api_climate_set_mode():
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        data = request.get_json(silent=True) or {}
+        mode = data.get("mode")
+        if mode not in ("heat", "cool"):
+            return jsonify(ok=False, error="mode must be 'heat' or 'cool'"), 400
+        thermostat.schedule_store.set_mode(mode)
+        # Re-evaluate right away instead of leaving valves showing stale
+        # state until the background loop's next scheduled tick - a mode
+        # switch changes every zone's heat/cool logic at once.
+        thermostat.tick()
+        return jsonify(ok=True)
+
+    @app.route("/api/climate/away", methods=["POST"])
+    def api_climate_set_away():
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        data = request.get_json(silent=True) or {}
+        hours = data.get("hours")
+        if not isinstance(hours, (int, float)) or hours <= 0:
+            return jsonify(ok=False, error="hours must be a positive number"), 400
+        until = datetime.now() + timedelta(hours=hours)
+        thermostat.schedule_store.set_away_until(until)
+        thermostat.tick()
+        return jsonify(ok=True, away_until=until.isoformat())
+
+    @app.route("/api/climate/away/cancel", methods=["POST"])
+    def api_climate_cancel_away():
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        thermostat.schedule_store.set_away_until(None)
+        thermostat.tick()
+        return jsonify(ok=True)
+
+    @app.route("/api/climate/zones/<name>/schedule")
+    def api_climate_get_schedule(name):
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        return jsonify(ok=True, week=thermostat.schedule_store.get_week(name))
+
+    @app.route("/api/climate/zones/<name>/schedule", methods=["POST"])
+    def api_climate_set_schedule(name):
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        data = request.get_json(silent=True) or {}
+        week = data.get("week")
+        if not isinstance(week, dict):
+            return jsonify(ok=False, error="missing 'week'"), 400
+        try:
+            thermostat.schedule_store.set_week(name, week)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        # Same reasoning as the mode switch above: don't leave the valve
+        # (and the status label derived from it) stale until the next
+        # scheduled tick just because the new target was written to disk.
+        thermostat.tick()
+        return jsonify(ok=True)
+
+    @app.route("/api/climate/zones/<name>/on-hours")
+    def api_climate_on_hours(name):
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        zone = next((z for z in thermostat.zones if z.name == name), None)
+        if zone is None:
+            return jsonify(ok=False, error=f"unknown zone '{name}'"), 404
+        store: HistoryStore = app.config["HISTORY"]
+        interval = app.config["HISTORY_POLL_INTERVAL"]
+        return jsonify(
+            ok=True,
+            today=round(store.sum_on_hours_range(zone.valve, "is_on", "today", interval), 2),
+            week=round(store.sum_on_hours_range(zone.valve, "is_on", "week", interval), 2),
+            month=round(store.sum_on_hours_range(zone.valve, "is_on", "month", interval), 2),
+        )
 
 
 def main() -> None:

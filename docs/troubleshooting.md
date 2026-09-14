@@ -36,6 +36,24 @@ Expected - position is a time-based estimate, not a real sensor reading
 closed once via the dashboard/CLI to recalibrate; that's an exact
 0%/100% regardless of what the estimate said before.
 
+**A device that should follow another one (`interlocks:`) doesn't seem to react**
+Check `active_in_mode` on that interlock entry - if it's set (e.g.
+`"cool"`), the rule is deliberately a no-op in every other mode, leaving
+the follower switch entirely to whatever else normally drives it (see
+[docs/configuration.md](configuration.md#interlocks-one-switch-forced-to-follow-another)).
+This is the single most common "it's not a bug" surprise with this
+feature - a dehumidifier interlock scoped to `cool` genuinely does
+nothing while the thermostat is in `heat` mode, on purpose. Check the
+current mode (Settings, or `GET /api/climate/zones`) before assuming
+something's broken.
+
+**A zone's target/valve status looks stale right after editing the schedule or switching mode**
+Should self-correct within one `poll_interval_seconds` at most - both
+`/api/climate/zones/<name>/schedule` and `/api/climate/mode` already
+trigger an immediate re-evaluation, not just a write to disk. If it's
+still stale after that, check the browser console/network tab for a
+failed request rather than assuming the control loop itself is wrong.
+
 **I accidentally committed something under `config/`**
 ```bash
 git rm --cached config/the-file-you-committed

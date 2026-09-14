@@ -9,30 +9,98 @@
 <body>
   <header>
     <h1>{{ t.app.title }}</h1>
-    <div id="summary"></div>
+    <div class="header-right">
+      <div id="summary"></div>
+      <button class="icon-btn-sm settings-btn" onclick="openSettings()" title="{{ t.settings.heading }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
+    </div>
   </header>
 
-  <div id="sensor-cards" class="dashboard-grid"></div>
-
-  <section>
-    <div class="section-head">
-      <h2>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="11" x2="21" y2="11"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-        {{ t.covers.heading }}
-      </h2>
-      <div class="toolbar">
-        <button class="tbtn open" onclick="sendCoverAction('all', 'open')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-          {{ t.covers.open_all }}
-        </button>
-        <button class="tbtn close" onclick="sendCoverAction('all', 'close')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          {{ t.covers.close_all }}
+  <div id="settings-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeSettings()">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2>{{ t.settings.heading }}</h2>
+        <button class="icon-btn-sm" onclick="closeSettings()" title="{{ t.settings.close }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">{{ t.settings.mode_label }}</div>
+          <p class="hint-text">{{ t.climate.mode_note }}</p>
+        </div>
+        <label class="mode-toggle">
+          <input type="checkbox" id="climate-mode-toggle" onchange="onModeToggle(this)">
+          <span class="mode-track"><span class="mode-label-heat">{{ t.climate.mode_heat }}</span><span class="mode-label-cool">{{ t.climate.mode_cool }}</span></span>
+        </label>
+      </div>
     </div>
-    <div id="cover-cards" class="shutters-grid"></div>
-  </section>
+  </div>
+
+  <div id="away-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeAway()">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2>{{ t.climate.away_heading }}</h2>
+        <button class="icon-btn-sm" onclick="closeAway()" title="{{ t.settings.close }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <p class="hint-text">{{ t.climate.away_note }}</p>
+      <p class="hint-text" id="away-status"></p>
+      <div class="away-options">
+        <button class="range-btn" onclick="setAway(24)">{{ t.climate.away_1day }}</button>
+        <button class="range-btn" onclick="setAway(72)">{{ t.climate.away_3days }}</button>
+        <button class="range-btn" onclick="setAway(168)">{{ t.climate.away_7days }}</button>
+      </div>
+      <button class="tbtn close" id="away-cancel-btn" onclick="cancelAway()" hidden style="width:100%; margin-top:10px; justify-content:center">{{ t.climate.away_return_now }}</button>
+    </div>
+  </div>
+
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="home" onclick="switchTab('home')">{{ t.tabs.home }}</button>
+    <button class="tab-btn" data-tab="climate" onclick="switchTab('climate')">{{ t.tabs.climate }}</button>
+  </nav>
+
+  <div id="tab-home" class="tab-panel">
+    <div id="sensor-cards" class="dashboard-grid"></div>
+
+    <section>
+      <div class="section-head">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="11" x2="21" y2="11"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+          {{ t.covers.heading }}
+        </h2>
+        <div class="toolbar">
+          <button class="tbtn open" onclick="sendCoverAction('all', 'open')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            {{ t.covers.open_all }}
+          </button>
+          <button class="tbtn close" onclick="sendCoverAction('all', 'close')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            {{ t.covers.close_all }}
+          </button>
+        </div>
+      </div>
+      <div id="cover-cards" class="shutters-grid"></div>
+    </section>
+  </div>
+
+  <div id="tab-climate" class="tab-panel" hidden>
+    <div class="section-head">
+      <h2>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"></path><path d="M12 18v4"></path><path d="m4.93 4.93 2.83 2.83"></path><path d="m16.24 16.24 2.83 2.83"></path><path d="M2 12h4"></path><path d="M18 12h4"></path><path d="m4.93 19.07 2.83-2.83"></path><path d="m16.24 7.76 2.83-2.83"></path></svg>
+        {{ t.climate.heading }}
+      </h2>
+      <div class="toolbar">
+        <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>
+        <button class="mode-badge" id="climate-mode-badge" onclick="openSettings()"></button>
+      </div>
+    </div>
+    <p class="hint-text" id="climate-clock"></p>
+    <div id="climate-zones"></div>
+    <div id="climate-extra" class="dashboard-grid"></div>
+  </div>
 
   <script>
     window.COVER_NAMES = {{ cover_names | tojson }};

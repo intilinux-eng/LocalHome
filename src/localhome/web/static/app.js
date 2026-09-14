@@ -262,7 +262,7 @@ function buildSensorCard(sensor) {
   }
 
   return `
-    <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}">
+    <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}" data-visible-in-mode="${sensor.visible_in_mode || ""}">
       <div class="sensor-top">
         <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${sensor.name}</span></span>
         <span class="state" id="updated-${id}"></span>
@@ -299,14 +299,19 @@ async function setNumberValue(name, value) {
   }
 }
 
-function renderSensors(sensors) {
-  const el = document.getElementById("sensor-cards");
+function renderSensors(sensors, containerId = "sensor-cards") {
+  const el = document.getElementById(containerId);
+  if (!el) return;
   el.innerHTML = sensors.filter(s => !s.embedded).map(buildSensorCard).join("");
 
-  document.querySelectorAll(".range-btn").forEach(btn => {
+  // Scoped to this container, not the whole document - renderSensors() is
+  // called once per dashboard tab (Home, then the Climate tab's "extra"
+  // switches like the dehumidifier), and a document-wide query here would
+  // re-attach duplicate listeners onto the other tab's already-rendered cards.
+  el.querySelectorAll(".range-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.sensor;
-      document.querySelectorAll(`.range-btn[data-sensor="${id}"]`).forEach(b => b.classList.remove("active"));
+      el.querySelectorAll(`.range-btn[data-sensor="${id}"]`).forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       chartRanges[id] = btn.dataset.range;
       const sensor = sensors.find(s => slug(s.name) === id);
@@ -314,7 +319,7 @@ function renderSensors(sensors) {
     });
   });
 
-  document.querySelectorAll(".number-slider").forEach(slider => {
+  el.querySelectorAll(".number-slider").forEach(slider => {
     const name = slider.dataset.name;
     const sensor = sensors.find(s => s.name === name);
     const unit = (sensor.range || {}).unit || "";
@@ -333,14 +338,22 @@ function renderSensors(sensors) {
 }
 
 function refreshSensor(sensor) {
-  const id = slug(sensor.name);
-  fetch(`/api/sensors/${encodeURIComponent(sensor.name)}`)
-    .then(r => r.json())
-    .then(reading => updateSensorCard(sensor, reading))
-    .catch(() => updateSensorCard(sensor, { ok: false, error: "unreachable" }));
+  // A switch tagged `linked_valve` (see the dehumidifier/interlock example
+  // in docs/configuration.md) also needs its follower valve's live state
+  // fetched alongside its own reading, so the card can show what it's
+  // actually doing right now - not just "on", but "on, and that also
+  // opened the bathroom valve" - see updateSensorCard()'s switch branch.
+  const mainFetch = fetch(`/api/sensors/${encodeURIComponent(sensor.name)}`).then(r => r.json());
+  const linkedFetch = sensor.linked_valve
+    ? fetch(`/api/sensors/${encodeURIComponent(sensor.linked_valve)}`).then(r => r.json()).catch(() => null)
+    : Promise.resolve(null);
+
+  Promise.all([mainFetch, linkedFetch])
+    .then(([reading, linkedReading]) => updateSensorCard(sensor, reading, linkedReading))
+    .catch(() => updateSensorCard(sensor, { ok: false, error: "unreachable" }, null));
 }
 
-function updateSensorCard(sensor, reading) {
+function updateSensorCard(sensor, reading, linkedReading) {
   const id = slug(sensor.name);
   const dot = document.getElementById(`dot-${id}`);
   const updated = document.getElementById(`updated-${id}`);
@@ -388,6 +401,11 @@ function updateSensorCard(sensor, reading) {
         </label>
       </div>
     `;
+    if (sensor.linked_valve) {
+      const linkedOn = !!(linkedReading && linkedReading.ok && linkedReading.is_on);
+      const key = linkedOn ? "climate.linked_valve_on" : "climate.linked_valve_off";
+      html += `<div class="switch-sub linked-valve-note">${tr(key, { valve: sensor.linked_valve })}</div>`;
+    }
   } else if (sensor.kind === "number") {
     const unit = (sensor.range || {}).unit || "";
     html += `<div class="headline"><div class="big">${fmt(reading.value, 0)} <span>${unit}</span></div></div>`;
@@ -474,6 +492,11 @@ function svgEl(tag, attrs) {
   return el;
 }
 
+// Rounds a chart's Y-axis max up to a "nice" round number instead of the
+// exact data max (743W -> 1000, 5.2 -> 10, etc.), the same way graphing
+// libraries pick axis bounds - Math.log10 finds which power of ten the
+// value sits in, then the loop picks the smallest of a few human-friendly
+// multiples of that power that's still >= value.
 function niceMax(value) {
   if (value <= 0) return 100;
   const pow = Math.pow(10, Math.floor(Math.log10(value)));
@@ -525,8 +548,15 @@ function drawEmpty(svg) {
   </foreignObject>`;
 }
 
+// Every chart is drawn into a fixed CHART_W x CHART_H SVG viewBox (see the
+// CHART_* constants near the top of this file) rather than sized off the
+// real DOM - so the same pixel math works whatever CSS ends up scaling
+// the <svg> to. `xOf`/`yOf` below are just linear maps from data units
+// (a unix timestamp, a watt/degree/percent value) to that fixed pixel
+// space: "where the oldest/newest point sits" and "where zero/max sits"
+// become the two ends of each map.
 function drawPowerChart(id, points, range, budget) {
-  chartPointsCache[id] = points;
+  chartPointsCache[id] = points;  // hover needs the raw values back, not just what got drawn - see onPowerChartHover
   const svg = document.getElementById(`chart-${id}`);
   if (!svg) return;
   svg.innerHTML = "";
@@ -535,6 +565,9 @@ function drawPowerChart(id, points, range, budget) {
   const availableW = budget ? budget.available_power_w : Math.max(...points.map(p => p.value)) * 1.2;
   const tripRiskW = budget ? budget.trip_risk_w : availableW * 1.2;
   const dataMax = Math.max(...points.map(p => p.value));
+  // Axis max is whichever is bigger: a nice-rounded ceiling over the data
+  // itself, or enough headroom to fit the trip-risk reference line - so
+  // that line is never drawn above the top of the chart when it's high.
   const maxVal = Math.max(niceMax(dataMax * 1.2), tripRiskW * 1.1);
   const minTs = points[0].ts, maxTs = points[points.length - 1].ts;
   const plotW = CHART_W - CHART_PAD_L, plotH = CHART_H - CHART_PAD_TOP - CHART_PAD_BOTTOM;
@@ -577,6 +610,9 @@ function drawPowerChart(id, points, range, budget) {
     }));
   });
 
+  // One invisible full-width/height rect handles hover for every bar,
+  // instead of a listener per bar - simpler, and it still works over the
+  // gaps between bars, not just on top of one.
   const hit = svgEl("rect", { x: CHART_PAD_L, y: 0, width: plotW, height: CHART_H, fill: "transparent" });
   hit.addEventListener("pointermove", e => onPowerChartHover(e, id, svg, xOf, range));
   hit.addEventListener("pointerleave", () => hideTooltip(id));
@@ -585,6 +621,10 @@ function drawPowerChart(id, points, range, budget) {
 
 function onPowerChartHover(e, id, svg, xOf, range) {
   const points = chartPointsCache[id];
+  // The pointer event gives CSS pixels in the page; the chart's own math
+  // is all in CHART_W/CHART_H viewBox units - this rescales one to the
+  // other using however big the <svg> actually renders on screen, so
+  // hover still lines up correctly whatever width the card ends up at.
   const rect = svg.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (CHART_W / rect.width);
   let nearest = points[0], best = Infinity;
@@ -608,11 +648,20 @@ function hideTooltip(id) {
   document.querySelectorAll(`#chart-${id} .power-bar`).forEach(bar => { bar.style.filter = ""; });
 }
 
+// Like niceMax, but for a full [min, max] range with a bit of breathing
+// room (`pad`) on each side, snapped outward to the nearest multiple of
+// `step` - so the temperature axis lands on round degrees and the
+// humidity one on round tens, instead of whatever the raw data happened
+// to range over.
 function niceBounds(values, pad, step) {
   const min = Math.min(...values) - pad, max = Math.max(...values) + pad;
   return [Math.floor(min / step) * step, Math.ceil(max / step) * step];
 }
 
+// Temperature and humidity share one time (X) axis but get their own
+// independent Y scale - °C on the left, % on the right - since the two
+// units have nothing to do with each other and forcing them onto one
+// scale would make at least one line uselessly flat.
 function drawClimateChart(id, tempPoints, humPoints, range) {
   const svg = document.getElementById(`chart-${id}`);
   if (!svg) return;
@@ -667,19 +716,592 @@ function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range) {
   tooltip.style.top = "0px";
 }
 
+// ----------------------------------------------------------------- tabs ----
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.getElementById("tab-home").hidden = tab !== "home";
+  document.getElementById("tab-climate").hidden = tab !== "climate";
+  try { localStorage.setItem("localhome-tab", tab); } catch (e) { /* private browsing etc - just skip remembering it */ }
+}
+
+// A deliberately low-key settings panel (a gear icon, not a prominent
+// control on the main tab) for anything that shouldn't be one accidental
+// tap away - right now just the heat/cool season switch, which stays in
+// effect until someone opens this and changes it again (persisted to
+// schedules.json - see ScheduleStore in services/thermostat.py - so it
+// survives a restart/power cut, not just a page reload).
+function openSettings() {
+  document.getElementById("settings-modal").hidden = false;
+}
+
+function closeSettings() {
+  document.getElementById("settings-modal").hidden = true;
+}
+
+function updateModeBadge() {
+  const badge = document.getElementById("climate-mode-badge");
+  if (!badge) return;
+  badge.textContent = climateMode === "cool" ? tr("climate.mode_cool") : tr("climate.mode_heat");
+  badge.className = `mode-badge ${climateMode}`;
+}
+
+// "Away" is a temporary hold on top of the weekly schedule - see
+// get_away_until() in services/thermostat.py for why it's not just
+// painting every hour off for a day. climateAwayUntil is null (not away)
+// or an ISO string (guaranteed still in the future - the backend clears
+// it itself once it's passed, see ThermostatController.tick()).
+let climateAwayUntil = null;
+
+function openAway() {
+  updateAwayStatusText();
+  document.getElementById("away-modal").hidden = false;
+}
+
+function closeAway() {
+  document.getElementById("away-modal").hidden = true;
+}
+
+function updateAwayBadge() {
+  const badge = document.getElementById("climate-away-badge");
+  if (!badge) return;
+  badge.textContent = tr("climate.away_button");
+  badge.className = `mode-badge away-badge${climateAwayUntil ? " active" : ""}`;
+}
+
+function formatAwayUntil(iso) {
+  return new Date(iso).toLocaleString(LOCALE, {
+    weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function updateAwayStatusText() {
+  const el = document.getElementById("away-status");
+  const cancelBtn = document.getElementById("away-cancel-btn");
+  if (!el) return;
+  if (climateAwayUntil) {
+    el.textContent = tr("climate.away_active", { until: formatAwayUntil(climateAwayUntil) });
+    if (cancelBtn) cancelBtn.hidden = false;
+  } else {
+    el.textContent = tr("climate.away_idle");
+    if (cancelBtn) cancelBtn.hidden = true;
+  }
+}
+
+// Patches just the banner atop the zone cards instead of going through
+// renderClimateZones()'s full rebuild - away starting/ending never adds or
+// removes a zone card (unlike a mode switch), so a full rebuild would just
+// be extra work (and would need every schedule grid reloaded again too).
+function updateAwayBanner() {
+  const container = document.getElementById("climate-zones");
+  if (!container) return;
+  let banner = container.querySelector(".away-banner");
+  if (climateAwayUntil) {
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.className = "away-banner";
+      container.prepend(banner);
+    }
+    banner.innerHTML = `${tr("climate.away_active", { until: formatAwayUntil(climateAwayUntil) })} <button class="range-btn" onclick="cancelAway()">${tr("climate.away_return_now")}</button>`;
+  } else if (banner) {
+    banner.remove();
+  }
+}
+
+async function setAway(hours) {
+  try {
+    const res = await fetch("/api/climate/away", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hours }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(tr("sensors.error_prefix") + data.error);
+      return;
+    }
+    climateAwayUntil = data.away_until;
+    updateAwayBadge();
+    updateAwayStatusText();
+    closeAway();
+    await refreshClimateZonesLive();
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+  }
+}
+
+async function cancelAway() {
+  try {
+    const res = await fetch("/api/climate/away/cancel", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(tr("sensors.error_prefix") + data.error);
+      return;
+    }
+    climateAwayUntil = null;
+    updateAwayBadge();
+    updateAwayStatusText();
+    await refreshClimateZonesLive();
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+  }
+}
+
+// ------------------------------------------------------- climate/thermostat
+
+// Two-zone (or more) valve thermostat: each zone is an existing climate
+// sensor + switch valve (already rendered as normal cards if not claimed by
+// a zone - see boot()), plus a weekly per-hour setpoint schedule this tab
+// edits directly. See services/thermostat.py for the control-loop side.
+
+// A live clock, and re-highlighting whichever schedule cell "now" points
+// at, so it's always obvious which hour of which day is currently driving
+// each zone's target - without this, the target number in the header was
+// the only clue, disconnected from the grid that actually produced it.
+function updateClimateClock() {
+  const el = document.getElementById("climate-clock");
+  if (el) {
+    el.textContent = new Date().toLocaleString(LOCALE, {
+      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+    });
+  }
+}
+
+function updateNowHighlight() {
+  const now = new Date();
+  const dayKey = currentDayKey(now);
+  const hour = now.getHours();
+  document.querySelectorAll(".sched-cell.now, .sched-day-label.now, .sched-hour-axis span.now").forEach(c => c.classList.remove("now"));
+  document.querySelectorAll(`.sched-day-label`).forEach((label, i) => {
+    if (DAY_KEYS[i % 7] === dayKey) label.classList.add("now");
+  });
+  document.querySelectorAll(`.sched-cell[data-day="${dayKey}"][data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
+  document.querySelectorAll(`.sched-hour-axis span[data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
+}
+
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const SCHEDULE_PRESETS = [null, 16, 18, 20, 21, 22, 24];
+
+let climateZones = [];
+let climateMode = "heat";
+const scheduleWeeks = {};   // zone name -> working copy of its week grid
+const saveTimers = {};      // zone name -> debounce timer for schedule saves
+let paintValue = 21;
+let isPainting = false;
+
+// A continuous hue ramp put 4 of the 6 preset values (18/20/21/22) all in
+// the same green band, hard to tell apart at a glance - see user feedback.
+// These stops instead give each preset its own clearly-named color (blue,
+// teal, green, gold, orange, red); values in between (e.g. old data outside
+// the current presets) interpolate between the nearest two stops.
+const TEMP_COLOR_STOPS = [
+  { v: 16, h: 212, s: 70, l: 50 },
+  { v: 18, h: 184, s: 65, l: 42 },
+  { v: 20, h: 140, s: 55, l: 42 },
+  { v: 21, h: 48, s: 75, l: 48 },
+  { v: 22, h: 28, s: 80, l: 50 },
+  { v: 24, h: 4, s: 70, l: 52 },
+];
+function tempColor(value) {
+  const stops = TEMP_COLOR_STOPS;
+  if (value <= stops[0].v) return `hsl(${stops[0].h}, ${stops[0].s}%, ${stops[0].l}%)`;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i], b = stops[i + 1];
+    if (value <= b.v) {
+      const t = (value - a.v) / (b.v - a.v);
+      return `hsl(${a.h + (b.h - a.h) * t}, ${a.s + (b.s - a.s) * t}%, ${a.l + (b.l - a.l) * t}%)`;
+    }
+  }
+  const last = stops[stops.length - 1];
+  return `hsl(${last.h}, ${last.s}%, ${last.l}%)`;
+}
+
+// One <span> per hour (plus a leading spacer matching the grid's day-label
+// column), so the axis shares the exact same 25-column grid as .sched-grid
+// below it and each label sits precisely above its own hour - a handful of
+// labels spaced with plain flexbox justify-content:space-between would NOT
+// line up correctly here, since space-between divides N items into N-1
+// equal gaps regardless of which hour each one is meant to represent. Every
+// span carries data-hour (so updateNowHighlight() can bold the current
+// one), but only every 3rd hour gets a visible number, to keep the row
+// readable instead of cramming in 24 tiny digits.
+function hourAxisHtml() {
+  let cells = `<span></span>`;
+  for (let h = 0; h < 24; h++) {
+    cells += `<span data-hour="${h}">${h % 3 === 0 ? h : ""}</span>`;
+  }
+  return cells;
+}
+
+function buildZoneCard(zone) {
+  const id = slug(zone.name);
+  const chartId = slug(zone.sensor);
+  const currentText = zone.sensor_ok && zone.temperature_c != null
+    ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
+    : tr("climate.unreachable");
+  return `
+    <div class="zone-card" id="zone-${id}">
+      <div class="zone-head">
+        <div class="sensor-title"><span class="dot ${zone.valve_on ? "on" : ""}"></span><span class="zone-name">${zone.name}</span></div>
+        <div class="zone-current">${currentText}</div>
+      </div>
+      <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
+
+      <div class="sched-palette">
+        ${SCHEDULE_PRESETS.map(v => `
+          <button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
+                  style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : v}</button>
+        `).join("")}
+      </div>
+      <p class="hint-text">${tr("climate.schedule_hint")}</p>
+
+      <div class="sched-hour-axis-wrap">
+        <div class="sched-hour-axis">${hourAxisHtml()}</div>
+        <span class="sched-hour-axis-end">24h</span>
+      </div>
+      <div class="sched-grid" id="sched-${id}"></div>
+
+      <div class="zone-actions">
+        <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', true)">${tr("climate.copy_weekdays")}</button>
+        <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', false)">${tr("climate.copy_monday")}</button>
+      </div>
+
+      <div class="section-head" style="margin:18px 0 6px">
+        <h2 style="font-size:0.85rem">${tr("climate.on_hours_heading")}</h2>
+      </div>
+      <div class="metric-grid" id="on-hours-${id}">
+        <div class="metric"><div class="value">--</div><div class="label">${tr("climate.on_hours_today")}</div></div>
+        <div class="metric"><div class="value">--</div><div class="label">${tr("climate.on_hours_week")}</div></div>
+        <div class="metric"><div class="value">--</div><div class="label">${tr("climate.on_hours_month")}</div></div>
+      </div>
+
+      <div class="chart-filters">
+        <button class="range-btn" data-sensor="${chartId}" data-range="6h">6h</button>
+        <button class="range-btn active" data-sensor="${chartId}" data-range="24h">24h</button>
+        <button class="range-btn" data-sensor="${chartId}" data-range="7d">7d</button>
+      </div>
+      <div class="chart-wrap">
+        <svg id="chart-${chartId}" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
+        <div class="chart-tooltip" id="tooltip-${chartId}" hidden></div>
+      </div>
+      <div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")}</div>
+    </div>
+  `;
+}
+
+function renderClimateZones() {
+  const container = document.getElementById("climate-zones");
+  const toggleLabel = document.querySelector(".mode-toggle");
+  if (!climateZones.length) {
+    container.innerHTML = `<p class="hint-text">${tr("climate.no_zones")}</p>`;
+    if (toggleLabel) toggleLabel.style.display = "none";
+    return;
+  }
+  if (toggleLabel) toggleLabel.style.display = "";
+
+  // A zone with cool_enabled:false (e.g. a bathroom a radiant-ceiling
+  // system can't safely cool - see docs/configuration.md) has nothing to
+  // show or schedule while cooling: the thermostat never acts on it in
+  // that mode, so its card would just be a schedule editor with no
+  // effect. Still shown normally in heat mode.
+  const visibleZones = climateZones.filter(z => z.cool_enabled !== false || climateMode !== "cool");
+  const excludedCount = climateZones.length - visibleZones.length;
+
+  container.innerHTML =
+    (excludedCount > 0 ? `<p class="hint-text">${tr("climate.cooling_excluded_note", { count: excludedCount })}</p>` : "") +
+    visibleZones.map(buildZoneCard).join("");
+  updateAwayBanner();
+
+  // Each zone's temperature/humidity trend reuses the exact same chart
+  // code as a regular `climate` sensor card (loadChart/drawClimateChart) -
+  // just pointed at the zone's underlying sensor name instead of a card
+  // built by buildSensorCard(), via this small stand-in object.
+  container.querySelectorAll(".range-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const chartId = btn.dataset.sensor;
+      container.querySelectorAll(`.range-btn[data-sensor="${chartId}"]`).forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      chartRanges[chartId] = btn.dataset.range;
+      const zone = climateZones.find(z => slug(z.sensor) === chartId);
+      if (zone) loadChart({ name: zone.sensor, kind: "climate" });
+    });
+  });
+
+  visibleZones.forEach(zone => {
+    chartRanges[slug(zone.sensor)] = "24h";
+    loadChart({ name: zone.sensor, kind: "climate" });
+  });
+}
+
+function applyCellStyle(cell, value) {
+  cell.style.background = value == null ? "" : tempColor(value);
+  cell.classList.toggle("off", value == null);
+  cell.title = value == null ? tr("climate.target_off") : `${value}°C`;
+  cell.dataset.value = value == null ? "" : value;
+}
+
+function currentDayKey(date) {
+  return DAY_KEYS[(date.getDay() + 6) % 7]; // JS: 0=Sunday; DAY_KEYS: 0=Monday
+}
+
+function buildScheduleGrid(zoneId, week) {
+  const grid = document.getElementById(`sched-${zoneId}`);
+  if (!grid) return;
+  grid.innerHTML = "";
+  const dayLabels = tr("climate.days");
+  const now = new Date();
+  const nowDayKey = currentDayKey(now);
+  const nowHour = now.getHours();
+
+  DAY_KEYS.forEach((dayKey, d) => {
+    const label = document.createElement("span");
+    label.className = "sched-day-label" + (dayKey === nowDayKey ? " now" : "");
+    label.textContent = dayLabels[d] || dayKey;
+    grid.appendChild(label);
+
+    for (let h = 0; h < 24; h++) {
+      const cell = document.createElement("div");
+      cell.className = "sched-cell" + (dayKey === nowDayKey && h === nowHour ? " now" : "");
+      cell.dataset.day = dayKey;
+      cell.dataset.hour = String(h);
+      applyCellStyle(cell, week[dayKey][h]);
+      cell.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        isPainting = true;
+        paintCell(zoneId, cell);
+      });
+      cell.addEventListener("pointerenter", () => {
+        if (isPainting) paintCell(zoneId, cell);
+      });
+      grid.appendChild(cell);
+    }
+  });
+}
+
+document.addEventListener("pointerup", () => { isPainting = false; });
+
+function paintCell(zoneId, cell) {
+  const zone = climateZones.find(z => slug(z.name) === zoneId);
+  const week = zone && scheduleWeeks[zone.name];
+  if (!week) return;
+  applyCellStyle(cell, paintValue);
+  week[cell.dataset.day][Number(cell.dataset.hour)] = paintValue;
+  scheduleSave(zone.name);
+}
+
+function selectPaintValue(btn) {
+  paintValue = btn.dataset.value === "" ? null : Number(btn.dataset.value);
+  document.querySelectorAll(".sched-swatch").forEach(b => b.classList.toggle("active", b.dataset.value === btn.dataset.value));
+}
+
+function copyMondayToWeek(zoneName, zoneId, weekdaysOnly) {
+  const week = scheduleWeeks[zoneName];
+  if (!week) return;
+  const monday = week.mon.slice();
+  const targets = weekdaysOnly ? ["tue", "wed", "thu", "fri"] : ["tue", "wed", "thu", "fri", "sat", "sun"];
+  targets.forEach(day => { week[day] = monday.slice(); });
+  buildScheduleGrid(zoneId, week);
+  scheduleSave(zoneName);
+}
+
+function scheduleSave(zoneName) {
+  clearTimeout(saveTimers[zoneName]);
+  saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), 600);
+}
+
+async function saveSchedule(zoneName) {
+  try {
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ week: scheduleWeeks[zoneName] }),
+    });
+    const data = await res.json();
+    if (!data.ok) alert(`${tr("climate.save_failed")}: ${data.error}`);
+  } catch (e) {
+    alert(tr("climate.save_failed"));
+  }
+}
+
+async function loadZoneSchedule(zoneName) {
+  try {
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule`);
+    const data = await res.json();
+    if (!data.ok) return;
+    scheduleWeeks[zoneName] = data.week;
+    buildScheduleGrid(slug(zoneName), data.week);
+  } catch (e) { /* grid stays empty; next tab visit retries */ }
+}
+
+async function refreshOnHours(zoneName) {
+  try {
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/on-hours`);
+    const data = await res.json();
+    const el = document.getElementById(`on-hours-${slug(zoneName)}`);
+    if (!el || !data.ok) return;
+    const values = el.querySelectorAll(".value");
+    const unit = tr("climate.hours_unit");
+    values[0].textContent = `${data.today.toFixed(1)}${unit}`;
+    values[1].textContent = `${data.week.toFixed(1)}${unit}`;
+    values[2].textContent = `${data.month.toFixed(1)}${unit}`;
+  } catch (e) { /* leave dashes */ }
+}
+
+// One place computing the zone status line, so the initial render
+// (buildZoneCard) and the 5s live refresh (refreshClimateZonesLive) can
+// never drift out of sync with each other.
+//
+// Deliberately mode-agnostic: there is one valve, with one state (open/
+// closed) - the heat/cool mode toggle at the top of the tab is what
+// changes *when* it opens (see services/thermostat.py), not the valve
+// itself. Wording this as "heating active"/"cooling active" per zone was
+// tried and reverted - it made one physical valve look like two different
+// subsystems, which isn't the mental model this is supposed to match.
+// Three distinct states, not two - "valve closed" alone doesn't say
+// whether that's because there's no target this hour (off) or because
+// the target was reached and it's satisfied. Conflating those was
+// exactly the ambiguity asked to be fixed here.
+function zoneStatusClass(zone) {
+  if (climateAwayUntil) return "off";
+  if (zone.target_c == null) return "off";
+  return zone.valve_on ? "active" : "reached";
+}
+
+function zoneStatusText(zone) {
+  if (climateAwayUntil) return tr("climate.status_away");
+  if (zone.target_c == null) return tr("climate.no_target");
+  const target = zone.target_c.toFixed(0) + "°C";
+  return zone.valve_on ? tr("climate.status_active", { target }) : tr("climate.status_reached", { target });
+}
+
+// A device tagged `visible_in_mode: "heat"/"cool"` in config.yaml (e.g. a
+// dehumidifier that only makes sense while cooling) hides its card outside
+// that mode. Re-run whenever climateMode changes - on boot, after toggling
+// it, and on every live refresh in case it changed from elsewhere.
+function applyClimateModeVisibility() {
+  document.querySelectorAll("#climate-extra .sensor-card").forEach(card => {
+    const requiredMode = card.dataset.visibleInMode;
+    card.hidden = !!requiredMode && requiredMode !== climateMode;
+  });
+}
+
+async function refreshClimateZonesLive() {
+  try {
+    const res = await fetch("/api/climate/zones");
+    const data = await res.json();
+    if (!data.ok) return;
+    climateMode = data.mode || climateMode;
+    climateAwayUntil = data.away_until || null;
+    updateModeBadge();
+    updateAwayBadge();
+    updateAwayBanner();
+    data.zones.forEach(zone => {
+      const card = document.getElementById(`zone-${slug(zone.name)}`);
+      if (!card) return;
+      card.querySelector(".dot").classList.toggle("on", zone.valve_on);
+      card.querySelector(".zone-current").textContent = zone.sensor_ok && zone.temperature_c != null
+        ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
+        : tr("climate.unreachable");
+      const sub = card.querySelector(".zone-sub");
+      sub.textContent = zoneStatusText(zone);
+      sub.className = `zone-sub state-${zoneStatusClass(zone)}`;
+    });
+    applyClimateModeVisibility();
+  } catch (e) { /* keep last render */ }
+}
+
+async function onModeToggle(el) {
+  const mode = el.checked ? "cool" : "heat";
+  try {
+    const res = await fetch("/api/climate/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(tr("sensors.error_prefix") + data.error);
+      el.checked = !el.checked;
+      return;
+    }
+    climateMode = mode;
+    updateModeBadge();
+    applyClimateModeVisibility();
+    // A full reload, not just refreshClimateZonesLive()'s in-place patch:
+    // switching mode can change *which* zone cards should even exist (a
+    // cool_enabled:false zone's card only appears in heat mode), which a
+    // live-patch of already-rendered cards can't add or remove.
+    const zonesRes = await fetch("/api/climate/zones").then(r => r.json()).catch(() => null);
+    if (zonesRes && zonesRes.ok) {
+      climateAwayUntil = zonesRes.away_until || null;
+      updateAwayBadge();
+      climateZones = zonesRes.zones;
+      renderClimateZones();
+      for (const zone of climateZones) await loadZoneSchedule(zone.name);
+      updateNowHighlight();
+    }
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+    el.checked = !el.checked;
+  }
+}
+
 // ---------------------------------------------------------------- boot -----
 
 async function boot() {
+  try {
+    const savedTab = localStorage.getItem("localhome-tab");
+    if (savedTab) switchTab(savedTab);
+  } catch (e) { /* fine, defaults to the Home tab */ }
+
   renderCovers(window.COVER_NAMES);
   refreshCovers(window.COVER_NAMES);
   setInterval(() => refreshCovers(window.COVER_NAMES), 8000);
 
-  const res = await fetch("/api/devices");
-  const data = await res.json();
-  attachPairings(data.sensors);
-  renderSensors(data.sensors);
-  setInterval(() => data.sensors.forEach(refreshSensor), 5000);
-  setInterval(() => data.sensors.forEach(loadChart), 60000);
+  const [devicesData, climateData] = await Promise.all([
+    fetch("/api/devices").then(r => r.json()),
+    fetch("/api/climate/zones").then(r => r.json()).catch(() => ({ ok: false, zones: [] })),
+  ]);
+
+  // A zone's sensor/valve get their own purpose-built card in the Climate
+  // tab (temperature + schedule + on-hours), so they're excluded from the
+  // generic per-kind grids entirely rather than also showing up there.
+  const zoneMemberNames = new Set();
+  if (climateData.ok) climateData.zones.forEach(z => { zoneMemberNames.add(z.sensor); zoneMemberNames.add(z.valve); });
+
+  attachPairings(devicesData.sensors);
+  const homeSensors = devicesData.sensors.filter(s => s.tab !== "climate" && !zoneMemberNames.has(s.name));
+  const climateExtraSensors = devicesData.sensors.filter(s => s.tab === "climate" && !zoneMemberNames.has(s.name));
+
+  renderSensors(homeSensors, "sensor-cards");
+  renderSensors(climateExtraSensors, "climate-extra");
+  const pollableSensors = homeSensors.concat(climateExtraSensors);
+  setInterval(() => pollableSensors.forEach(refreshSensor), 5000);
+  setInterval(() => pollableSensors.forEach(loadChart), 60000);
+
+  updateClimateClock();
+  setInterval(updateClimateClock, 30000);
+
+  if (climateData.ok) {
+    climateMode = climateData.mode || "heat";
+    climateAwayUntil = climateData.away_until || null;
+    updateModeBadge();
+    updateAwayBadge();
+    climateZones = climateData.zones;
+    renderClimateZones();
+    const toggle = document.getElementById("climate-mode-toggle");
+    if (toggle) toggle.checked = climateMode === "cool";
+    for (const zone of climateZones) {
+      await loadZoneSchedule(zone.name);
+      refreshOnHours(zone.name);
+    }
+    updateNowHighlight();
+    setInterval(refreshClimateZonesLive, 5000);
+    setInterval(() => climateZones.forEach(z => refreshOnHours(z.name)), 30000);
+    setInterval(() => climateZones.forEach(z => loadChart({ name: z.sensor, kind: "climate" })), 60000);
+    setInterval(updateNowHighlight, 30000);
+  }
+  applyClimateModeVisibility();
 }
 
 boot();

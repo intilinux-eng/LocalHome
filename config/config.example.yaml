@@ -103,6 +103,107 @@ integrations:
   #   max_value: 100
   #   unit: "%"
 
+  # `type: simulated` fakes a device with no hardware behind it at all -
+  # for trying out the dashboard (or, as below, a whole thermostat setup)
+  # before you own the real thing. Swap the type for a real driver later;
+  # nothing else changes, since it's the same interface either way. See
+  # docs/integrations/simulated.md. `dashboard_tab: "climate"` here keeps
+  # these off the generic Home grid - see the `thermostat:` section below,
+  # which is what actually renders them (as zone cards, not generic ones).
+  #
+  # influence_target_c above base_temperature_c simulates "opening the
+  # valve warms the room" - right for heat mode (the default below). The
+  # fake sensor has no idea what season it is: if you switch mode to
+  # "cool" to try that out, drop these below base_temperature_c instead
+  # so an open valve cools the room. Real hardware doesn't need this -
+  # the actual plant decides whether the water is hot or cold.
+  - kind: climate
+    type: simulated
+    name: "Living Areas Temperature"
+    base_temperature_c: 19.0
+    influenced_by: "Living Areas Valve"    # drifts toward influence_target_c while that switch is on
+    influence_target_c: 26.0
+    dashboard_tab: "climate"
+  - kind: switch
+    type: simulated
+    name: "Living Areas Valve"
+    dashboard_tab: "climate"
+  - kind: climate
+    type: simulated
+    name: "Bathrooms Temperature"
+    base_temperature_c: 20.0
+    influenced_by: "Bathrooms Valve"
+    influence_target_c: 27.0
+    dashboard_tab: "climate"
+  - kind: switch
+    type: simulated
+    name: "Bathrooms Valve"
+    dashboard_tab: "climate"
+
+  # `visible_in_mode` hides a device's dashboard card outside the given
+  # thermostat mode - here, a dehumidifier that only makes sense in summer
+  # (see the `thermostat:` section below for the mode toggle itself).
+  # Works on any integration entry, not just this one.
+  - kind: switch
+    type: simulated
+    name: "Dehumidifier"
+    dashboard_tab: "climate"
+    visible_in_mode: "cool"
+
+  # An outdoor sensor - not wired to any valve (no `influenced_by`), just
+  # read-only context. Also what a future automatic heat/cool changeover
+  # would key off (an outdoor-temperature threshold sustained for a few
+  # hours is the standard approach for shared-plant systems - not a fixed
+  # calendar date, since actual weather varies year to year); not wired
+  # up yet, just here to have the data available already.
+  - kind: climate
+    type: simulated
+    name: "Outdoor Temperature"
+    base_temperature_c: 17.0
+    base_humidity_pct: 65.0
+    dashboard_tab: "climate"
+
+# Optional: two-zone (or more) valve thermostat for a shared-plant
+# radiant-panel setup - a central boiler/chiller feeds hot or cold water
+# to per-zone valves, and this just decides when each valve should be
+# open: current zone temperature vs. that zone's own weekly schedule
+# (edited from the dashboard's "Heating & Cooling" tab), with hysteresis
+# so a valve doesn't chatter open/close right at the setpoint. See
+# docs/configuration.md#thermostat-heatingcooling-zones and
+# services/thermostat.py.
+thermostat:
+  mode: "heat"          # "heat" or "cool" - shared by every zone (one plant); also changeable from the dashboard
+  hysteresis_c: 0.3
+  schedules_file: "schedules.json"
+  poll_interval_seconds: 60
+  zones:
+    - name: "Living Areas"
+      sensor: "Living Areas Temperature"   # must name a `climate` integration above
+      valve: "Living Areas Valve"           # must name a `switch` integration above
+    - name: "Bathrooms"
+      sensor: "Bathrooms Temperature"
+      valve: "Bathrooms Valve"
+      # A room a radiant-panel system physically can't cool safely - high
+      # ambient humidity (showers) condenses on a cold ceiling panel
+      # regardless of the room's own temperature. `cool_enabled: false`
+      # means the thermostat never touches this valve for temperature
+      # reasons while mode is "cool" (not even a forced "closed" command -
+      # see the interlocks example below for why that distinction
+      # matters); it behaves normally in "heat" mode.
+      cool_enabled: false
+
+  # `interlocks`: force one switch to mirror another's on-state,
+  # independent of the thermostat's own temperature logic - e.g. a
+  # water-based dehumidifier that draws chilled water through this same
+  # bathroom valve's circuit needs it open whenever it's running, even
+  # though the zone above is excluded from normal cooling control.
+  # `active_in_mode` (optional) scopes it to one thermostat mode; omit it
+  # to apply regardless of mode. See docs/configuration.md.
+  interlocks:
+    - leader: "Dehumidifier"
+      follower: "Bathrooms Valve"
+      active_in_mode: "cool"
+
 # Optional: push notifications for the power-budget alert below.
 notifications:
   type: telegram
@@ -123,3 +224,8 @@ positions_file: "positions.json"
 history:
   db_file: "data/history.db"
   poll_interval_seconds: 30
+  # Charts only ever show up to 7 days, but rows aren't deleted just
+  # because they scroll out of that view - without this, the database
+  # would keep every reading forever. Rows older than this are pruned
+  # once a day.
+  retention_days: 30
