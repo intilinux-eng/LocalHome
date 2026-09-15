@@ -22,7 +22,7 @@ from typing import Any
 from localhome.core.interfaces import CoverDriver
 from localhome.core.registry import register_driver
 from localhome.drivers.mqtt.base import MqttJsonState, command_payload
-from localhome.drivers.mqtt.client import load_broker_config
+from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
 
@@ -39,6 +39,7 @@ class MqttCoverDriver(CoverDriver):
         payload_close: str = "close",
         payload_stop: str = "stop",
         command_payload_field: str | None = None,
+        cache_path: str | None = None,
     ):
         self.id = cover_id or name
         self.name = name
@@ -46,7 +47,7 @@ class MqttCoverDriver(CoverDriver):
         self._state_field = state_field
         self._payloads = {"open": payload_open, "close": payload_close, "stop": payload_stop}
         self._command_payload_field = command_payload_field
-        self._state = MqttJsonState(broker, state_topic)
+        self._state = MqttJsonState(broker, state_topic, cache_path=cache_path)
 
     def status(self) -> dict[str, Any]:
         payload = self._state.get_payload()
@@ -73,6 +74,7 @@ def _create(options: dict) -> MqttCoverDriver:
         payload_close=options.get("payload_close", "close"),
         payload_stop=options.get("payload_stop", "stop"),
         command_payload_field=options.get("command_payload_field"),
+        cache_path=state_cache_path(options),
     )
 
 

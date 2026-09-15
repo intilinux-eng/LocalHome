@@ -13,10 +13,17 @@ from typing import Any
 
 from localhome.drivers.mqtt.client import get_connection
 from localhome.drivers.mqtt.paths import extract_path
+from localhome.drivers.mqtt.state_cache import load_cached, save_cached
 
 
 class MqttJsonState:
-    def __init__(self, broker: dict, state_topic: str, stale_after_seconds: float | None = None):
+    def __init__(
+        self,
+        broker: dict,
+        state_topic: str,
+        stale_after_seconds: float | None = None,
+        cache_path: str | None = None,
+    ):
         self._lock = threading.Lock()
         self._payload: Any = None  # a dict for JSON payloads, a str otherwise
         self._received_at: float | None = None
@@ -29,6 +36,13 @@ class MqttJsonState:
         # quiet for hours without being broken - defaulting this off
         # avoids flagging that as "unreachable".
         self.stale_after_seconds = stale_after_seconds
+        self._broker = broker
+        self._topic = state_topic
+        self._cache_path = cache_path
+        if cache_path is not None:
+            cached = load_cached(cache_path, broker, state_topic)
+            if cached is not None:
+                self._payload, self._received_at = cached
         self._connection = get_connection(broker)
         self._connection.subscribe(state_topic, self._on_message)
 
@@ -40,9 +54,12 @@ class MqttJsonState:
             # publish "on"/"off" as the raw payload, for example. Keep it
             # as a plain string; extract_path(data, "") returns it as-is.
             data = payload.decode(errors="replace")
+        received_at = time.time()
         with self._lock:
             self._payload = data
-            self._received_at = time.time()
+            self._received_at = received_at
+        if self._cache_path is not None:
+            save_cached(self._cache_path, self._broker, self._topic, data, received_at)
 
     def get_payload(self) -> Any:
         with self._lock:
