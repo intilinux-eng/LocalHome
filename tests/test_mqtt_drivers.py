@@ -57,6 +57,49 @@ def test_sensor_history_fields_default_to_all_mapped_fields(fake_connection):
     assert set(driver.history_fields) == {"power_w", "voltage_v"}
 
 
+# ---------------------------------------------------- multi-topic sensor ----
+# A Shelly H&T (and presumably other devices) splits one logical reading's
+# fields across separate per-component topics rather than one combined
+# payload - state_topic accepts a list for exactly this.
+
+def test_sensor_merges_fields_from_multiple_topics(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_connection.deliver("shelly/status/humidity:0", json.dumps({"rh": 47.0}))
+
+    reading = driver.read()
+
+    assert reading == {"ok": True, "name": "Bathroom Sensor", "temperature_c": 21.5, "humidity_pct": 47.0}
+
+
+def test_sensor_gives_a_partial_reading_when_only_some_topics_have_reported(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    # humidity topic never delivered anything yet
+
+    reading = driver.read()
+
+    assert reading == {"ok": True, "name": "Bathroom Sensor", "temperature_c": 21.5}
+
+
+def test_sensor_raises_only_when_every_topic_has_nothing(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+    )
+    with pytest.raises(RuntimeError, match="no MQTT message"):
+        driver.read()
+
+
 # --------------------------------------------------------------- switch ----
 
 def test_switch_reads_state_and_extra_fields(fake_connection):
