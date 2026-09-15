@@ -1016,13 +1016,41 @@ function zoneFreshnessText(zone) {
 // Only a battery-powered sensor (e.g. a Shelly H&T) reports battery_pct
 // at all - most zones' sensors are mains-powered or simulated and never
 // will, so the element stays hidden rather than showing a permanent
-// "no battery" placeholder. LOW_BATTERY_PCT is deliberately generous
-// (not "about to die") since this is a once-in-months reminder to
-// change it, not an urgent alert.
-const LOW_BATTERY_PCT = 20;
+// "no battery" placeholder.
+const LOW_BATTERY_PCT = 10;
 
 function batteryLabel(pct) {
   return pct == null ? "" : `${tr("fields.battery_pct")} ${Math.round(pct)}%`;
+}
+
+// One popup per low-battery *episode*, not one per poll - a battery
+// sitting at 8% for weeks would otherwise nag every 5s forever. A flag
+// in localStorage remembers "already told you about this one", cleared
+// the moment the reading goes back above the threshold (a fresh battery
+// swap, or the sensor just recovering) so a *future* drop pops up again.
+function checkLowBatteryPopup(zone) {
+  if (zone.battery_pct == null) return;
+  const key = `localhome-low-battery-notified-${zone.name}`;
+  if (zone.battery_pct <= LOW_BATTERY_PCT) {
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch (e) { /* private browsing etc - show it every time instead of never */ }
+    openLowBattery(tr("climate.low_battery_message", {
+      name: zone.name, threshold: LOW_BATTERY_PCT, value: Math.round(zone.battery_pct),
+    }));
+  } else {
+    try { localStorage.removeItem(key); } catch (e) { /* fine, nothing to clean up */ }
+  }
+}
+
+function openLowBattery(message) {
+  document.getElementById("low-battery-message").textContent = message;
+  document.getElementById("low-battery-modal").hidden = false;
+}
+
+function closeLowBattery() {
+  document.getElementById("low-battery-modal").hidden = true;
 }
 
 function buildZoneCard(zone) {
@@ -1292,6 +1320,7 @@ async function refreshClimateZonesLive() {
     updateAwayBadge();
     updateAwayBanner();
     data.zones.forEach(zone => {
+      checkLowBatteryPopup(zone);
       const card = document.getElementById(`zone-${slug(zone.name)}`);
       if (!card) return;
       card.querySelector(".dot").classList.toggle("on", zone.valve_on);

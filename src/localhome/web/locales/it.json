@@ -114,6 +114,8 @@
     "away_1day": "1 giorno",
     "away_3days": "3 giorni",
     "away_7days": "7 giorni",
-    "away_return_now": "Rientra ora"
+    "away_return_now": "Rientra ora",
+    "low_battery_heading": "Batteria scarica",
+    "low_battery_message": "La batteria del sensore \"{name}\" è sotto il {threshold}% ({value}%) - sostituiscila a breve."
   }
 }
