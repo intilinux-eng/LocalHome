@@ -54,7 +54,7 @@ from typing import Any
 from localhome.core.interfaces import PollingDriver
 from localhome.core.registry import register_driver
 from localhome.drivers.mqtt.base import MqttJsonState, require_payload
-from localhome.drivers.mqtt.client import load_broker_config
+from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
 
@@ -68,13 +68,17 @@ class MqttSensorDriver(PollingDriver):
         history_fields: tuple[str, ...] | None = None,
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
+        cache_path: str | None = None,
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
         self._fields = fields
         self.history_fields = tuple(history_fields) if history_fields else tuple(fields)
         topics = state_topic if isinstance(state_topic, list) else [state_topic]
-        self._states = [MqttJsonState(broker, topic, stale_after_seconds=stale_after_seconds) for topic in topics]
+        self._states = [
+            MqttJsonState(broker, topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
+            for topic in topics
+        ]
 
     def read(self) -> dict[str, Any]:
         # Each subscribed topic is tried independently rather than
@@ -109,6 +113,7 @@ def _create(options: dict) -> MqttSensorDriver:
         history_fields=options.get("history_fields"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
+        cache_path=state_cache_path(options),
     )
 
 

@@ -218,3 +218,61 @@ def test_cover_send_publishes_the_configured_action_payload(fake_connection):
     driver.send("stop")
 
     assert fake_connection.published == [("shellies/shutter1/set", "stop")]
+
+
+# --------------------------------------------------- state persistence ----
+# cache_path lets a driver survive a restart with its last known payload
+# intact - see drivers/mqtt/state_cache.py for why this matters (a
+# battery sensor's next report can be hours away, and the thermostat
+# would otherwise leave a valve alone for that whole window on every
+# restart rather than trusting a recent-enough last reading).
+
+def test_sensor_seeds_its_reading_from_a_persisted_cache(fake_connection, tmp_path):
+    cache_path = str(tmp_path / "mqtt_state_cache.json")
+    first_run = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"}, cache_path=cache_path,
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    assert first_run.read()["temperature_c"] == 21.5  # sanity check, and what triggers the save
+
+    # A brand new driver instance, standing in for the app after a
+    # restart - never received a live message of its own.
+    second_run = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"}, cache_path=cache_path,
+    )
+
+    assert second_run.read()["temperature_c"] == 21.5
+
+
+def test_sensor_without_a_cache_path_does_not_touch_disk(fake_connection, tmp_path):
+    # No cache_path at all (e.g. an inline `broker: {...}` entry with no
+    # file to anchor next to) - must behave exactly as before, no crash.
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+
+    assert driver.read()["temperature_c"] == 21.5
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_switch_seeds_its_on_off_state_from_a_persisted_cache(fake_connection, tmp_path):
+    cache_path = str(tmp_path / "mqtt_state_cache.json")
+    first_run = MqttSwitchDriver(
+        name="Bypass Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False, cache_path=cache_path,
+    )
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+    assert first_run.read()["is_on"] is True
+
+    second_run = MqttSwitchDriver(
+        name="Bypass Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False, cache_path=cache_path,
+    )
+
+    assert second_run.read()["is_on"] is True

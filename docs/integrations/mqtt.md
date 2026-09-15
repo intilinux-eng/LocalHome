@@ -29,6 +29,16 @@ Every `mqtt_json` entry:
 Multiple `mqtt_json` entries pointed at the same `broker_file` share one
 real MQTT connection - see `drivers/mqtt/client.py`.
 
+Every entry with a `broker_file` also persists its last known payload
+to `mqtt_state_cache.json` next to that file, and reloads it on the next
+startup - a restart doesn't blank a reading back to "no MQTT message
+received yet" while waiting for the device to publish again, which for
+a battery sensor confirmed to publish with MQTT's `retain` flag unset
+(see the H&T example below) can otherwise take hours. This is automatic
+and needs no config; see `drivers/mqtt/state_cache.py`. An inline
+`broker: {...}` entry (no file to anchor the cache next to) simply
+doesn't persist - use `broker_file` if you want this.
+
 ## DHCP devices, and detecting one that's gone offline
 
 If your devices get their IP from DHCP (the common case, and no

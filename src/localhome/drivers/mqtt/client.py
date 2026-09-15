@@ -16,6 +16,7 @@ stance (see core/manager.py).
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
@@ -92,3 +93,15 @@ def load_broker_config(options: dict) -> dict:
     if "broker_file" in options:
         return load_json(options["broker_file"])
     return options.get("broker", {})
+
+
+def state_cache_path(options: dict) -> str | None:
+    """Where drivers/mqtt/state_cache.py persists this entry's last known
+    payload(s): next to `broker_file`, same filename for every entry on
+    that broker so they share one small file. None (no persistence) for
+    an inline `broker: {...}` entry, since there's no file to anchor
+    next to and no config.yaml directory to infer."""
+    broker_file = options.get("broker_file")
+    if not broker_file:
+        return None
+    return str(Path(broker_file).parent / "mqtt_state_cache.json")

@@ -32,7 +32,7 @@ from typing import Any
 from localhome.core.interfaces import SwitchDriver
 from localhome.core.registry import register_driver
 from localhome.drivers.mqtt.base import MqttJsonState, command_payload, require_payload
-from localhome.drivers.mqtt.client import load_broker_config
+from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
 
@@ -50,6 +50,7 @@ class MqttSwitchDriver(SwitchDriver):
         command_payload_field: str | None = None,
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
+        cache_path: str | None = None,
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
@@ -60,7 +61,7 @@ class MqttSwitchDriver(SwitchDriver):
         self._payload_on = payload_on
         self._payload_off = payload_off
         self._command_payload_field = command_payload_field
-        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds)
+        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
 
     def read(self) -> dict[str, Any]:
         payload = require_payload(self._state)
@@ -95,6 +96,7 @@ def _create(options: dict) -> MqttSwitchDriver:
         command_payload_field=options.get("command_payload_field"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
+        cache_path=state_cache_path(options),
     )
 
 
