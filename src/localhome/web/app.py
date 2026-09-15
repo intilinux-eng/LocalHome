@@ -87,6 +87,7 @@ def create_app(config_path: str | None = None) -> Flask:
     thermostat = None
     interlock = None
     interlock_followers: dict[str, str] = {}
+    mode_switch_names: set[str] = set()
     thermostat_cfg = config.raw.get("thermostat")
     if thermostat_cfg:
         schedules_path = config.resolve(thermostat_cfg.get("schedules_file", "schedules.json"))
@@ -111,6 +112,7 @@ def create_app(config_path: str | None = None) -> Flask:
             ModeSwitch(switch=item["switch"], active_in_mode=item["active_in_mode"])
             for item in thermostat_cfg.get("mode_switches", [])
         ]
+        mode_switch_names = {ms.switch for ms in mode_switches}
         if interlocks or mode_switches:
             interlock = InterlockController(
                 manager,
@@ -138,6 +140,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["POWER_SENSOR"] = power_sensor
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
+    app.config["MODE_SWITCH_NAMES"] = mode_switch_names
 
     _register_routes(app)
     return app
@@ -161,13 +164,19 @@ def _register_routes(app: Flask) -> None:
         power_budget: PowerBudget | None = app.config["POWER_BUDGET"]
         power_sensor = app.config["POWER_SENSOR"]
         interlock_followers: dict[str, str] = app.config["INTERLOCK_FOLLOWERS"]
+        mode_switch_names: set[str] = app.config["MODE_SWITCH_NAMES"]
 
         sensors = []
         for name in manager.pollers:
             entry = {
                 "name": name,
                 "kind": manager.sensor_kinds.get(name, "unknown"),
-                "controllable": name in manager.switches or name in manager.numbers,
+                # A mode_switch has no owner of its own - it's forced by
+                # the thermostat's mode alone (see services/interlock.py)
+                # - so a manual toggle would just get overridden on the
+                # next tick. Show its state, but don't offer a control
+                # that wouldn't actually do anything lasting.
+                "controllable": (name in manager.switches or name in manager.numbers) and name not in mode_switch_names,
                 "tab": manager.dashboard_tab.get(name, "home"),
                 "visible_in_mode": manager.visible_in_mode.get(name),
             }
@@ -268,6 +277,8 @@ def _register_routes(app: Flask) -> None:
         switch = manager.switches.get(name)
         if switch is None:
             return jsonify(ok=False, error=f"'{name}' is not a controllable switch"), 404
+        if name in app.config["MODE_SWITCH_NAMES"]:
+            return jsonify(ok=False, error=f"'{name}' is controlled automatically by the thermostat mode"), 409
         try:
             switch.turn_on() if action == "on" else switch.turn_off()
         except Exception as exc:
