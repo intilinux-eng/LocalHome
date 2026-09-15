@@ -88,9 +88,13 @@ integrations:
 
   # A controllable analog value - a dimmer, a fan speed, a 0-10V output -
   # anything set to a number in a range rather than toggled or driven
-  # open/closed. This is the shape a future MQTT-bridged 0-10V dimmer
-  # would use; uncomment and point it at your own device once you have
-  # one, it's otherwise inert.
+  # open/closed. This shape (type: mqtt_json) is for a device that
+  # republishes its full state on a retained topic (Tasmota,
+  # Zigbee2MQTT); uncomment and point it at your own device once you
+  # have one, it's otherwise inert. A Shelly Gen2/Gen3 dimmer commonly
+  # does NOT behave this way - see "Shelly components without a
+  # retained status topic" in docs/integrations/mqtt.md for the
+  # `type: shelly_light` alternative, confirmed against real hardware.
   # - kind: number
   #   name: "VMC Dimmer"
   #   type: mqtt_json

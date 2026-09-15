@@ -9,6 +9,11 @@ same way - which covers most of the DIY/self-hosted smart-home world
 (Shelly, Tasmota, Zigbee2MQTT, ESPHome, a handful of lines of a
 microcontroller sketch) - it plugs in through config alone.
 
+Also covers `shelly_light` (`switch` + `number`), a second, RPC-based
+driver for Shelly Gen2/Gen3 components that don't fit the
+subscribe-and-cache model at all - see "Shelly components without a
+retained status topic" below.
+
 ## How it works
 
 Every `mqtt_json` entry:
@@ -201,16 +206,17 @@ nothing else to extract from it:
 
 ### A dimmer / analog output (`number`)
 
-This is the shape a future 0-10V dimmer (e.g. bridged through a Shelly
-add-on) would use - see `core/interfaces.py`'s `NumberDriver`:
+This is the shape a Tasmota- or Zigbee2MQTT-style dimmer that republishes
+its full state on a retained topic would use - see `core/interfaces.py`'s
+`NumberDriver`:
 
 ```yaml
 - kind: number
   type: mqtt_json
-  name: "VMC Dimmer"
+  name: "Living Room Dimmer"
   broker_file: "mqtt_broker.json"
-  state_topic: "shellies/vmc-dimmer/status"
-  command_topic: "shellies/vmc-dimmer/set"
+  state_topic: "zigbee2mqtt/Living Room Dimmer"
+  command_topic: "zigbee2mqtt/Living Room Dimmer/set"
   value_field: "brightness"
   command_payload_field: "brightness"
   min_value: 0
@@ -221,6 +227,59 @@ add-on) would use - see `core/interfaces.py`'s `NumberDriver`:
 The dashboard renders this as a slider card; dragging it calls
 `POST /api/sensors/<name>/set-value`, clamped to `min_value`/`max_value`
 before anything is published.
+
+A Shelly Gen2/Gen3 dimmer (including the 0/1-10V add-on, wired to
+modulate something else's speed rather than a real light) does **not**
+fit this pattern - see the next section.
+
+## Shelly components without a retained status topic (`shelly_light`)
+
+Confirmed by hand against a real Shelly 0/1-10V Dimmer Gen3
+(`shelly0110dimg3-XXXXXXXXXXXX`) driving a VMC's 0-10V speed input:
+unlike the H&T sensor's `status/temperature:0`/`status/humidity:0`
+topics (retained, republished in full on every change), this device
+never publishes a retained `status/light:0` topic at all. Its only
+passive signal is `events/rpc`, and those messages are **partial** -
+a `NotifyStatus` about the `sys` or `wifi` component is a complete,
+different JSON payload that doesn't mention `light:0`. Caching "the last
+message on this topic" the way `mqtt_json`/`MqttJsonState` does would
+intermittently blank out the light's own state for no real reason.
+
+Since a component like this is mains-powered and always connected, the
+fix is to not depend on it announcing itself: `shelly_light` instead
+**actively polls** the device with a `Light.GetStatus` RPC call on every
+read, and sends commands with `Light.Set` - the same request/response
+protocol (`{"id", "src", "method", "params"}` published to
+`<device_id>/rpc`, reply delivered to `<src>/rpc`) Shelly's own app/cloud
+integration uses. See `drivers/mqtt/rpc.py` for the request/reply
+correlation and `drivers/mqtt/shelly_light.py` for the driver itself.
+
+```yaml
+- kind: switch
+  type: shelly_light
+  name: "VMC Dimmer"
+  broker_file: "mqtt_broker.json"
+  device_id: "shelly0110dimg3-XXXXXXXXXXXX"
+- kind: number
+  type: shelly_light
+  name: "VMC Dimmer Speed"
+  broker_file: "mqtt_broker.json"
+  device_id: "shelly0110dimg3-XXXXXXXXXXXX"
+  paired_switch: "VMC Dimmer"   # one dashboard card: toggle + slider
+```
+
+`device_id` is the Shelly RPC id, visible on the device's own web UI
+(same string the H&T's topics use as a prefix, e.g.
+`shellyazht-XXXXXXXXXXXX`). `component_id` (default `0`) selects which
+`light:N` component, for a multi-channel device. There's no
+`state_topic`/`command_topic` to set - the RPC topics are derived from
+`device_id` automatically.
+
+If you ever swap this device for one that *does* publish retained
+per-component status (most Shelly relays/switches do - see the examples
+above), switch its `type` back to `mqtt_json` instead; don't assume
+`shelly_light` is the right default for every Shelly device, only for
+ones you've confirmed behave like this one.
 
 ### A generic MQTT cover
 
@@ -257,3 +316,13 @@ for any brand.
 | `history_fields` | sensor kinds | subset of `fields` worth recording (default: all of them) |
 | `poll_interval_seconds` | all | how often the cached MQTT value is snapshotted into a reading/history row (default 20s - this doesn't trigger new network traffic, MQTT already pushes) |
 | `stale_after_seconds` | sensor, switch, number | mark the reading `"ok": False` once the last MQTT message is older than this (default: unset, never expires) - see "Detecting an offline device" above |
+
+`shelly_light` (switch/number) takes a different, smaller set of options - see "Shelly components without a retained status topic" above:
+
+| Option | Meaning |
+|---|---|
+| `broker_file` / `broker` | connection details, same as `mqtt_json` |
+| `device_id` | the Shelly RPC id, e.g. `"shelly0110dimg3-XXXXXXXXXXXX"` |
+| `component_id` | which `light:N` component (default `0`) |
+| `min_value` / `max_value` / `unit` | number only, same meaning as `mqtt_json` |
+| `poll_interval_seconds` | how often to send a `Light.GetStatus` RPC call - unlike `mqtt_json`, this **does** generate network traffic each time, since there's no passive cache to read from |
