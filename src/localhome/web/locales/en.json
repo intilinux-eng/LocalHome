@@ -116,6 +116,7 @@
     "away_7days": "7 days",
     "away_return_now": "Back now",
     "low_battery_heading": "Low battery",
-    "low_battery_message": "\"{name}\"'s sensor battery is below {threshold}% ({value}%) - replace it soon."
+    "low_battery_message": "\"{name}\"'s sensor battery is below {threshold}% ({value}%) - replace it soon.",
+    "dew_point": "Dew point {value}°C"
   }
 }
