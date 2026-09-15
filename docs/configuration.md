@@ -233,6 +233,31 @@ temperature would be confusing to see.
 Nothing about `interlocks` is dehumidifier-specific - any "switch A on
 requires switch B on too" relationship fits.
 
+### `mode_switches`: one switch forced to follow the thermostat's mode
+
+For a switch that has no owner of its own at all - nothing schedules it,
+no zone valve logic ever touches it - and should simply be on while the
+thermostat is in one mode and off otherwise. The motivating case: a
+cooling-only bypass valve that reroutes water around a zone's radiant
+panel (so that zone's own valve can stay shut, avoiding condensation,
+while the circuit still carries chilled water elsewhere) whenever the
+system is in "cool", full stop - not tied to any other device's state.
+
+```yaml
+thermostat:
+  ...
+  mode_switches:
+    - switch: "Cooling Bypass Valve"   # a `switch` integration's name
+      active_in_mode: "cool"            # required - the mode this switch mirrors
+```
+
+Same `InterlockController`/loop as `interlocks` above, but with a
+different rule: since nothing else owns this switch, there's no "leave
+it alone" case to protect - outside `active_in_mode` it's actively
+forced *off*, not left in whatever state it was. If you need a switch
+that's sometimes owned by something else and sometimes forced to follow
+another switch, that's `interlocks`, not this.
+
 ### Away mode
 
 There's no config key for this - it's a runtime toggle, from the

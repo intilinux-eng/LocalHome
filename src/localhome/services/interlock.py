@@ -1,16 +1,25 @@
-"""Forces one switch to mirror another switch's on-state - a small,
-generic building block for a physical dependency between two devices
-that has nothing to do with the thermostat's own temperature-driven
-logic. The motivating case: a "water-based" dehumidifier that draws
-chilled water through a specific zone's valve to condense moisture out
-of the air, so that valve must be open whenever the dehumidifier runs,
-even though the zone itself may be excluded from normal cooling control
-(see `Zone.cool_enabled` in services/thermostat.py) - a bathroom's valve
-staying closed to avoid condensation on its own radiant panel doesn't
-mean it can stay closed when something else downstream needs the water.
+"""Two small, generic building blocks for a physical dependency that has
+nothing to do with the thermostat's own temperature-driven logic:
 
-Nothing about this is dehumidifier-specific; any "switch A being on
-requires switch B to also be on" relationship fits.
+- `Interlock` forces one switch to mirror another switch's on-state.
+  The motivating case: a "water-based" dehumidifier that draws chilled
+  water through a specific zone's valve to condense moisture out of the
+  air, so that valve must be open whenever the dehumidifier runs, even
+  though the zone itself may be excluded from normal cooling control
+  (see `Zone.cool_enabled` in services/thermostat.py) - a bathroom's
+  valve staying closed to avoid condensation on its own radiant panel
+  doesn't mean it can stay closed when something else downstream needs
+  the water. Nothing about this is dehumidifier-specific; any "switch A
+  being on requires switch B to also be on" relationship fits.
+
+- `ModeSwitch` forces one switch to mirror the thermostat's current
+  mode directly, with no leader switch involved. The motivating case: a
+  cooling-only bypass valve that must always be open in "cool" and
+  always closed otherwise - unlike an `Interlock` follower, which is
+  left alone entirely outside its `active_in_mode` so whatever else
+  owns it (typically the thermostat) isn't fought over, a `ModeSwitch`
+  has no other owner at all, so leaving its mode actively closes it
+  rather than leaving it in whatever state it was.
 """
 from __future__ import annotations
 
@@ -35,16 +44,24 @@ class Interlock:
     active_in_mode: str | None = None
 
 
+@dataclass
+class ModeSwitch:
+    switch: str
+    active_in_mode: str
+
+
 class InterlockController:
     def __init__(
         self,
         manager,
         interlocks: list[Interlock],
+        mode_switches: list[ModeSwitch] = (),
         mode_provider=None,
         poll_interval_seconds: float = 20,
     ):
         self.manager = manager
         self.interlocks = interlocks
+        self.mode_switches = list(mode_switches)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.poll_interval_seconds = poll_interval_seconds
         self._started = False
@@ -72,6 +89,8 @@ class InterlockController:
             if not leader_reading.get("ok"):
                 continue
             self._apply(link.follower, bool(leader_reading.get("is_on")))
+        for mode_switch in self.mode_switches:
+            self._apply(mode_switch.switch, current_mode == mode_switch.active_in_mode)
 
     def _apply(self, follower_name: str, desired_on: bool) -> None:
         switch = self.manager.switches.get(follower_name)
