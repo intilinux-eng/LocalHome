@@ -33,9 +33,10 @@ Example - a Tasmota plug's periodic energy telemetry:
     voltage_v: "ENERGY.Voltage"
     current_a: "ENERGY.Current"
 
-Example - a Shelly H&T publishing temperature and humidity on separate
-per-component topics (confirmed with mosquitto_sub -t '<id>/#' -v - see
-docs/integrations/mqtt.md):
+Example - a Shelly H&T publishing temperature, humidity and battery on
+separate per-component topics (confirmed with mosquitto_sub -t '<id>/#'
+-v - see docs/integrations/mqtt.md); battery_pct reads the standard
+Shelly Gen2/Gen3 DevicePower component shape ({"battery": {"percent": N}}):
   kind: climate
   type: mqtt_json
   name: "Bathroom Sensor"
@@ -43,9 +44,11 @@ docs/integrations/mqtt.md):
   state_topic:
     - "shellyht-XXXX/status/temperature:0"
     - "shellyht-XXXX/status/humidity:0"
+    - "shellyht-XXXX/status/devicepower:0"
   fields:
     temperature_c: "tC"
     humidity_pct: "rh"
+    battery_pct: "battery.percent"
 """
 from __future__ import annotations
 

@@ -76,6 +76,29 @@ def test_sensor_merges_fields_from_multiple_topics(fake_connection):
     assert reading == {"ok": True, "name": "Bathroom Sensor", "temperature_c": 21.5, "humidity_pct": 47.0}
 
 
+def test_sensor_merges_a_third_topic_with_a_nested_field_path(fake_connection):
+    # The real-world shape: a Shelly H&T's DevicePower component nests
+    # battery percentage under "battery.percent", on its own topic
+    # alongside temperature/humidity - see drivers/mqtt/sensor.py's
+    # module docstring and docs/integrations/mqtt.md.
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=[
+            "shelly/status/temperature:0", "shelly/status/humidity:0", "shelly/status/devicepower:0",
+        ],
+        fields={"temperature_c": "tC", "humidity_pct": "rh", "battery_pct": "battery.percent"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_connection.deliver("shelly/status/humidity:0", json.dumps({"rh": 47.0}))
+    fake_connection.deliver("shelly/status/devicepower:0", json.dumps({"battery": {"percent": 78}}))
+
+    reading = driver.read()
+
+    assert reading == {
+        "ok": True, "name": "Bathroom Sensor", "temperature_c": 21.5, "humidity_pct": 47.0, "battery_pct": 78,
+    }
+
+
 def test_sensor_gives_a_partial_reading_when_only_some_topics_have_reported(fake_connection):
     driver = MqttSensorDriver(
         name="Bathroom Sensor", broker=BROKER,

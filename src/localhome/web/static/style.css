@@ -650,6 +650,15 @@ input[type="range"]:disabled {
   color: var(--text-dim);
   text-align: right;
 }
+.zone-battery {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: right;
+}
+.zone-battery.low {
+  color: var(--accent-close);
+  font-weight: 600;
+}
 .zone-sub {
   display: inline-block;
   font-size: 0.74rem;
