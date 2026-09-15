@@ -801,7 +801,12 @@ function closeSettings() {
 function updateModeBadge() {
   const badge = document.getElementById("climate-mode-badge");
   if (!badge) return;
-  badge.textContent = climateMode === "cool" ? tr("climate.mode_cool") : tr("climate.mode_heat");
+  // "Riscaldamento"/"Raffrescamento" alone just repeats a word already in
+  // the heading right next to it - easy to misread as another label
+  // rather than the live status it actually is. The explicit "_active"
+  // wording (plus the dot) is what actually answers "which mode are we
+  // in right now", not the mode-badge's already-distinct heat/cool color.
+  badge.textContent = climateMode === "cool" ? tr("climate.mode_cool_active") : tr("climate.mode_heat_active");
   badge.className = `mode-badge ${climateMode}`;
 }
 
