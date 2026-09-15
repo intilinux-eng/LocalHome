@@ -822,32 +822,10 @@ input[type="range"]:disabled {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-dim);
 }
-/* #climate-mode-badge is a plain <span> now - purely informational (see
-   the settings gear icon for the one and only place to change it), so it
-   gets no pointer cursor. .away-badge is a real <button>, so it does. */
+/* .away-badge is a real <button>, so it gets a pointer cursor - the
+   season heading above is plain text/icon now, nothing to click. */
 .away-badge {
   cursor: pointer;
-}
-/* A small solid dot ahead of the text, in the same heat/cool color as
-   the badge itself (currentColor) - a second, non-text signal for "this
-   is the live status" that doesn't rely on reading the word correctly,
-   distinct from the on/off .dot used on device cards elsewhere. */
-#climate-mode-badge::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.mode-badge.heat {
-  background: rgba(255, 159, 10, 0.18);
-  color: #ff9f0a;
-}
-.mode-badge.cool {
-  background: rgba(57, 135, 229, 0.18);
-  color: #3987e5;
 }
 .away-badge.active {
   background: rgba(255, 69, 58, 0.18);

@@ -87,10 +87,9 @@
 
   <div id="tab-climate" class="tab-panel" hidden>
     <div class="section-head">
-      <h2>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"></path><path d="M12 18v4"></path><path d="m4.93 4.93 2.83 2.83"></path><path d="m16.24 16.24 2.83 2.83"></path><path d="M2 12h4"></path><path d="M18 12h4"></path><path d="m4.93 19.07 2.83-2.83"></path><path d="m16.24 7.76 2.83-2.83"></path></svg>
-        {{ t.climate.heading }}
-        <span class="mode-badge" id="climate-mode-badge" title="{{ t.settings.heading }}"></span>
+      <h2 title="{{ t.settings.heading }}">
+        <span id="climate-season-icon"></span>
+        <span id="climate-season-label">{{ t.climate.season_winter }}</span>
       </h2>
       <div class="toolbar">
         <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>
