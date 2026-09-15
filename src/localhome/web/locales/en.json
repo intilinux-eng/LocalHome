@@ -77,6 +77,8 @@
     "heading": "Heating & Cooling",
     "mode_heat": "Heating",
     "mode_cool": "Cooling",
+    "mode_heat_active": "Heating active",
+    "mode_cool_active": "Cooling active",
     "mode_note": "Shared by both zones - one central plant sends either hot or cold water to both valves.",
     "current": "Current",
     "target": "Target",

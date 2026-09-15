@@ -828,6 +828,19 @@ input[type="range"]:disabled {
 .away-badge {
   cursor: pointer;
 }
+/* A small solid dot ahead of the text, in the same heat/cool color as
+   the badge itself (currentColor) - a second, non-text signal for "this
+   is the live status" that doesn't rely on reading the word correctly,
+   distinct from the on/off .dot used on device cards elsewhere. */
+#climate-mode-badge::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
 .mode-badge.heat {
   background: rgba(255, 159, 10, 0.18);
   color: #ff9f0a;
