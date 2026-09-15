@@ -10,8 +10,15 @@ gets and which of the two the `energy:` alert can target.
 
 config.yaml options:
   broker_file (or inline broker: {...}): connection details
-  state_topic: the MQTT topic to subscribe to
-  fields: {reading_field_name: "dotted.path.in.the.json.payload"}
+  state_topic: the MQTT topic to subscribe to - or a *list* of topics,
+               for a device that splits one reading's fields across
+               several topics (e.g. a Shelly H&T publishing temperature
+               and humidity separately); each topic keeps its own cached
+               payload, so one going stale/missing doesn't blank out a
+               field that came from a different topic (see
+               MqttSensorDriver.read() below)
+  fields: {reading_field_name: "dotted.path.in.the.json.payload"} -
+          looked up against whichever subscribed topic's payload has it
   history_fields: optional subset of `fields` worth recording (defaults
                    to all of them)
 
@@ -25,6 +32,20 @@ Example - a Tasmota plug's periodic energy telemetry:
     power_w: "ENERGY.Power"
     voltage_v: "ENERGY.Voltage"
     current_a: "ENERGY.Current"
+
+Example - a Shelly H&T publishing temperature and humidity on separate
+per-component topics (confirmed with mosquitto_sub -t '<id>/#' -v - see
+docs/integrations/mqtt.md):
+  kind: climate
+  type: mqtt_json
+  name: "Bathroom Sensor"
+  broker_file: "mqtt_broker.json"
+  state_topic:
+    - "shellyht-XXXX/status/temperature:0"
+    - "shellyht-XXXX/status/humidity:0"
+  fields:
+    temperature_c: "tC"
+    humidity_pct: "rh"
 """
 from __future__ import annotations
 
@@ -42,7 +63,7 @@ class MqttSensorDriver(PollingDriver):
         self,
         name: str,
         broker: dict,
-        state_topic: str,
+        state_topic: str | list[str],
         fields: dict[str, str],
         history_fields: tuple[str, ...] | None = None,
         poll_interval_seconds: float = 20.0,
@@ -52,15 +73,30 @@ class MqttSensorDriver(PollingDriver):
         self.poll_interval_seconds = poll_interval_seconds
         self._fields = fields
         self.history_fields = tuple(history_fields) if history_fields else tuple(fields)
-        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds)
+        topics = state_topic if isinstance(state_topic, list) else [state_topic]
+        self._states = [MqttJsonState(broker, topic, stale_after_seconds=stale_after_seconds) for topic in topics]
 
     def read(self) -> dict[str, Any]:
-        payload = require_payload(self._state)
+        # Each subscribed topic is tried independently rather than
+        # requiring all of them to have a fresh payload - a device that
+        # splits fields across topics (a Shelly H&T's temperature and
+        # humidity, say) still gives a partial-but-useful reading if only
+        # one topic has reported so far, instead of the whole sensor
+        # going "unreachable" until every topic happens to line up.
         reading: dict[str, Any] = {"ok": True, "name": self.name}
-        for field, path in self._fields.items():
-            value = extract_path(payload, path)
-            if value is not None:
-                reading[field] = value
+        errors = []
+        for state in self._states:
+            try:
+                payload = require_payload(state)
+            except RuntimeError as exc:
+                errors.append(str(exc))
+                continue
+            for field, path in self._fields.items():
+                value = extract_path(payload, path)
+                if value is not None:
+                    reading[field] = value
+        if len(errors) == len(self._states):
+            raise RuntimeError("; ".join(errors))
         return reading
 
 
