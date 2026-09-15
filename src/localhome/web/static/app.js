@@ -402,16 +402,23 @@ function updateSensorCard(sensor, reading, linkedReading) {
     if ("humidity_pct" in reading) html += `<div><div class="big">${fmt(reading.humidity_pct, 0)} <span>%</span></div><div class="label">${tr("fields.humidity_pct")}</div></div>`;
     html += `</div>`;
   } else if (sensor.kind === "switch") {
+    // A non-controllable switch (e.g. a mode_switch, driven purely by
+    // the thermostat's mode - see services/interlock.py) shows the same
+    // status headline but no toggle: a manual flip here would just get
+    // overridden on the controller's next tick, so offering one would
+    // be misleading rather than actually inert.
+    const toggleHtml = sensor.controllable ? `
+        <label class="toggle">
+          <input type="checkbox" ${reading.is_on ? "checked" : ""} onchange="onSwitchToggle('${sensor.name}', this)">
+          <span class="track"></span>
+        </label>` : "";
     html += `
       <div class="switch-body">
         <div>
           <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
           <div class="switch-sub">${reading.voltage_v != null ? fmt(reading.voltage_v, 0) + " V · " + fmt(reading.current_a, 2) + " A" : ""}</div>
         </div>
-        <label class="toggle">
-          <input type="checkbox" ${reading.is_on ? "checked" : ""} onchange="onSwitchToggle('${sensor.name}', this)">
-          <span class="track"></span>
-        </label>
+        ${toggleHtml}
       </div>
     `;
     if (sensor.linked_valve) {
