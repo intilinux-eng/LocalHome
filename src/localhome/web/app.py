@@ -339,6 +339,7 @@ def _register_routes(app: Flask) -> None:
                 "cool_enabled": zone.cool_enabled,
                 "temperature_c": sensor_reading.get("temperature_c"),
                 "humidity_pct": sensor_reading.get("humidity_pct"),
+                "battery_pct": sensor_reading.get("battery_pct"),
                 "sensor_ok": sensor_reading.get("ok", False),
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),

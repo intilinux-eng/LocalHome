@@ -1013,6 +1013,18 @@ function zoneFreshnessText(zone) {
   return formatUpdatedAgo(zone.sensor_seconds_since_update);
 }
 
+// Only a battery-powered sensor (e.g. a Shelly H&T) reports battery_pct
+// at all - most zones' sensors are mains-powered or simulated and never
+// will, so the element stays hidden rather than showing a permanent
+// "no battery" placeholder. LOW_BATTERY_PCT is deliberately generous
+// (not "about to die") since this is a once-in-months reminder to
+// change it, not an urgent alert.
+const LOW_BATTERY_PCT = 20;
+
+function batteryLabel(pct) {
+  return pct == null ? "" : `${tr("fields.battery_pct")} ${Math.round(pct)}%`;
+}
+
 function buildZoneCard(zone) {
   const id = slug(zone.name);
   const chartId = slug(zone.sensor);
@@ -1026,6 +1038,7 @@ function buildZoneCard(zone) {
         <div>
           <div class="zone-current">${currentText}</div>
           <div class="zone-updated" id="zone-updated-${id}" title="${zone.sensor_error || ""}">${zoneFreshnessText(zone)}</div>
+          <div class="zone-battery${zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT ? " low" : ""}" id="zone-battery-${id}"${zone.battery_pct == null ? " hidden" : ""}>${batteryLabel(zone.battery_pct)}</div>
         </div>
       </div>
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
@@ -1289,6 +1302,12 @@ async function refreshClimateZonesLive() {
       if (updated) {
         updated.textContent = zoneFreshnessText(zone);
         updated.title = zone.sensor_error || "";
+      }
+      const battery = card.querySelector(".zone-battery");
+      if (battery) {
+        battery.hidden = zone.battery_pct == null;
+        battery.textContent = batteryLabel(zone.battery_pct);
+        battery.classList.toggle("low", zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT);
       }
       const sub = card.querySelector(".zone-sub");
       sub.textContent = zoneStatusText(zone);
