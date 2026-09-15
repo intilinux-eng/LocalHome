@@ -19,7 +19,7 @@ from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.position_control import PositionStore
-from localhome.services.interlock import Interlock, InterlockController
+from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -107,10 +107,15 @@ def create_app(config_path: str | None = None) -> Flask:
             Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
             for link in thermostat_cfg.get("interlocks", [])
         ]
-        if interlocks:
+        mode_switches = [
+            ModeSwitch(switch=item["switch"], active_in_mode=item["active_in_mode"])
+            for item in thermostat_cfg.get("mode_switches", [])
+        ]
+        if interlocks or mode_switches:
             interlock = InterlockController(
                 manager,
                 interlocks,
+                mode_switches,
                 mode_provider=schedule_store.get_mode,
                 poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             )

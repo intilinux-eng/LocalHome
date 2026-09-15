@@ -208,6 +208,18 @@ thermostat:
       follower: "Bathrooms Valve"
       active_in_mode: "cool"
 
+  # `mode_switches`: like an interlock, but with no leader switch at all -
+  # the switch just mirrors the thermostat's current mode directly. For
+  # a switch with no other owner (unlike a zone's own valve, which the
+  # thermostat itself drives), this is the difference that matters: it's
+  # actively forced OFF outside `active_in_mode`, not just left alone -
+  # e.g. a cooling-only bypass valve that reroutes water around a zone's
+  # radiant panel so the panel's own valve can stay closed (avoiding
+  # condensation) while the circuit still moves chilled water elsewhere.
+  mode_switches:
+    - switch: "Cooling Bypass Valve"
+      active_in_mode: "cool"
+
 # Optional: push notifications for the power-budget alert below.
 notifications:
   type: telegram
