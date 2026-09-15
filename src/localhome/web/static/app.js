@@ -798,16 +798,21 @@ function closeSettings() {
   document.getElementById("settings-modal").hidden = true;
 }
 
-function updateModeBadge() {
-  const badge = document.getElementById("climate-mode-badge");
-  if (!badge) return;
-  // "Riscaldamento"/"Raffrescamento" alone just repeats a word already in
-  // the heading right next to it - easy to misread as another label
-  // rather than the live status it actually is. The explicit "_active"
-  // wording (plus the dot) is what actually answers "which mode are we
-  // in right now", not the mode-badge's already-distinct heat/cool color.
-  badge.textContent = climateMode === "cool" ? tr("climate.mode_cool_active") : tr("climate.mode_heat_active");
-  badge.className = `mode-badge ${climateMode}`;
+// Same "season" framing the settings modal's toggle already uses
+// ("Stagione riscaldamento / raffrescamento") - a snowflake+"Inverno" or
+// sun+"Estate" reads as the current state at a glance, instead of a
+// static "Heating & Cooling" label that named the tab's topic but never
+// said which of the two was actually running.
+const SEASON_ICON_WINTER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M3.34 7 20.66 17"></path><path d="M20.66 7 3.34 17"></path></svg>`;
+const SEASON_ICON_SUMMER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"></path><path d="M12 18v4"></path><path d="m4.93 4.93 2.83 2.83"></path><path d="m16.24 16.24 2.83 2.83"></path><path d="M2 12h4"></path><path d="M18 12h4"></path><path d="m4.93 19.07 2.83-2.83"></path><path d="m16.24 7.76 2.83-2.83"></path></svg>`;
+
+function updateSeasonHeading() {
+  const icon = document.getElementById("climate-season-icon");
+  const label = document.getElementById("climate-season-label");
+  if (!icon || !label) return;
+  const isSummer = climateMode === "cool";
+  icon.innerHTML = isSummer ? SEASON_ICON_SUMMER : SEASON_ICON_WINTER;
+  label.textContent = isSummer ? tr("climate.season_summer") : tr("climate.season_winter");
 }
 
 // "Away" is a temporary hold on top of the weekly schedule - see
@@ -1270,7 +1275,7 @@ async function refreshClimateZonesLive() {
     if (!data.ok) return;
     climateMode = data.mode || climateMode;
     climateAwayUntil = data.away_until || null;
-    updateModeBadge();
+    updateSeasonHeading();
     updateAwayBadge();
     updateAwayBanner();
     data.zones.forEach(zone => {
@@ -1308,7 +1313,7 @@ async function onModeToggle(el) {
       return;
     }
     climateMode = mode;
-    updateModeBadge();
+    updateSeasonHeading();
     applyClimateModeVisibility();
     // A full reload, not just refreshClimateZonesLive()'s in-place patch:
     // switching mode can change *which* zone cards should even exist (a
@@ -1368,7 +1373,7 @@ async function boot() {
   if (climateData.ok) {
     climateMode = climateData.mode || "heat";
     climateAwayUntil = climateData.away_until || null;
-    updateModeBadge();
+    updateSeasonHeading();
     updateAwayBadge();
     climateZones = climateData.zones;
     renderClimateZones();

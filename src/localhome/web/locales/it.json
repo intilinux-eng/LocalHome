@@ -74,11 +74,10 @@
     "mode_label": "Stagione riscaldamento / raffrescamento"
   },
   "climate": {
-    "heading": "Riscaldamento e raffrescamento",
+    "season_winter": "Inverno",
+    "season_summer": "Estate",
     "mode_heat": "Riscaldamento",
     "mode_cool": "Raffrescamento",
-    "mode_heat_active": "Riscaldamento attivo",
-    "mode_cool_active": "Raffrescamento attivo",
     "mode_note": "Condiviso da entrambe le zone - un'unica centrale invia acqua calda o fredda a entrambe le valvole.",
     "current": "Attuale",
     "target": "Target",
