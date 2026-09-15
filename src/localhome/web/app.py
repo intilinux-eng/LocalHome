@@ -17,6 +17,7 @@ from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
@@ -332,13 +333,21 @@ def _register_routes(app: Flask) -> None:
         for zone in thermostat.zones:
             sensor_reading = manager.sensor_reading(zone.sensor)
             valve_reading = manager.sensor_reading(zone.valve)
+            temperature_c = sensor_reading.get("temperature_c")
+            humidity_pct = sensor_reading.get("humidity_pct")
+            # humidity_pct == 0 is a broken/uncalibrated reading, not
+            # "bone dry air" - math.log(0) would raise anyway, so this
+            # also protects the endpoint from a single bad sensor value
+            # taking the whole response down.
+            dew_point = dew_point_c(temperature_c, humidity_pct) if temperature_c is not None and humidity_pct else None
             zones.append({
                 "name": zone.name,
                 "sensor": zone.sensor,
                 "valve": zone.valve,
                 "cool_enabled": zone.cool_enabled,
-                "temperature_c": sensor_reading.get("temperature_c"),
-                "humidity_pct": sensor_reading.get("humidity_pct"),
+                "temperature_c": temperature_c,
+                "humidity_pct": humidity_pct,
+                "dew_point_c": dew_point,
                 "battery_pct": sensor_reading.get("battery_pct"),
                 "sensor_ok": sensor_reading.get("ok", False),
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),

@@ -659,6 +659,11 @@ input[type="range"]:disabled {
   color: var(--accent-close);
   font-weight: 600;
 }
+.zone-dewpoint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: right;
+}
 .zone-sub {
   display: inline-block;
   font-size: 0.74rem;

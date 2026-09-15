@@ -1044,6 +1044,21 @@ function checkLowBatteryPopup(zone) {
   }
 }
 
+// Only meaningful while cooling, and only for a zone the thermostat
+// actually cools (a cool_enabled:false zone like a condensation-prone
+// bathroom radiant panel is never chased toward a cooling target, so
+// its own dew point isn't an actionable number here - see the
+// cool_enabled note in services/thermostat.py). dew_point_c itself is
+// computed server-side (services/dewpoint.py) from that zone's own
+// temperature/humidity - see web/app.py's /api/climate/zones.
+function dewPointVisible(zone) {
+  return climateMode === "cool" && zone.cool_enabled !== false && zone.dew_point_c != null;
+}
+
+function dewPointLabel(zone) {
+  return zone.dew_point_c == null ? "" : tr("climate.dew_point", { value: zone.dew_point_c.toFixed(1) });
+}
+
 function openLowBattery(message) {
   document.getElementById("low-battery-message").textContent = message;
   document.getElementById("low-battery-modal").hidden = false;
@@ -1067,6 +1082,7 @@ function buildZoneCard(zone) {
           <div class="zone-current">${currentText}</div>
           <div class="zone-updated" id="zone-updated-${id}" title="${zone.sensor_error || ""}">${zoneFreshnessText(zone)}</div>
           <div class="zone-battery${zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT ? " low" : ""}" id="zone-battery-${id}"${zone.battery_pct == null ? " hidden" : ""}>${batteryLabel(zone.battery_pct)}</div>
+          <div class="zone-dewpoint" id="zone-dewpoint-${id}"${dewPointVisible(zone) ? "" : " hidden"}>${dewPointLabel(zone)}</div>
         </div>
       </div>
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
@@ -1337,6 +1353,11 @@ async function refreshClimateZonesLive() {
         battery.hidden = zone.battery_pct == null;
         battery.textContent = batteryLabel(zone.battery_pct);
         battery.classList.toggle("low", zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT);
+      }
+      const dewpoint = card.querySelector(".zone-dewpoint");
+      if (dewpoint) {
+        dewpoint.hidden = !dewPointVisible(zone);
+        dewpoint.textContent = dewPointLabel(zone);
       }
       const sub = card.querySelector(".zone-sub");
       sub.textContent = zoneStatusText(zone);
