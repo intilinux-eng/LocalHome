@@ -15,18 +15,20 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from localhome.config import LocalHomeConfig, load_config
+from localhome.config import Integration, LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.climate_map_store import (
     ClimateMapStore,
     build_climate_integrations,
+    build_extra_switch_integrations,
     build_zone_configs,
     snapshot_from_config,
 )
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.manual_override import ManualOverrideStore
-from localhome.services.mqtt_broker_status import check_broker
+from localhome.services.mqtt_broker_config import get_broker, set_broker
+from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
@@ -72,16 +74,20 @@ def create_app(config_path: str | None = None) -> Flask:
     climate_map = ClimateMapStore(config.resolve("climate_map.json"))
     manual_override_path = config.resolve("manual_override.json")
     manual_override = ManualOverrideStore(manual_override_path)
+    broker_file = config.resolve("mqtt_broker.json")
     panel_zones = climate_map.get_zones()
+    extra_switches = climate_map.get_extra_switches()
+    new_integrations: list[Integration] = []
     if panel_zones is not None:
-        broker_file = config.resolve("mqtt_broker.json")
-        new_integrations = build_climate_integrations(panel_zones, broker_file, manual_override_path)
+        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
+    new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
+    if new_integrations:
         existing_names = {i.options.get("name") for i in config.integrations}
         for integration in new_integrations:
             name = integration.options.get("name")
             if name in existing_names:
                 logger.warning(
-                    "Climate admin panel zone device %r collides with an existing config.yaml integration "
+                    "Climate admin panel device %r collides with an existing config.yaml integration "
                     "name - the panel's version will win (DeviceManager._register() is last-one-wins).",
                     name,
                 )
@@ -522,6 +528,46 @@ def _register_routes(app: Flask) -> None:
         broker_file = config.resolve("mqtt_broker.json")
         return jsonify(ok=True, **check_broker(broker_file))
 
+    @app.route("/api/climate-admin/broker")
+    def api_climate_admin_get_broker():
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        return jsonify(ok=True, **get_broker(broker_file))
+
+    @app.route("/api/climate-admin/broker", methods=["POST"])
+    def api_climate_admin_set_broker():
+        # Doing a full install from a tablet means never needing to open
+        # mqtt_broker.json by hand - see services/mqtt_broker_config.py.
+        # Same "changes need a restart" contract as the zone mapping
+        # below: DeviceManager only ever builds its MQTT client once, at
+        # process start.
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        data = request.get_json(silent=True) or {}
+        try:
+            set_broker(
+                broker_file,
+                data.get("host"),
+                data.get("port"),
+                data.get("username"),
+                data.get("password"),
+                bool(data.get("change_password")),
+            )
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/broker/test", methods=["POST"])
+    def api_climate_admin_test_broker():
+        # Tests whatever the operator just typed, before it's saved -
+        # same probe as broker-status above (services/mqtt_broker_status.py),
+        # just against unsaved values instead of the file on disk.
+        data = request.get_json(silent=True) or {}
+        host, port = data.get("host"), data.get("port")
+        if not isinstance(host, str) or not host.strip() or not isinstance(port, int) or isinstance(port, bool):
+            return jsonify(ok=False, error="host and port are required"), 400
+        return jsonify(ok=True, **check_host_port(host.strip(), port))
+
     @app.route("/api/climate-admin/map")
     def api_climate_admin_get_map():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
@@ -561,6 +607,24 @@ def _register_routes(app: Flask) -> None:
                         "carry over automatically."
                     )
         return jsonify(ok=True, restart_required=True, warnings=warnings)
+
+    @app.route("/api/climate-admin/extra-switches")
+    def api_climate_admin_get_extra_switches():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        return jsonify(ok=True, switches=climate_map.get_extra_switches())
+
+    @app.route("/api/climate-admin/extra-switches", methods=["POST"])
+    def api_climate_admin_set_extra_switches():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        data = request.get_json(silent=True) or {}
+        switches = data.get("switches")
+        if not isinstance(switches, list):
+            return jsonify(ok=False, error="missing 'switches'"), 400
+        try:
+            climate_map.set_extra_switches(switches)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
 
     @app.route("/api/climate-admin/zones/<name>/manual-value", methods=["POST"])
     def api_climate_admin_set_manual_value(name):

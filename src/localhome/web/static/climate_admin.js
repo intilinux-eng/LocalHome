@@ -40,6 +40,7 @@ function zoneFormHtml(zone, index) {
         <label>${tr("climate_admin.sensor_device_id_label")}</label>
         <input type="text" class="zone-sensor-device-id" value="${z.sensor_device_id || ""}" placeholder="shellyht-XXXXXXXXXXXX">
       </div>
+      <p class="hint-text zone-manual-hint"${z.sensor_mode !== "manual" ? " hidden" : ""}>${tr("climate_admin.manual_mode_hint")}</p>
       <div class="admin-field">
         <label>${tr("climate_admin.valve_device_id_label")}</label>
         <input type="text" class="zone-valve-device-id" value="${z.valve_device_id || ""}" placeholder="shellyplus1-XXXXXXXXXXXX">
@@ -55,6 +56,7 @@ function zoneFormHtml(zone, index) {
 function onSensorModeChange(select) {
   const card = select.closest(".admin-zone-card");
   card.querySelector(".zone-sensor-id-field").hidden = select.value !== "shelly";
+  card.querySelector(".zone-manual-hint").hidden = select.value !== "manual";
 }
 
 async function loadMap() {
@@ -82,6 +84,85 @@ function collectZonesFromForm() {
   });
 }
 
+// ------------------------------------------------------------ broker form ----
+// Editing config/mqtt_broker.json from the web - see
+// services/mqtt_broker_config.py. Loaded once (not on every poll tick,
+// unlike refreshBroker()'s reachability pill below) so it never
+// overwrites an in-progress edit out from under the operator.
+
+async function loadBroker() {
+  const res = await fetch("/api/climate-admin/broker");
+  const data = await res.json();
+  document.getElementById("broker-host").value = data.host || "";
+  document.getElementById("broker-port").value = data.port || "";
+  document.getElementById("broker-username").value = data.username || "";
+  document.getElementById("broker-change-password").checked = false;
+  document.getElementById("broker-password").value = "";
+  document.getElementById("broker-password-field").hidden = true;
+  document.getElementById("broker-password-toggle-label").textContent =
+    data.has_password ? tr("climate_admin.broker_change_password_label") : tr("climate_admin.broker_set_password_label");
+}
+
+function onChangePasswordToggle(checkbox) {
+  document.getElementById("broker-password-field").hidden = !checkbox.checked;
+}
+
+async function testBroker() {
+  const resultEl = document.getElementById("broker-test-result");
+  const host = document.getElementById("broker-host").value.trim();
+  const port = parseInt(document.getElementById("broker-port").value, 10);
+  resultEl.textContent = "";
+  try {
+    const res = await fetch("/api/climate-admin/broker/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ host, port }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.textContent = data.reachable ? tr("climate_admin.broker_ok") : `${tr("climate_admin.broker_down")} (${data.error})`;
+    resultEl.className = data.reachable ? "hint-text admin-success" : "hint-text admin-error";
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  }
+}
+
+async function saveBroker() {
+  const resultEl = document.getElementById("broker-save-result");
+  const changePassword = document.getElementById("broker-change-password").checked;
+  const body = {
+    host: document.getElementById("broker-host").value.trim(),
+    port: parseInt(document.getElementById("broker-port").value, 10),
+    username: document.getElementById("broker-username").value.trim(),
+    change_password: changePassword,
+  };
+  if (changePassword) body.password = document.getElementById("broker-password").value;
+  try {
+    const res = await fetch("/api/climate-admin/broker", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.textContent = tr("climate_admin.broker_save_success");
+    resultEl.className = "hint-text admin-success";
+    await loadBroker();
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  }
+}
+
 async function saveMap() {
   const resultEl = document.getElementById("save-result");
   try {
@@ -101,6 +182,81 @@ async function saveMap() {
     resultEl.textContent = text;
     resultEl.className = "hint-text admin-success";
     await loadMap();
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  }
+}
+
+// -------------------------------------------------------- extra switches ----
+// Standalone Shelly Plus 1 on/off switches with no sensor/schedule of
+// their own (a dehumidifier, a bathroom bypass valve, ...) - see
+// services/climate_map_store.py's build_extra_switch_integrations().
+// Unlike zones there's no fixed count or fixed name: config.yaml's own
+// interlocks/mode_switches reference these by whatever name is typed
+// here, so moving one over from a hand-written config.yaml entry means
+// typing that *same* name, not a placeholder - see that module's
+// docstring.
+
+let extraSwitchCount = 0;
+
+function extraSwitchRowHtml(switchEntry, index) {
+  const s = switchEntry || { name: "", device_id: "" };
+  return `
+    <div class="admin-zone-card admin-extra-switch-row" data-index="${index}">
+      <div class="admin-field">
+        <label>${tr("climate_admin.extra_switch_name_label")}</label>
+        <input type="text" class="extra-switch-name" value="${s.name || ""}" placeholder="${tr("climate_admin.extra_switch_name_placeholder")}">
+      </div>
+      <div class="admin-field">
+        <label>${tr("climate_admin.extra_switch_device_id_label")}</label>
+        <input type="text" class="extra-switch-device-id" value="${s.device_id || ""}" placeholder="shellyplus1-XXXXXXXXXXXX">
+      </div>
+      <button class="range-btn" onclick="removeExtraSwitchRow(this)">${tr("climate_admin.extra_switch_remove_button")}</button>
+    </div>
+  `;
+}
+
+async function loadExtraSwitches() {
+  const res = await fetch("/api/climate-admin/extra-switches");
+  const data = await res.json();
+  const switches = data.switches || [];
+  extraSwitchCount = switches.length;
+  document.getElementById("extra-switch-forms").innerHTML = switches.map((s, i) => extraSwitchRowHtml(s, i)).join("");
+}
+
+function addExtraSwitchRow() {
+  document.getElementById("extra-switch-forms").insertAdjacentHTML("beforeend", extraSwitchRowHtml(null, extraSwitchCount++));
+}
+
+function removeExtraSwitchRow(button) {
+  button.closest(".admin-extra-switch-row").remove();
+}
+
+function collectExtraSwitchesFromForm() {
+  return [...document.querySelectorAll(".admin-extra-switch-row")].map(row => ({
+    name: row.querySelector(".extra-switch-name").value.trim(),
+    device_id: row.querySelector(".extra-switch-device-id").value.trim(),
+  }));
+}
+
+async function saveExtraSwitches() {
+  const resultEl = document.getElementById("save-extra-result");
+  try {
+    const res = await fetch("/api/climate-admin/extra-switches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ switches: collectExtraSwitchesFromForm() }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.textContent = tr("climate_admin.save_success");
+    resultEl.className = "hint-text admin-success";
+    await loadExtraSwitches();
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
     resultEl.className = "hint-text admin-error";
@@ -140,11 +296,20 @@ function sensorStatusHtml(zone, mode) {
 }
 
 function valveStatusHtml(zone) {
+  const testButtons = `
+    <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'on', this)">${tr("climate_admin.valve_test_open")}</button>
+    <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'off', this)">${tr("climate_admin.valve_test_close")}</button>
+  `;
   if (zone.valve_ok) {
     const state = zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed");
-    return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state}`;
+    return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state} ${testButtons}`;
   }
-  return `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span>`;
+  return `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span> ${testButtons}`;
+}
+
+function targetHtml(zone) {
+  const target = zone.target_c != null ? `${fmt(zone.target_c, 1)}°C` : tr("climate.no_target");
+  return `${tr("climate_admin.target_label")}: ${target}`;
 }
 
 function statusRowHtml(zone, mapEntry) {
@@ -160,16 +325,28 @@ function statusRowHtml(zone, mapEntry) {
     <div class="admin-status-row">
       <div class="admin-status-name">${zone.name}</div>
       <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, mode)}</div>
+      <div>${targetHtml(zone)}</div>
       <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone)}</div>
+      <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
       ${manualBoxHtml}
     </div>
   `;
+}
+
+function modeAwayLineHtml(data) {
+  if (!data.mode) return "";
+  const modeLabel = data.mode === "cool" ? tr("climate.mode_cool") : tr("climate.mode_heat");
+  const awayText = data.away_until
+    ? tr("climate.away_active", { until: new Date(data.away_until).toLocaleString() })
+    : tr("climate.away_idle");
+  return `${modeLabel} · ${awayText}`;
 }
 
 async function refreshStatus() {
   try {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
+    document.getElementById("mode-away-line").textContent = modeAwayLineHtml(data);
     const byName = {};
     ((savedMap && savedMap.zones) || []).forEach(z => { byName[z.name] = z; });
     const rows = (data.zones || []).map(zone => statusRowHtml(zone, byName[zone.name])).join("");
@@ -177,6 +354,25 @@ async function refreshStatus() {
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place and
     // keep polling rather than blanking the page.
+  }
+}
+
+// A manual test, not the thermostat's own control - reuses the generic
+// switch route every controllable device already has (web/app.py's
+// api_sensor_action()), so pressing it just proves the physical relay
+// responds; the thermostat's own next tick re-asserts its schedule
+// shortly after, same as it would for any manual toggle.
+async function testValve(valveName, action, button) {
+  button.disabled = true;
+  try {
+    const res = await fetch(`/api/sensors/${encodeURIComponent(valveName)}/${action}`, { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    refreshStatus();
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -258,4 +454,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 loadMap();
+loadBroker();
+loadExtraSwitches();
 startPolling();

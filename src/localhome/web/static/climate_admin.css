@@ -141,3 +141,20 @@
   font-size: 0.8rem;
   width: 90px;
 }
+
+.admin-valve-test {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  margin-left: 4px;
+}
+
+.admin-valve-test-hint {
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.admin-extra-switch-row {
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
