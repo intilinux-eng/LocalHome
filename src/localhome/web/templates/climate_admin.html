@@ -22,7 +22,8 @@
   <div class="section-head">
     <h2>{{ t.climate_admin.broker_heading }}</h2>
   </div>
-  <p class="hint-text" id="broker-info">{{ t.climate_admin.broker_note }}</p>
+  <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
+  <p id="broker-status" class="admin-broker-status"></p>
 
   <div class="section-head">
     <h2>{{ t.climate_admin.zones_heading }}</h2>
@@ -36,7 +37,7 @@
   <div class="section-head" style="margin-top:32px">
     <h2>{{ t.climate_admin.status_heading }}</h2>
     <div class="toolbar">
-      <button class="range-btn" onclick="refreshStatus()">{{ t.climate_admin.refresh_button }}</button>
+      <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
     </div>
   </div>
   <p class="hint-text">{{ t.climate_admin.status_note }}</p>

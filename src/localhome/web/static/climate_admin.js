@@ -66,7 +66,7 @@ async function loadMap() {
   // services/climate_map_store.py's snapshot_from_config().
   const zones = savedMap.zones || [null, null];
   document.getElementById("zone-forms").innerHTML = zones.map((z, i) => zoneFormHtml(z, i)).join("");
-  refreshStatus();
+  refreshAll();
 }
 
 function collectZonesFromForm() {
@@ -180,6 +180,32 @@ async function refreshStatus() {
   }
 }
 
+// Raw TCP reachability, not "is any zone reporting" - the two are
+// deliberately checked separately (see services/mqtt_broker_status.py)
+// so a broker that's simply not running isn't mistaken for a device
+// fault ("not reachable yet" on every zone at once is a broker problem,
+// not a Shelly button worth pressing).
+async function refreshBroker() {
+  const el = document.getElementById("broker-status");
+  try {
+    const res = await fetch("/api/climate-admin/broker-status");
+    const data = await res.json();
+    const where = `${data.host || "?"}:${data.port || "?"}`;
+    if (data.reachable) {
+      el.innerHTML = `<span class="admin-status ok">${tr("climate_admin.broker_ok")}</span> ${where}`;
+    } else {
+      el.innerHTML = `<span class="admin-status bad">${tr("climate_admin.broker_down")}</span> ${where} - ${tr("climate_admin.broker_down_hint")}`;
+    }
+  } catch (e) {
+    // Transient fetch failure - leave the last rendering in place.
+  }
+}
+
+async function refreshAll() {
+  await refreshBroker();
+  await refreshStatus();
+}
+
 async function setManualValue(zoneName, button) {
   const box = button.closest(".admin-manual-box");
   const temperature_c = parseFloat(box.querySelector(".manual-temp-input").value);
@@ -214,7 +240,7 @@ async function setManualValue(zoneName, button) {
 
 function startPolling() {
   stopPolling();
-  pollTimer = setInterval(refreshStatus, 3500);
+  pollTimer = setInterval(refreshAll, 3500);
 }
 
 function stopPolling() {
@@ -226,7 +252,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopPolling();
   } else {
-    refreshStatus();
+    refreshAll();
     startPolling();
   }
 });

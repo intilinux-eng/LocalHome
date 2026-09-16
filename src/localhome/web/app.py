@@ -26,6 +26,7 @@ from localhome.services.climate_map_store import (
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.manual_override import ManualOverrideStore
+from localhome.services.mqtt_broker_status import check_broker
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
@@ -509,6 +510,17 @@ def _register_routes(app: Flask) -> None:
             t=app.config["TRANSLATIONS"],
             lang=config.web_language,
         )
+
+    @app.route("/api/climate-admin/broker-status")
+    def api_climate_admin_broker_status():
+        # A raw TCP probe, not a real MQTT client - answers "is anything
+        # even listening" so a device stuck on "not reachable yet" isn't
+        # misdiagnosed as its own fault when the broker itself is down
+        # (a real incident this panel is meant to catch immediately - see
+        # services/mqtt_broker_status.py).
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        return jsonify(ok=True, **check_broker(broker_file))
 
     @app.route("/api/climate-admin/map")
     def api_climate_admin_get_map():

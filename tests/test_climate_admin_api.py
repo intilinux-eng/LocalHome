@@ -7,6 +7,7 @@ debug-value route applying immediately with no restart, and the
 validation/rename edge cases services/climate_map_store.py documents.
 """
 import json
+import socket
 
 import pytest
 
@@ -66,6 +67,49 @@ def _app(tmp_path, config_text=CONFIG_WITH_THERMOSTAT):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(config_text, encoding="utf-8")
     return create_app(str(config_path))
+
+
+# --------------------------------------------------------- broker status ----
+# A real loopback socket, not tests/mqtt_fakes.py's FakeMqttConnection -
+# that fixture only fakes the MQTT protocol layer, not whether anything
+# is actually listening on the TCP port, which is exactly what this
+# route checks (see services/mqtt_broker_status.py).
+
+def test_broker_status_route_reports_reachable_when_something_listens(tmp_path):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    host, port = server.getsockname()
+    (tmp_path / "mqtt_broker.json").write_text(json.dumps({"host": host, "port": port}), encoding="utf-8")
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    try:
+        body = client.get("/api/climate-admin/broker-status").get_json()
+    finally:
+        server.close()
+
+    assert body["ok"] is True
+    assert body["reachable"] is True
+    assert body["host"] == host
+    assert body["port"] == port
+
+
+def test_broker_status_route_reports_unreachable_when_nothing_listens(tmp_path):
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    _, port = probe.getsockname()
+    probe.close()
+    (tmp_path / "mqtt_broker.json").write_text(json.dumps({"host": "127.0.0.1", "port": port}), encoding="utf-8")
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    body = client.get("/api/climate-admin/broker-status").get_json()
+
+    assert body["ok"] is True
+    assert body["reachable"] is False
+    assert body["host"] == "127.0.0.1"
+    assert body["port"] == port
 
 
 # ------------------------------------------------------------------ GET ----

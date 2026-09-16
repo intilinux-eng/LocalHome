@@ -53,6 +53,12 @@
   margin-top: 4px;
 }
 
+.admin-broker-status {
+  font-size: 0.85rem;
+  margin-top: -4px;
+  margin-bottom: 20px;
+}
+
 .admin-error {
   color: var(--accent-close);
 }
