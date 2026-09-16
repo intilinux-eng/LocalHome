@@ -272,6 +272,67 @@ that deadline is in the future, and clears it and resumes the normal
 per-zone schedule logic on its own on the first tick after it passes,
 with no need for anything to remember to turn it back off.
 
+## The Shelly climate admin panel
+
+`/climate-admin` is a second, separate page from the main dashboard -
+built for one specific, common case: the exact same two-zone
+heating/cooling setup described above, installed across multiple homes
+that all standardize on the [Shelly](https://www.shelly.com/) device
+family (Gen3 H&T sensors, Plus 1 relays). Redeploying to a new home
+should only ever mean typing in *that* home's own device ids - never
+touching code or `config.yaml` by hand.
+
+When nothing's been saved here yet, the page pre-fills itself from
+`config.yaml`'s own current, hand-written setup (real device ids
+included) rather than a blank form - purely read-only, and never
+consulted again once something's saved. Saving writes to
+`config/climate_map.json` instead (additive, gitignored) - see
+`services/climate_map_store.py`'s module docstring for the exact
+on-disk shape and precedence rules. **Changes here need a LocalHome
+restart to take effect** (`DeviceManager` only builds its drivers once,
+at process start) - the page has a "Restart LocalHome" button for this
+(re-execs the process in place - reliable on Linux, the deployment
+target; not on Windows, where the C runtime's `execv` emulation can
+leave more than one process bound to the same port - see
+`services/self_restart.py` if you're developing on Windows and hit
+this, and just restart the process by hand there instead).
+
+Per zone:
+
+- **Sensor source**: a real Shelly device (needs a device id), a
+  simulated one (`drivers/simulated/climate.py` - no hardware
+  installed yet), or a manually-typed debug value
+  (`drivers/manual/climate.py`) held fixed until changed, so the
+  thermostat's on/off decision can be exercised at a chosen
+  temperature without waiting for a real event.
+- **Valve source**: a real Shelly relay, or simulated
+  (`drivers/simulated/switch.py`) - fully controllable through the
+  same generic on/off route the panel's own manual test buttons use,
+  so the whole control loop (sensor → thermostat → valve) can be
+  verified before any relay is actually wired.
+
+The MQTT broker connection (`config/mqtt_broker.json`) is also editable
+from this page - host, port, username, and password (never read back
+out once saved), with a "test connection" check against whatever's
+currently typed in, before saving it. And two more fixed, standalone
+Shelly Plus 1 switches with no sensor or schedule of their own - a
+bathroom bypass valve and a dehumidifier - are mappable the same way;
+if `thermostat.interlocks`/`mode_switches` above already control one of
+these by a different name, update that entry to say "Bathroom Bypass
+Valve"/"Dehumidifier" instead, since this panel always uses those exact
+names.
+
+The page's live status section reflects whichever mapping is *actually
+running* (since the last restart) - joined against the saved mapping to
+show a mode/source pill (e.g. `SIMULATED`) next to each zone. A
+dedicated broker-reachability check (a raw TCP probe, not a full MQTT
+handshake) is kept separate from each zone's own status, so a broker
+that's simply not running isn't mistaken for six devices failing at
+once. Guidance text is keyed off the specific error a device's driver
+reports: a battery sensor that hasn't reported *yet* (it only wakes on
+its own schedule, or a button press) reads differently from one that
+*was* reporting and has now gone quiet.
+
 ## Language
 
 The dashboard's UI text (labels, buttons, alerts) comes from a JSON file

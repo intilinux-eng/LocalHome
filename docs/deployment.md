@@ -1,9 +1,13 @@
 # Deployment
 
 `python run.py` is fine for trying LocalHome out. For something that
-should survive a reboot and keep running unattended - a Raspberry Pi or
-small server next to your router is the typical target - pick one of
-these.
+should survive a reboot and keep running unattended - an
+[Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, or any other
+small Linux board next to your router is the typical target - pick one
+of these. The Arduino UNO Q runs a real Linux userspace (SSH, bash,
+systemd - not a microcontroller-only board), so everything below -
+Docker and bare-metal/systemd alike - applies to it exactly as
+written; no board-specific steps.
 
 ## Docker
 

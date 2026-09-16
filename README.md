@@ -17,12 +17,15 @@ you've outgrown it - that's a fine outcome for a project this size.
 
 ## Screenshots
 
-Both captured against the `simulated` driver (see below) - no real
-hardware needed to see this for yourself.
+All three captured against the `simulated` driver and example device
+ids (see below) - no real hardware needed to see this for yourself.
 
 | Home | Heating & Cooling |
 |---|---|
 | ![Home tab: sensor cards and covers](docs/screenshots/home.png) | ![Heating & Cooling tab: per-zone schedule, on-time history and chart](docs/screenshots/climate.png) |
+
+![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, and live per-zone status](docs/screenshots/climate-admin.png)
+*Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
 
 ## What's included
 
@@ -67,6 +70,33 @@ Don't own any of the devices above? The point of this project is that
 adding your own driver is a self-contained, half-hour change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).
 
+## The Shelly climate admin panel
+
+A dedicated `/climate-admin` page for the two-zone heating/cooling
+thermostat, built around one specific, common deployment: the exact
+same setup (two radiant-panel zones, one shared plant) installed
+across multiple homes that all standardize on the [Shelly](https://www.shelly.com/)
+device family (Gen3 H&T sensors, Plus 1 relays) - where redeploying to
+a new home should only ever mean typing in that home's own device ids,
+never touching code or config.yaml by hand. See
+[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel)
+for the full picture; in short, from the browser alone:
+
+- Map each zone's sensor to a real Shelly device, a simulated one (no
+  hardware installed yet), or a manually-typed debug value - and its
+  valve to a real relay or a simulated one - so the on/off control
+  logic can be verified end to end (including manual open/close test
+  buttons) before any hardware is actually wired.
+- Edit the MQTT broker connection and two more fixed Shelly Plus 1
+  switches (a bathroom bypass valve, a dehumidifier) - a full install
+  needs no file editing at all.
+- A live status view with plain-language guidance that tells a
+  battery sensor that simply hasn't reported yet apart from one that's
+  genuinely gone offline, a broker-reachability check kept separate
+  from per-device status (so a dead broker is never mistaken for six
+  dead devices at once), and a "Restart LocalHome" button so a change
+  can be applied from just a browser.
+
 ## Tested hardware
 
 Driver *code* should work with any device of the right product
@@ -79,6 +109,9 @@ runs against day to day:
 | A Tuya 9-in-1 air-quality/climate sensor | `tuya_air_quality` | Product family "9in1/12in1/14in1" (model `QTF-A+C`, `product_id b7alv1ety7u19i9d`), category `hjjcy`, tinytuya protocol v3.5. |
 | Sonoff POWCT power-monitoring relay | `ewelink_powct` | Via the eWeLink cloud v2 API - see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) for why this one isn't local. |
 | Meross MSS310 smartplug (energy monitoring) | `meross_plug` | Via the official `meross-iot` library (HTTP login + MQTT), using its `ElectricityMixin` for live power/voltage/current. |
+| Shelly H&T Gen3 (battery temperature/humidity sensor) | `mqtt_json` | Two topics (`status/temperature:0`, `status/humidity:0`) merged into one reading via a list `state_topic`, plus its `status/devicepower:0` (battery %) and `status/wifi` (signal strength) components - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md). |
+| Shelly Plus 1 (relay, mains-powered) | `mqtt_json` | The generic Gen2+ JSON-boolean shape (`status/switch:0`/`command/switch:0`) - used for both zone valves and the climate admin panel's two extra switches. |
+| Shelly 0/1-10V Dimmer Gen3 | `shelly_light` | Doesn't publish a retained status topic like the devices above - actively polled via RPC (`Light.GetStatus`/`Light.Set`) instead; see "Shelly components without a retained status topic" in [docs/integrations/mqtt.md](docs/integrations/mqtt.md). |
 
 If you run a driver against different hardware in the same product
 family and it works (or doesn't), a PR adding a row here - or opening an
@@ -111,9 +144,12 @@ this framework itself stays fully public.
 Prefer an editable install instead of `run.py`? `pip install -e .` gives
 you the `localhome` and `localhome-cli` commands.
 
-Want this running unattended on a dedicated device (a Raspberry Pi or
-similar next to your router) instead of a dev machine? See
-[docs/deployment.md](docs/deployment.md) for Docker and systemd options.
+Want this running unattended on a dedicated device (an
+[Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, or similar
+small Linux board next to your router) instead of a dev machine? See
+[docs/deployment.md](docs/deployment.md) for Docker and systemd
+options - this project's own day-to-day instance targets an Arduino
+UNO Q.
 
 ## How it's organized
 
