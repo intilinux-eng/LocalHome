@@ -328,7 +328,20 @@ function modeAwayLineHtml(data) {
   return `${modeLabel} · ${awayText}`;
 }
 
+function isTypingAManualValue() {
+  const active = document.activeElement;
+  return !!(active && active.matches && active.matches(".manual-temp-input, .manual-humidity-input"));
+}
+
 async function refreshStatus() {
+  // Rebuilding #status-list wholesale (below) would otherwise wipe out
+  // the temperature/humidity inputs mid-keystroke on every poll tick -
+  // exactly the "can't even finish typing before it refreshes" bug -
+  // so skip this tick entirely while the operator is actively focused
+  // on one of them. Clicking "Imposta" itself still refreshes right
+  // away (setManualValue() calls this directly, and by then focus has
+  // moved to the button, not an input).
+  if (isTypingAManualValue()) return;
   try {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
