@@ -349,6 +349,7 @@ def _register_routes(app: Flask) -> None:
                 "humidity_pct": humidity_pct,
                 "dew_point_c": dew_point,
                 "battery_pct": sensor_reading.get("battery_pct"),
+                "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),

@@ -47,6 +47,19 @@ def test_battery_pct_key_is_present_and_defaults_to_none(tmp_path):
     assert zone["battery_pct"] is None
 
 
+def test_wifi_rssi_dbm_key_is_present_and_defaults_to_none(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+
+    body = client.get("/api/climate/zones").get_json()
+
+    zone = next(z for z in body["zones"] if z["name"] == "Rooms")
+    assert "wifi_rssi_dbm" in zone
+    assert zone["wifi_rssi_dbm"] is None
+
+
 def test_dew_point_c_is_computed_from_the_zones_own_reading(tmp_path):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(CONFIG, encoding="utf-8")

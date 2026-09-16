@@ -117,6 +117,9 @@
     "away_return_now": "Back now",
     "low_battery_heading": "Low battery",
     "low_battery_message": "\"{name}\"'s sensor battery is below {threshold}% ({value}%) - replace it soon.",
-    "dew_point": "Dew point {value}°C"
+    "dew_point": "Dew point {value}°C",
+    "wifi_good": "WiFi excellent ({value} dBm)",
+    "wifi_fair": "WiFi fair ({value} dBm)",
+    "wifi_poor": "WiFi weak ({value} dBm)"
   }
 }

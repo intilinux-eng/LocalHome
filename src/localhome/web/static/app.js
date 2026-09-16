@@ -1059,6 +1059,21 @@ function dewPointLabel(zone) {
   return zone.dew_point_c == null ? "" : tr("climate.dew_point", { value: zone.dew_point_c.toFixed(1) });
 }
 
+// Standard WiFi RSSI (dBm) quality bands - helps tell "sensor is just
+// slow" apart from "sensor can barely reach the router", which matters
+// once a battery device stops reporting for way longer than its own
+// wakeup_period ceiling (see docs/integrations/mqtt.md).
+function wifiQuality(dbm) {
+  if (dbm >= -60) return "good";
+  if (dbm >= -75) return "fair";
+  return "poor";
+}
+
+function wifiLabel(zone) {
+  if (zone.wifi_rssi_dbm == null) return "";
+  return tr(`climate.wifi_${wifiQuality(zone.wifi_rssi_dbm)}`, { value: Math.round(zone.wifi_rssi_dbm) });
+}
+
 function openLowBattery(message) {
   document.getElementById("low-battery-message").textContent = message;
   document.getElementById("low-battery-modal").hidden = false;
@@ -1082,6 +1097,7 @@ function buildZoneCard(zone) {
           <div class="zone-current">${currentText}</div>
           <div class="zone-updated" id="zone-updated-${id}" title="${zone.sensor_error || ""}">${zoneFreshnessText(zone)}</div>
           <div class="zone-battery${zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT ? " low" : ""}" id="zone-battery-${id}"${zone.battery_pct == null ? " hidden" : ""}>${batteryLabel(zone.battery_pct)}</div>
+          <div class="zone-wifi ${zone.wifi_rssi_dbm != null ? wifiQuality(zone.wifi_rssi_dbm) : ""}" id="zone-wifi-${id}"${zone.wifi_rssi_dbm == null ? " hidden" : ""}>${wifiLabel(zone)}</div>
           <div class="zone-dewpoint" id="zone-dewpoint-${id}"${dewPointVisible(zone) ? "" : " hidden"}>${dewPointLabel(zone)}</div>
         </div>
       </div>
@@ -1353,6 +1369,12 @@ async function refreshClimateZonesLive() {
         battery.hidden = zone.battery_pct == null;
         battery.textContent = batteryLabel(zone.battery_pct);
         battery.classList.toggle("low", zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT);
+      }
+      const wifi = card.querySelector(".zone-wifi");
+      if (wifi) {
+        wifi.hidden = zone.wifi_rssi_dbm == null;
+        wifi.textContent = wifiLabel(zone);
+        wifi.className = `zone-wifi ${zone.wifi_rssi_dbm != null ? wifiQuality(zone.wifi_rssi_dbm) : ""}`;
       }
       const dewpoint = card.querySelector(".zone-dewpoint");
       if (dewpoint) {

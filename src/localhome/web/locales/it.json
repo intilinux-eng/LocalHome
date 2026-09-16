@@ -117,6 +117,9 @@
     "away_return_now": "Rientra ora",
     "low_battery_heading": "Batteria scarica",
     "low_battery_message": "La batteria del sensore \"{name}\" è sotto il {threshold}% ({value}%) - sostituiscila a breve.",
-    "dew_point": "Punto di rugiada {value}°C"
+    "dew_point": "Punto di rugiada {value}°C",
+    "wifi_good": "WiFi ottimo ({value} dBm)",
+    "wifi_fair": "WiFi discreto ({value} dBm)",
+    "wifi_poor": "WiFi debole ({value} dBm)"
   }
 }
