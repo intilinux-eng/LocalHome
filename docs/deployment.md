@@ -56,6 +56,19 @@ sudo useradd --system --home /opt/localhome localhome
 sudo git clone <this-repo> /opt/localhome
 cd /opt/localhome
 python3 -m venv .venv
+```
+
+If that fails with "ensurepip is not available", your distro splits the
+venv module into its own package - install it and retry (Debian trixie,
+this project's own Arduino UNO Q instance included, needs the
+version-suffixed name; try the plain one first):
+
+```bash
+sudo apt install -y python3-venv || sudo apt install -y python3.13-venv
+python3 -m venv .venv   # retry
+```
+
+```bash
 .venv/bin/pip install .
 
 cp config/config.example.yaml config/config.yaml

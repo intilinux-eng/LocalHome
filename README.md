@@ -123,26 +123,38 @@ person.
 ```bash
 git clone <this-repo>
 cd <the-cloned-directory>
-pip install -r requirements.txt
+
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e .
 
 cp config/config.example.yaml config/config.yaml
 # also copy the *.example.json files you need next to it and fill them in -
 # see docs/configuration.md and docs/integrations/ for how to get each
 # device's IDs/keys/credentials.
 
-pip install -e . && localhome-cli doctor   # sanity-checks config.yaml - see docs/configuration.md
-
-python run.py
+localhome-cli doctor   # sanity-checks config.yaml - see docs/configuration.md
+localhome
 # -> dashboard at http://localhost:5000
 ```
+
+Always into a virtual environment, never with a bare `pip install`
+against the system Python - modern Debian/Ubuntu (including this
+project's own Arduino UNO Q instance) actively refuse the latter
+(`externally-managed-environment`), and some also don't ship the venv
+module by default (`python3 -m venv` failing with "ensurepip is not
+available") - see
+[docs/troubleshooting.md](docs/troubleshooting.md) if you hit either.
 
 Nothing under `config/` other than the `*.example.*` files is ever meant
 to be committed - see [.gitignore](.gitignore). That's what keeps your
 own device inventory, API keys and account passwords out of git while
 this framework itself stays fully public.
 
-Prefer an editable install instead of `run.py`? `pip install -e .` gives
-you the `localhome` and `localhome-cli` commands.
+Rather run the script directly than install the `localhome` command?
+`python run.py` works the same way once the `pip install -e .` step
+above has run (it needs the dependencies either way, just not the
+console-script entry point).
 
 Want this running unattended on a dedicated device (an
 [Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, or similar

@@ -4,6 +4,31 @@ Per-brand connection issues (Tuya cloud project errors, eWeLink login
 failures, Meross region mismatches) are covered in their own
 [docs/integrations/](integrations/) pages. This page covers the rest.
 
+**`error: externally-managed-environment`, or `python3 -m venv` fails with "ensurepip is not available"**
+Two separate speed bumps on modern Debian/Ubuntu (hit setting this project
+up on its own Arduino UNO Q instance, Debian trixie) that look unrelated
+but share one fix. The distro blocks installing Python packages
+system-wide, and often doesn't ship the venv module by default - install
+that first (the exact package name varies; try the generic one, then the
+version-suffixed one your own error message names):
+```bash
+sudo apt install -y python3-venv || sudo apt install -y python3.13-venv
+```
+Then always install into a virtual environment, never with a bare `pip
+install` against the system Python:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"     # or: pip install -r requirements.txt
+```
+A venv's own `pip` is never "externally managed", so this sidesteps the
+restriction entirely instead of fighting it with `--break-system-packages`
+(which the error message itself offers, but risks whatever else the
+system's own Python is used for). See
+[docs/deployment.md](deployment.md#bare-metal-systemd) for the systemd
+unit that keeps this running after you close the SSH session, instead of
+dying with it.
+
 **`FileNotFoundError: Config file not found: .../config/config.yaml`**
 You haven't created your own config yet:
 ```bash
