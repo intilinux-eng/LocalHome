@@ -1,5 +1,8 @@
 from localhome.cli import _run_doctor
 from localhome.config import load_config
+from localhome.core.manager import DeviceManager
+from localhome.services.climate_map_store import ClimateMapStore, apply_to_config
+from tests.mqtt_fakes import FakeMqttConnection
 
 
 def _config(tmp_path, yaml_text: str):
@@ -39,7 +42,7 @@ thermostat:
         paired_switch={},
     )
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     assert exit_code == 0
     assert "No configuration problems found" in capsys.readouterr().out
@@ -65,7 +68,7 @@ thermostat:
         paired_switch={},
     )
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     out = capsys.readouterr().out
     assert exit_code == 1
@@ -93,7 +96,7 @@ thermostat:
         paired_switch={},
     )
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     out = capsys.readouterr().out
     assert exit_code == 1
@@ -120,7 +123,7 @@ thermostat:
         paired_switch={},
     )
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     assert exit_code == 1
     assert "valve 'Rooms Valve - typo' matches no configured switch" in capsys.readouterr().out
@@ -136,7 +139,7 @@ def test_doctor_catches_a_dangling_paired_switch(tmp_path, capsys):
         paired_switch={"Brightness": "Lamp - typo"},
     )
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     assert exit_code == 1
     assert "paired_switch 'Lamp - typo' matches no configured switch" in capsys.readouterr().out
@@ -154,7 +157,57 @@ energy:
     )
     manager = FakeManager(pollers={}, switches={}, numbers={}, sensor_kinds={}, paired_switch={})
 
-    exit_code = _run_doctor(config, manager)
+    exit_code = _run_doctor(config, manager, apply_to_config(config))
 
     assert exit_code == 1
     assert "energy.sensor 'Meter - typo' matches no configured integration" in capsys.readouterr().out
+
+
+def test_doctor_cross_checks_a_climate_admin_panel_managed_zone(tmp_path, capsys):
+    # No thermostat: key in config.yaml at all - the from-scratch,
+    # entirely panel-managed apartment. Before apply_to_config() was
+    # wired into main(), doctor would report "Thermostat zones: 0" and
+    # never check these at all - see cli.py's main().
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones([
+        {"name": "Rooms", "sensor_mode": "simulated", "sensor_device_id": None,
+         "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True},
+        {"name": "Bathrooms", "sensor_mode": "simulated", "sensor_device_id": None,
+         "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": False},
+    ])
+    config = _config(tmp_path, "integrations: []\n")
+
+    thermostat_cfg = apply_to_config(config)
+    manager = DeviceManager(config)
+    exit_code = _run_doctor(config, manager, thermostat_cfg)
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Thermostat zones: 2" in out
+
+
+def test_doctor_sees_a_climate_admin_panel_managed_extra_switch(tmp_path, capsys, monkeypatch):
+    # The panel's fixed-name extra switch (services/climate_map_store.py's
+    # EXTRA_SWITCH_FIELDS) needs a real broker file to actually build -
+    # same requirement any mqtt_json driver has. Faked, like every other
+    # MQTT-touching test in this project - no real network.
+    monkeypatch.setattr("localhome.drivers.mqtt.base.get_connection", lambda broker: FakeMqttConnection())
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_extra_switches(
+        {"bypass_valve_device_id": None, "dehumidifier_device_id": "shellyplus1-AAAA"}
+    )
+    (tmp_path / "mqtt_broker.json").write_text('{"host": "test-broker", "port": 1883}', encoding="utf-8")
+    config = _config(
+        tmp_path,
+        """
+integrations: []
+energy:
+  sensor: "Dehumidifier"
+""",
+    )
+
+    thermostat_cfg = apply_to_config(config)
+    manager = DeviceManager(config)
+    exit_code = _run_doctor(config, manager, thermostat_cfg)
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "No configuration problems found" in out

@@ -146,11 +146,12 @@ function onChangePasswordToggle(checkbox) {
   document.getElementById("broker-password-field").hidden = !checkbox.checked;
 }
 
-async function testBroker() {
+async function testBroker(button) {
   const resultEl = document.getElementById("broker-test-result");
   const host = document.getElementById("broker-host").value.trim();
   const port = parseInt(document.getElementById("broker-port").value, 10);
   resultEl.textContent = "";
+  button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/broker/test", {
       method: "POST",
@@ -168,10 +169,12 @@ async function testBroker() {
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
     resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
   }
 }
 
-async function saveBroker() {
+async function saveBroker(button) {
   const resultEl = document.getElementById("broker-save-result");
   const changePassword = document.getElementById("broker-change-password").checked;
   const body = {
@@ -181,6 +184,7 @@ async function saveBroker() {
     change_password: changePassword,
   };
   if (changePassword) body.password = document.getElementById("broker-password").value;
+  button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/broker", {
       method: "POST",
@@ -199,11 +203,14 @@ async function saveBroker() {
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
     resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
   }
 }
 
-async function saveMap() {
+async function saveMap(button) {
   const resultEl = document.getElementById("save-result");
+  button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/map", {
       method: "POST",
@@ -224,6 +231,8 @@ async function saveMap() {
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
     resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -245,12 +254,13 @@ async function loadExtraSwitches() {
   extraSwitchesRestartPending = !!data.restart_pending;
 }
 
-async function saveExtraSwitches() {
+async function saveExtraSwitches(button) {
   const resultEl = document.getElementById("save-extra-result");
   const body = {
     bypass_valve_device_id: document.getElementById("extra-bypass-valve-id").value.trim() || null,
     dehumidifier_device_id: document.getElementById("extra-dehumidifier-id").value.trim() || null,
   };
+  button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/extra-switches", {
       method: "POST",
@@ -269,6 +279,8 @@ async function saveExtraSwitches() {
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
     resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -276,6 +288,20 @@ async function saveExtraSwitches() {
 // Reuses /api/climate/zones as-is (see web/app.py) - joined client-side
 // against the *saved* map by zone name, so a config edit not yet applied
 // (restart pending) never gets confused with the live-running mapping.
+
+// Same thresholds/labels as the main dashboard's app.js (wifiQuality/
+// wifiLabel) - copied rather than shared, matching this file's own
+// "separate bundle" convention (see the top of this file).
+function wifiQuality(dbm) {
+  if (dbm >= -60) return "good";
+  if (dbm >= -75) return "fair";
+  return "poor";
+}
+
+function wifiLabel(zone) {
+  if (zone.wifi_rssi_dbm == null) return "";
+  return tr(`climate.wifi_${wifiQuality(zone.wifi_rssi_dbm)}`, { value: Math.round(zone.wifi_rssi_dbm) });
+}
 
 function sensorStatusHtml(zone, mode) {
   if (mode === "simulated") {
@@ -292,6 +318,8 @@ function sensorStatusHtml(zone, mode) {
     let extra = "";
     if (zone.humidity_pct != null) extra += ` · ${fmt(zone.humidity_pct, 0)}%`;
     if (zone.battery_pct != null) extra += ` · ${tr("fields.battery_pct")} ${fmt(zone.battery_pct, 0)}%`;
+    const wifi = wifiLabel(zone);
+    if (wifi) extra += ` · ${wifi}`;
     return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
   }
   const error = zone.sensor_error || "";

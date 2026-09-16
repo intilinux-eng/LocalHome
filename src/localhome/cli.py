@@ -13,6 +13,7 @@ import sys
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.services.climate_map_store import apply_to_config
 
 
 def _find_covers(manager: DeviceManager, name: str):
@@ -31,7 +32,7 @@ def _find_covers(manager: DeviceManager, name: str):
     return matches
 
 
-def _run_doctor(config: LocalHomeConfig, manager: DeviceManager) -> int:
+def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg: dict) -> int:
     """Cross-checks config.yaml references that DeviceManager itself
     can't catch: a driver that fails to *construct* (bad credentials, a
     missing file) already gets logged loudly, but a *name* that simply
@@ -39,10 +40,17 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager) -> int:
     paired_switch pointing at the wrong switch - fails silently (the
     thermostat just never acts on that zone, the number just never gets
     embedded), which is a rough way to discover a typo in a new install.
+
+    `thermostat_cfg` is the *effective* config - see main()'s
+    apply_to_config() call - not necessarily config.raw["thermostat"]
+    verbatim: an apartment set up entirely through the climate admin
+    panel has no thermostat.zones in config.yaml at all, and doctor
+    needs to check the panel's own zones instead, the same ones the
+    real running server would.
     """
     problems: list[str] = []
 
-    thermostat_cfg = config.raw.get("thermostat") or {}
+    thermostat_cfg = thermostat_cfg or {}
     for zone in thermostat_cfg.get("zones", []):
         zone_name = zone.get("name", "<unnamed>")
         sensor, valve = zone.get("sensor"), zone.get("valve")
@@ -112,10 +120,15 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
     config = load_config(args.config)
+    # Same merge web/app.py's create_app() applies before building its
+    # own DeviceManager - so `manager` (and doctor's cross-checks below)
+    # see the climate admin panel's saved zones/extra switches too, not
+    # just config.yaml's own literal (possibly absent) thermostat block.
+    thermostat_cfg = apply_to_config(config)
     manager = DeviceManager(config)
 
     if args.command == "doctor":
-        sys.exit(_run_doctor(config, manager))
+        sys.exit(_run_doctor(config, manager, thermostat_cfg))
 
     if args.command == "list":
         for name in manager.covers:

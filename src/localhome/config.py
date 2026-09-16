@@ -18,7 +18,6 @@ CONFIG_ENV_VAR = "LOCALHOME_CONFIG"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "config.yaml"
-EXAMPLE_CONFIG_PATH = _REPO_ROOT / "config" / "config.example.yaml"
 
 
 @dataclass

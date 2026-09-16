@@ -46,8 +46,8 @@
       <input type="password" id="broker-password" autocomplete="new-password">
     </div>
     <div class="toolbar">
-      <button class="range-btn" onclick="testBroker()">{{ t.climate_admin.broker_test_button }}</button>
-      <button class="tbtn open" onclick="saveBroker()">{{ t.climate_admin.broker_save_button }}</button>
+      <button class="range-btn" onclick="testBroker(this)">{{ t.climate_admin.broker_test_button }}</button>
+      <button class="tbtn open" onclick="saveBroker(this)">{{ t.climate_admin.broker_save_button }}</button>
     </div>
     <p class="hint-text" id="broker-test-result"></p>
     <p class="hint-text" id="broker-save-result"></p>
@@ -59,7 +59,7 @@
   <p class="hint-text">{{ t.climate_admin.zones_note }}</p>
   <div id="zone-forms"></div>
 
-  <button class="tbtn open" id="save-btn" onclick="saveMap()">{{ t.climate_admin.save_button }}</button>
+  <button class="tbtn open" id="save-btn" onclick="saveMap(this)">{{ t.climate_admin.save_button }}</button>
   <p class="hint-text" id="save-result"></p>
 
   <div class="section-head" style="margin-top:32px">
@@ -76,7 +76,7 @@
       <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
     </div>
   </div>
-  <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches()">{{ t.climate_admin.save_button }}</button>
+  <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches(this)">{{ t.climate_admin.save_button }}</button>
   <p class="hint-text" id="save-extra-result"></p>
 
   <div class="section-head" style="margin-top:32px">

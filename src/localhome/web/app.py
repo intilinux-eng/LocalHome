@@ -15,14 +15,12 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from localhome.config import Integration, LocalHomeConfig, load_config
+from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.climate_map_store import (
     EXTRA_SWITCH_FIELDS,
     ClimateMapStore,
-    build_climate_integrations,
-    build_extra_switch_integrations,
-    build_zone_configs,
+    apply_to_config,
     snapshot_from_config,
 )
 from localhome.services.dewpoint import dew_point_c
@@ -67,33 +65,19 @@ def create_app(config_path: str | None = None) -> Flask:
 
     config = load_config(config_path)
 
-    # The climate admin panel (first-home-model): lets an installer map the
-    # fixed two-zone thermostat onto whichever Shelly devices *this*
-    # apartment has, instead of hand-editing config.yaml - see
-    # services/climate_map_store.py. Checked before DeviceManager is
-    # built so the panel's zones (if any are saved) become real
-    # integrations the same way config.yaml's own would.
+    # The climate admin panel: lets an installer map the fixed two-zone
+    # thermostat onto whichever Shelly devices *this* apartment has,
+    # instead of hand-editing config.yaml - see
+    # services/climate_map_store.py's apply_to_config(), which does the
+    # actual merge (also used by `localhome-cli doctor`, so it
+    # cross-checks the same effective setup this app runs, not just
+    # config.yaml's own literal thermostat block).
     climate_map = ClimateMapStore(config.resolve("climate_map.json"))
     manual_override_path = config.resolve("manual_override.json")
     manual_override = ManualOverrideStore(manual_override_path)
-    broker_file = config.resolve("mqtt_broker.json")
     panel_zones = climate_map.get_zones()
     extra_switches = climate_map.get_extra_switches()
-    new_integrations: list[Integration] = []
-    if panel_zones is not None:
-        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
-    new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
-    if new_integrations:
-        existing_names = {i.options.get("name") for i in config.integrations}
-        for integration in new_integrations:
-            name = integration.options.get("name")
-            if name in existing_names:
-                logger.warning(
-                    "Climate admin panel device %r collides with an existing config.yaml integration "
-                    "name - the panel's version will win (DeviceManager._register() is last-one-wins).",
-                    name,
-                )
-        config.integrations = config.integrations + new_integrations
+    thermostat_cfg = apply_to_config(config)
 
     manager = DeviceManager(config)
 
@@ -130,20 +114,16 @@ def create_app(config_path: str | None = None) -> Flask:
     interlock = None
     interlock_followers: dict[str, str] = {}
     mode_switch_names: set[str] = set()
-    thermostat_cfg = config.raw.get("thermostat")
-    if panel_zones is not None:
-        # Whole-block precedence, not a merge: the panel's saved mapping
-        # fully replaces config.yaml's own `zones:` list when present -
-        # two independent zone/valve configs fighting over the same
-        # physical valve is a worse failure mode than "one clearly wins"
-        # (see services/climate_map_store.py). Everything else in
-        # `thermostat:` (mode/hysteresis_c/interlocks/mode_switches/
-        # schedules_file) still comes from config.yaml, unaffected - and
-        # every .get() below already has a default, so a config.yaml
-        # with no `thermostat:` key at all still works once the panel
-        # has a saved mapping (the from-scratch-apartment case).
-        thermostat_cfg = dict(thermostat_cfg or {})
-        thermostat_cfg["zones"] = build_zone_configs(panel_zones)
+    # thermostat_cfg (from apply_to_config() above) already has the
+    # panel's saved zones whole-block-replacing config.yaml's own, if
+    # any were saved - see that function's docstring for why "whole
+    # block", not a merge: two independent zone/valve configs fighting
+    # over the same physical valve is a worse failure mode than "one
+    # clearly wins". mode/hysteresis_c/interlocks/mode_switches/
+    # schedules_file still come from config.yaml either way, and every
+    # .get() below already has a default, so a config.yaml with no
+    # thermostat: key at all still works once the panel has a saved
+    # mapping (the from-scratch-apartment case).
     if thermostat_cfg:
         schedules_path = config.resolve(thermostat_cfg.get("schedules_file", "schedules.json"))
         schedule_store = ScheduleStore(schedules_path, default_mode=thermostat_cfg.get("mode", "heat"))
@@ -654,13 +634,19 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/climate-admin/zones/<name>/manual-value", methods=["POST"])
     def api_climate_admin_set_manual_value(name):
-        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         manual_override: ManualOverrideStore = app.config["MANUAL_OVERRIDE"]
         manager: DeviceManager = app.config["MANAGER"]
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
 
-        saved_zones = climate_map.get_zones() or []
-        zone = next((z for z in saved_zones if z.get("name") == name), None)
+        # Against ACTIVE_CLIMATE_ZONES (what this process actually
+        # loaded at startup), not climate_map.get_zones() (whatever's
+        # currently saved) - a zone can be saved as "manual" before a
+        # restart while a *different*, still-running driver (e.g. a
+        # real Shelly sensor) owns that name in this process. Matches
+        # every sibling route's own active-vs-saved distinction - see
+        # create_app()'s ACTIVE_CLIMATE_ZONES comment.
+        active_zones = app.config["ACTIVE_CLIMATE_ZONES"] or []
+        zone = next((z for z in active_zones if z.get("name") == name), None)
         if zone is None or zone.get("sensor_mode") != "manual":
             return jsonify(ok=False, error=f"zone '{name}' is not currently configured in manual mode"), 409
 

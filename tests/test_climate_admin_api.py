@@ -351,6 +351,22 @@ def test_manual_value_route_404s_when_no_mapping_is_saved_at_all(tmp_path):
     assert res.status_code == 409
 
 
+def test_manual_value_route_rejects_a_save_not_yet_loaded_by_this_process(tmp_path):
+    # This process started with no saved mapping at all - "Rooms" is
+    # whatever CONFIG_WITH_THERMOSTAT's own real driver is, not a
+    # manual_override one - even though a save moments later claims
+    # otherwise. Same "active, not saved" rule every sibling route
+    # follows (ACTIVE_CLIMATE_ZONES) - a save always needs a restart
+    # before this route (or any other) can act on it.
+    app = _app(tmp_path)
+    client = app.test_client()
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
+
+    res = client.post("/api/climate-admin/zones/Rooms/manual-value", json={"temperature_c": 21.0})
+
+    assert res.status_code == 409
+
+
 # ------------------------------------------------------------ broker config ----
 # Editing config/mqtt_broker.json from the web - see
 # services/mqtt_broker_config.py. fake_mqtt's own broker file (host

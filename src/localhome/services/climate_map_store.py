@@ -61,7 +61,7 @@ import logging
 import os
 import threading
 
-from localhome.config import Integration
+from localhome.config import Integration, LocalHomeConfig
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -360,6 +360,51 @@ def build_zone_configs(zones: list[dict]) -> list[dict]:
         }
         for zone in zones
     ]
+
+
+def apply_to_config(config: LocalHomeConfig) -> dict | None:
+    """Applies the climate admin panel's saved mapping (if any) onto an
+    already-loaded LocalHomeConfig, exactly the way web/app.py's
+    create_app() does before building a DeviceManager from it - so any
+    other entry point that also builds one (`localhome-cli doctor`,
+    most notably) cross-checks the same effective setup a running
+    server actually uses, not just config.yaml's own literal - and for
+    a from-scratch apartment, possibly entirely absent -
+    `thermostat.zones`.
+
+    Mutates `config.integrations` in place (additive). Returns the
+    effective `thermostat` dict callers should use in place of
+    `config.raw.get("thermostat")` - unchanged (including None) if the
+    panel has no saved zones, since only having *some* apartments use
+    this panel and others not is exactly the point.
+    """
+    climate_map = ClimateMapStore(config.resolve("climate_map.json"))
+    manual_override_path = config.resolve("manual_override.json")
+    broker_file = config.resolve("mqtt_broker.json")
+    panel_zones = climate_map.get_zones()
+    extra_switches = climate_map.get_extra_switches()
+
+    new_integrations: list[Integration] = []
+    if panel_zones is not None:
+        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
+    new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
+    if new_integrations:
+        existing_names = {i.options.get("name") for i in config.integrations}
+        for integration in new_integrations:
+            name = integration.options.get("name")
+            if name in existing_names:
+                logger.warning(
+                    "Climate admin panel device %r collides with an existing config.yaml integration "
+                    "name - the panel's version will win (DeviceManager._register() is last-one-wins).",
+                    name,
+                )
+        config.integrations = config.integrations + new_integrations
+
+    if panel_zones is None:
+        return config.raw.get("thermostat")
+    thermostat_cfg = dict(config.raw.get("thermostat") or {})
+    thermostat_cfg["zones"] = build_zone_configs(panel_zones)
+    return thermostat_cfg
 
 
 class ClimateMapStore:
