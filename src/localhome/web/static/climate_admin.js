@@ -15,6 +15,7 @@ function fmt(value, digits) {
 }
 
 const SENSOR_MODES = ["shelly", "simulated", "manual"];
+const VALVE_MODES = ["shelly", "simulated"];
 
 let savedMap = null; // last GET /api/climate-admin/map response
 let pollTimer = null;
@@ -22,9 +23,12 @@ let pollTimer = null;
 // ------------------------------------------------------------ config form ----
 
 function zoneFormHtml(zone, index) {
-  const z = zone || { name: "", sensor_mode: "shelly", sensor_device_id: "", valve_device_id: "", cool_enabled: true };
-  const options = SENSOR_MODES.map(
+  const z = zone || { name: "", sensor_mode: "shelly", sensor_device_id: "", valve_mode: "shelly", valve_device_id: "", cool_enabled: true };
+  const sensorOptions = SENSOR_MODES.map(
     m => `<option value="${m}" ${z.sensor_mode === m ? "selected" : ""}>${tr(`climate_admin.mode_${m}`)}</option>`
+  ).join("");
+  const valveOptions = VALVE_MODES.map(
+    m => `<option value="${m}" ${(z.valve_mode || "shelly") === m ? "selected" : ""}>${tr(`climate_admin.mode_${m}`)}</option>`
   ).join("");
   return `
     <div class="admin-zone-card" data-index="${index}">
@@ -34,7 +38,7 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field">
         <label>${tr("climate_admin.sensor_mode_label")}</label>
-        <select class="zone-sensor-mode" onchange="onSensorModeChange(this)">${options}</select>
+        <select class="zone-sensor-mode" onchange="onSensorModeChange(this)">${sensorOptions}</select>
       </div>
       <div class="admin-field zone-sensor-id-field"${z.sensor_mode !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.sensor_device_id_label")}</label>
@@ -42,6 +46,10 @@ function zoneFormHtml(zone, index) {
       </div>
       <p class="hint-text zone-manual-hint"${z.sensor_mode !== "manual" ? " hidden" : ""}>${tr("climate_admin.manual_mode_hint")}</p>
       <div class="admin-field">
+        <label>${tr("climate_admin.valve_mode_label")}</label>
+        <select class="zone-valve-mode" onchange="onValveModeChange(this)">${valveOptions}</select>
+      </div>
+      <div class="admin-field zone-valve-id-field"${(z.valve_mode || "shelly") !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.valve_device_id_label")}</label>
         <input type="text" class="zone-valve-device-id" value="${z.valve_device_id || ""}" placeholder="shellyplus1-XXXXXXXXXXXX">
       </div>
@@ -59,6 +67,11 @@ function onSensorModeChange(select) {
   card.querySelector(".zone-manual-hint").hidden = select.value !== "manual";
 }
 
+function onValveModeChange(select) {
+  const card = select.closest(".admin-zone-card");
+  card.querySelector(".zone-valve-id-field").hidden = select.value !== "shelly";
+}
+
 async function loadMap() {
   const res = await fetch("/api/climate-admin/map");
   savedMap = await res.json();
@@ -73,12 +86,14 @@ async function loadMap() {
 
 function collectZonesFromForm() {
   return [...document.querySelectorAll("#zone-forms .admin-zone-card")].map(card => {
-    const mode = card.querySelector(".zone-sensor-mode").value;
+    const sensorMode = card.querySelector(".zone-sensor-mode").value;
+    const valveMode = card.querySelector(".zone-valve-mode").value;
     return {
       name: card.querySelector(".zone-name").value.trim(),
-      sensor_mode: mode,
-      sensor_device_id: mode === "shelly" ? card.querySelector(".zone-sensor-device-id").value.trim() : null,
-      valve_device_id: card.querySelector(".zone-valve-device-id").value.trim(),
+      sensor_mode: sensorMode,
+      sensor_device_id: sensorMode === "shelly" ? card.querySelector(".zone-sensor-device-id").value.trim() : null,
+      valve_mode: valveMode,
+      valve_device_id: valveMode === "shelly" ? card.querySelector(".zone-valve-device-id").value.trim() : null,
       cool_enabled: card.querySelector(".zone-cool-enabled").checked,
     };
   });
@@ -264,16 +279,17 @@ function sensorStatusHtml(zone, mode) {
   return `<span class="admin-status neutral">${error || tr("climate_admin.not_reachable_generic")}</span>`;
 }
 
-function valveStatusHtml(zone) {
+function valveStatusHtml(zone, valveMode) {
+  const pill = valveMode === "simulated" ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ` : "";
   const testButtons = `
     <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'on', this)">${tr("climate_admin.valve_test_open")}</button>
     <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'off', this)">${tr("climate_admin.valve_test_close")}</button>
   `;
   if (zone.valve_ok) {
     const state = zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed");
-    return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state} ${testButtons}`;
+    return `${pill}<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state} ${testButtons}`;
   }
-  return `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span> ${testButtons}`;
+  return `${pill}<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span> ${testButtons}`;
 }
 
 function targetHtml(zone) {
@@ -283,6 +299,7 @@ function targetHtml(zone) {
 
 function statusRowHtml(zone, mapEntry) {
   const mode = mapEntry ? mapEntry.sensor_mode : "shelly";
+  const valveMode = mapEntry ? (mapEntry.valve_mode || "shelly") : "shelly";
   const manualBoxHtml = mode === "manual" ? `
     <div class="admin-manual-box">
       <input type="number" step="0.1" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
@@ -295,7 +312,7 @@ function statusRowHtml(zone, mapEntry) {
       <div class="admin-status-name">${zone.name}</div>
       <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, mode)}</div>
       <div>${targetHtml(zone)}</div>
-      <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone)}</div>
+      <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
       <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
       ${manualBoxHtml}
     </div>

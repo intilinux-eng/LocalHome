@@ -109,6 +109,15 @@ def test_rejects_duplicate_extra_switch_device_ids():
         validate_extra_switches(switches)
 
 
+def test_the_duplicate_id_error_names_the_actual_offending_value():
+    # Not just "a duplicate was found" - with up to 4 device id fields
+    # across zones and extra switches, a technician needs to know
+    # exactly which value to go fix (see _check_no_duplicates()).
+    switches = {"bypass_valve_device_id": "shellyplus1-DDDD", "dehumidifier_device_id": "shellyplus1-DDDD"}
+    with pytest.raises(ValueError, match="shellyplus1-DDDD"):
+        validate_extra_switches(switches)
+
+
 def test_rejects_an_extra_switch_device_id_already_used_by_a_zone():
     switches = {"bypass_valve_device_id": VALID_ZONES[0]["valve_device_id"], "dehumidifier_device_id": None}
     with pytest.raises(ValueError, match="duplicate id"):
@@ -152,6 +161,12 @@ def test_rejects_a_missing_name():
 def test_rejects_duplicate_zone_names():
     zones = [VALID_ZONES[0], dict(VALID_ZONES[1], name=VALID_ZONES[0]["name"])]
     with pytest.raises(ValueError, match="unique"):
+        validate_zones(zones)
+
+
+def test_the_duplicate_zone_name_error_names_the_actual_offending_value():
+    zones = [VALID_ZONES[0], dict(VALID_ZONES[1], name=VALID_ZONES[0]["name"])]
+    with pytest.raises(ValueError, match=VALID_ZONES[0]["name"]):
         validate_zones(zones)
 
 
@@ -199,6 +214,41 @@ def test_rejects_the_same_valve_device_id_reused_across_two_zones():
         validate_zones(zones)
 
 
+def test_valve_mode_defaults_to_shelly_when_absent():
+    # Every fixture above omits valve_mode entirely - a saved mapping
+    # from before this field existed must still validate the same way.
+    assert "valve_mode" not in VALID_ZONES[0]
+    validate_zones(VALID_ZONES)  # must not raise
+
+
+def test_rejects_an_unknown_valve_mode():
+    zones = [dict(VALID_ZONES[0], valve_mode="cloud"), VALID_ZONES[1]]
+    with pytest.raises(ValueError, match="valve_mode"):
+        validate_zones(zones)
+
+
+def test_rejects_a_missing_valve_device_id_in_shelly_mode():
+    zones = [dict(VALID_ZONES[0], valve_mode="shelly", valve_device_id=None), VALID_ZONES[1]]
+    with pytest.raises(ValueError, match="valve_device_id"):
+        validate_zones(zones)
+
+
+def test_does_not_require_a_valve_device_id_in_simulated_valve_mode():
+    zones = [dict(VALID_ZONES[0], valve_mode="simulated", valve_device_id=None), VALID_ZONES[1]]
+    validate_zones(zones)  # must not raise
+
+
+def test_a_fully_hardware_free_zone_is_valid_for_debugging():
+    # sensor_mode="manual" + valve_mode="simulated" together need no
+    # device id at all - the exact "verify the control logic before any
+    # relay is wired" case this pair of modes exists for.
+    zones = [
+        {"name": "Rooms", "sensor_mode": "manual", "sensor_device_id": None, "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True},
+        VALID_ZONES[1],
+    ]
+    validate_zones(zones)  # must not raise
+
+
 # ------------------------------------------------- integration building ----
 
 def test_build_climate_integrations_shelly_mode_shape():
@@ -240,6 +290,16 @@ def test_build_climate_integrations_simulated_mode_shape():
     assert sensor.options == {"name": "Rooms Sensor", "dashboard_tab": "climate"}
 
 
+def test_build_climate_integrations_simulated_valve_shape():
+    zone = dict(VALID_ZONES[0], valve_mode="simulated", valve_device_id=None)
+    integrations = build_climate_integrations([zone], "mqtt_broker.json", "manual_override.json")
+    valve = next(i for i in integrations if i.options["name"] == "Rooms Valve")
+
+    assert valve.kind == "switch"
+    assert valve.type == "simulated"
+    assert valve.options == {"name": "Rooms Valve", "dashboard_tab": "climate"}
+
+
 def test_build_climate_integrations_manual_mode_shape():
     integrations = build_climate_integrations([VALID_ZONES[1]], "mqtt_broker.json", "manual_override.json")
     sensor = next(i for i in integrations if i.options["name"] == "Bathrooms Sensor")
@@ -279,11 +339,11 @@ def test_snapshot_reads_a_real_shelly_sensor_and_valve():
 
     assert snapshot[0] == {
         "name": "Rooms", "sensor_mode": "shelly", "sensor_device_id": "shellyht-AAAA",
-        "valve_device_id": "shellyplus1-BBBB", "cool_enabled": True,
+        "valve_mode": "shelly", "valve_device_id": "shellyplus1-BBBB", "cool_enabled": True,
     }
 
 
-def test_snapshot_reads_a_simulated_sensor():
+def test_snapshot_reads_a_simulated_sensor_and_valve():
     zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve", cool_enabled=False)]
     integrations = [
         Integration("climate", "simulated", {"name": "Rooms Sensor"}),
@@ -294,7 +354,7 @@ def test_snapshot_reads_a_simulated_sensor():
 
     assert snapshot[0] == {
         "name": "Rooms", "sensor_mode": "simulated", "sensor_device_id": None,
-        "valve_device_id": None, "cool_enabled": False,
+        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": False,
     }
 
 
@@ -306,7 +366,7 @@ def test_snapshot_pads_up_to_zone_count_with_blank_entries():
     assert len(snapshot) == 2
     assert snapshot[1] == {
         "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
-        "valve_device_id": None, "cool_enabled": True,
+        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
     }
 
 
@@ -318,3 +378,5 @@ def test_snapshot_falls_back_to_an_empty_shelly_slot_for_an_unknown_driver_type(
 
     assert snapshot[0]["sensor_mode"] == "shelly"
     assert snapshot[0]["sensor_device_id"] is None
+    assert snapshot[0]["valve_mode"] == "shelly"
+    assert snapshot[0]["valve_device_id"] is None

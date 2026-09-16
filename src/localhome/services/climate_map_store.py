@@ -22,8 +22,16 @@ field and `_sensor_integration()` below:
                 the panel's operator last typed in, held fixed, so a
                 zone's on/off logic can be exercised at a chosen
                 temperature without a real event or a simulated drift
-The valve is always a real Shelly relay (Gen2+ JSON boolean shape) -
-this feature doesn't need a simulated/manual valve.
+The valve has its own, separate `valve_mode` - "shelly" (a real relay,
+Gen2+ JSON boolean shape, needs valve_device_id) or "simulated"
+(drivers/simulated/switch.py, controllable through the same generic
+on/off route the live status page's manual test buttons already use).
+No "manual" mode here - unlike a sensor reading, a switch's state is
+already directly settable by just flipping it, real or simulated, so
+sensor_mode="manual" plus valve_mode="simulated" together are enough to
+exercise the whole control loop - typed temperature in, valve reacts
+out - with no hardware wired at all, before anything is trusted to run
+on its own.
 
 set_zones() validates before writing anything - the file on disk is
 always either absent or fully valid, never partial (mirrors the
@@ -60,6 +68,7 @@ logger = logging.getLogger(__name__)
 
 ZONE_COUNT = 2
 SENSOR_MODES = ("shelly", "simulated", "manual")
+VALVE_MODES = ("shelly", "simulated")
 
 
 def validate_zones(zones: list[dict]) -> None:
@@ -92,18 +101,41 @@ def validate_zones(zones: list[dict]) -> None:
                 raise ValueError(f"zone {i} ('{name}'): sensor_device_id is required when sensor_mode is 'shelly'")
             device_ids.append(sensor_device_id.strip())
 
+        # Same "no hardware yet" escape hatch as the sensor - a valve
+        # has no "manual" mode of its own (there's nothing to type a
+        # value for), but a simulated one is still fully controllable
+        # through the same on/off route the live status page's test
+        # buttons use, so the control logic can be exercised end to end
+        # before any Shelly relay is actually wired.
+        valve_mode = zone.get("valve_mode", "shelly")
+        if valve_mode not in VALVE_MODES:
+            raise ValueError(f"zone {i} ('{name}'): valve_mode must be one of {VALVE_MODES}")
         valve_device_id = zone.get("valve_device_id")
-        if not isinstance(valve_device_id, str) or not valve_device_id.strip():
-            raise ValueError(f"zone {i} ('{name}'): valve_device_id is required")
-        device_ids.append(valve_device_id.strip())
+        if valve_mode == "shelly":
+            if not isinstance(valve_device_id, str) or not valve_device_id.strip():
+                raise ValueError(f"zone {i} ('{name}'): valve_device_id is required when valve_mode is 'shelly'")
+            device_ids.append(valve_device_id.strip())
 
         if "cool_enabled" in zone and not isinstance(zone["cool_enabled"], bool):
             raise ValueError(f"zone {i} ('{name}'): cool_enabled must be true or false")
 
-    if len(set(names)) != len(names):
-        raise ValueError("zone names must be unique")
-    if len(set(device_ids)) != len(device_ids):
-        raise ValueError("each Shelly device id may only be used for one role - a duplicate id was found")
+    _check_no_duplicates(names, "duplicate zone name '{value}' - zone names must be unique")
+    _check_no_duplicates(
+        device_ids,
+        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    )
+
+
+def _check_no_duplicates(values: list[str], message: str) -> None:
+    """Names the actual duplicate rather than just saying "something's
+    duplicated" - with up to 2 zones and 2 extra switches all sharing
+    one device-id namespace, "a duplicate id was found" alone leaves a
+    technician checking every field by hand to find which one."""
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            raise ValueError(message.format(value=value))
+        seen.add(value)
 
 
 def _zone_device_ids(zones: list[dict]) -> list[str]:
@@ -111,7 +143,7 @@ def _zone_device_ids(zones: list[dict]) -> list[str]:
     for zone in zones or []:
         if zone.get("sensor_mode") == "shelly" and zone.get("sensor_device_id"):
             ids.append(zone["sensor_device_id"].strip())
-        if zone.get("valve_device_id"):
+        if zone.get("valve_mode", "shelly") == "shelly" and zone.get("valve_device_id"):
             ids.append(zone["valve_device_id"].strip())
     return ids
 
@@ -146,8 +178,10 @@ def validate_extra_switches(extra_switches: dict, zones: list[dict] | None = Non
                 raise ValueError(f"{key}: device id must be a non-empty string or null")
             device_ids.append(device_id.strip())
 
-    if len(set(device_ids)) != len(device_ids):
-        raise ValueError("each Shelly device id may only be used for one role - a duplicate id was found")
+    _check_no_duplicates(
+        device_ids,
+        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    )
 
 
 def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> dict:
@@ -201,6 +235,19 @@ def _sensor_integration(zone: dict, sensor_name: str, broker_file: str, manual_s
     raise ValueError(f"unknown sensor_mode {mode!r}")
 
 
+def _valve_integration(zone: dict, valve_name: str, broker_file: str) -> Integration:
+    mode = zone.get("valve_mode", "shelly")
+    if mode == "shelly":
+        return Integration("switch", "mqtt_json", _valve_integration_options(zone, valve_name, broker_file))
+    if mode == "simulated":
+        # Fully controllable through the same generic on/off route the
+        # live status page's manual test buttons already use - lets the
+        # thermostat's control logic (and a technician's manual test) be
+        # exercised end to end before any relay is actually wired.
+        return Integration("switch", "simulated", {"name": valve_name, "dashboard_tab": "climate"})
+    raise ValueError(f"unknown valve_mode {mode!r}")
+
+
 def build_climate_integrations(zones: list[dict], broker_file: str, manual_store_path: str) -> list[Integration]:
     """The Integrations DeviceManager needs to build every zone's sensor
     + valve - concatenated onto config.integrations before DeviceManager
@@ -212,7 +259,7 @@ def build_climate_integrations(zones: list[dict], broker_file: str, manual_store
         sensor_name = f"{zone['name']} Sensor"
         valve_name = f"{zone['name']} Valve"
         integrations.append(_sensor_integration(zone, sensor_name, broker_file, manual_store_path))
-        integrations.append(Integration("switch", "mqtt_json", _valve_integration_options(zone, valve_name, broker_file)))
+        integrations.append(_valve_integration(zone, valve_name, broker_file))
     return integrations
 
 
@@ -233,7 +280,10 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
 
 
 def _blank_zone() -> dict:
-    return {"name": "", "sensor_mode": "shelly", "sensor_device_id": None, "valve_device_id": None, "cool_enabled": True}
+    return {
+        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
+        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
+    }
 
 
 def _device_id_from_topic(topic) -> str | None:
@@ -278,12 +328,18 @@ def snapshot_from_config(zones, integrations: list[Integration]) -> list[dict]:
             sensor_mode, sensor_device_id = "shelly", None
 
         valve = by_name.get(zone.valve)
-        valve_device_id = _device_id_from_topic(valve.options.get("state_topic")) if valve is not None and valve.type == "mqtt_json" else None
+        if valve is not None and valve.type == "mqtt_json":
+            valve_mode, valve_device_id = "shelly", _device_id_from_topic(valve.options.get("state_topic"))
+        elif valve is not None and valve.type == "simulated":
+            valve_mode, valve_device_id = "simulated", None
+        else:
+            valve_mode, valve_device_id = "shelly", None
 
         snapshot.append({
             "name": zone.name,
             "sensor_mode": sensor_mode,
             "sensor_device_id": sensor_device_id,
+            "valve_mode": valve_mode,
             "valve_device_id": valve_device_id,
             "cool_enabled": zone.cool_enabled,
         })

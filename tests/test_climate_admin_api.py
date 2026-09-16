@@ -128,7 +128,7 @@ def test_get_map_reports_not_configured_with_no_saved_mapping(tmp_path):
     # only defines one zone.
     assert body["zones"][0] == {
         "name": "Existing Zone", "sensor_mode": "simulated", "sensor_device_id": None,
-        "valve_device_id": None, "cool_enabled": True,
+        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True,
     }
     assert body["zones"][1]["name"] == ""
 
@@ -253,6 +253,38 @@ def test_shelly_mode_zone_builds_a_real_mqtt_json_driver(tmp_path, fake_mqtt):
     reading = manager.sensor_reading("Rooms Sensor")
     assert reading["ok"] is True
     assert reading["temperature_c"] == 21.5
+
+
+def test_a_fully_hardware_free_zone_saves_and_builds_simulated_manual_drivers(tmp_path):
+    # sensor_mode="manual" + valve_mode="simulated", no device id at all -
+    # the "verify the control logic before any relay is wired" case
+    # services/climate_map_store.py's module docstring describes.
+    zones = [
+        {"name": "Rooms", "sensor_mode": "manual", "sensor_device_id": None,
+         "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True},
+        VALID_ZONES[1],
+    ]
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    res = client.post("/api/climate-admin/map", json={"zones": zones})
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+
+    app2 = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    manager = app2.config["MANAGER"]
+    assert "Rooms Valve" in manager.switches
+
+    # The manual sensor value applies immediately...
+    client2 = app2.test_client()
+    res = client2.post("/api/climate-admin/zones/Rooms/manual-value", json={"temperature_c": 30.0})
+    assert res.get_json()["ok"] is True
+
+    # ...and the simulated valve is directly testable through the exact
+    # same generic route the live status page's manual test buttons use.
+    res = client2.post("/api/sensors/Rooms Valve/on")
+    assert res.get_json()["ok"] is True
+    assert manager.sensor_reading("Rooms Valve")["is_on"] is True
 
 
 # ------------------------------------------------------------ manual value ----
