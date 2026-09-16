@@ -44,27 +44,33 @@ ids (see below) - no real hardware needed to see this for yourself.
 output - for anything set to a level rather than toggled or driven
 open/closed.
 
-The web dashboard has two tabs: **Home** (whatever combination of the
-above you have enabled, plus estimated 0-100% position for covers that
-only report a raw open/close/stop motor command, plus a sqlite-backed
-history/chart, with automatic old-row cleanup, for any numeric field a
-driver exposes, plus an optional power-budget alert) and **Heating &
-Cooling** - a multi-zone valve thermostat for a shared-plant
-radiant-panel setup (or anything similar): a click-and-drag weekly
-setpoint schedule per zone, editable straight from the dashboard, how
-many hours each zone's valve was on today/this week/this month, a
-one-tap "away for N days" override that closes every valve and resumes
-the normal schedule on its own, a zone that can opt out of one mode
-entirely (e.g. a bathroom that can't safely be cooled), and a generic
-"switch A forces switch B" rule for a device whose own operation depends
-on a specific valve (e.g. a dehumidifier sharing a zone's water
-circuit). See
-[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones).
-Both tabs get optional HTTP Basic Auth if you want it (off by default),
-and a UI language you can switch with one config line (English and
-Italian ship today; see
-[docs/configuration.md#language](docs/configuration.md#language) for
-adding your own).
+The web dashboard has two tabs.
+
+**Home** - whatever combination of the devices above you have enabled,
+plus estimated 0-100% position for covers that only report a raw
+open/close/stop motor command, a sqlite-backed history/chart (with
+automatic old-row cleanup) for any numeric field a driver exposes, and
+an optional power-budget alert.
+
+**Heating & Cooling** - a multi-zone valve thermostat for a
+shared-plant radiant-panel setup (or anything similar): a
+click-and-drag weekly setpoint schedule per zone, editable straight
+from the dashboard; how many hours each zone's valve was on
+today/this week/this month; a one-tap "away for N days" override that
+closes every valve and resumes the normal schedule on its own; a zone
+that can opt out of one mode entirely (e.g. a bathroom that can't
+safely be cooled); and a generic "switch A forces switch B" rule for a
+device whose own operation depends on a specific valve (e.g. a
+dehumidifier sharing a zone's water circuit). See
+[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones) -
+and if every zone happens to be on Shelly hardware, see
+[the climate admin panel](#the-shelly-climate-admin-panel) below for
+configuring it from a browser instead of by hand.
+
+Both tabs get optional HTTP Basic Auth (off by default) and a UI
+language switchable with one config line - English and Italian ship
+today; see [docs/configuration.md#language](docs/configuration.md#language)
+for adding your own.
 
 Don't own any of the devices above? The point of this project is that
 adding your own driver is a self-contained, half-hour change - see
@@ -139,12 +145,11 @@ localhome
 ```
 
 Always into a virtual environment, never with a bare `pip install`
-against the system Python - modern Debian/Ubuntu (including this
-project's own Arduino UNO Q instance) actively refuse the latter
-(`externally-managed-environment`), and some also don't ship the venv
-module by default (`python3 -m venv` failing with "ensurepip is not
-available") - see
-[docs/troubleshooting.md](docs/troubleshooting.md) if you hit either.
+against the system Python - modern Debian/Ubuntu actively refuse the
+latter (`externally-managed-environment`), and some also don't ship
+the venv module by default (`python3 -m venv` failing with "ensurepip
+is not available") - see [docs/troubleshooting.md](docs/troubleshooting.md)
+if you hit either.
 
 Nothing under `config/` other than the `*.example.*` files is ever meant
 to be committed - see [.gitignore](.gitignore). That's what keeps your
