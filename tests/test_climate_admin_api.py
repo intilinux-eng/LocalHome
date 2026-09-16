@@ -466,3 +466,20 @@ def test_post_extra_switches_rejects_a_duplicate_device_id_with_a_zone(tmp_path)
 
     assert res.status_code == 400
     assert "duplicate id" in res.get_json()["error"]
+
+
+# --------------------------------------------------------------- restart ----
+
+def test_restart_route_schedules_a_restart_without_actually_restarting(tmp_path, monkeypatch):
+    # Never let the real thing run here - os.execv would replace the
+    # pytest process itself (see services/self_restart.py).
+    called = []
+    monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: called.append(True))
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    res = client.post("/api/climate-admin/restart")
+
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+    assert called == [True]

@@ -14,6 +14,29 @@ function fmt(value, digits) {
   return typeof value === "number" ? value.toFixed(digits) : "--";
 }
 
+// ---------------------------------------------------------------- restart ----
+// Every save above needs this before it actually does anything - see
+// services/self_restart.py. Reused wherever a save's result or the
+// live status section's "restart pending" banner needs to offer it.
+
+function restartButtonHtml() {
+  return `<button class="range-btn" onclick="restartLocalHome(this)">${tr("climate_admin.restart_button")}</button>`;
+}
+
+async function restartLocalHome(button) {
+  if (!confirm(tr("climate_admin.restart_confirm"))) return;
+  button.disabled = true;
+  try {
+    await fetch("/api/climate-admin/restart", { method: "POST" });
+  } catch (e) {
+    // A connection reset right as the process turns over is the
+    // expected outcome here, not a failure worth reporting.
+  }
+  const container = button.parentElement;
+  if (container) container.innerHTML = tr("climate_admin.restart_in_progress");
+  setTimeout(() => location.reload(), 4000);
+}
+
 const SENSOR_MODES = ["shelly", "simulated", "manual"];
 const VALVE_MODES = ["shelly", "simulated"];
 
@@ -170,7 +193,7 @@ async function saveBroker() {
       resultEl.className = "hint-text admin-error";
       return;
     }
-    resultEl.textContent = tr("climate_admin.broker_save_success");
+    resultEl.innerHTML = `${tr("climate_admin.broker_save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadBroker();
   } catch (e) {
@@ -195,7 +218,7 @@ async function saveMap() {
     }
     let text = tr("climate_admin.save_success");
     if (data.warnings && data.warnings.length) text += " " + data.warnings.join(" ");
-    resultEl.textContent = text;
+    resultEl.innerHTML = `${text} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadMap();
   } catch (e) {
@@ -240,7 +263,7 @@ async function saveExtraSwitches() {
       resultEl.className = "hint-text admin-error";
       return;
     }
-    resultEl.textContent = tr("climate_admin.save_success");
+    resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadExtraSwitches();
   } catch (e) {
@@ -353,7 +376,7 @@ async function refreshStatus() {
     // whole section below is stale, not just the zone that changed -
     // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
     if ((savedMap && savedMap.restart_pending) || extraSwitchesRestartPending) {
-      document.getElementById("status-list").innerHTML = `<p class="hint-text admin-restart-pending">${tr("climate_admin.restart_pending")}</p>`;
+      document.getElementById("status-list").innerHTML = `<p class="hint-text admin-restart-pending">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
       return;
     }
     const byName = {};

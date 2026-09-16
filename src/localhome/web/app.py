@@ -32,6 +32,7 @@ from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
+from localhome.services.self_restart import schedule_restart
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -641,6 +642,14 @@ def _register_routes(app: Flask) -> None:
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/restart", methods=["POST"])
+    def api_climate_admin_restart():
+        # Fires after this response is sent - see services/self_restart.py.
+        # Every "restart_required: true" above meant "go do this by
+        # hand, from a terminal" until now.
+        schedule_restart()
+        return jsonify(ok=True)
 
     @app.route("/api/climate-admin/zones/<name>/manual-value", methods=["POST"])
     def api_climate_admin_set_manual_value(name):
