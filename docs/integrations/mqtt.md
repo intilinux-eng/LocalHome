@@ -114,7 +114,51 @@ Omit `username`/`password` for an anonymous-access broker. Every
 `mqtt_json` integration below references this same file via
 `broker_file`.
 
-## 2. Examples
+## 2. Keep the broker itself running
+
+Everything above assumes something is actually listening at the host/port
+in `mqtt_broker.json`. If mosquitto isn't running - crashed, or just never
+restarted after a reboot - every device will look "disconnected" in its
+own app/UI even with perfectly correct settings, because there's nothing
+at the other end of the connection to accept it. Before changing anything
+on a device's side, confirm the broker itself is up: `mosquitto_sub -t '#'
+-v` failing to even connect (not just "no messages yet") means this, not
+the device, is the problem.
+
+**Linux**: the systemd unit mosquitto ships with already restarts it on
+boot once enabled - `sudo systemctl enable --now mosquitto`. Don't edit
+that unit file for LocalHome's own settings (listening on the LAN,
+`allow_anonymous`); drop them in `/etc/mosquitto/conf.d/localhome.conf`
+instead - the default `mosquitto.conf`'s `include_dir` already loads
+everything there automatically, and it survives a mosquitto package
+upgrade that the main file wouldn't.
+
+**Windows**: mosquitto for Windows *can* install as a service
+(`mosquitto.exe install`), but its service mode always loads
+`mosquitto.conf` from its own install directory - it does **not** accept
+a custom `-c <path>`/`run` argument the way running it by hand does.
+Registering the service with one anyway (`sc.exe config ... binPath=
+"mosquitto.exe run -c <path>"`) looks like it worked but the service will
+never actually start (Windows reports a generic "could not start the
+service" with nothing more specific in the Event Log) - if you hit that,
+either put LocalHome's settings directly in the default
+`mosquitto.conf` next to the installed exe and use the plain
+`mosquitto.exe install`/`uninstall` service commands with no extra
+arguments, or skip the Windows Service entirely: drop a tiny script into
+the current user's Startup folder (`shell:startup`) that launches
+mosquitto hidden at login -
+
+```vbs
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run """C:\Program Files\mosquitto\mosquitto.exe"" -c ""<path to your .conf>""", 0, False
+```
+
+- which also sidesteps a related gotcha: a service normally runs as
+`LocalSystem`, so a `log_dest file ...` log ends up owned by `SYSTEM` and
+unreadable by your own account without an extra ACL change; a script in
+the Startup folder runs as you, so the log stays readable normally.
+
+## 3. Examples
 
 ### A Tasmota smartplug (`power_meter`)
 
