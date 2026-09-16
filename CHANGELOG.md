@@ -20,6 +20,62 @@ date rather than by tag.
   every interval. Tuya (LAN), eWeLink and Telegram already bounded
   every network call the same way.
 
+## 2026-09-16
+
+### Added
+- The Shelly climate admin panel (`/climate-admin`) - maps the
+  thermostat's two zones onto a home's own Shelly device ids from the
+  browser, instead of hand-editing `config.yaml`, for redeploying the
+  exact same setup across multiple homes that standardize on the
+  Shelly family. Per zone: a sensor source (a real Shelly H&T, a
+  simulated one, or a manually-typed debug value) and a valve source
+  (real or simulated) - simulated + manual together let the whole
+  sensor-to-valve control loop be verified, including manual open/close
+  test buttons, before any relay is wired. Also edits the MQTT broker
+  connection and two more fixed Shelly Plus 1 switches (a bathroom
+  bypass valve, a dehumidifier), and shows live per-zone status with
+  plain-language guidance (a battery sensor that hasn't reported *yet*
+  reads differently from one that's gone offline; a dead broker is
+  never mistaken for every device failing at once) and a "Restart
+  LocalHome" button. See
+  [docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
+- WiFi signal strength (`wifi_rssi_dbm`) on a zone's sensor card,
+  alongside the existing battery indicator - useful for judging a
+  battery sensor's placement.
+- A zone's dew point while cooling (condensation risk context) and a
+  low-battery popup (once per session) when a sensor's battery drops
+  below 10%.
+- A season indicator (☀/❄) replacing the static "Heating & Cooling"
+  heading.
+- The Arduino UNO Q, this project's own day-to-day deployment target,
+  noted alongside the existing Raspberry Pi/generic-Linux-board
+  mentions (README, `docs/deployment.md`).
+
+### Fixed
+- `localhome-cli doctor` now cross-checks the climate admin panel's own
+  saved zones/extra switches too, via the same merge `web/app.py`'s
+  `create_app()` applies - previously an apartment set up entirely
+  through the panel had no `thermostat:` block in `config.yaml` at
+  all, so `doctor` silently checked nothing about it.
+- A failed MQTT publish (most concretely: sent before the client
+  finished its initial connection) no longer looks identical to a
+  successful one - every switch/number/cover command already had
+  error handling ready for this at every layer (the thermostat and
+  interlock control loops, the `/api/sensors/...` routes), it just
+  never fired because `publish()` never raised.
+- The climate admin panel's manual-value debug route checked the
+  *saved* zone mapping instead of what the running process actually
+  loaded - a save that hadn't taken effect yet (no restart) could
+  apply a fabricated reading to whichever real driver still owned that
+  zone's name.
+- `python3 -m venv`/a bare `pip install` now gets a virtual environment
+  first in Quick start and the bare-metal deployment guide - modern
+  Debian/Ubuntu actively refuses the latter
+  (`externally-managed-environment`) and often doesn't ship the venv
+  module by default either, confirmed setting this project up for real
+  on its own Arduino UNO Q instance (Debian trixie). See
+  [docs/troubleshooting.md](docs/troubleshooting.md).
+
 ## 2026-09-14
 
 ### Added

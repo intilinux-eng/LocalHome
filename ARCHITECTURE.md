@@ -160,6 +160,74 @@ else that speaks MQTT+JSON, instead of one driver per brand.
   because each backs off completely outside the conditions where it's
   meant to act, rather than both trying to assert a value every tick.
 
+## The climate admin panel: config built at runtime, not by hand
+
+`config.yaml`'s `integrations` list is a plain mutable Python list on a
+plain dataclass (`LocalHomeConfig`, [`config.py`](src/localhome/config.py)) -
+nothing stops appending to it *before* `DeviceManager(config)` reads it.
+That's the entire mechanism behind `/climate-admin`
+([docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel)):
+`services/climate_map_store.py`'s `apply_to_config(config)` reads
+`config/climate_map.json` (if anything's been saved there) and appends
+the `Integration` objects it describes onto `config.integrations`, then
+returns the effective `thermostat` dict to use in place of
+`config.raw.get("thermostat")` - whole-block, not merged: a saved
+mapping fully replaces `config.yaml`'s own `zones:` list, because two
+independent zone/valve configs fighting over one physical valve is a
+worse failure mode than "one of them clearly wins". Both
+`web/app.py`'s `create_app()` and `cli.py`'s `main()` (behind
+`localhome-cli doctor`) call this same function, so a config built
+entirely through the panel - no `thermostat:` key in `config.yaml` at
+all - is exactly as inspectable by `doctor` as one written by hand.
+
+Each zone's sensor and valve each get their own small mode axis rather
+than one combined "hardware or not" flag:
+
+- **Sensor**: a real Shelly device, a simulated one
+  (`drivers/simulated/climate.py`), or a manually-typed debug value
+  held fixed (`drivers/manual/climate.py`) - for exercising the
+  thermostat's on/off decision at a chosen temperature without a real
+  event.
+- **Valve**: a real Shelly relay, or simulated
+  (`drivers/simulated/switch.py`) - and because a simulated switch is
+  driven through the exact same `SwitchDriver` interface (and the same
+  generic `/api/sensors/<name>/on|off` route) a real one is, manual
+  sensor + simulated valve together let the *whole* sensor-to-valve
+  loop be verified - including a manual open/close test from the panel
+  itself - before any hardware is wired at all.
+
+Two more fixed, standalone Shelly Plus 1 switches (a bathroom bypass
+valve, a dehumidifier) go through the same `apply_to_config()` path but
+skip the "whole-block replace" question entirely - they're purely
+additive, so an apartment can panel-manage one, the other, both, or
+neither independently of the zones. Unlike a zone, there's no name
+field: `climate_map_store.py`'s `EXTRA_SWITCH_FIELDS` fixes the
+Integration name every install builds ("Bathroom Bypass Valve"/
+"Dehumidifier"), a deliberate constraint, not an oversight - if
+`config.yaml`'s own `thermostat.interlocks`/`mode_switches` already
+reference one of these by a different literal name, moving it to the
+panel means updating that reference, since nothing here rewrites
+`config.yaml` for you.
+
+Every save needs a restart before it's actually running - `DeviceManager`
+only builds its drivers once, at process start, same as everything else
+in this document. What's new here is *telling the truth about it*
+instead of leaving the dashboard to guess: `create_app()` snapshots
+exactly which zones/extra switches it loaded at startup
+(`ACTIVE_CLIMATE_ZONES`/`ACTIVE_EXTRA_SWITCHES`), and the panel's own
+`GET` routes compare that snapshot against a fresh read of
+`climate_map.json` on every request. An earlier attempt at this compared
+driver *names* instead and missed most real cases - a zone already
+managed by the panel keeps the same name (`"<zone> Sensor"`) no matter
+which mode it's in, so switching modes without restarting went
+undetected. `services/self_restart.py` (a `POST` re-execs the running
+process in place, the same idiom uvicorn/gunicorn use for `--reload`)
+closes the loop from the browser alone - reliable on Linux, the real
+deployment target, where it's a true `execve()`; not on Windows, where
+that call is emulated as spawn-then-exit and can leave more than one
+process bound to the same port, so treat it as a Linux-only convenience
+during development.
+
 ## Testing without hardware: the `simulated` driver
 
 [`drivers/simulated/`](src/localhome/drivers/simulated/) implements
