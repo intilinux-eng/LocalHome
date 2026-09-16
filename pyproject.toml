@@ -18,11 +18,13 @@ dependencies = [
     "requests>=2.31",
     "PyYAML>=6.0",
     "paho-mqtt>=2.0",
-    "python-kasa>=0.7",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# GPL-3.0-or-later, unlike every other dependency here - opt-in on
+# purpose, see THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically
+tplink = ["python-kasa>=0.7"]
 
 [project.scripts]
 localhome = "localhome.web.app:main"

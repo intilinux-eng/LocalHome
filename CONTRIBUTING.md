@@ -36,8 +36,22 @@ through the exact interface to implement. In short:
   explicitly in its integration doc, the way `docs/integrations/ewelink.md`
   and `docs/integrations/meross.md` do.
 - **No new required dependencies for existing drivers.** A new driver
-  can add its own dependency (guarded so the rest of the app doesn't
-  need it installed to run); don't add one that every user now needs.
+  can add its own dependency, but it goes in its own
+  `[project.optional-dependencies]` extra in `pyproject.toml`, not the
+  main `dependencies` list - `core/registry.py`'s driver loader already
+  tolerates that extra not being installed (logs it, skips that one
+  driver, starts everything else normally), so nothing every user needs
+  is pip-installed automatically for a device only some users own.
+- **Check a new dependency's license before adding it**, the same way
+  you'd check a device's local-vs-cloud protocol. This project stays
+  under permissive licenses (see
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) on purpose - a
+  copyleft one (GPL, AGPL, ...) isn't automatically disqualifying, but
+  it needs its own extra (per the rule above, doubly so here) and an
+  explicit note in THIRD_PARTY_NOTICES.md, not a silent addition to the
+  table as if it were just another MIT/BSD package. `python-kasa`
+  (GPL-3.0-or-later) is the one existing example of this - see
+  [THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
 - **Never commit real device data.** `devices.json`, `secrets*.json`,
   `config.yaml` and anything else under `config/` other than the
   `*.example.*` files are gitignored on purpose - keep it that way, and
@@ -63,9 +77,16 @@ valve/sensor was involved.
 ## Running tests
 
 ```bash
-pip install -r requirements-dev.txt
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 pytest
 ```
+
+(Same venv from the [README](README.md)'s Quick start, or
+[Trying it on your own computer](README.md#trying-it-on-your-own-computer-first),
+works fine here too - just add `[dev]` to the `pip install -e .` you
+already ran.)
 
 Tests must not require real hardware or real cloud credentials - mock or
 construct fake driver instances instead (see `tests/` for examples).

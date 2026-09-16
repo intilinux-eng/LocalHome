@@ -40,6 +40,8 @@ notifications:
   secrets_file: "secrets_telegram.json"
 ```
 
-If this file is missing or invalid, LocalHome logs a warning at startup
-and keeps running with notifications silently disabled - a broken/absent
-notifier never blocks the rest of the dashboard.
+If this file is missing or invalid, LocalHome logs the error at startup
+(the same "log it, skip it, keep going" rule every driver gets - see
+[ARCHITECTURE.md](../../ARCHITECTURE.md)) and keeps running with
+notifications silently disabled - a broken/absent notifier never blocks
+the rest of the dashboard.

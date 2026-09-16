@@ -8,6 +8,16 @@ import sys
 from localhome.services import self_restart
 
 
+def test_is_supported_is_false_on_windows(monkeypatch):
+    monkeypatch.setattr(self_restart.sys, "platform", "win32")
+    assert self_restart.is_supported() is False
+
+
+def test_is_supported_is_true_on_linux(monkeypatch):
+    monkeypatch.setattr(self_restart.sys, "platform", "linux")
+    assert self_restart.is_supported() is True
+
+
 def test_schedule_restart_calls_execv_with_the_current_interpreter_and_argv(monkeypatch):
     monkeypatch.setattr(self_restart.time, "sleep", lambda seconds: None)
     calls = []

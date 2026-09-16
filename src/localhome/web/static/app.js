@@ -1348,6 +1348,15 @@ async function refreshClimateZonesLive() {
     if (!data.ok) return;
     climateMode = data.mode || climateMode;
     climateAwayUntil = data.away_until || null;
+    // A zone's underlying sensor/valve driver *name* can change without
+    // this page reloading - a climate-admin save+restart while this tab
+    // was already open (e.g. switching a zone to a manual/simulated
+    // source) renames "Zone Temperature"-style config.yaml drivers to
+    // "Zone Sensor"/"Zone Valve". Keep this in sync every tick, not just
+    // read once at page load, so the chart refresh below (and anything
+    // else keyed off zone.sensor/zone.valve) doesn't keep polling a name
+    // that stopped existing the moment the process restarted.
+    climateZones = data.zones;
     updateSeasonHeading();
     updateAwayBadge();
     updateAwayBanner();

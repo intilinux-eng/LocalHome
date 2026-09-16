@@ -67,34 +67,88 @@
   color: var(--accent-open);
 }
 
-#status-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-}
-
-.admin-status-row {
-  background: var(--card);
+/* The one thing that decides which formula every zone's valve below
+   follows (open-below-target vs. open-above-target) - deliberately
+   its own bordered banner, not a plain hint-text line, so it can't be
+   skimmed past the way the rest of this page's small print can. */
+.admin-mode-banner {
   border: 1px solid var(--card-border);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 10px 16px;
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.admin-mode-banner .admin-mode-icon {
+  font-size: 1.1rem;
+}
+
+.admin-mode-exclusion {
+  border: 1px dashed var(--card-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--accent-stop);
+}
+
+/* Live status lives inside each zone's own config card (see
+   zoneFormHtml() in climate_admin.js) - this divider is what visually
+   separates "what you configured" from "what's actually happening"
+   within one card, instead of two separate page sections. */
+.admin-zone-status {
+  border-top: 1px solid var(--card-border);
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 0.85rem;
 }
 
-.admin-restart-pending {
+.admin-restart-pending-inline {
   border: 1px dashed var(--accent-stop);
-  border-radius: 14px;
-  padding: 14px 16px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 0;
   color: var(--accent-stop);
   font-weight: 600;
+  font-size: 0.8rem;
 }
 
-.admin-status-name {
+/* Broker connection / extra switches - one-time setup, not part of
+   the day-to-day "swap a sensor" loop the zone cards above are for,
+   so they collapse out of the way by default. */
+.admin-details {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 4px 16px;
+  margin-top: 20px;
+}
+
+.admin-details summary {
+  padding: 10px 0;
   font-weight: 600;
-  margin-bottom: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.admin-details[open] summary {
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 12px;
+}
+
+.admin-details .admin-broker-status {
+  font-weight: 400;
+  font-size: 0.78rem;
+  margin: 0;
 }
 
 .admin-status {
@@ -147,7 +201,7 @@
   padding: 6px 8px;
   color: var(--text);
   font-size: 0.8rem;
-  width: 90px;
+  width: 120px;
 }
 
 .admin-valve-test {

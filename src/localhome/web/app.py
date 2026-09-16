@@ -18,6 +18,7 @@ from werkzeug.exceptions import HTTPException
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.climate_map_store import (
+    EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
     ClimateMapStore,
     apply_to_config,
@@ -30,7 +31,7 @@ from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
-from localhome.services.self_restart import schedule_restart
+from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -77,6 +78,7 @@ def create_app(config_path: str | None = None) -> Flask:
     manual_override = ManualOverrideStore(manual_override_path)
     panel_zones = climate_map.get_zones()
     extra_switches = climate_map.get_extra_switches()
+    extra_sensors = climate_map.get_extra_sensors()
     thermostat_cfg = apply_to_config(config)
 
     manager = DeviceManager(config)
@@ -188,6 +190,7 @@ def create_app(config_path: str | None = None) -> Flask:
     # the exact same "<zone> Sensor"/"<zone> Valve" names either way).
     app.config["ACTIVE_CLIMATE_ZONES"] = panel_zones
     app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
+    app.config["ACTIVE_EXTRA_SENSORS"] = extra_sensors
 
     _register_routes(app)
     return app
@@ -624,11 +627,42 @@ def _register_routes(app: Flask) -> None:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)
 
+    @app.route("/api/climate-admin/extra-sensors")
+    def api_climate_admin_get_extra_sensors():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        saved = climate_map.get_extra_sensors()
+        restart_pending = saved != app.config["ACTIVE_EXTRA_SENSORS"]
+        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SENSOR_FIELDS})
+
+    @app.route("/api/climate-admin/extra-sensors", methods=["POST"])
+    def api_climate_admin_set_extra_sensors():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        data = request.get_json(silent=True) or {}
+        extra_sensors = {key: data.get(key) for key in EXTRA_SENSOR_FIELDS}
+        try:
+            climate_map.set_extra_sensors(extra_sensors)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
+
     @app.route("/api/climate-admin/restart", methods=["POST"])
     def api_climate_admin_restart():
         # Fires after this response is sent - see services/self_restart.py.
         # Every "restart_required: true" above meant "go do this by
-        # hand, from a terminal" until now.
+        # hand, from a terminal" until now - except on Windows, where
+        # the underlying os.execv is emulated as spawn-then-exit and
+        # reliably leaves two processes fighting over one port instead
+        # of actually restarting anything. Refuse there instead of
+        # leaving the operator with a page that never comes back.
+        if not is_supported():
+            return jsonify(
+                ok=False,
+                platform_unsupported=True,
+                error="Restarting from the browser isn't reliable on Windows "
+                "(it can leave two processes bound to the same port instead "
+                "of actually restarting) - stop the process yourself "
+                "(Ctrl+C in its terminal) and start it again.",
+            ), 501
         schedule_restart()
         return jsonify(ok=True)
 

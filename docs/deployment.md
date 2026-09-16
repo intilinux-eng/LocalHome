@@ -9,19 +9,26 @@ systemd - not a microcontroller-only board), so everything below -
 Docker and bare-metal/systemd alike - applies to it exactly as
 written; no board-specific steps.
 
-## Quick start: a fresh device, start to finish
+## Quick start: a fresh Debian/Ubuntu box, start to finish
 
-The single ordered path from a brand-new board to a running,
-survives-a-reboot dashboard - this is what to follow the first time,
-skipping straight to [Docker](#docker) or the more hardened
-[dedicated-user bare-metal setup](#bare-metal-systemd) below only if
-you already know you want one of those instead. Confirmed against a
-real Arduino UNO Q (Debian trixie).
+The single ordered path from a brand-new box to a running,
+survives-a-reboot dashboard, MQTT broker included. This is plain
+Debian/Ubuntu, whatever board it's running on - an
+[Arduino UNO Q](https://www.arduino.cc/)'s Linux userspace *is* Debian
+trixie, a Raspberry Pi's is Raspberry Pi OS (Debian-based), and so on,
+so there's nothing board-specific below. This is what to follow the
+first time, skipping straight to [Docker](#docker) or the more
+hardened [dedicated-user bare-metal setup](#bare-metal-systemd) below
+only if you already know you want one of those instead. Confirmed
+against a real Arduino UNO Q (Debian trixie).
 
 ```bash
-# 1. On the device itself (SSH in first if it's headless):
+# 1. On the device itself (SSH in first if it's headless). mosquitto
+#    is only needed if any of your devices speak MQTT (Shelly, Tasmota,
+#    Zigbee2MQTT, ...) - include it now if so, `sudo apt remove
+#    mosquitto` later if you decide you don't need it after all:
 sudo apt update
-sudo apt install -y git python3-venv || sudo apt install -y python3.13-venv
+sudo apt install -y git mosquitto python3-venv || sudo apt install -y git mosquitto python3.13-venv
 # (the exact venv package name varies by distro version - if the first
 #  one 404s, apt's own error names the right one; see below)
 
@@ -33,18 +40,33 @@ python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
 
-# 3. Configure it - either by hand:
+# 3. Using MQTT devices? Point mosquitto at your LAN instead of just
+#    localhost (apt's package already enabled its systemd unit, so it
+#    already survives a reboot - this just gives it LocalHome's own
+#    settings instead of the untouched default, which only listens on
+#    localhost and refuses every device on your LAN):
+printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+sudo systemctl restart mosquitto
+# -> confirm it's listening and accepting messages:
+#    mosquitto_sub -h localhost -t '#' -v      (Ctrl+C to stop)
+# `allow_anonymous true` is fine for a broker only reachable on your
+# own trusted LAN with nothing else exposed - see
+# docs/integrations/mqtt.md#1-configure-the-broker-connection for a
+# username/password setup instead.
+
+# 4. Configure LocalHome itself - either by hand:
 cp config/config.example.yaml config/config.yaml
 #    ...and the *.example.json files you need; see docs/configuration.md
 #    and docs/integrations/ - or, if every device is Shelly, skip this
-#    and use the climate admin panel instead (step 5).
+#    and use the climate admin panel instead (step 6).
 
-# 4. Sanity-check before trusting it to run unattended:
+# 5. Sanity-check before trusting it to run unattended:
 .venv/bin/localhome-cli doctor
 
-# 5. Make it survive a reboot and closing the SSH session - see
-#    deploy/localhome.service (copy it, then edit User/WorkingDirectory/
-#    ExecStart to match the path you cloned into above):
+# 6. Make LocalHome itself survive a reboot and closing the SSH session
+#    - see deploy/localhome.service (copy it, then edit
+#    User/WorkingDirectory/ExecStart to match the path you cloned into
+#    above):
 sudo cp deploy/localhome.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now localhome
@@ -57,21 +79,14 @@ venv .venv` itself fails with "ensurepip is not available", your
 distro named the package differently - install the exact one apt's own
 error message names (Debian trixie wants `python3.13-venv`) and retry.
 See [docs/troubleshooting.md](troubleshooting.md) if anything else about
-steps 1-4 goes sideways.
+steps 1-5 goes sideways.
 
 **Using Shelly devices** (the climate admin panel, `/climate-admin`)?
-Two more things belong in this same "before you walk away" checklist:
-
-- The MQTT broker (mosquitto) needs to survive a reboot exactly like
-  LocalHome itself does above - `sudo apt install mosquitto` already
-  auto-starts it via its own systemd unit, you just need your settings
-  in `/etc/mosquitto/conf.d/` instead of the package default. See
-  [docs/integrations/mqtt.md#2-keep-the-broker-itself-running](integrations/mqtt.md#2-keep-the-broker-itself-running).
-- Map your zones onto this home's actual Shelly device ids from
-  `/climate-admin` once the dashboard is up (step 5's URL) - see
-  [docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
-  Remember it needs a restart (`sudo systemctl restart localhome`)
-  after every save before a change actually takes effect.
+Map your zones onto this home's actual Shelly device ids from
+`/climate-admin` once the dashboard is up (step 6's URL) - see
+[docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
+Remember it needs a restart (`sudo systemctl restart localhome`) after
+every save before a change actually takes effect.
 
 ## Docker
 

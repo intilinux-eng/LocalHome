@@ -292,10 +292,12 @@ on-disk shape and precedence rules. **Changes here need a LocalHome
 restart to take effect** (`DeviceManager` only builds its drivers once,
 at process start) - the page has a "Restart LocalHome" button for this
 (re-execs the process in place - reliable on Linux, the deployment
-target; not on Windows, where the C runtime's `execv` emulation can
-leave more than one process bound to the same port - see
-`services/self_restart.py` if you're developing on Windows and hit
-this, and just restart the process by hand there instead).
+target; on Windows, the C runtime's `execv` emulation reliably leaves
+two processes fighting over one port instead of actually restarting,
+confirmed empirically, so the button refuses there instead of leaving
+you with a page that never comes back - `services/self_restart.py`'s
+`is_supported()` is the check. Developing on Windows: stop the process
+yourself (Ctrl+C) and start it again instead).
 
 Per zone:
 

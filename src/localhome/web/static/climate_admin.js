@@ -26,15 +26,45 @@ function restartButtonHtml() {
 async function restartLocalHome(button) {
   if (!confirm(tr("climate_admin.restart_confirm"))) return;
   button.disabled = true;
+  const container = button.parentElement;
+  let data = { ok: true };
   try {
-    await fetch("/api/climate-admin/restart", { method: "POST" });
+    const res = await fetch("/api/climate-admin/restart", { method: "POST" });
+    data = await res.json();
   } catch (e) {
     // A connection reset right as the process turns over is the
-    // expected outcome here, not a failure worth reporting.
+    // expected outcome on a real restart - treat it as "restarting",
+    // not as this request having failed.
   }
-  const container = button.parentElement;
+  if (data && data.ok === false && data.platform_unsupported) {
+    if (container) container.innerHTML = `<p class="admin-mode-exclusion">${tr("climate_admin.restart_unsupported_windows")}</p>`;
+    button.disabled = false;
+    return;
+  }
   if (container) container.innerHTML = tr("climate_admin.restart_in_progress");
-  setTimeout(() => location.reload(), 4000);
+  await waitForServerAndReload(container);
+}
+
+// Polls instead of a single blind reload after a fixed delay - a real
+// restart's timing varies (import time, MQTT/cloud driver setup), and
+// reloading into a server that isn't back yet just shows the browser's
+// own connection-error page - indistinguishable from a restart that's
+// genuinely stuck (the exact confusion this replaces).
+async function waitForServerAndReload(container) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 1000));
+    try {
+      const res = await fetch("/api/climate-admin/map", { cache: "no-store" });
+      if (res.ok) {
+        location.reload();
+        return;
+      }
+    } catch (e) {
+      // Not back yet - keep polling.
+    }
+  }
+  if (container) container.innerHTML = `<p class="admin-mode-exclusion">${tr("climate_admin.restart_timeout")}</p>`;
 }
 
 const SENSOR_MODES = ["shelly", "simulated", "manual"];
@@ -54,6 +84,12 @@ function zoneFormHtml(zone, index) {
   const valveOptions = VALVE_MODES.map(
     m => `<option value="${m}" ${(z.valve_mode || "shelly") === m ? "selected" : ""}>${tr(`climate_admin.mode_${m}`)}</option>`
   ).join("");
+  // The status block below is filled in by refreshStatus() - it's part
+  // of this same card (not a separate page section) so editing a
+  // device id and checking whether it's actually reporting happen
+  // without scrolling anywhere. refreshStatus() only ever touches
+  // #zone-status-N's innerHTML, never this card as a whole, so a poll
+  // tick never resets a field the operator is mid-edit on.
   return `
     <div class="admin-zone-card" data-index="${index}">
       <div class="admin-field">
@@ -81,6 +117,9 @@ function zoneFormHtml(zone, index) {
         <input type="checkbox" class="zone-cool-enabled" ${z.cool_enabled !== false ? "checked" : ""}>
         ${tr("climate_admin.cool_enabled_label")}
       </label>
+      <div class="admin-zone-status" id="zone-status-${index}">
+        <p class="hint-text">${tr("climate_admin.status_loading")}</p>
+      </div>
     </div>
   `;
 }
@@ -284,6 +323,88 @@ async function saveExtraSwitches(button) {
   }
 }
 
+// --------------------------------------------------------- extra sensor ----
+// One more fixed, standalone Shelly H&T Gen3 sensor (outdoor
+// temperature/humidity) - no valve, no schedule, not tied to a zone,
+// and unlike a zone's own sensor there's no simulated/manual mode: it's
+// either a real device id or nothing, so the only fields are the id
+// itself and this section's own live status. Fixed name, same
+// convention as the extra switches above - see
+// services/climate_map_store.py's EXTRA_SENSOR_FIELDS.
+const EXTRA_SENSOR_NAME = "Temperatura Esterna";
+let extraSensorRestartPending = false;
+
+async function loadExtraSensor() {
+  const res = await fetch("/api/climate-admin/extra-sensors");
+  const data = await res.json();
+  document.getElementById("extra-outdoor-sensor-id").value = data.outdoor_sensor_device_id || "";
+  extraSensorRestartPending = !!data.restart_pending;
+}
+
+async function saveExtraSensor(button) {
+  const resultEl = document.getElementById("save-extra-sensor-result");
+  const body = {
+    outdoor_sensor_device_id: document.getElementById("extra-outdoor-sensor-id").value.trim() || null,
+  };
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate-admin/extra-sensors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
+    resultEl.className = "hint-text admin-success";
+    await loadExtraSensor();
+    refreshExtraSensorStatus();
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// Reuses the generic /api/sensors/<name> route (web/app.py) rather than
+// anything zone-specific - this sensor isn't part of any zone. Adapts
+// its plain ok/error shape onto the same sensor_ok/sensor_error shape
+// sensorStatusHtml() already expects from /api/climate/zones, so the
+// exact same "reporting / not reachable yet / gone offline" rendering
+// (and guidance text) applies here without duplicating it.
+async function refreshExtraSensorStatus() {
+  const slot = document.getElementById("extra-sensor-status");
+  if (!slot) return;
+  if (!document.getElementById("extra-outdoor-sensor-id").value.trim()) {
+    slot.innerHTML = "";
+    return;
+  }
+  if (extraSensorRestartPending) {
+    slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+    return;
+  }
+  try {
+    const res = await fetch(`/api/sensors/${encodeURIComponent(EXTRA_SENSOR_NAME)}`);
+    const reading = await res.json();
+    const zoneShaped = {
+      sensor_ok: reading.ok,
+      sensor_error: reading.error,
+      temperature_c: reading.temperature_c,
+      humidity_pct: reading.humidity_pct,
+      battery_pct: reading.battery_pct,
+      wifi_rssi_dbm: reading.wifi_rssi_dbm,
+    };
+    slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, "shelly")}</div>`;
+  } catch (e) {
+    // Transient fetch failure - leave the last rendering in place.
+  }
+}
+
 // -------------------------------------------------------------- status ----
 // Reuses /api/climate/zones as-is (see web/app.py) - joined client-side
 // against the *saved* map by zone name, so a config edit not yet applied
@@ -350,10 +471,29 @@ function targetHtml(zone) {
   return `${tr("climate_admin.target_label")}: ${target}`;
 }
 
-function statusRowHtml(zone, mapEntry) {
-  const mode = mapEntry ? mapEntry.sensor_mode : "shelly";
+// A cool_enabled:false zone (e.g. a condensation-prone bathroom) is
+// still shown here in every mode - unlike the main dashboard, which
+// just hides its card while cooling (see app.js) - because this page's
+// whole job is showing *why* a valve is in the state it's in, and
+// silently disappearing a configured zone would be more confusing, not
+// less. What it's *not* driven by needs saying instead: the thermostat
+// doesn't touch this valve for temperature at all in this mode, so
+// whatever state it's actually in is either idle or another mechanism
+// entirely (an interlock/mode_switch - see docs/configuration.md).
+function modeExclusionNoticeHtml(zone, mode) {
+  if (mode !== "cool" || zone.cool_enabled !== false) return "";
+  return `<p class="admin-mode-exclusion">${tr("climate_admin.zone_excluded_cool")}</p>`;
+}
+
+// Fills #zone-status-N inside zoneFormHtml()'s own card - deliberately
+// not a standalone row with its own name/border the way this used to
+// render in a separate "Live status" section: the card it's inside
+// already has the name and the fields that determine this state, so
+// repeating either here would just be distance-adding noise.
+function zoneStatusInnerHtml(zone, mapEntry, mode) {
+  const sensorMode = mapEntry ? mapEntry.sensor_mode : "shelly";
   const valveMode = mapEntry ? (mapEntry.valve_mode || "shelly") : "shelly";
-  const manualBoxHtml = mode === "manual" ? `
+  const manualBoxHtml = sensorMode === "manual" ? `
     <div class="admin-manual-box">
       <input type="number" step="0.1" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
       <input type="number" step="0.1" class="manual-humidity-input" placeholder="${tr("climate_admin.manual_humidity_label")}">
@@ -361,24 +501,30 @@ function statusRowHtml(zone, mapEntry) {
     </div>` : "";
 
   return `
-    <div class="admin-status-row">
-      <div class="admin-status-name">${zone.name}</div>
-      <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, mode)}</div>
-      <div>${targetHtml(zone)}</div>
-      <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
-      <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
-      ${manualBoxHtml}
-    </div>
+    <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, sensorMode)}</div>
+    <div>${targetHtml(zone)}</div>
+    <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
+    <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
+    ${modeExclusionNoticeHtml(zone, mode)}
+    ${manualBoxHtml}
   `;
 }
 
+// The one thing that decides which formula every zone's valve below
+// follows - see climate_admin.css's .admin-mode-banner. Spelled out
+// explicitly (not just "Heating"/"Cooling") because a zone card below
+// only shows "open"/"closed", never *why* - this is the only place on
+// this page that says which direction is currently correct.
 function modeAwayLineHtml(data) {
   if (!data.mode) return "";
-  const modeLabel = data.mode === "cool" ? tr("climate.mode_cool") : tr("climate.mode_heat");
+  const isCool = data.mode === "cool";
+  const icon = isCool ? "❄️" : "🔥";
+  const modeLabel = isCool ? tr("climate.mode_cool") : tr("climate.mode_heat");
+  const formula = isCool ? tr("climate_admin.mode_formula_cool") : tr("climate_admin.mode_formula_heat");
   const awayText = data.away_until
     ? tr("climate.away_active", { until: new Date(data.away_until).toLocaleString() })
     : tr("climate.away_idle");
-  return `${modeLabel} · ${awayText}`;
+  return `<span class="admin-mode-icon">${icon}</span> <strong>${modeLabel}</strong> - ${formula} · ${awayText}`;
 }
 
 function isTypingAManualValue() {
@@ -387,30 +533,35 @@ function isTypingAManualValue() {
 }
 
 async function refreshStatus() {
-  // Rebuilding #status-list wholesale (below) would otherwise wipe out
-  // the temperature/humidity inputs mid-keystroke on every poll tick -
-  // exactly the "can't even finish typing before it refreshes" bug -
-  // so skip this tick entirely while the operator is actively focused
-  // on one of them. Clicking "Imposta" itself still refreshes right
-  // away (setManualValue() calls this directly, and by then focus has
-  // moved to the button, not an input).
+  // Only ever writes into #zone-status-N (one per card, appended by
+  // zoneFormHtml()) - never the card as a whole, so a poll tick never
+  // wipes out a device id or a manual-value input mid-edit. The
+  // isTypingAManualValue() guard below still applies on top of that,
+  // since even an untouched innerHTML write would blur a focused
+  // input by replacing its container's content around it.
   if (isTypingAManualValue()) return;
+  const mapZones = (savedMap && savedMap.zones) || [];
   try {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
-    document.getElementById("mode-away-line").textContent = modeAwayLineHtml(data);
+    document.getElementById("mode-away-line").innerHTML = modeAwayLineHtml(data);
     // A single all-or-nothing signal, not per-zone: a restart rebuilds
-    // every zone's drivers together, so "one thing changed" means the
-    // whole section below is stale, not just the zone that changed -
+    // every zone's drivers together, so "one thing changed" means
+    // every card's status is stale, not just the zone that changed -
     // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
-    if ((savedMap && savedMap.restart_pending) || extraSwitchesRestartPending) {
-      document.getElementById("status-list").innerHTML = `<p class="hint-text admin-restart-pending">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
-      return;
-    }
+    const restartPending = (savedMap && savedMap.restart_pending) || extraSwitchesRestartPending;
     const byName = {};
-    ((savedMap && savedMap.zones) || []).forEach(z => { byName[z.name] = z; });
-    const rows = (data.zones || []).map(zone => statusRowHtml(zone, byName[zone.name])).join("");
-    document.getElementById("status-list").innerHTML = rows || `<p class="hint-text">${tr("climate_admin.status_none")}</p>`;
+    (data.zones || []).forEach(z => { byName[z.name] = z; });
+    mapZones.forEach((mapEntry, index) => {
+      const slot = document.getElementById(`zone-status-${index}`);
+      if (!slot) return;
+      if (restartPending) {
+        slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+        return;
+      }
+      const zone = byName[mapEntry.name];
+      slot.innerHTML = zone ? zoneStatusInnerHtml(zone, mapEntry, data.mode) : `<p class="hint-text">${tr("climate_admin.status_none")}</p>`;
+    });
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place and
     // keep polling rather than blanking the page.

@@ -13,8 +13,11 @@ discovers it automatically by walking the drivers package.
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 _FACTORIES: dict[tuple[str, str], Callable[[dict], Any]] = {}
 _loaded = False
@@ -35,7 +38,15 @@ def register_driver(kind: str, type_name: str):
 
 def load_builtin_drivers() -> None:
     """Import every module under localhome.drivers so its @register_driver
-    calls run. Safe to call more than once."""
+    calls run. Safe to call more than once.
+
+    A module whose own third-party SDK isn't installed (e.g. the
+    optional `[tplink]` extra) is logged and skipped rather than
+    aborting startup entirely - the same "one broken thing shouldn't
+    take down everything else" rule the rest of this app follows, just
+    applied one import earlier than DeviceManager's own per-integration
+    try/except.
+    """
     global _loaded
     if _loaded:
         return
@@ -43,7 +54,15 @@ def load_builtin_drivers() -> None:
     import localhome.drivers as drivers_pkg
 
     for module_info in pkgutil.walk_packages(drivers_pkg.__path__, prefix="localhome.drivers."):
-        importlib.import_module(module_info.name)
+        try:
+            importlib.import_module(module_info.name)
+        except ImportError:
+            logger.warning(
+                "Skipping driver module %s - a required package isn't installed "
+                "(if this is a driver you need, check its docs/integrations/*.md "
+                "page for the extra pip install it needs)",
+                module_info.name,
+            )
 
 
 def create(kind: str, type_name: str, options: dict) -> list:

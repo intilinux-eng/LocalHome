@@ -484,6 +484,59 @@ def test_post_extra_switches_rejects_a_duplicate_device_id_with_a_zone(tmp_path)
     assert "duplicate id" in res.get_json()["error"]
 
 
+# -------------------------------------------------------- extra sensor ----
+# One more fixed, standalone Shelly H&T Gen3 sensor (outdoor
+# temperature/humidity), independent of the zone mapping and the extra
+# switches above - see services/climate_map_store.py's EXTRA_SENSOR_FIELDS.
+
+def test_get_extra_sensors_is_null_when_nothing_saved(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    body = client.get("/api/climate-admin/extra-sensors").get_json()
+
+    assert body["ok"] is True
+    assert body["outdoor_sensor_device_id"] is None
+
+
+def test_get_extra_sensors_reports_restart_pending_after_an_unloaded_save(tmp_path):
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    client = app.test_client()
+
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
+    client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_device_id": "shellyht-FFFF"})
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is True
+
+
+def test_post_extra_sensors_saves_and_builds_a_real_driver_on_the_next_restart(tmp_path):
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    client = app.test_client()
+
+    res = client.post("/api/climate-admin/extra-sensors", json={
+        "outdoor_sensor_device_id": "shellyht-FFFF",
+    })
+
+    assert res.status_code == 200
+    assert res.get_json()["restart_required"] is True
+    # Like a zone or an extra switch, a saved extra sensor only becomes a
+    # real driver on the *next* create_app() (a restart).
+    app2 = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    assert "Temperatura Esterna" in app2.config["MANAGER"].pollers
+
+
+def test_post_extra_sensors_rejects_a_duplicate_device_id_with_a_zone(tmp_path):
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    client = app.test_client()
+
+    res = client.post("/api/climate-admin/extra-sensors", json={
+        "outdoor_sensor_device_id": VALID_ZONES[0]["valve_device_id"],
+    })
+
+    assert res.status_code == 400
+    assert "duplicate id" in res.get_json()["error"]
+
+
 # --------------------------------------------------------------- restart ----
 
 def test_restart_route_schedules_a_restart_without_actually_restarting(tmp_path, monkeypatch):
@@ -491,6 +544,7 @@ def test_restart_route_schedules_a_restart_without_actually_restarting(tmp_path,
     # pytest process itself (see services/self_restart.py).
     called = []
     monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: called.append(True))
+    monkeypatch.setattr("localhome.web.app.is_supported", lambda: True)
     app = _app(tmp_path)
     client = app.test_client()
 
@@ -499,3 +553,24 @@ def test_restart_route_schedules_a_restart_without_actually_restarting(tmp_path,
     assert res.status_code == 200
     assert res.get_json()["ok"] is True
     assert called == [True]
+
+
+def test_restart_route_refuses_cleanly_when_the_platform_cant_restart_safely(tmp_path, monkeypatch):
+    # The real is_supported() is False on Windows - see
+    # services/self_restart.py's module docstring for why os.execv
+    # there reliably leaves two processes bound to the same port
+    # instead of actually restarting. The route must refuse before
+    # ever calling schedule_restart(), not attempt it and fail loudly.
+    called = []
+    monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: called.append(True))
+    monkeypatch.setattr("localhome.web.app.is_supported", lambda: False)
+    app = _app(tmp_path)
+    client = app.test_client()
+
+    res = client.post("/api/climate-admin/restart")
+
+    assert res.status_code == 501
+    body = res.get_json()
+    assert body["ok"] is False
+    assert body["platform_unsupported"] is True
+    assert called == []

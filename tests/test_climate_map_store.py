@@ -4,9 +4,11 @@ from localhome.config import Integration
 from localhome.services.climate_map_store import (
     ClimateMapStore,
     build_climate_integrations,
+    build_extra_sensor_integrations,
     build_extra_switch_integrations,
     build_zone_configs,
     snapshot_from_config,
+    validate_extra_sensors,
     validate_extra_switches,
     validate_zones,
 )
@@ -20,6 +22,10 @@ VALID_ZONES = [
 VALID_EXTRA_SWITCHES = {
     "bypass_valve_device_id": "shellyplus1-DDDD",
     "dehumidifier_device_id": "shellyplus1-EEEE",
+}
+
+VALID_EXTRA_SENSORS = {
+    "outdoor_sensor_device_id": "shellyht-FFFF",
 }
 
 
@@ -142,6 +148,94 @@ def test_build_extra_switch_integrations_shape():
 
 def test_build_extra_switch_integrations_skips_an_unset_field():
     integrations = build_extra_switch_integrations({"bypass_valve_device_id": None, "dehumidifier_device_id": None}, "mqtt_broker.json")
+    assert integrations == []
+
+
+# ----------------------------------------------------- extra sensor ----
+# One more fixed, standalone Shelly H&T Gen3 sensor every "reference
+# model" apartment eventually gets (outdoor temperature/humidity) - not
+# part of either zone (no valve, no thermostat decision), no
+# simulated/manual stand-in (see services/climate_map_store.py's
+# EXTRA_SENSOR_FIELDS/module docstring).
+
+def test_extra_sensors_is_empty_when_nothing_saved_yet(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    assert store.get_extra_sensors() == {}
+
+
+def test_extra_sensors_round_trip(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_extra_sensors(VALID_EXTRA_SENSORS)
+    assert store.get_extra_sensors() == VALID_EXTRA_SENSORS
+
+
+def test_saving_extra_sensors_does_not_wipe_previously_saved_zones_or_switches(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_zones(VALID_ZONES)
+    store.set_extra_switches(VALID_EXTRA_SWITCHES)
+    store.set_extra_sensors(VALID_EXTRA_SENSORS)
+    assert store.get_zones() == VALID_ZONES
+    assert store.get_extra_switches() == VALID_EXTRA_SWITCHES
+    assert store.get_extra_sensors() == VALID_EXTRA_SENSORS
+
+
+def test_rejects_a_blank_extra_sensor_device_id():
+    with pytest.raises(ValueError, match="outdoor_sensor_device_id"):
+        validate_extra_sensors({"outdoor_sensor_device_id": "  "})
+
+
+def test_empty_extra_sensors_dict_is_valid():
+    validate_extra_sensors({})  # must not raise
+
+
+def test_rejects_an_extra_sensor_device_id_already_used_by_a_zone():
+    sensors = {"outdoor_sensor_device_id": VALID_ZONES[0]["sensor_device_id"]}
+    with pytest.raises(ValueError, match="duplicate id"):
+        validate_extra_sensors(sensors, zones=VALID_ZONES)
+
+
+def test_rejects_an_extra_sensor_device_id_already_used_by_an_extra_switch():
+    sensors = {"outdoor_sensor_device_id": VALID_EXTRA_SWITCHES["bypass_valve_device_id"]}
+    with pytest.raises(ValueError, match="duplicate id"):
+        validate_extra_sensors(sensors, extra_switches=VALID_EXTRA_SWITCHES)
+
+
+def test_rejects_an_extra_switch_device_id_already_used_by_the_extra_sensor():
+    # The cross-check works the other direction too - set_extra_switches()
+    # passes the saved extra sensor in, not just zones.
+    switches = {"bypass_valve_device_id": VALID_EXTRA_SENSORS["outdoor_sensor_device_id"], "dehumidifier_device_id": None}
+    with pytest.raises(ValueError, match="duplicate id"):
+        validate_extra_switches(switches, extra_sensors=VALID_EXTRA_SENSORS)
+
+
+def test_saving_a_zone_device_id_that_collides_with_a_saved_extra_sensor_is_rejected(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_extra_sensors(VALID_EXTRA_SENSORS)
+    colliding_zones = [
+        {**VALID_ZONES[0], "sensor_device_id": VALID_EXTRA_SENSORS["outdoor_sensor_device_id"]},
+        VALID_ZONES[1],
+    ]
+    with pytest.raises(ValueError, match="duplicate id"):
+        store.set_zones(colliding_zones)
+    assert store.get_zones() is None
+
+
+def test_build_extra_sensor_integrations_shape():
+    integrations = build_extra_sensor_integrations(VALID_EXTRA_SENSORS, "mqtt_broker.json")
+    (outdoor,) = integrations
+
+    assert outdoor.kind == "climate"
+    assert outdoor.type == "mqtt_json"
+    assert outdoor.options["name"] == "Temperatura Esterna"
+    assert outdoor.options["state_topic"] == [
+        "shellyht-FFFF/status/temperature:0",
+        "shellyht-FFFF/status/humidity:0",
+        "shellyht-FFFF/status/devicepower:0",
+    ]
+
+
+def test_build_extra_sensor_integrations_skips_an_unset_field():
+    integrations = build_extra_sensor_integrations({"outdoor_sensor_device_id": None}, "mqtt_broker.json")
     assert integrations == []
 
 

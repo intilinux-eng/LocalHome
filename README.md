@@ -27,6 +27,106 @@ ids (see below) - no real hardware needed to see this for yourself.
 ![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, and live per-zone status](docs/screenshots/climate-admin.png)
 *Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
 
+## Quick start: Debian/Ubuntu (Arduino UNO Q, Raspberry Pi, ...)
+
+LocalHome is one small Python process: it talks to your devices
+directly over your LAN (or their local MQTT broker) - no hub, no
+cloud subscription - and serves a dashboard over plain HTTP. This is
+plain Debian/Ubuntu underneath, whatever board it's running on - an
+[Arduino UNO Q](https://www.arduino.cc/)'s Linux userspace *is* Debian
+trixie (SSH, bash, systemd, not a microcontroller-only board), a
+Raspberry Pi's is Raspberry Pi OS - so nothing below is board-specific.
+Getting it running is exactly three things: get the code and its
+Python dependencies onto the box, tell it about your devices in one
+config file, and let systemd keep it (and mosquitto, if you need MQTT)
+running so both survive a reboot or you closing the SSH session. The
+steps below are that, in order - see
+[docs/deployment.md](docs/deployment.md) for the same walkthrough with
+more detail, plus a Docker alternative and a hardened dedicated-user
+variant.
+
+```bash
+# 1. SSH into the box, then - mosquitto is only needed if any of your
+#    devices speak MQTT (Shelly, Tasmota, Zigbee2MQTT, ...):
+sudo apt update
+sudo apt install -y git mosquitto python3-venv || sudo apt install -y git mosquitto python3.13-venv
+# (the exact venv package name varies by distro version - if the first
+#  one 404s, apt's own error names the right one)
+
+# 2. Get the code and its dependencies:
+git clone <this-repo> ~/localhome
+cd ~/localhome
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e .
+
+# 3. Using MQTT devices? Point mosquitto at your LAN instead of just
+#    localhost (its systemd unit is already enabled by the package,
+#    so it already survives a reboot):
+printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+sudo systemctl restart mosquitto
+
+# 4. Tell LocalHome about your devices:
+cp config/config.example.yaml config/config.yaml
+#    ...and the *.example.json files you need; see docs/configuration.md
+#    and docs/integrations/ - or, if every device is Shelly, skip this
+#    and use the climate admin panel instead (step 6).
+
+# 5. Sanity-check before trusting it to run unattended:
+.venv/bin/localhome-cli doctor
+
+# 6. Make LocalHome survive a reboot and closing the SSH session:
+sudo cp deploy/localhome.service /etc/systemd/system/
+# edit /etc/systemd/system/localhome.service first: replace YOUR_USER
+# with the account you just cloned as
+sudo systemctl daemon-reload
+sudo systemctl enable --now localhome
+sudo systemctl status localhome
+# -> dashboard at http://<box-ip>:5000 ; logs: sudo journalctl -u localhome -f
+```
+
+If step 1's venv package isn't found, or step 2's `python3 -m venv
+.venv` fails with "ensurepip is not available", your distro named the
+package differently - install the exact one apt's own error message
+names and retry; see [docs/troubleshooting.md](docs/troubleshooting.md).
+
+**Using Shelly devices?** Skip most of step 4 and use `/climate-admin`
+from the dashboard instead (device ids only, no file editing) - see
+[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
+
+## Trying it on your own computer first
+
+Want to see the dashboard before committing to a board? Same idea, on
+your own machine, with the `simulated` driver - no real hardware, and
+no systemd step, since you're not leaving it running unattended:
+
+```bash
+git clone <this-repo>
+cd <the-cloned-directory>
+
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e .
+
+cp config/config.example.yaml config/config.yaml
+localhome-cli doctor
+localhome
+# -> dashboard at http://localhost:5000
+```
+
+Always into a virtual environment, never a bare `pip install` against
+the system Python - modern Debian/Ubuntu actively refuse the latter
+(`externally-managed-environment`); see
+[docs/troubleshooting.md](docs/troubleshooting.md) if you hit that or
+the "ensurepip is not available" venv error.
+
+Nothing under `config/` other than the `*.example.*` files is ever
+meant to be committed - see [.gitignore](.gitignore). That's what keeps
+your own device inventory, API keys and account passwords out of git
+while this framework itself stays fully public. Rather run the script
+directly than install the `localhome` command? `python run.py` works
+the same way once `pip install -e .` has run.
+
 ## What's included
 
 | Kind          | Driver                | Talks to                          | Local? |
@@ -124,50 +224,6 @@ family and it works (or doesn't), a PR adding a row here - or opening an
 issue with the model/product_id - is genuinely useful to the next
 person.
 
-## Quick start
-
-```bash
-git clone <this-repo>
-cd <the-cloned-directory>
-
-python3 -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .
-
-cp config/config.example.yaml config/config.yaml
-# also copy the *.example.json files you need next to it and fill them in -
-# see docs/configuration.md and docs/integrations/ for how to get each
-# device's IDs/keys/credentials.
-
-localhome-cli doctor   # sanity-checks config.yaml - see docs/configuration.md
-localhome
-# -> dashboard at http://localhost:5000
-```
-
-Always into a virtual environment, never with a bare `pip install`
-against the system Python - modern Debian/Ubuntu actively refuse the
-latter (`externally-managed-environment`), and some also don't ship
-the venv module by default (`python3 -m venv` failing with "ensurepip
-is not available") - see [docs/troubleshooting.md](docs/troubleshooting.md)
-if you hit either.
-
-Nothing under `config/` other than the `*.example.*` files is ever meant
-to be committed - see [.gitignore](.gitignore). That's what keeps your
-own device inventory, API keys and account passwords out of git while
-this framework itself stays fully public.
-
-Rather run the script directly than install the `localhome` command?
-`python run.py` works the same way once the `pip install -e .` step
-above has run (it needs the dependencies either way, just not the
-console-script entry point).
-
-Want this running unattended on a dedicated device (an
-[Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, or similar
-small Linux board next to your router) instead of a dev machine? See
-[docs/deployment.md](docs/deployment.md) for Docker and systemd
-options - this project's own day-to-day instance targets an Arduino
-UNO Q.
-
 ## How it's organized
 
 ```
@@ -212,10 +268,13 @@ history/alerting story, while staying easy enough to read that adding
 
 ## Legal & licensing
 
-LocalHome is [MIT licensed](LICENSE). All of its dependencies (tinytuya,
-Flask, aiohttp, meross-iot, requests, PyYAML, paho-mqtt) are under
-permissive licenses with no copyleft obligations - see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full list.
+LocalHome is [MIT licensed](LICENSE). Most of its dependencies
+(tinytuya, Flask, aiohttp, meross-iot, requests, PyYAML, paho-mqtt) are
+under permissive licenses with no copyleft obligations - one exception,
+`python-kasa` (GPL-3.0-or-later, used only by the TP-Link driver), is
+called out explicitly - see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically)
+for the full list and what that exception actually means in practice.
 
 One exception worth knowing about explicitly: the `ewelink_powct` driver
 talks to eWeLink's cloud using unofficial, reverse-engineered app

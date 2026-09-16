@@ -11,6 +11,15 @@ leaves your network).
 speaks, so one driver covers both older Kasa-branded strips/bulbs and
 newer Tapo-branded ones.
 
+Unlike this project's other dependencies, `python-kasa` is
+GPL-3.0-or-later, not a permissive license - which is why, unlike
+every other driver's SDK, it's **not** installed by default: it lives
+in its own `tplink` extra (`pip install -e ".[tplink]"`), so nothing
+GPL-licensed lands in your environment unless you actually use this
+driver. See
+[THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically](../../THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically)
+for what that license means in practice before opting in.
+
 ## 0. Tapo devices on recent firmware: enable "Third-Party Compatibility" first
 
 Tapo devices updated to a recent firmware (confirmed on an L900 light
@@ -34,7 +43,7 @@ Kasa-branded devices and older Tapo firmware don't need this step.
 ## 1. Find each strip's IP
 
 ```bash
-pip install python-kasa   # already in requirements.txt once installed
+pip install -e ".[tplink]"   # pulls in python-kasa - see the license note above
 python tools/tplink_discover.py
 ```
 

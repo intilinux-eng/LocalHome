@@ -53,6 +53,17 @@ instead of whatever they called it before - a one-time edit, not
 something this panel does for you (DeviceManager logs a name-collision
 warning at startup if the old config.yaml entry is left in place too -
 see web/app.py's create_app()).
+
+It also holds `extra_sensors` - the same "fixed role, optional,
+device-id-only" shape as extra_switches, but for a standalone *sensor*
+that isn't part of either zone: an outdoor temperature/humidity
+reading, always a real Shelly H&T Gen3 (see EXTRA_SENSOR_FIELDS/
+build_extra_sensor_integrations() below - reuses the exact same
+3-topic MQTT shape a zone's own "shelly" sensor mode uses). No
+"simulated"/"manual" mode here - unlike a zone's sensor, there's no
+thermostat decision riding on this reading, so there's nothing to
+exercise before the hardware exists; it's either wired (a device id is
+set) or it isn't (blank, not built at all).
 """
 from __future__ import annotations
 
@@ -161,18 +172,70 @@ EXTRA_SWITCH_FIELDS = {
 }
 
 
-def validate_extra_switches(extra_switches: dict, zones: list[dict] | None = None) -> None:
+def _extra_switch_device_ids(extra_switches: dict) -> list[str]:
+    return [
+        extra_switches[key].strip()
+        for key in EXTRA_SWITCH_FIELDS
+        if (extra_switches or {}).get(key)
+    ]
+
+
+def _extra_sensor_device_ids(extra_sensors: dict) -> list[str]:
+    return [
+        extra_sensors[key].strip()
+        for key in EXTRA_SENSOR_FIELDS
+        if (extra_sensors or {}).get(key)
+    ]
+
+
+def validate_extra_switches(
+    extra_switches: dict, zones: list[dict] | None = None, extra_sensors: dict | None = None,
+) -> None:
     """Each of the two fixed roles is independently optional - a fresh
     apartment might not have either wired yet - but if given, must be a
     non-empty device id, and no device id may double up with a zone's
     own sensor/valve (validate_zones() enforces the equivalent rule
-    within the zones themselves)."""
+    within the zones themselves) or the extra sensor below."""
     if not isinstance(extra_switches, dict):
         raise ValueError("extra_switches must be an object")
 
-    device_ids: list[str] = list(_zone_device_ids(zones or []))
+    device_ids: list[str] = list(_zone_device_ids(zones or [])) + _extra_sensor_device_ids(extra_sensors or {})
     for key in EXTRA_SWITCH_FIELDS:
         device_id = extra_switches.get(key)
+        if device_id is not None:
+            if not isinstance(device_id, str) or not device_id.strip():
+                raise ValueError(f"{key}: device id must be a non-empty string or null")
+            device_ids.append(device_id.strip())
+
+    _check_no_duplicates(
+        device_ids,
+        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    )
+
+
+# Fixed role, not a user-typed name - an outdoor reading isn't part of
+# either zone (no valve, no thermostat decision), so unlike a zone
+# there's nothing to exercise with a simulated/manual stand-in before
+# the hardware exists: it's either a real Shelly device id, or not
+# built at all. Same fixed-English-name convention as
+# EXTRA_SWITCH_FIELDS - see that constant and the module docstring for
+# what a matching config.yaml entry needs updating to.
+EXTRA_SENSOR_FIELDS = {
+    "outdoor_sensor_device_id": "Temperatura Esterna",
+}
+
+
+def validate_extra_sensors(
+    extra_sensors: dict, zones: list[dict] | None = None, extra_switches: dict | None = None,
+) -> None:
+    """Same shape as validate_extra_switches() above, mirrored for the
+    one fixed sensor role instead of the two fixed switch roles."""
+    if not isinstance(extra_sensors, dict):
+        raise ValueError("extra_sensors must be an object")
+
+    device_ids: list[str] = list(_zone_device_ids(zones or [])) + _extra_switch_device_ids(extra_switches or {})
+    for key in EXTRA_SENSOR_FIELDS:
+        device_id = extra_sensors.get(key)
         if device_id is not None:
             if not isinstance(device_id, str) or not device_id.strip():
                 raise ValueError(f"{key}: device id must be a non-empty string or null")
@@ -276,6 +339,22 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
             integrations.append(Integration("switch", "mqtt_json", _valve_integration_options(zone_shaped, display_name, broker_file)))
+    return integrations
+
+
+def build_extra_sensor_integrations(extra_sensors: dict, broker_file: str) -> list[Integration]:
+    """The one fixed sensor role (EXTRA_SENSOR_FIELDS) becomes a real
+    climate integration only if its device id is set - same "not wired
+    yet means not built at all" rule as build_extra_switch_integrations()
+    above. Reuses the exact same Shelly H&T Gen3 shape a zone's own
+    "shelly" sensor mode already uses (_shelly_sensor_options()), just
+    keyed by the fixed field name instead of "sensor_device_id"."""
+    integrations: list[Integration] = []
+    for key, display_name in EXTRA_SENSOR_FIELDS.items():
+        device_id = (extra_sensors or {}).get(key)
+        if device_id:
+            zone_shaped = {"sensor_device_id": device_id}
+            integrations.append(Integration("climate", "mqtt_json", _shelly_sensor_options(zone_shaped, display_name, broker_file)))
     return integrations
 
 
@@ -383,11 +462,13 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
     broker_file = config.resolve("mqtt_broker.json")
     panel_zones = climate_map.get_zones()
     extra_switches = climate_map.get_extra_switches()
+    extra_sensors = climate_map.get_extra_sensors()
 
     new_integrations: list[Integration] = []
     if panel_zones is not None:
         new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
     new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
+    new_integrations += build_extra_sensor_integrations(extra_sensors, broker_file)
     if new_integrations:
         existing_names = {i.options.get("name") for i in config.integrations}
         for integration in new_integrations:
@@ -427,7 +508,9 @@ class ClimateMapStore:
 
     def set_zones(self, zones: list[dict]) -> None:
         validate_zones(zones)
-        validate_extra_switches(self.get_extra_switches(), zones)
+        extra_switches, extra_sensors = self.get_extra_switches(), self.get_extra_sensors()
+        validate_extra_switches(extra_switches, zones, extra_sensors)
+        validate_extra_sensors(extra_sensors, zones, extra_switches)
         with self._lock:
             data = self._load()
             data["zones"] = zones
@@ -443,8 +526,21 @@ class ClimateMapStore:
         return self._load().get("extra_switches") or {}
 
     def set_extra_switches(self, extra_switches: dict) -> None:
-        validate_extra_switches(extra_switches, self.get_zones())
+        validate_extra_switches(extra_switches, self.get_zones(), self.get_extra_sensors())
         with self._lock:
             data = self._load()
             data["extra_switches"] = extra_switches
+            save_json_atomic(self.path, data)
+
+    def get_extra_sensors(self) -> dict:
+        # Same independence from zones/extra_switches as get_extra_switches()
+        # above - a missing/null field means "not panel-managed", not
+        # "broken".
+        return self._load().get("extra_sensors") or {}
+
+    def set_extra_sensors(self, extra_sensors: dict) -> None:
+        validate_extra_sensors(extra_sensors, self.get_zones(), self.get_extra_switches())
+        with self._lock:
+            data = self._load()
+            data["extra_sensors"] = extra_sensors
             save_json_atomic(self.path, data)

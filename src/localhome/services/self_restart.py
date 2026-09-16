@@ -28,6 +28,13 @@ import threading
 import time
 
 
+def is_supported() -> bool:
+    """False on Windows - see the module docstring above. The route
+    calling schedule_restart() must check this first and refuse
+    cleanly instead of leaving two processes fighting over one port."""
+    return not sys.platform.startswith("win")
+
+
 def _restart() -> None:
     # A short delay so the HTTP response confirming the request was
     # received can flush back to the browser before the process

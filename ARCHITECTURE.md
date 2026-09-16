@@ -223,10 +223,14 @@ which mode it's in, so switching modes without restarting went
 undetected. `services/self_restart.py` (a `POST` re-execs the running
 process in place, the same idiom uvicorn/gunicorn use for `--reload`)
 closes the loop from the browser alone - reliable on Linux, the real
-deployment target, where it's a true `execve()`; not on Windows, where
-that call is emulated as spawn-then-exit and can leave more than one
-process bound to the same port, so treat it as a Linux-only convenience
-during development.
+deployment target, where it's a true `execve()`. On Windows that call
+is emulated as spawn-then-exit and reliably leaves two processes bound
+to the same port instead of actually restarting (confirmed
+empirically, not just in theory), so `is_supported()` gates the route
+itself: it refuses with a clear error there rather than leaving the
+operator with a page that never comes back, same "fail loudly and
+cleanly instead of half-working" instinct as everything else in this
+file.
 
 ## Testing without hardware: the `simulated` driver
 

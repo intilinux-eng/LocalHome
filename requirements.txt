@@ -5,4 +5,7 @@ meross-iot>=0.4
 requests>=2.31
 PyYAML>=6.0
 paho-mqtt>=2.0
-python-kasa>=0.7
+# python-kasa (TP-Link Kasa/Tapo) is GPL-3.0-or-later, unlike everything
+# above - opt-in only, add it yourself (or `pip install -e ".[tplink]"`
+# instead of this file) if you're using tplink_led_strip. See
+# THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically.

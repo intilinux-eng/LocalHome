@@ -6,7 +6,43 @@ date rather than by tag.
 
 ## Unreleased
 
+### Changed
+- Redesigned the climate admin panel (`/climate-admin`): each zone's
+  config form and its live status (sensor reading, valve state, manual
+  test buttons) now live in one merged card instead of two separate
+  page sections - swapping a device id and checking whether it's
+  actually reporting no longer means scrolling back and forth. The
+  heat/cool mode banner moved to the top of the page (it decides which
+  direction every valve's "open"/"closed" below actually means) and now
+  spells out the formula explicitly ("valves open below target, close
+  above it"), not just the mode name. A zone with `cool_enabled: false`
+  now gets an explicit "excluded from cooling" notice while the
+  thermostat is in cool mode, instead of showing a bare, unexplained
+  valve state. The MQTT broker connection and the two extra switches -
+  one-time setup, not part of the day-to-day "swap a sensor" loop - are
+  now collapsed behind native `<details>` disclosures instead of
+  competing for attention with the zone cards.
+
 ### Fixed
+- The climate admin panel's "Restart LocalHome" button now refuses
+  cleanly on Windows (`services/self_restart.py`'s new `is_supported()`)
+  instead of attempting a restart that reliably leaves two processes
+  fighting over the same port there - confirmed happening live during
+  development. The button's success path also now polls for the server
+  actually coming back instead of blindly reloading after a fixed 4
+  seconds, which previously looked identical to "stuck" whenever a
+  restart took a little longer.
+- `python-kasa` (the `tplink_led_strip` driver's SDK) is
+  GPL-3.0-or-later, unlike every other dependency here, but was sitting
+  in `pyproject.toml`'s main `dependencies` - so every install pulled
+  in GPL-licensed code whether or not you own any TP-Link devices, and
+  `core/registry.py`'s driver loader had no fallback if it were ever
+  missing, so the whole app would fail to start rather than just that
+  one driver. Moved to its own `[tplink]` extra
+  (`pip install -e ".[tplink]"`), and `load_builtin_drivers()` now logs
+  and skips a driver module whose own package isn't installed instead
+  of aborting startup. See
+  [THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
 - Every route now falls back to a clean `{"ok": false, "error": ...}`
   JSON response (logged server-side) for any exception nobody
   anticipated, instead of Flask's default HTML error page - which broke
@@ -93,8 +129,6 @@ date rather than by tag.
   unreachable.
 - README screenshots (`docs/screenshots/`), captured against the
   `simulated` driver.
-
-### Added
 - A heating/cooling thermostat: a multi-zone valve control loop for a
   shared-plant radiant-panel setup (or anything similar) - a
   click-and-drag weekly setpoint schedule per zone, a shared heat/cool
