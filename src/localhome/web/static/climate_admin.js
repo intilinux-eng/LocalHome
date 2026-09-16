@@ -72,7 +72,7 @@ async function loadMap() {
 }
 
 function collectZonesFromForm() {
-  return [...document.querySelectorAll(".admin-zone-card")].map(card => {
+  return [...document.querySelectorAll("#zone-forms .admin-zone-card")].map(card => {
     const mode = card.querySelector(".zone-sensor-mode").value;
     return {
       name: card.querySelector(".zone-name").value.trim(),
@@ -189,64 +189,33 @@ async function saveMap() {
 }
 
 // -------------------------------------------------------- extra switches ----
-// Standalone Shelly Plus 1 on/off switches with no sensor/schedule of
-// their own (a dehumidifier, a bathroom bypass valve, ...) - see
-// services/climate_map_store.py's build_extra_switch_integrations().
-// Unlike zones there's no fixed count or fixed name: config.yaml's own
-// interlocks/mode_switches reference these by whatever name is typed
-// here, so moving one over from a hand-written config.yaml entry means
-// typing that *same* name, not a placeholder - see that module's
-// docstring.
-
-let extraSwitchCount = 0;
-
-function extraSwitchRowHtml(switchEntry, index) {
-  const s = switchEntry || { name: "", device_id: "" };
-  return `
-    <div class="admin-zone-card admin-extra-switch-row" data-index="${index}">
-      <div class="admin-field">
-        <label>${tr("climate_admin.extra_switch_name_label")}</label>
-        <input type="text" class="extra-switch-name" value="${s.name || ""}" placeholder="${tr("climate_admin.extra_switch_name_placeholder")}">
-      </div>
-      <div class="admin-field">
-        <label>${tr("climate_admin.extra_switch_device_id_label")}</label>
-        <input type="text" class="extra-switch-device-id" value="${s.device_id || ""}" placeholder="shellyplus1-XXXXXXXXXXXX">
-      </div>
-      <button class="range-btn" onclick="removeExtraSwitchRow(this)">${tr("climate_admin.extra_switch_remove_button")}</button>
-    </div>
-  `;
-}
+// Two more fixed, standalone Shelly Plus 1 on/off switches every
+// "reference model" apartment has (a bathroom bypass valve and a
+// dehumidifier) - no sensor, no schedule, not tied to a zone. Each is
+// independently optional (leave blank if not wired yet). Unlike a zone
+// there's no name field: the panel always builds these under a fixed
+// name - see services/climate_map_store.py's EXTRA_SWITCH_FIELDS and
+// its module docstring for what that means for an existing config.yaml
+// interlock/mode_switch that already controls one of these by name.
 
 async function loadExtraSwitches() {
   const res = await fetch("/api/climate-admin/extra-switches");
   const data = await res.json();
-  const switches = data.switches || [];
-  extraSwitchCount = switches.length;
-  document.getElementById("extra-switch-forms").innerHTML = switches.map((s, i) => extraSwitchRowHtml(s, i)).join("");
-}
-
-function addExtraSwitchRow() {
-  document.getElementById("extra-switch-forms").insertAdjacentHTML("beforeend", extraSwitchRowHtml(null, extraSwitchCount++));
-}
-
-function removeExtraSwitchRow(button) {
-  button.closest(".admin-extra-switch-row").remove();
-}
-
-function collectExtraSwitchesFromForm() {
-  return [...document.querySelectorAll(".admin-extra-switch-row")].map(row => ({
-    name: row.querySelector(".extra-switch-name").value.trim(),
-    device_id: row.querySelector(".extra-switch-device-id").value.trim(),
-  }));
+  document.getElementById("extra-bypass-valve-id").value = data.bypass_valve_device_id || "";
+  document.getElementById("extra-dehumidifier-id").value = data.dehumidifier_device_id || "";
 }
 
 async function saveExtraSwitches() {
   const resultEl = document.getElementById("save-extra-result");
+  const body = {
+    bypass_valve_device_id: document.getElementById("extra-bypass-valve-id").value.trim() || null,
+    dehumidifier_device_id: document.getElementById("extra-dehumidifier-id").value.trim() || null,
+  };
   try {
     const res = await fetch("/api/climate-admin/extra-switches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ switches: collectExtraSwitchesFromForm() }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!data.ok) {

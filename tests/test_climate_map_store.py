@@ -17,10 +17,10 @@ VALID_ZONES = [
     {"name": "Bathrooms", "sensor_mode": "manual", "sensor_device_id": None, "valve_device_id": "shellyplus1-CCCC", "cool_enabled": False},
 ]
 
-VALID_EXTRA_SWITCHES = [
-    {"name": "Dehumidifier", "device_id": "shellyplus1-DDDD"},
-    {"name": "Bathroom Bypass Valve", "device_id": "shellyplus1-EEEE"},
-]
+VALID_EXTRA_SWITCHES = {
+    "bypass_valve_device_id": "shellyplus1-DDDD",
+    "dehumidifier_device_id": "shellyplus1-EEEE",
+}
 
 
 # --------------------------------------------------------------- store ----
@@ -60,13 +60,14 @@ def test_a_corrupt_file_defers_to_none_rather_than_raising(tmp_path):
 
 
 # ---------------------------------------------------- extra switches ----
-# Standalone Shelly Plus 1 on/off switches (dehumidifier, bypass valve,
-# ...) - independent of zones, no fixed count, no fixed name (see
-# services/climate_map_store.py's module docstring).
+# Two more fixed, standalone Shelly Plus 1 on/off switches every
+# "reference model" apartment has (a bathroom bypass valve and a
+# dehumidifier) - independent of zones, no name field, no sensor (see
+# services/climate_map_store.py's EXTRA_SWITCH_FIELDS/module docstring).
 
 def test_extra_switches_is_empty_when_nothing_saved_yet(tmp_path):
     store = ClimateMapStore(str(tmp_path / "climate_map.json"))
-    assert store.get_extra_switches() == []
+    assert store.get_extra_switches() == {}
 
 
 def test_extra_switches_round_trip(tmp_path):
@@ -91,38 +92,31 @@ def test_saving_extra_switches_does_not_wipe_previously_saved_zones(tmp_path):
     assert store.get_extra_switches() == VALID_EXTRA_SWITCHES
 
 
-def test_rejects_a_missing_extra_switch_name():
-    switches = [dict(VALID_EXTRA_SWITCHES[0], name=""), VALID_EXTRA_SWITCHES[1]]
-    with pytest.raises(ValueError, match="name"):
-        validate_extra_switches(switches)
+def test_either_extra_switch_field_may_be_left_null(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_extra_switches({"bypass_valve_device_id": "shellyplus1-DDDD", "dehumidifier_device_id": None})
+    assert store.get_extra_switches() == {"bypass_valve_device_id": "shellyplus1-DDDD", "dehumidifier_device_id": None}
 
 
-def test_rejects_a_missing_extra_switch_device_id():
-    switches = [dict(VALID_EXTRA_SWITCHES[0], device_id=None), VALID_EXTRA_SWITCHES[1]]
-    with pytest.raises(ValueError, match="device_id"):
-        validate_extra_switches(switches)
-
-
-def test_rejects_duplicate_extra_switch_names():
-    switches = [VALID_EXTRA_SWITCHES[0], dict(VALID_EXTRA_SWITCHES[1], name=VALID_EXTRA_SWITCHES[0]["name"])]
-    with pytest.raises(ValueError, match="unique"):
-        validate_extra_switches(switches)
+def test_rejects_a_blank_extra_switch_device_id():
+    with pytest.raises(ValueError, match="bypass_valve_device_id"):
+        validate_extra_switches({"bypass_valve_device_id": "  ", "dehumidifier_device_id": None})
 
 
 def test_rejects_duplicate_extra_switch_device_ids():
-    switches = [VALID_EXTRA_SWITCHES[0], dict(VALID_EXTRA_SWITCHES[1], device_id=VALID_EXTRA_SWITCHES[0]["device_id"])]
+    switches = {"bypass_valve_device_id": "shellyplus1-DDDD", "dehumidifier_device_id": "shellyplus1-DDDD"}
     with pytest.raises(ValueError, match="duplicate id"):
         validate_extra_switches(switches)
 
 
 def test_rejects_an_extra_switch_device_id_already_used_by_a_zone():
-    switches = [dict(VALID_EXTRA_SWITCHES[0], device_id=VALID_ZONES[0]["valve_device_id"])]
+    switches = {"bypass_valve_device_id": VALID_ZONES[0]["valve_device_id"], "dehumidifier_device_id": None}
     with pytest.raises(ValueError, match="duplicate id"):
         validate_extra_switches(switches, zones=VALID_ZONES)
 
 
-def test_empty_extra_switches_list_is_valid():
-    validate_extra_switches([])  # must not raise
+def test_empty_extra_switches_dict_is_valid():
+    validate_extra_switches({})  # must not raise
 
 
 def test_build_extra_switch_integrations_shape():
@@ -131,10 +125,15 @@ def test_build_extra_switch_integrations_shape():
 
     assert dehumidifier.kind == "switch"
     assert dehumidifier.type == "mqtt_json"
-    assert dehumidifier.options["state_topic"] == "shellyplus1-DDDD/status/switch:0"
-    assert dehumidifier.options["command_topic"] == "shellyplus1-DDDD/command/switch:0"
+    assert dehumidifier.options["state_topic"] == "shellyplus1-EEEE/status/switch:0"
+    assert dehumidifier.options["command_topic"] == "shellyplus1-EEEE/command/switch:0"
     assert dehumidifier.options["payload_on"] is True
     assert dehumidifier.options["payload_off"] is False
+
+
+def test_build_extra_switch_integrations_skips_an_unset_field():
+    integrations = build_extra_switch_integrations({"bypass_valve_device_id": None, "dehumidifier_device_id": None}, "mqtt_broker.json")
+    assert integrations == []
 
 
 # ---------------------------------------------------------- validation ----

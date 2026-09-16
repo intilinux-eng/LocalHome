@@ -152,9 +152,3 @@
   font-size: 0.72rem;
   margin: 0;
 }
-
-.admin-extra-switch-row {
-  flex-direction: row;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}

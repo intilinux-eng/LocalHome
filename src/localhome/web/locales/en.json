@@ -178,11 +178,8 @@
     "sensor_label": "Sensor",
     "valve_label": "Valve",
     "extra_switches_heading": "Extra switches",
-    "extra_switches_note": "Any other standalone Shelly Plus 1 on/off switch this apartment's plant needs (a dehumidifier, a bypass valve, ...) - not tied to a zone, no sensor. If config.yaml's thermostat.interlocks/mode_switches already reference one of these by name, use that exact same name here, not a new one.",
-    "extra_switch_add_button": "Add a switch",
-    "extra_switch_remove_button": "Remove",
-    "extra_switch_name_label": "Name",
-    "extra_switch_name_placeholder": "e.g. Dehumidifier",
-    "extra_switch_device_id_label": "Device id"
+    "extra_switches_note": "Two more fixed, standalone Shelly Plus 1 on/off switches, not tied to a zone and with no sensor - leave either blank if not wired yet. If config.yaml's thermostat.interlocks/mode_switches already control one of these by a different name, update that config.yaml entry to say \"Bathroom Bypass Valve\"/\"Dehumidifier\" instead - this panel always uses those exact names.",
+    "extra_bypass_valve_label": "Bathroom bypass valve device id",
+    "extra_dehumidifier_label": "Dehumidifier device id"
   }
 }

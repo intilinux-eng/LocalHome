@@ -30,19 +30,21 @@ always either absent or fully valid, never partial (mirrors the
 "reject on the way in" lesson from ScheduleStore.set_week(), see
 services/thermostat.py).
 
-The same file also holds `extra_switches` - any number of standalone
-Shelly Plus 1-style on/off switches that don't belong to a zone at all
-(a dehumidifier, a bathroom bypass valve, or anything else this
-apartment's plant needs - see validate_extra_switches()/
-build_extra_switch_integrations() below). Independent of zones: an
-apartment can panel-manage one, the other, both, or neither. Unlike
-zones, there's no fixed name - config.yaml's own `thermostat.interlocks`/
-`mode_switches` reference these by whatever literal name is typed in
-here, so switching one of them from a hand-written config.yaml entry to
-this panel means typing the *same* name it already had, not a generic
-placeholder, or those interlocks/mode_switches silently stop finding it
-(DeviceManager logs a name-collision warning at startup if you leave
-the old config.yaml entry in place too - see web/app.py's create_app()).
+The same file also holds `extra_switches` - two more fixed, standalone
+Shelly Plus 1 on/off switches this apartment's plant always has, same
+as the two zones are fixed: a bathroom bypass valve and a dehumidifier
+(see EXTRA_SWITCH_FIELDS/build_extra_switch_integrations() below).
+Each is independently optional (either, both, or neither may be
+panel-managed - a fresh apartment might not have the hardware wired
+yet), but unlike a zone there's no name field: the panel always builds
+these under a fixed English name ("Bathroom Bypass Valve"/
+"Dehumidifier"). Adopting this for a device already hand-wired in
+config.yaml means updating that config.yaml's own `thermostat.
+interlocks`/`mode_switches` entries to reference that same fixed name
+instead of whatever they called it before - a one-time edit, not
+something this panel does for you (DeviceManager logs a name-collision
+warning at startup if the old config.yaml entry is left in place too -
+see web/app.py's create_app()).
 """
 from __future__ import annotations
 
@@ -114,34 +116,36 @@ def _zone_device_ids(zones: list[dict]) -> list[str]:
     return ids
 
 
-def validate_extra_switches(extra_switches: list[dict], zones: list[dict] | None = None) -> None:
-    """Any number of standalone Shelly Plus 1-style on/off switches that
-    aren't part of a zone's own sensor+valve pair - a dehumidifier, a
-    bypass valve, or anything else this apartment's install turns out to
-    need (see docs/configuration.md#thermostat-heatingcooling-zones and
-    build_extra_switch_integrations() below). Unlike zones there's no
-    fixed count and no sensor - just a name and a device id, both
-    required, cross-checked against each other and against `zones` for
-    the same "one device id, one role" rule validate_zones() enforces."""
-    if not isinstance(extra_switches, list):
-        raise ValueError("extra_switches must be a list")
+# Fixed roles, not a user-typed name - every "reference model" apartment
+# has exactly these two, same as it has exactly two zones (ZONE_COUNT).
+# The dict key is this store's on-disk field name; the value is the
+# literal Integration `name` build_extra_switch_integrations() below
+# gives it - a generic English string, safe to commit, deliberately
+# fixed across every install (see the module docstring for what that
+# means for config.yaml's own interlocks/mode_switches).
+EXTRA_SWITCH_FIELDS = {
+    "bypass_valve_device_id": "Bathroom Bypass Valve",
+    "dehumidifier_device_id": "Dehumidifier",
+}
 
-    names: list[str] = []
+
+def validate_extra_switches(extra_switches: dict, zones: list[dict] | None = None) -> None:
+    """Each of the two fixed roles is independently optional - a fresh
+    apartment might not have either wired yet - but if given, must be a
+    non-empty device id, and no device id may double up with a zone's
+    own sensor/valve (validate_zones() enforces the equivalent rule
+    within the zones themselves)."""
+    if not isinstance(extra_switches, dict):
+        raise ValueError("extra_switches must be an object")
+
     device_ids: list[str] = list(_zone_device_ids(zones or []))
-    for i, switch in enumerate(extra_switches):
-        if not isinstance(switch, dict):
-            raise ValueError(f"extra switch {i} must be an object")
-        name = switch.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError(f"extra switch {i}: 'name' is required")
-        names.append(name)
-        device_id = switch.get("device_id")
-        if not isinstance(device_id, str) or not device_id.strip():
-            raise ValueError(f"extra switch {i} ('{name}'): 'device_id' is required")
-        device_ids.append(device_id.strip())
+    for key in EXTRA_SWITCH_FIELDS:
+        device_id = extra_switches.get(key)
+        if device_id is not None:
+            if not isinstance(device_id, str) or not device_id.strip():
+                raise ValueError(f"{key}: device id must be a non-empty string or null")
+            device_ids.append(device_id.strip())
 
-    if len(set(names)) != len(names):
-        raise ValueError("extra switch names must be unique")
     if len(set(device_ids)) != len(device_ids):
         raise ValueError("each Shelly device id may only be used for one role - a duplicate id was found")
 
@@ -212,15 +216,19 @@ def build_climate_integrations(zones: list[dict], broker_file: str, manual_store
     return integrations
 
 
-def build_extra_switch_integrations(extra_switches: list[dict], broker_file: str) -> list[Integration]:
-    """Every extra switch is the exact same Shelly relay shape a zone's
-    valve already uses (_valve_integration_options() above) - reused
-    directly rather than duplicated, just keyed by "device_id" instead
-    of "valve_device_id"."""
+def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> list[Integration]:
+    """Each of the two fixed roles (EXTRA_SWITCH_FIELDS) becomes a real
+    switch only if its device id is set - a fresh apartment that hasn't
+    wired one yet simply doesn't get an integration for it, same as an
+    unmanaged zone. Reuses the exact same Shelly relay shape a zone's
+    valve already uses (_valve_integration_options() above), just keyed
+    by the fixed field name instead of "valve_device_id"."""
     integrations: list[Integration] = []
-    for switch in extra_switches:
-        zone_shaped = {"valve_device_id": switch["device_id"]}
-        integrations.append(Integration("switch", "mqtt_json", _valve_integration_options(zone_shaped, switch["name"], broker_file)))
+    for key, display_name in EXTRA_SWITCH_FIELDS.items():
+        device_id = (extra_switches or {}).get(key)
+        if device_id:
+            zone_shaped = {"valve_device_id": device_id}
+            integrations.append(Integration("switch", "mqtt_json", _valve_integration_options(zone_shaped, display_name, broker_file)))
     return integrations
 
 
@@ -324,16 +332,16 @@ class ClimateMapStore:
             data["zones"] = zones
             save_json_atomic(self.path, data)
 
-    def get_extra_switches(self) -> list[dict]:
+    def get_extra_switches(self) -> dict:
         # Independent of zones - either can be panel-managed without the
         # other (an apartment might only ever use this for the
         # dehumidifier/bypass valve and keep zones hand-edited in
-        # config.yaml, or the reverse). Empty means "none of these are
-        # panel-managed", not "broken" - config.yaml's own switches (if
-        # any) are simply untouched, same as an unmanaged zone.
-        return self._load().get("extra_switches") or []
+        # config.yaml, or the reverse). A missing/null field means "not
+        # panel-managed", not "broken" - config.yaml's own switch (if
+        # any) is simply untouched, same as an unmanaged zone.
+        return self._load().get("extra_switches") or {}
 
-    def set_extra_switches(self, extra_switches: list[dict]) -> None:
+    def set_extra_switches(self, extra_switches: dict) -> None:
         validate_extra_switches(extra_switches, self.get_zones())
         with self._lock:
             data = self._load()

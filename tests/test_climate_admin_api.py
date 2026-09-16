@@ -365,18 +365,19 @@ def test_broker_test_route_rejects_a_missing_port(tmp_path):
 
 
 # ------------------------------------------------------- extra switches ----
-# Standalone Shelly Plus 1 on/off switches (dehumidifier, bypass valve,
-# ...), independent of the zone mapping - see
-# services/climate_map_store.py's build_extra_switch_integrations().
+# Two more fixed, standalone Shelly Plus 1 on/off switches (bathroom
+# bypass valve, dehumidifier), independent of the zone mapping - see
+# services/climate_map_store.py's EXTRA_SWITCH_FIELDS.
 
-def test_get_extra_switches_is_empty_when_nothing_saved(tmp_path):
+def test_get_extra_switches_is_null_when_nothing_saved(tmp_path):
     app = _app(tmp_path)
     client = app.test_client()
 
     body = client.get("/api/climate-admin/extra-switches").get_json()
 
     assert body["ok"] is True
-    assert body["switches"] == []
+    assert body["bypass_valve_device_id"] is None
+    assert body["dehumidifier_device_id"] is None
 
 
 def test_post_extra_switches_saves_and_builds_a_real_driver_on_the_next_restart(tmp_path):
@@ -384,7 +385,7 @@ def test_post_extra_switches_saves_and_builds_a_real_driver_on_the_next_restart(
     client = app.test_client()
 
     res = client.post("/api/climate-admin/extra-switches", json={
-        "switches": [{"name": "Dehumidifier", "device_id": "shellyplus1-FFFF"}],
+        "dehumidifier_device_id": "shellyplus1-FFFF",
     })
 
     assert res.status_code == 200
@@ -393,6 +394,7 @@ def test_post_extra_switches_saves_and_builds_a_real_driver_on_the_next_restart(
     # *next* create_app() (a restart) - see web/app.py's create_app().
     app2 = _app(tmp_path, CONFIG_NO_THERMOSTAT)
     assert "Dehumidifier" in app2.config["MANAGER"].switches
+    assert "Bathroom Bypass Valve" not in app2.config["MANAGER"].switches
 
 
 def test_post_extra_switches_rejects_a_duplicate_device_id_with_a_zone(tmp_path):
@@ -401,7 +403,7 @@ def test_post_extra_switches_rejects_a_duplicate_device_id_with_a_zone(tmp_path)
     client = app.test_client()
 
     res = client.post("/api/climate-admin/extra-switches", json={
-        "switches": [{"name": "Dehumidifier", "device_id": VALID_ZONES[0]["valve_device_id"]}],
+        "dehumidifier_device_id": VALID_ZONES[0]["valve_device_id"],
     })
 
     assert res.status_code == 400

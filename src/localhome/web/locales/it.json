@@ -178,11 +178,8 @@
     "sensor_label": "Sensore",
     "valve_label": "Valvola",
     "extra_switches_heading": "Interruttori extra",
-    "extra_switches_note": "Qualsiasi altro interruttore on/off Shelly Plus 1 autonomo che serve all'impianto (un deumidificatore, una valvola di bypass, ...) - non legato a una zona, senza sensore. Se thermostat.interlocks/mode_switches in config.yaml già fanno riferimento a uno di questi per nome, usa qui esattamente lo stesso nome, non uno nuovo.",
-    "extra_switch_add_button": "Aggiungi interruttore",
-    "extra_switch_remove_button": "Rimuovi",
-    "extra_switch_name_label": "Nome",
-    "extra_switch_name_placeholder": "es. Deumidificatore",
-    "extra_switch_device_id_label": "ID dispositivo"
+    "extra_switches_note": "Altri due interruttori on/off Shelly Plus 1 fissi, non legati a una zona e senza sensore - lascia vuoto quello non ancora collegato. Se thermostat.interlocks/mode_switches in config.yaml controllano già uno di questi con un nome diverso, aggiorna quella voce di config.yaml a \"Bathroom Bypass Valve\"/\"Dehumidifier\" - questo pannello usa sempre esattamente quei nomi.",
+    "extra_bypass_valve_label": "ID dispositivo valvola bypass bagni",
+    "extra_dehumidifier_label": "ID dispositivo deumidificatore"
   }
 }

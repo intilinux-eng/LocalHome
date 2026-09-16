@@ -18,6 +18,7 @@ from werkzeug.exceptions import HTTPException
 from localhome.config import Integration, LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.services.climate_map_store import (
+    EXTRA_SWITCH_FIELDS,
     ClimateMapStore,
     build_climate_integrations,
     build_extra_switch_integrations,
@@ -611,17 +612,16 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/extra-switches")
     def api_climate_admin_get_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
-        return jsonify(ok=True, switches=climate_map.get_extra_switches())
+        saved = climate_map.get_extra_switches()
+        return jsonify(ok=True, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
 
     @app.route("/api/climate-admin/extra-switches", methods=["POST"])
     def api_climate_admin_set_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         data = request.get_json(silent=True) or {}
-        switches = data.get("switches")
-        if not isinstance(switches, list):
-            return jsonify(ok=False, error="missing 'switches'"), 400
+        extra_switches = {key: data.get(key) for key in EXTRA_SWITCH_FIELDS}
         try:
-            climate_map.set_extra_switches(switches)
+            climate_map.set_extra_switches(extra_switches)
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)

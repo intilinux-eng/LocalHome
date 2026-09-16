@@ -66,9 +66,15 @@
     <h2>{{ t.climate_admin.extra_switches_heading }}</h2>
   </div>
   <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
-  <div id="extra-switch-forms"></div>
-  <div class="toolbar">
-    <button class="range-btn" onclick="addExtraSwitchRow()">{{ t.climate_admin.extra_switch_add_button }}</button>
+  <div class="admin-zone-card" id="extra-switch-form">
+    <div class="admin-field">
+      <label>{{ t.climate_admin.extra_bypass_valve_label }}</label>
+      <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+    </div>
+    <div class="admin-field">
+      <label>{{ t.climate_admin.extra_dehumidifier_label }}</label>
+      <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+    </div>
   </div>
   <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches()">{{ t.climate_admin.save_button }}</button>
   <p class="hint-text" id="save-extra-result"></p>
