@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t.climate_admin.page_title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='climate_admin.css') }}">
+</head>
+<body>
+  <header>
+    <h1>{{ t.climate_admin.page_title }}</h1>
+    <div class="header-right">
+      <a class="icon-btn-sm" href="/" title="{{ t.climate_admin.back_to_dashboard }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      </a>
+    </div>
+  </header>
+
+  <p class="hint-text">{{ t.climate_admin.intro }}</p>
+
+  <div class="section-head">
+    <h2>{{ t.climate_admin.broker_heading }}</h2>
+  </div>
+  <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
+  <p id="broker-status" class="admin-broker-status"></p>
+  <div class="admin-zone-card" id="broker-form">
+    <div class="admin-field">
+      <label>{{ t.climate_admin.broker_host_label }}</label>
+      <input type="text" id="broker-host" placeholder="192.168.1.21">
+    </div>
+    <div class="admin-field">
+      <label>{{ t.climate_admin.broker_port_label }}</label>
+      <input type="number" id="broker-port" placeholder="1883">
+    </div>
+    <div class="admin-field">
+      <label>{{ t.climate_admin.broker_username_label }}</label>
+      <input type="text" id="broker-username" placeholder="{{ t.climate_admin.broker_optional }}">
+    </div>
+    <label class="admin-checkbox">
+      <input type="checkbox" id="broker-change-password" onchange="onChangePasswordToggle(this)">
+      <span id="broker-password-toggle-label">{{ t.climate_admin.broker_set_password_label }}</span>
+    </label>
+    <div class="admin-field" id="broker-password-field" hidden>
+      <label>{{ t.climate_admin.broker_password_label }}</label>
+      <input type="password" id="broker-password" autocomplete="new-password">
+    </div>
+    <div class="toolbar">
+      <button class="range-btn" onclick="testBroker()">{{ t.climate_admin.broker_test_button }}</button>
+      <button class="tbtn open" onclick="saveBroker()">{{ t.climate_admin.broker_save_button }}</button>
+    </div>
+    <p class="hint-text" id="broker-test-result"></p>
+    <p class="hint-text" id="broker-save-result"></p>
+  </div>
+
+  <div class="section-head">
+    <h2>{{ t.climate_admin.zones_heading }}</h2>
+  </div>
+  <p class="hint-text">{{ t.climate_admin.zones_note }}</p>
+  <div id="zone-forms"></div>
+
+  <button class="tbtn open" id="save-btn" onclick="saveMap()">{{ t.climate_admin.save_button }}</button>
+  <p class="hint-text" id="save-result"></p>
+
+  <div class="section-head" style="margin-top:32px">
+    <h2>{{ t.climate_admin.extra_switches_heading }}</h2>
+  </div>
+  <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
+  <div class="admin-zone-card" id="extra-switch-form">
+    <div class="admin-field">
+      <label>{{ t.climate_admin.extra_bypass_valve_label }}</label>
+      <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+    </div>
+    <div class="admin-field">
+      <label>{{ t.climate_admin.extra_dehumidifier_label }}</label>
+      <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+    </div>
+  </div>
+  <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches()">{{ t.climate_admin.save_button }}</button>
+  <p class="hint-text" id="save-extra-result"></p>
+
+  <div class="section-head" style="margin-top:32px">
+    <h2>{{ t.climate_admin.status_heading }}</h2>
+    <div class="toolbar">
+      <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
+    </div>
+  </div>
+  <p class="hint-text">{{ t.climate_admin.status_note }}</p>
+  <p class="hint-text" id="mode-away-line"></p>
+  <div id="status-list"></div>
+
+  <script>
+    window.I18N = {{ t | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='climate_admin.js') }}"></script>
+</body>
+</html>

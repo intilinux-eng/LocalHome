@@ -15,12 +15,24 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from localhome.config import LocalHomeConfig, load_config
+from localhome.config import Integration, LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.services.climate_map_store import (
+    EXTRA_SWITCH_FIELDS,
+    ClimateMapStore,
+    build_climate_integrations,
+    build_extra_switch_integrations,
+    build_zone_configs,
+    snapshot_from_config,
+)
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
+from localhome.services.manual_override import ManualOverrideStore
+from localhome.services.mqtt_broker_config import get_broker, set_broker
+from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
+from localhome.services.self_restart import schedule_restart
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -54,6 +66,35 @@ def create_app(config_path: str | None = None) -> Flask:
         return jsonify(ok=False, error="internal error - see server logs"), 500
 
     config = load_config(config_path)
+
+    # The climate admin panel (first-home-model): lets an installer map the
+    # fixed two-zone thermostat onto whichever Shelly devices *this*
+    # apartment has, instead of hand-editing config.yaml - see
+    # services/climate_map_store.py. Checked before DeviceManager is
+    # built so the panel's zones (if any are saved) become real
+    # integrations the same way config.yaml's own would.
+    climate_map = ClimateMapStore(config.resolve("climate_map.json"))
+    manual_override_path = config.resolve("manual_override.json")
+    manual_override = ManualOverrideStore(manual_override_path)
+    broker_file = config.resolve("mqtt_broker.json")
+    panel_zones = climate_map.get_zones()
+    extra_switches = climate_map.get_extra_switches()
+    new_integrations: list[Integration] = []
+    if panel_zones is not None:
+        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
+    new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
+    if new_integrations:
+        existing_names = {i.options.get("name") for i in config.integrations}
+        for integration in new_integrations:
+            name = integration.options.get("name")
+            if name in existing_names:
+                logger.warning(
+                    "Climate admin panel device %r collides with an existing config.yaml integration "
+                    "name - the panel's version will win (DeviceManager._register() is last-one-wins).",
+                    name,
+                )
+        config.integrations = config.integrations + new_integrations
+
     manager = DeviceManager(config)
 
     auth_cfg = (config.raw.get("web") or {}).get("auth")
@@ -90,6 +131,19 @@ def create_app(config_path: str | None = None) -> Flask:
     interlock_followers: dict[str, str] = {}
     mode_switch_names: set[str] = set()
     thermostat_cfg = config.raw.get("thermostat")
+    if panel_zones is not None:
+        # Whole-block precedence, not a merge: the panel's saved mapping
+        # fully replaces config.yaml's own `zones:` list when present -
+        # two independent zone/valve configs fighting over the same
+        # physical valve is a worse failure mode than "one clearly wins"
+        # (see services/climate_map_store.py). Everything else in
+        # `thermostat:` (mode/hysteresis_c/interlocks/mode_switches/
+        # schedules_file) still comes from config.yaml, unaffected - and
+        # every .get() below already has a default, so a config.yaml
+        # with no `thermostat:` key at all still works once the panel
+        # has a saved mapping (the from-scratch-apartment case).
+        thermostat_cfg = dict(thermostat_cfg or {})
+        thermostat_cfg["zones"] = build_zone_configs(panel_zones)
     if thermostat_cfg:
         schedules_path = config.resolve(thermostat_cfg.get("schedules_file", "schedules.json"))
         schedule_store = ScheduleStore(schedules_path, default_mode=thermostat_cfg.get("mode", "heat"))
@@ -142,6 +196,18 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
+    app.config["CLIMATE_MAP"] = climate_map
+    app.config["MANUAL_OVERRIDE"] = manual_override
+    # A snapshot of exactly what was loaded to build the integrations
+    # above, at this process's startup - compared against a fresh read
+    # of climate_map.json on every GET /api/climate-admin/map so the
+    # panel can tell a technician the truth about whether a save has
+    # actually taken effect yet, instead of the frontend trying to
+    # guess it from driver names (which can't tell "shelly" apart from
+    # "simulated" once a zone is already panel-managed, since both keep
+    # the exact same "<zone> Sensor"/"<zone> Valve" names either way).
+    app.config["ACTIVE_CLIMATE_ZONES"] = panel_zones
+    app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
 
     _register_routes(app)
     return app
@@ -448,6 +514,179 @@ def _register_routes(app: Flask) -> None:
             week=round(store.sum_on_hours_range(zone.valve, "is_on", "week", interval), 2),
             month=round(store.sum_on_hours_range(zone.valve, "is_on", "month", interval), 2),
         )
+
+    # ----------------------------------------------- climate admin panel ----
+    # first-home-model: lets an installer map the fixed two-zone thermostat
+    # onto this apartment's own Shelly device ids, and debug the control
+    # logic with a manually-typed temperature - see
+    # services/climate_map_store.py / services/manual_override.py.
+
+    @app.route("/climate-admin")
+    def climate_admin_page():
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        return render_template(
+            "climate_admin.html",
+            t=app.config["TRANSLATIONS"],
+            lang=config.web_language,
+        )
+
+    @app.route("/api/climate-admin/broker-status")
+    def api_climate_admin_broker_status():
+        # A raw TCP probe, not a real MQTT client - answers "is anything
+        # even listening" so a device stuck on "not reachable yet" isn't
+        # misdiagnosed as its own fault when the broker itself is down
+        # (a real incident this panel is meant to catch immediately - see
+        # services/mqtt_broker_status.py).
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        return jsonify(ok=True, **check_broker(broker_file))
+
+    @app.route("/api/climate-admin/broker")
+    def api_climate_admin_get_broker():
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        return jsonify(ok=True, **get_broker(broker_file))
+
+    @app.route("/api/climate-admin/broker", methods=["POST"])
+    def api_climate_admin_set_broker():
+        # Doing a full install from a tablet means never needing to open
+        # mqtt_broker.json by hand - see services/mqtt_broker_config.py.
+        # Same "changes need a restart" contract as the zone mapping
+        # below: DeviceManager only ever builds its MQTT client once, at
+        # process start.
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        broker_file = config.resolve("mqtt_broker.json")
+        data = request.get_json(silent=True) or {}
+        try:
+            set_broker(
+                broker_file,
+                data.get("host"),
+                data.get("port"),
+                data.get("username"),
+                data.get("password"),
+                bool(data.get("change_password")),
+            )
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/broker/test", methods=["POST"])
+    def api_climate_admin_test_broker():
+        # Tests whatever the operator just typed, before it's saved -
+        # same probe as broker-status above (services/mqtt_broker_status.py),
+        # just against unsaved values instead of the file on disk.
+        data = request.get_json(silent=True) or {}
+        host, port = data.get("host"), data.get("port")
+        if not isinstance(host, str) or not host.strip() or not isinstance(port, int) or isinstance(port, bool):
+            return jsonify(ok=False, error="host and port are required"), 400
+        return jsonify(ok=True, **check_host_port(host.strip(), port))
+
+    @app.route("/api/climate-admin/map")
+    def api_climate_admin_get_map():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        saved = climate_map.get_zones()
+        # True the instant a save no longer matches what this process
+        # actually loaded at startup - see create_app()'s
+        # ACTIVE_CLIMATE_ZONES comment for why this can't be inferred
+        # from driver names alone.
+        restart_pending = saved != app.config["ACTIVE_CLIMATE_ZONES"]
+        if saved is not None:
+            return jsonify(ok=True, configured=True, zones=saved, restart_pending=restart_pending)
+        # Nothing saved yet - read config.yaml's *current* hand-written
+        # setup as the form's starting point (real device ids included)
+        # instead of a blank form, so trying "manual"/"simulated" mode
+        # for a quick test doesn't mean re-typing a real device id -
+        # this only ever reads config.yaml, never changes the real
+        # device, and is never consulted again once something's saved.
+        snapshot = snapshot_from_config(thermostat.zones, config.integrations) if thermostat else None
+        return jsonify(ok=True, configured=False, zones=snapshot, restart_pending=restart_pending)
+
+    @app.route("/api/climate-admin/map", methods=["POST"])
+    def api_climate_admin_set_map():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        data = request.get_json(silent=True) or {}
+        zones = data.get("zones")
+        if not isinstance(zones, list):
+            return jsonify(ok=False, error="missing 'zones'"), 400
+        previous = climate_map.get_zones()
+        try:
+            climate_map.set_zones(zones)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        warnings = []
+        if previous is not None:
+            for old_zone, new_zone in zip(previous, zones):
+                if old_zone.get("name") != new_zone.get("name"):
+                    warnings.append(
+                        f"Zone renamed from '{old_zone.get('name')}' to '{new_zone.get('name')}' - its "
+                        "existing weekly schedule (if any) stays saved under the old name and won't "
+                        "carry over automatically."
+                    )
+        return jsonify(ok=True, restart_required=True, warnings=warnings)
+
+    @app.route("/api/climate-admin/extra-switches")
+    def api_climate_admin_get_extra_switches():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        saved = climate_map.get_extra_switches()
+        restart_pending = saved != app.config["ACTIVE_EXTRA_SWITCHES"]
+        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
+
+    @app.route("/api/climate-admin/extra-switches", methods=["POST"])
+    def api_climate_admin_set_extra_switches():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        data = request.get_json(silent=True) or {}
+        extra_switches = {key: data.get(key) for key in EXTRA_SWITCH_FIELDS}
+        try:
+            climate_map.set_extra_switches(extra_switches)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/restart", methods=["POST"])
+    def api_climate_admin_restart():
+        # Fires after this response is sent - see services/self_restart.py.
+        # Every "restart_required: true" above meant "go do this by
+        # hand, from a terminal" until now.
+        schedule_restart()
+        return jsonify(ok=True)
+
+    @app.route("/api/climate-admin/zones/<name>/manual-value", methods=["POST"])
+    def api_climate_admin_set_manual_value(name):
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        manual_override: ManualOverrideStore = app.config["MANUAL_OVERRIDE"]
+        manager: DeviceManager = app.config["MANAGER"]
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+
+        saved_zones = climate_map.get_zones() or []
+        zone = next((z for z in saved_zones if z.get("name") == name), None)
+        if zone is None or zone.get("sensor_mode") != "manual":
+            return jsonify(ok=False, error=f"zone '{name}' is not currently configured in manual mode"), 409
+
+        data = request.get_json(silent=True) or {}
+        if "temperature_c" not in data:
+            return jsonify(ok=False, error="missing 'temperature_c'"), 400
+        try:
+            temperature_c = float(data["temperature_c"])
+            humidity_pct = float(data["humidity_pct"]) if data.get("humidity_pct") is not None else None
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="temperature_c/humidity_pct must be numbers"), 400
+
+        sensor_name = f"{name} Sensor"
+        manual_override.set(sensor_name, temperature_c, humidity_pct)
+        # Apply immediately, no restart needed - unlike the map above,
+        # this only mutates the already-running ManualOverrideDriver's
+        # backing value, not which drivers exist.
+        poller = manager.pollers.get(sensor_name)
+        if poller is not None:
+            reading = {"ok": True, "name": sensor_name, "temperature_c": temperature_c, "manual_override": True}
+            if humidity_pct is not None:
+                reading["humidity_pct"] = humidity_pct
+            poller.cache.set(reading)
+        if thermostat:
+            thermostat.tick()
+        return jsonify(ok=True)
 
 
 def main() -> None:
