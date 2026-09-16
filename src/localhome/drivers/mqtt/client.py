@@ -63,7 +63,17 @@ class MqttConnection:
         self._client.subscribe(topic)
 
     def publish(self, topic: str, payload: str, qos: int = 0, retain: bool = False) -> None:
-        self._client.publish(topic, payload, qos=qos, retain=retain)
+        info = self._client.publish(topic, payload, qos=qos, retain=retain)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            # rc is set synchronously by paho, before any real network
+            # I/O - it can't confirm delivery, but it does catch the one
+            # concrete, real failure mode this project has hit: calling
+            # publish() while connect_async()'s handshake hasn't
+            # finished yet (or mid-reconnect) silently no-ops instead of
+            # raising, so every caller up the stack (thermostat/
+            # interlock/_apply(), the /api/sensors/... routes) already
+            # has a try/except ready for this - it just never fired.
+            raise ConnectionError(f"MQTT publish to {topic!r} failed: {mqtt.error_string(info.rc)}")
 
 
 def get_connection(broker: dict[str, Any]) -> MqttConnection:
