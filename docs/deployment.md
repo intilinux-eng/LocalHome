@@ -9,6 +9,70 @@ systemd - not a microcontroller-only board), so everything below -
 Docker and bare-metal/systemd alike - applies to it exactly as
 written; no board-specific steps.
 
+## Quick start: a fresh device, start to finish
+
+The single ordered path from a brand-new board to a running,
+survives-a-reboot dashboard - this is what to follow the first time,
+skipping straight to [Docker](#docker) or the more hardened
+[dedicated-user bare-metal setup](#bare-metal-systemd) below only if
+you already know you want one of those instead. Confirmed against a
+real Arduino UNO Q (Debian trixie).
+
+```bash
+# 1. On the device itself (SSH in first if it's headless):
+sudo apt update
+sudo apt install -y git python3-venv || sudo apt install -y python3.13-venv
+# (the exact venv package name varies by distro version - if the first
+#  one 404s, apt's own error names the right one; see below)
+
+# 2. Get the code and its dependencies - a normal user account is fine,
+#    no dedicated system user needed for a single-purpose device:
+git clone <this-repo> ~/localhome
+cd ~/localhome
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e .
+
+# 3. Configure it - either by hand:
+cp config/config.example.yaml config/config.yaml
+#    ...and the *.example.json files you need; see docs/configuration.md
+#    and docs/integrations/ - or, if every device is Shelly, skip this
+#    and use the climate admin panel instead (step 5).
+
+# 4. Sanity-check before trusting it to run unattended:
+.venv/bin/localhome-cli doctor
+
+# 5. Make it survive a reboot and closing the SSH session - see
+#    deploy/localhome.service (copy it, then edit User/WorkingDirectory/
+#    ExecStart to match the path you cloned into above):
+sudo cp deploy/localhome.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now localhome
+sudo systemctl status localhome
+# -> dashboard at http://<device-ip>:5000 ; logs: sudo journalctl -u localhome -f
+```
+
+If step 1's `python3-venv` package isn't found, or step 2's `python3 -m
+venv .venv` itself fails with "ensurepip is not available", your
+distro named the package differently - install the exact one apt's own
+error message names (Debian trixie wants `python3.13-venv`) and retry.
+See [docs/troubleshooting.md](troubleshooting.md) if anything else about
+steps 1-4 goes sideways.
+
+**Using Shelly devices** (the climate admin panel, `/climate-admin`)?
+Two more things belong in this same "before you walk away" checklist:
+
+- The MQTT broker (mosquitto) needs to survive a reboot exactly like
+  LocalHome itself does above - `sudo apt install mosquitto` already
+  auto-starts it via its own systemd unit, you just need your settings
+  in `/etc/mosquitto/conf.d/` instead of the package default. See
+  [docs/integrations/mqtt.md#2-keep-the-broker-itself-running](integrations/mqtt.md#2-keep-the-broker-itself-running).
+- Map your zones onto this home's actual Shelly device ids from
+  `/climate-admin` once the dashboard is up (step 5's URL) - see
+  [docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
+  Remember it needs a restart (`sudo systemctl restart localhome`)
+  after every save before a change actually takes effect.
+
 ## Docker
 
 ```bash
@@ -49,41 +113,28 @@ the same either way; use whichever fits how you deploy.
 
 ## Bare metal (systemd)
 
-For running directly on the target device without Docker:
+The steps above under "Quick start" *are* the bare-metal/systemd path -
+this section is only for the one variant they skip: a dedicated,
+more locked-down system user instead of your own account, for a box
+that does other things besides run LocalHome.
 
 ```bash
 sudo useradd --system --home /opt/localhome localhome
 sudo git clone <this-repo> /opt/localhome
 cd /opt/localhome
-python3 -m venv .venv
-```
-
-If that fails with "ensurepip is not available", your distro splits the
-venv module into its own package - install it and retry (Debian trixie,
-this project's own Arduino UNO Q instance included, needs the
-version-suffixed name; try the plain one first):
-
-```bash
-sudo apt install -y python3-venv || sudo apt install -y python3.13-venv
-python3 -m venv .venv   # retry
-```
-
-```bash
-.venv/bin/pip install .
+python3 -m venv .venv && .venv/bin/pip install -e .
 
 cp config/config.example.yaml config/config.yaml
 # ...edit it and the *.example.json files you need
 
 sudo chown -R localhome:localhome /opt/localhome
-sudo cp deploy/localhome.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now localhome
-sudo journalctl -u localhome -f
 ```
 
-`deploy/localhome.service` is a starting point, not a one-size-fits-all
-unit - adjust `User`/`WorkingDirectory` if your layout differs, and
-`ReadWritePaths` if a driver you add needs to write somewhere else.
+Then edit `deploy/localhome.service`'s `YOUR_USER`/path placeholders to
+`localhome`/`/opt/localhome` instead of your own account before
+copying it and continuing from `systemctl daemon-reload` in the Quick
+start above - same everything else, including the venv troubleshooting
+note if `python3 -m venv` itself fails.
 
 ## A few things worth knowing before you expose this beyond your LAN
 

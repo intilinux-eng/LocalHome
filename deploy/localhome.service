@@ -1,16 +1,29 @@
-; Example systemd unit for running LocalHome as a bare-metal service (a
-; Raspberry Pi, an old laptop, whatever's next to your router) instead of
-; Docker. Copy to /etc/systemd/system/localhome.service and adjust the
-; paths/user, then:
+; Example systemd unit for running LocalHome as a bare-metal service (an
+; Arduino UNO Q, a Raspberry Pi, an old laptop - whatever's next to your
+; router) instead of Docker. See docs/deployment.md's "Quick start: a
+; fresh device, start to finish" for the full sequence this fits into.
 ;
+; Replace YOUR_USER below with the account you cloned/installed as (a
+; normal user account is fine - no dedicated system user needed for a
+; single-purpose device), then:
+;
+;   sudo cp deploy/localhome.service /etc/systemd/system/
 ;   sudo systemctl daemon-reload
 ;   sudo systemctl enable --now localhome
 ;   sudo journalctl -u localhome -f      # logs
 ;
-; Assumes the repo is checked out at /opt/localhome and set up with:
-;   cd /opt/localhome && python3 -m venv .venv && .venv/bin/pip install .
-; and that /opt/localhome/config/config.yaml already exists (see
-; docs/configuration.md) - create/edit it before starting the service.
+; Assumes the repo is checked out at /home/YOUR_USER/localhome and set
+; up with:
+;   cd ~/localhome && python3 -m venv .venv && .venv/bin/pip install -e .
+; and that config/config.yaml already exists there (see
+; docs/configuration.md) - create/edit it (or use the climate admin
+; panel once it's running) before starting the service.
+;
+; Want a dedicated, more locked-down system user instead of your own
+; account? `sudo useradd --system --home /opt/localhome localhome`,
+; check the repo out there instead, and swap every path below plus
+; User/Group accordingly - the hardening lines further down assume
+; whichever account you pick owns nothing else on the box.
 
 [Unit]
 Description=LocalHome smart-home dashboard
@@ -19,19 +32,20 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=localhome
-Group=localhome
-WorkingDirectory=/opt/localhome
-ExecStart=/opt/localhome/.venv/bin/localhome
+User=YOUR_USER
+Group=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/localhome
+ExecStart=/home/YOUR_USER/localhome/.venv/bin/localhome
 Restart=on-failure
 RestartSec=5
 
 ; Basic hardening - relax if a driver you add needs more (e.g. writing
-; somewhere outside WorkingDirectory).
+; somewhere outside WorkingDirectory), and update ReadWritePaths if you
+; changed WorkingDirectory above.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/localhome/config
+ReadWritePaths=/home/YOUR_USER/localhome/config
 
 [Install]
 WantedBy=multi-user.target
