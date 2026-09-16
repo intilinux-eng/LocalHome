@@ -84,6 +84,14 @@
   font-size: 0.85rem;
 }
 
+.admin-restart-pending {
+  border: 1px dashed var(--accent-stop);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: var(--accent-stop);
+  font-weight: 600;
+}
+
 .admin-status-name {
   font-weight: 600;
   margin-bottom: 2px;

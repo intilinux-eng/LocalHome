@@ -18,6 +18,7 @@ const SENSOR_MODES = ["shelly", "simulated", "manual"];
 const VALVE_MODES = ["shelly", "simulated"];
 
 let savedMap = null; // last GET /api/climate-admin/map response
+let extraSwitchesRestartPending = false; // from the last GET /api/climate-admin/extra-switches
 let pollTimer = null;
 
 // ------------------------------------------------------------ config form ----
@@ -218,6 +219,7 @@ async function loadExtraSwitches() {
   const data = await res.json();
   document.getElementById("extra-bypass-valve-id").value = data.bypass_valve_device_id || "";
   document.getElementById("extra-dehumidifier-id").value = data.dehumidifier_device_id || "";
+  extraSwitchesRestartPending = !!data.restart_pending;
 }
 
 async function saveExtraSwitches() {
@@ -346,6 +348,14 @@ async function refreshStatus() {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
     document.getElementById("mode-away-line").textContent = modeAwayLineHtml(data);
+    // A single all-or-nothing signal, not per-zone: a restart rebuilds
+    // every zone's drivers together, so "one thing changed" means the
+    // whole section below is stale, not just the zone that changed -
+    // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
+    if ((savedMap && savedMap.restart_pending) || extraSwitchesRestartPending) {
+      document.getElementById("status-list").innerHTML = `<p class="hint-text admin-restart-pending">${tr("climate_admin.restart_pending")}</p>`;
+      return;
+    }
     const byName = {};
     ((savedMap && savedMap.zones) || []).forEach(z => { byName[z.name] = z; });
     const rows = (data.zones || []).map(zone => statusRowHtml(zone, byName[zone.name])).join("");

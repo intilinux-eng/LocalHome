@@ -197,6 +197,16 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
+    # A snapshot of exactly what was loaded to build the integrations
+    # above, at this process's startup - compared against a fresh read
+    # of climate_map.json on every GET /api/climate-admin/map so the
+    # panel can tell a technician the truth about whether a save has
+    # actually taken effect yet, instead of the frontend trying to
+    # guess it from driver names (which can't tell "shelly" apart from
+    # "simulated" once a zone is already panel-managed, since both keep
+    # the exact same "<zone> Sensor"/"<zone> Valve" names either way).
+    app.config["ACTIVE_CLIMATE_ZONES"] = panel_zones
+    app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
 
     _register_routes(app)
     return app
@@ -575,8 +585,13 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_zones()
+        # True the instant a save no longer matches what this process
+        # actually loaded at startup - see create_app()'s
+        # ACTIVE_CLIMATE_ZONES comment for why this can't be inferred
+        # from driver names alone.
+        restart_pending = saved != app.config["ACTIVE_CLIMATE_ZONES"]
         if saved is not None:
-            return jsonify(ok=True, configured=True, zones=saved)
+            return jsonify(ok=True, configured=True, zones=saved, restart_pending=restart_pending)
         # Nothing saved yet - read config.yaml's *current* hand-written
         # setup as the form's starting point (real device ids included)
         # instead of a blank form, so trying "manual"/"simulated" mode
@@ -584,7 +599,7 @@ def _register_routes(app: Flask) -> None:
         # this only ever reads config.yaml, never changes the real
         # device, and is never consulted again once something's saved.
         snapshot = snapshot_from_config(thermostat.zones, config.integrations) if thermostat else None
-        return jsonify(ok=True, configured=False, zones=snapshot)
+        return jsonify(ok=True, configured=False, zones=snapshot, restart_pending=restart_pending)
 
     @app.route("/api/climate-admin/map", methods=["POST"])
     def api_climate_admin_set_map():
@@ -613,7 +628,8 @@ def _register_routes(app: Flask) -> None:
     def api_climate_admin_get_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         saved = climate_map.get_extra_switches()
-        return jsonify(ok=True, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
+        restart_pending = saved != app.config["ACTIVE_EXTRA_SWITCHES"]
+        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
 
     @app.route("/api/climate-admin/extra-switches", methods=["POST"])
     def api_climate_admin_set_extra_switches():

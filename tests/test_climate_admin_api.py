@@ -142,6 +142,32 @@ def test_get_map_reports_the_saved_mapping(tmp_path):
 
     assert body["configured"] is True
     assert body["zones"] == VALID_ZONES
+    # Saved before this process started - already what's running.
+    assert body["restart_pending"] is False
+
+
+def test_get_map_reports_restart_pending_after_a_save_the_running_process_hasnt_loaded(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    assert client.get("/api/climate-admin/map").get_json()["restart_pending"] is False
+
+    client.post("/api/climate-admin/map", json={"zones": VALID_ZONES})
+
+    # The save succeeded and is on disk, but *this* running process
+    # built its DeviceManager before it existed - exactly the "changed
+    # shelly to simulated but the panel still shows the old driver"
+    # confusion this field exists to make impossible to miss.
+    assert client.get("/api/climate-admin/map").get_json()["restart_pending"] is True
+
+
+def test_get_extra_switches_reports_restart_pending_after_an_unloaded_save(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    assert client.get("/api/climate-admin/extra-switches").get_json()["restart_pending"] is False
+
+    client.post("/api/climate-admin/extra-switches", json={"dehumidifier_device_id": "shellyplus1-FFFF"})
+
+    assert client.get("/api/climate-admin/extra-switches").get_json()["restart_pending"] is True
 
 
 # ----------------------------------------------------------------- POST ----
