@@ -78,8 +78,15 @@ def test_get_map_reports_not_configured_with_no_saved_mapping(tmp_path):
 
     assert body["ok"] is True
     assert body["configured"] is False
-    assert body["zones"] is None
-    assert body["config_yaml_zone_names"] == ["Existing Zone"]
+    # A snapshot of config.yaml's own current setup, not a blank form -
+    # see services/climate_map_store.py's snapshot_from_config(). The
+    # second slot is a blank placeholder since CONFIG_WITH_THERMOSTAT
+    # only defines one zone.
+    assert body["zones"][0] == {
+        "name": "Existing Zone", "sensor_mode": "simulated", "sensor_device_id": None,
+        "valve_device_id": None, "cool_enabled": True,
+    }
+    assert body["zones"][1]["name"] == ""
 
 
 def test_get_map_reports_the_saved_mapping(tmp_path):

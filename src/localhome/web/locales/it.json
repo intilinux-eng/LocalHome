@@ -127,7 +127,7 @@
     "broker_heading": "Broker MQTT",
     "broker_note": "Modificato a mano in config/mqtt_broker.json, non da questa pagina - vedi docs/integrations/mqtt.md.",
     "zones_heading": "Zone",
-    "zones_note": "Esattamente due zone. Scegli una fonte per il sensore di ciascuna zona: un dispositivo Shelly reale, uno simulato (hardware non ancora installato), oppure un valore manuale per il debug della logica di controllo.",
+    "zones_note": "Esattamente due zone. Scegli una fonte per il sensore di ciascuna zona: un dispositivo Shelly reale, uno simulato (hardware non ancora installato), oppure un valore manuale per il debug della logica di controllo. Passare da \"Shelly\" a un'altra fonte fa solo smettere di leggere quel sensore - non invia nulla al dispositivo reale.",
     "name_label": "Nome zona",
     "name_placeholder": "es. Zona 1",
     "sensor_mode_label": "Fonte sensore",

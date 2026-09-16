@@ -127,7 +127,7 @@
     "broker_heading": "MQTT broker",
     "broker_note": "Edited by hand in config/mqtt_broker.json, not through this page - see docs/integrations/mqtt.md.",
     "zones_heading": "Zones",
-    "zones_note": "Exactly two zones. Pick a sensor source per zone: a real Shelly device, a simulated one (no hardware installed yet), or a manual value for debugging the control logic.",
+    "zones_note": "Exactly two zones. Pick a sensor source per zone: a real Shelly device, a simulated one (no hardware installed yet), or a manual value for debugging the control logic. Switching a zone away from \"Shelly\" only stops LocalHome from reading that sensor - it never sends anything to the real device.",
     "name_label": "Zone name",
     "name_placeholder": "e.g. Rooms",
     "sensor_mode_label": "Sensor source",

@@ -60,14 +60,11 @@ function onSensorModeChange(select) {
 async function loadMap() {
   const res = await fetch("/api/climate-admin/map");
   savedMap = await res.json();
-  const zoneNames = savedMap.config_yaml_zone_names || [];
-  const zones = [];
-  for (let i = 0; i < 2; i++) {
-    const saved = savedMap.zones && savedMap.zones[i];
-    zones.push(saved || {
-      name: zoneNames[i] || "", sensor_mode: "shelly", sensor_device_id: "", valve_device_id: "", cool_enabled: true,
-    });
-  }
+  // The backend always sends exactly 2 well-formed zones now - either
+  // the saved mapping, or (when nothing's saved yet) a snapshot of
+  // config.yaml's own current setup, real device ids included - see
+  // services/climate_map_store.py's snapshot_from_config().
+  const zones = savedMap.zones || [null, null];
   document.getElementById("zone-forms").innerHTML = zones.map((z, i) => zoneFormHtml(z, i)).join("");
   refreshStatus();
 }

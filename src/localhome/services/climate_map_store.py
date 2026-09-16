@@ -156,6 +156,66 @@ def build_climate_integrations(zones: list[dict], broker_file: str, manual_store
     return integrations
 
 
+def _blank_zone() -> dict:
+    return {"name": "", "sensor_mode": "shelly", "sensor_device_id": None, "valve_device_id": None, "cool_enabled": True}
+
+
+def _device_id_from_topic(topic) -> str | None:
+    """The inverse of _shelly_sensor_options()/_valve_integration_options()
+    above: every topic this project's Shelly drivers use starts with
+    "<device_id>/..." - state_topic is a list for the multi-topic sensor
+    shape, a plain string for the valve, so take whichever comes first."""
+    if isinstance(topic, list):
+        topic = topic[0] if topic else None
+    if not topic or "/" not in topic:
+        return None
+    return topic.split("/", 1)[0]
+
+
+def snapshot_from_config(zones, integrations: list[Integration]) -> list[dict]:
+    """Best-effort read of config.yaml's *current* hand-written setup -
+    used only to pre-fill the panel's form the first time, before
+    anything's been saved here, never written back to config.yaml and
+    never consulted again once climate_map.json exists (see
+    ClimateMapStore.get_zones()). Without this, switching a zone to
+    "manual"/"simulated" for a quick test would mean re-typing a real
+    device id you're about to type right back in - reading it from the
+    already-running setup instead means nothing about the real,
+    currently-connected device is ever changed just by looking at it.
+
+    `zones` is services.thermostat.Zone objects (name/sensor/valve/
+    cool_enabled) - what create_app() already built from config.yaml's
+    thermostat.zones before this ever runs.
+    """
+    by_name = {i.options.get("name"): i for i in integrations}
+    snapshot = []
+    for zone in zones:
+        sensor = by_name.get(zone.sensor)
+        if sensor is not None and sensor.type == "mqtt_json":
+            sensor_mode, sensor_device_id = "shelly", _device_id_from_topic(sensor.options.get("state_topic"))
+        elif sensor is not None and sensor.type == "simulated":
+            sensor_mode, sensor_device_id = "simulated", None
+        else:
+            # An unrecognized/absent driver type (or none at all) isn't
+            # representable by this Shelly-only panel - fall back to an
+            # empty "shelly" slot rather than guessing or crashing.
+            sensor_mode, sensor_device_id = "shelly", None
+
+        valve = by_name.get(zone.valve)
+        valve_device_id = _device_id_from_topic(valve.options.get("state_topic")) if valve is not None and valve.type == "mqtt_json" else None
+
+        snapshot.append({
+            "name": zone.name,
+            "sensor_mode": sensor_mode,
+            "sensor_device_id": sensor_device_id,
+            "valve_device_id": valve_device_id,
+            "cool_enabled": zone.cool_enabled,
+        })
+    while len(snapshot) < ZONE_COUNT:
+        snapshot.append(_blank_zone())
+    return snapshot[:ZONE_COUNT]
+
+
 def build_zone_configs(zones: list[dict]) -> list[dict]:
     """The shape create_app() already builds Zone(...) objects from -
     see thermostat_cfg["zones"] parsing in web/app.py."""

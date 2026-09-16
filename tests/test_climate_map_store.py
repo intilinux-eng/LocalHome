@@ -1,11 +1,14 @@
 import pytest
 
+from localhome.config import Integration
 from localhome.services.climate_map_store import (
     ClimateMapStore,
     build_climate_integrations,
     build_zone_configs,
+    snapshot_from_config,
     validate_zones,
 )
+from localhome.services.thermostat import Zone
 
 VALID_ZONES = [
     {"name": "Rooms", "sensor_mode": "shelly", "sensor_device_id": "shellyht-AAAA", "valve_device_id": "shellyplus1-BBBB", "cool_enabled": True},
@@ -171,3 +174,63 @@ def test_build_zone_configs_maps_to_the_thermostat_zone_shape():
         {"name": "Rooms", "sensor": "Rooms Sensor", "valve": "Rooms Valve", "cool_enabled": True},
         {"name": "Bathrooms", "sensor": "Bathrooms Sensor", "valve": "Bathrooms Valve", "cool_enabled": False},
     ]
+
+
+# --------------------------------------------- snapshot_from_config ----
+# Pre-fills the panel's form from config.yaml's *current* hand-written
+# setup (real device ids included) instead of a blank one - read-only,
+# never writes back to config.yaml or touches the real device.
+
+def test_snapshot_reads_a_real_shelly_sensor_and_valve():
+    zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve", cool_enabled=True)]
+    integrations = [
+        Integration("climate", "mqtt_json", {
+            "name": "Rooms Sensor",
+            "state_topic": ["shellyht-AAAA/status/temperature:0", "shellyht-AAAA/status/humidity:0"],
+        }),
+        Integration("switch", "mqtt_json", {"name": "Rooms Valve", "state_topic": "shellyplus1-BBBB/status/switch:0"}),
+    ]
+
+    snapshot = snapshot_from_config(zones, integrations)
+
+    assert snapshot[0] == {
+        "name": "Rooms", "sensor_mode": "shelly", "sensor_device_id": "shellyht-AAAA",
+        "valve_device_id": "shellyplus1-BBBB", "cool_enabled": True,
+    }
+
+
+def test_snapshot_reads_a_simulated_sensor():
+    zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve", cool_enabled=False)]
+    integrations = [
+        Integration("climate", "simulated", {"name": "Rooms Sensor"}),
+        Integration("switch", "simulated", {"name": "Rooms Valve"}),
+    ]
+
+    snapshot = snapshot_from_config(zones, integrations)
+
+    assert snapshot[0] == {
+        "name": "Rooms", "sensor_mode": "simulated", "sensor_device_id": None,
+        "valve_device_id": None, "cool_enabled": False,
+    }
+
+
+def test_snapshot_pads_up_to_zone_count_with_blank_entries():
+    zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve")]
+
+    snapshot = snapshot_from_config(zones, [])
+
+    assert len(snapshot) == 2
+    assert snapshot[1] == {
+        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
+        "valve_device_id": None, "cool_enabled": True,
+    }
+
+
+def test_snapshot_falls_back_to_an_empty_shelly_slot_for_an_unknown_driver_type():
+    zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve")]
+    integrations = [Integration("climate", "tuya_air_quality", {"name": "Rooms Sensor"})]
+
+    snapshot = snapshot_from_config(zones, integrations)
+
+    assert snapshot[0]["sensor_mode"] == "shelly"
+    assert snapshot[0]["sensor_device_id"] is None

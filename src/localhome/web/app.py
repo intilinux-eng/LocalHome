@@ -17,7 +17,12 @@ from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
-from localhome.services.climate_map_store import ClimateMapStore, build_climate_integrations, build_zone_configs
+from localhome.services.climate_map_store import (
+    ClimateMapStore,
+    build_climate_integrations,
+    build_zone_configs,
+    snapshot_from_config,
+)
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services.manual_override import ManualOverrideStore
@@ -509,17 +514,18 @@ def _register_routes(app: Flask) -> None:
     def api_climate_admin_get_map():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_zones()
-        return jsonify(
-            ok=True,
-            configured=saved is not None,
-            zones=saved,
-            # Purely informational context for the form when nothing's
-            # been saved yet - config.yaml's own zone names, if any, so
-            # the installer can see what's already there without this
-            # panel guessing at a sensor_mode/device_id for them.
-            config_yaml_zone_names=[z.name for z in thermostat.zones] if thermostat else [],
-        )
+        if saved is not None:
+            return jsonify(ok=True, configured=True, zones=saved)
+        # Nothing saved yet - read config.yaml's *current* hand-written
+        # setup as the form's starting point (real device ids included)
+        # instead of a blank form, so trying "manual"/"simulated" mode
+        # for a quick test doesn't mean re-typing a real device id -
+        # this only ever reads config.yaml, never changes the real
+        # device, and is never consulted again once something's saved.
+        snapshot = snapshot_from_config(thermostat.zones, config.integrations) if thermostat else None
+        return jsonify(ok=True, configured=False, zones=snapshot)
 
     @app.route("/api/climate-admin/map", methods=["POST"])
     def api_climate_admin_set_map():
