@@ -1,0 +1,137 @@
+/* Page-specific styles for /climate-admin - style.css (linked alongside
+   this file, see templates/climate_admin.html) already provides the
+   dark theme variables, header/hint-text/tbtn/range-btn/section-head
+   base styles this page reuses directly. */
+
+#zone-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-zone-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-field label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.admin-field input,
+.admin-field select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.admin-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+#save-btn {
+  margin-top: 4px;
+}
+
+.admin-error {
+  color: var(--accent-close);
+}
+
+.admin-success {
+  color: var(--accent-open);
+}
+
+#status-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.admin-status-row {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.admin-status-name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.admin-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.admin-status.ok {
+  background: rgba(48, 209, 88, 0.18);
+  color: var(--accent-open);
+}
+
+.admin-status.neutral {
+  background: rgba(255, 159, 10, 0.18);
+  color: var(--accent-stop);
+}
+
+.admin-status.bad {
+  background: rgba(255, 69, 58, 0.18);
+  color: var(--accent-close);
+}
+
+.admin-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-right: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+}
+
+.admin-manual-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-manual-box input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-size: 0.8rem;
+  width: 90px;
+}
