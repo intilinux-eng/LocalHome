@@ -75,41 +75,82 @@ Two more things belong in this same "before you walk away" checklist:
 
 ## Docker
 
-```bash
-cp config/config.example.yaml config/config.yaml
-# ...and the *.example.json files you need, same as any other setup -
-# see docs/configuration.md.
+Two ways to run this in Docker - same result, pick whichever fits how
+you deploy. Either way you need a local `config/` directory (never
+baked into the image - see `.dockerignore`), so start by cloning the
+repo regardless of which path you take below:
 
+```bash
+git clone <this-repo>
+cd <the-cloned-directory>
+cp config/config.example.yaml config/config.yaml
+# ...and the *.example.json files you need - see docs/configuration.md
+# and docs/integrations/ for each device's own ids/keys/credentials.
+```
+
+### A. Build the image yourself (the default, works right away)
+
+```bash
 docker compose up -d --build
 ```
 
-`docker-compose.yml` bind-mounts `./config` into the container; nothing
-under `config/` is ever baked into the image (see `.dockerignore`), so
-the image itself stays generic and shareable while your real setup stays
-on the host. Rebuild (`docker compose up -d --build`) after pulling code
+`docker-compose.yml` bind-mounts `./config` into the container at
+runtime. Rebuild (`docker compose up -d --build`) after pulling code
 changes; no rebuild is needed after editing anything under `config/`,
 just restart (`docker compose restart`).
 
-### Using the published image instead of building locally
+### B. Pull a pre-built image instead of building locally
 
-`.github/workflows/docker.yml` builds a multi-arch (amd64 + arm64 -
-covers Raspberry Pi/similar boards) image and pushes it to GitHub
-Container Registry on every push to `main` and on version tags, once
-this repo lives on GitHub - no manual publishing step, no secrets to set
-up (it uses the repo's automatic `GITHUB_TOKEN`). Once that's run at
-least once, pull it instead of building:
+Every push to `main` (and every version tag) publishes a multi-arch
+(amd64 + arm64 - covers Raspberry Pi/Arduino UNO Q-class boards) image
+to GitHub Container Registry via `.github/workflows/docker.yml`, using
+the repo's automatic `GITHUB_TOKEN` - no publishing step or secrets to
+set up on your end. This project's own image (public, no `docker
+login` needed) lives at:
 
-```bash
-docker pull ghcr.io/<owner>/<repo>:latest
+```
+ghcr.io/intilinux-eng/localhome:latest
 ```
 
-and swap `build: .` for `image: ghcr.io/<owner>/<repo>:latest` in
-`docker-compose.yml` (or use `docker run` directly with the same
-`-p 5000:5000 -v ./config:/app/config` shape as the compose file). This
-skips the local build step entirely - handy on a low-power device like a
-Raspberry Pi, where compiling anything is slower than just downloading a
-finished image. Building locally (the default above) still works exactly
-the same either way; use whichever fits how you deploy.
+(Forked or renamed the repo? Yours publishes to
+`ghcr.io/<your-github-username-or-org>/<your-repo-name>` instead - all
+lowercase, matching how GHCR normalizes the name - once you've pushed
+to `main` at least once.)
+
+Skip the build step entirely - handy on a low-power board where
+compiling anything is slower than just downloading a finished image -
+either by editing `docker-compose.yml` to use it:
+
+```yaml
+services:
+  localhome:
+    image: ghcr.io/intilinux-eng/localhome:latest   # instead of `build: .`
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped
+```
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+or with a plain `docker run`, no compose file needed:
+
+```bash
+docker pull ghcr.io/intilinux-eng/localhome:latest
+docker run -d --name localhome \
+  -p 5000:5000 \
+  -v "$(pwd)/config:/app/config" \
+  --restart unless-stopped \
+  ghcr.io/intilinux-eng/localhome:latest
+```
+
+Either form: `docker compose pull`/`docker pull` again followed by
+`docker compose up -d`/`docker restart localhome` picks up a newer
+published image; editing anything under `config/` still only needs a
+restart, no pull.
 
 ## Bare metal (systemd)
 
