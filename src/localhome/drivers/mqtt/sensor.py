@@ -103,7 +103,42 @@ class MqttSensorDriver(PollingDriver):
                 if value is not None:
                     reading[field] = value
         if len(errors) == len(self._states):
-            raise RuntimeError("; ".join(errors))
+            # Every subscribed topic is stale/missing - a battery sensor
+            # (e.g. a Shelly H&T) between wake cycles hits this often,
+            # not just genuine offline hardware. Raising here (the old
+            # behavior) would discard the device's last known reading
+            # entirely, via SyncPoller's generic try/except turning any
+            # exception into a bare {"ok": False, "error": ...} - the
+            # dashboard would blank a value it still actually has.
+            # get_payload() doesn't care about staleness, only
+            # require_payload() does, so fall back to it for whatever
+            # each topic last had, however old, and report the oldest
+            # topic's age so the UI can say "last known: X, Yh ago"
+            # instead of just an error. Still ok: False either way - a
+            # control loop (thermostat/interlock) must not act on this
+            # as if it were fresh; see core/poller.py's callers.
+            ages = []
+            for state in self._states:
+                payload = state.get_payload()
+                if payload is None:
+                    continue
+                for field, path in self._fields.items():
+                    value = extract_path(payload, path)
+                    if value is not None:
+                        reading.setdefault(field, value)
+                age = state.seconds_since_message()
+                if age is not None:
+                    ages.append(age)
+            if not ages:
+                # Never received anything on *any* topic - nothing to
+                # fall back to, so this really is "unreachable" (a
+                # fresh/never-wired device), not "stale". Raise as
+                # before; SyncPoller turns this into the same bare
+                # {"ok": False, "error": ...} it always has.
+                raise RuntimeError("; ".join(errors))
+            reading["ok"] = False
+            reading["error"] = "; ".join(errors)
+            reading["last_value_age_seconds"] = min(ages)
         return reading
 
 

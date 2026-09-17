@@ -248,6 +248,11 @@ def validate_extra_sensors(
 
 
 def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> dict:
+    # Same 4-topic shape (temperature/humidity/devicepower/wifi) this
+    # project's own hand-written Shelly H&T entries use - see
+    # docs/integrations/mqtt.md - so a panel-built sensor shows the same
+    # WiFi signal strength a hand-written one would, not a reduced set
+    # just because it came from here.
     device_id = zone["sensor_device_id"].strip()
     return {
         "name": sensor_name,
@@ -256,8 +261,14 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
             f"{device_id}/status/temperature:0",
             f"{device_id}/status/humidity:0",
             f"{device_id}/status/devicepower:0",
+            f"{device_id}/status/wifi",
         ],
-        "fields": {"temperature_c": "tC", "humidity_pct": "rh", "battery_pct": "battery.percent"},
+        "fields": {
+            "temperature_c": "tC",
+            "humidity_pct": "rh",
+            "battery_pct": "battery.percent",
+            "wifi_rssi_dbm": "rssi",
+        },
         "stale_after_seconds": 21600,
         "dashboard_tab": "climate",
     }

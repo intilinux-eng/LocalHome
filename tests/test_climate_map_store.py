@@ -231,7 +231,9 @@ def test_build_extra_sensor_integrations_shape():
         "shellyht-FFFF/status/temperature:0",
         "shellyht-FFFF/status/humidity:0",
         "shellyht-FFFF/status/devicepower:0",
+        "shellyht-FFFF/status/wifi",
     ]
+    assert outdoor.options["fields"]["wifi_rssi_dbm"] == "rssi"
 
 
 def test_build_extra_sensor_integrations_skips_an_unset_field():
@@ -355,8 +357,14 @@ def test_build_climate_integrations_shelly_mode_shape():
         "shellyht-AAAA/status/temperature:0",
         "shellyht-AAAA/status/humidity:0",
         "shellyht-AAAA/status/devicepower:0",
+        "shellyht-AAAA/status/wifi",
     ]
-    assert sensor.options["fields"] == {"temperature_c": "tC", "humidity_pct": "rh", "battery_pct": "battery.percent"}
+    assert sensor.options["fields"] == {
+        "temperature_c": "tC",
+        "humidity_pct": "rh",
+        "battery_pct": "battery.percent",
+        "wifi_rssi_dbm": "rssi",
+    }
     assert sensor.options["stale_after_seconds"] == 21600
 
 

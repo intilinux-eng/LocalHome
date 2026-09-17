@@ -324,6 +324,17 @@ these by a different name, update that entry to say "Bathroom Bypass
 Valve"/"Dehumidifier" instead, since this panel always uses those exact
 names.
 
+One more fixed, standalone sensor - an outdoor temperature/humidity
+reading, always a real Shelly H&T Gen3, no simulated/manual stand-in -
+is mappable the same way under its own "Outdoor sensor" section: leave
+its device id blank if not wired yet, same as either extra switch.
+It's not part of either zone (no valve, no thermostat decision), so
+there's nothing tying it to `thermostat.zones`/`interlocks` the way the
+extra switches above can be - the only thing to update if a
+config.yaml entry already covers this is its own `dashboard_tab`/name
+if you want to keep both around, since this panel always builds it as
+"Temperatura Esterna".
+
 The page's live status section reflects whichever mapping is *actually
 running* (since the last restart) - joined against the saved mapping to
 show a mode/source pill (e.g. `SIMULATED`) next to each zone. A

@@ -193,9 +193,10 @@ for the full picture; in short, from the browser alone:
   valve to a real relay or a simulated one - so the on/off control
   logic can be verified end to end (including manual open/close test
   buttons) before any hardware is actually wired.
-- Edit the MQTT broker connection and two more fixed Shelly Plus 1
-  switches (a bathroom bypass valve, a dehumidifier) - a full install
-  needs no file editing at all.
+- Edit the MQTT broker connection, two more fixed Shelly Plus 1
+  switches (a bathroom bypass valve, a dehumidifier), and a standalone
+  outdoor temperature/humidity sensor (always a real Shelly H&T Gen3) -
+  a full install needs no file editing at all.
 - A live status view with plain-language guidance that tells a
   battery sensor that simply hasn't reported yet apart from one that's
   genuinely gone offline, a broker-reachability check kept separate

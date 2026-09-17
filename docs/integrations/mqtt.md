@@ -61,9 +61,18 @@ from an hour, or a week, ago). For a device you know reports on a
 regular interval regardless of state changes (most sensors; some
 relays, depending on firmware), set `stale_after_seconds` a bit above
 that interval - a reading older than that becomes `"ok": False`
-("unreachable" on the dashboard, and skipped by the thermostat/interlock
-the same way any other sensor failure is) instead of silently going
-stale forever:
+(skipped by the thermostat/interlock the same way any other sensor
+failure is) instead of silently going stale forever. For a `climate`/
+`power_meter` sensor split across multiple topics (a Shelly H&T's
+temperature/humidity/battery/wifi, say - see the examples below), this
+only kicks in once *every* topic has gone stale: the dashboard then
+shows the last value each topic ever had (however old) labeled "last
+known value - no update in Xh", not a blank "unreachable" card - a
+battery sensor between wake cycles hits this constantly, and losing
+its last reading every time would be worse than showing a slightly
+stale one. `read()` still reports `"ok": False` either way, so a
+control loop never acts on it as if it were fresh - see
+`drivers/mqtt/sensor.py`'s `read()`.
 
 ```yaml
 - kind: climate

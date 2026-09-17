@@ -81,6 +81,19 @@ function formatUpdatedAgo(seconds) {
   return age == null ? "" : tr("sensors.updated_ago", { time: age });
 }
 
+// The "last known value" fallback (drivers/mqtt/sensor.py's read())
+// only carries an age in seconds, not a timestamp - Date.now() at
+// render time is close enough (this is display-only; the thermostat
+// never uses this value, see services/thermostat.py's tick()) to turn
+// that into an actual date/time, which is what the operator actually
+// wants to see, not just a relative "19h ago".
+function staleValueNote(ageSeconds) {
+  const relative = formatAge(ageSeconds);
+  if (relative == null) return tr("sensors.stale_value_note", { date: "?", time: "?" });
+  const date = new Date(Date.now() - ageSeconds * 1000).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" });
+  return tr("sensors.stale_value_note", { date, time: relative });
+}
+
 // ---------------------------------------------------------------- covers ---
 
 function renderCovers(names) {
@@ -366,6 +379,16 @@ function refreshSensor(sensor) {
     .catch(() => updateSensorCard(sensor, { ok: false, error: "unreachable" }, null));
 }
 
+// A driver that went stale rather than never-connected (see
+// drivers/mqtt/sensor.py's read()) still reports ok: false - a control
+// loop must not act on it as fresh - but keeps its last known reading
+// attached instead of discarding it. HAS_LAST_KNOWN_VALUE_FIELDS is
+// what a card checks to tell "stale, but I still know the value" apart
+// from "truly nothing to show" (a driver that never got this
+// treatment, e.g. a fresh install, or a non-MQTT error with no
+// fallback at all).
+const HAS_LAST_KNOWN_VALUE_FIELDS = ["temperature_c", "humidity_pct", "power_w"];
+
 function updateSensorCard(sensor, reading, linkedReading) {
   const id = slug(sensor.name);
   const dot = document.getElementById(`dot-${id}`);
@@ -373,7 +396,9 @@ function updateSensorCard(sensor, reading, linkedReading) {
   const metrics = document.getElementById(`metrics-${id}`);
   if (!dot || !metrics) return;
 
-  if (!reading.ok) {
+  const hasLastKnownValue = !reading.ok && HAS_LAST_KNOWN_VALUE_FIELDS.some(f => reading[f] != null);
+
+  if (!reading.ok && !hasLastKnownValue) {
     dot.classList.remove("on");
     updated.textContent = reading.error || "error";
     metrics.innerHTML = `<div class="headline"><div class="big">--</div></div>`;
@@ -381,8 +406,10 @@ function updateSensorCard(sensor, reading, linkedReading) {
   }
 
   const online = reading.online === undefined || reading.online === true || reading.online === "ONLINE";
-  dot.classList.toggle("on", online && (reading.is_on === undefined || reading.is_on));
-  updated.textContent = formatUpdatedAgo(reading.seconds_since_update);
+  dot.classList.toggle("on", reading.ok && online && (reading.is_on === undefined || reading.is_on));
+  updated.textContent = reading.ok
+    ? formatUpdatedAgo(reading.seconds_since_update)
+    : staleValueNote(reading.last_value_age_seconds);
 
   const headlineField = HEADLINE_FIELDS[sensor.kind];
   const knownFields = Object.keys(FIELD_META).filter(f => f in reading && f !== headlineField);
@@ -1002,15 +1029,25 @@ function hourAxisHtml() {
   return cells;
 }
 
+// A zone's sensor can be stale (every MQTT topic past
+// stale_after_seconds - see drivers/mqtt/sensor.py's read()) while
+// still having a last known reading attached, rather than genuinely
+// unreachable with nothing to show at all - most commonly a battery
+// sensor (Shelly H&T) between wake cycles, not broken hardware.
+function zoneHasLastKnownValue(zone) {
+  return !zone.sensor_ok && zone.temperature_c != null;
+}
+
 // What the sensor slot shows when the reading itself is broken: the
-// driver's own error string if there is one (e.g. an MQTT staleness
-// timeout - see drivers/mqtt/base.py's require_payload() - or a Tuya/
-// Meross/Tapo network failure, since those poll the device directly and
-// already surface a real error the same way), falling back to the
-// generic "unreachable" label if a driver didn't set one.
+// last known value's age if there is one (see zoneHasLastKnownValue()
+// above), else the driver's own error string (e.g. a Tuya/Meross/Tapo
+// network failure, since those poll the device directly and already
+// surface a real error), falling back to the generic "unreachable"
+// label if a driver didn't set one.
 function zoneFreshnessText(zone) {
-  if (!zone.sensor_ok) return zone.sensor_error || tr("climate.unreachable");
-  return formatUpdatedAgo(zone.sensor_seconds_since_update);
+  if (zone.sensor_ok) return formatUpdatedAgo(zone.sensor_seconds_since_update);
+  if (zoneHasLastKnownValue(zone)) return staleValueNote(zone.sensor_last_value_age_seconds);
+  return zone.sensor_error || tr("climate.unreachable");
 }
 
 // Only a battery-powered sensor (e.g. a Shelly H&T) reports battery_pct
@@ -1086,7 +1123,7 @@ function closeLowBattery() {
 function buildZoneCard(zone) {
   const id = slug(zone.name);
   const chartId = slug(zone.sensor);
-  const currentText = zone.sensor_ok && zone.temperature_c != null
+  const currentText = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null
     ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
     : tr("climate.unreachable");
   return `
@@ -1365,7 +1402,7 @@ async function refreshClimateZonesLive() {
       const card = document.getElementById(`zone-${slug(zone.name)}`);
       if (!card) return;
       card.querySelector(".dot").classList.toggle("on", zone.valve_on);
-      card.querySelector(".zone-current").textContent = zone.sensor_ok && zone.temperature_c != null
+      card.querySelector(".zone-current").textContent = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null
         ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
         : tr("climate.unreachable");
       const updated = card.querySelector(".zone-updated");

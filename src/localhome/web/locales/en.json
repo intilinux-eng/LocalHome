@@ -54,6 +54,7 @@
   "sensors": {
     "peak_today": "Peak today",
     "updated_ago": "{time} ago",
+    "stale_value_note": "Last known value from {date} - no update in {time}",
     "switch_on": "on",
     "switch_off": "off",
     "confirm_turn_off": "Turn this plug off? Make sure you know what it's powering.",
@@ -192,6 +193,9 @@
     "extra_switches_heading": "Extra switches",
     "extra_switches_note": "Two more fixed, standalone Shelly Plus 1 on/off switches, not tied to a zone and with no sensor - leave either blank if not wired yet. If config.yaml's thermostat.interlocks/mode_switches already control one of these by a different name, update that config.yaml entry to say \"Bathroom Bypass Valve\"/\"Dehumidifier\" instead - this panel always uses those exact names.",
     "extra_bypass_valve_label": "Bathroom bypass valve device id",
-    "extra_dehumidifier_label": "Dehumidifier device id"
+    "extra_dehumidifier_label": "Dehumidifier device id",
+    "extra_sensor_heading": "Outdoor sensor",
+    "extra_sensor_note": "One more fixed, standalone Shelly H&T Gen3 sensor - outdoor temperature/humidity, not tied to any zone. Always a real device (no simulated/manual mode, unlike a zone's own sensor) - leave blank if not wired yet.",
+    "extra_outdoor_sensor_label": "Outdoor sensor device id"
   }
 }

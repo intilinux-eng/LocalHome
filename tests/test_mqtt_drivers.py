@@ -27,6 +27,17 @@ def fake_connection(monkeypatch):
     return conn
 
 
+@pytest.fixture
+def fake_clock(monkeypatch):
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr("localhome.drivers.mqtt.base.time.time", lambda: now["t"])
+
+    def advance(seconds):
+        now["t"] += seconds
+
+    return advance
+
+
 # --------------------------------------------------------------- sensor ----
 
 def test_sensor_raises_before_any_message_is_received(fake_connection):
@@ -121,6 +132,55 @@ def test_sensor_raises_only_when_every_topic_has_nothing(fake_connection):
     )
     with pytest.raises(RuntimeError, match="no MQTT message"):
         driver.read()
+
+
+# A battery sensor (Shelly H&T) between wake cycles crosses
+# stale_after_seconds constantly - that's not the same as genuinely
+# offline hardware, so read() must keep surfacing the last known value
+# (ok: False, but with the data) instead of discarding it the way
+# raising here always used to.
+
+def test_sensor_keeps_the_last_known_value_once_every_topic_goes_stale(fake_connection, fake_clock):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+        stale_after_seconds=300,
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_connection.deliver("shelly/status/humidity:0", json.dumps({"rh": 47.0}))
+    fake_clock(301)
+
+    reading = driver.read()
+
+    assert reading["ok"] is False
+    assert "no MQTT message in" in reading["error"]
+    assert reading["temperature_c"] == 21.5
+    assert reading["humidity_pct"] == 47.0
+    assert reading["last_value_age_seconds"] == pytest.approx(301)
+
+
+def test_sensor_falls_back_only_for_the_topic_that_ever_had_a_value(fake_connection, fake_clock):
+    # Mixed case: one topic went stale (has a last-known value to fall
+    # back to), the other never reported at all (nothing to fall back
+    # to) - each topic's own history decides whether its field shows up
+    # in the fallback reading, not an all-or-nothing choice.
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+        stale_after_seconds=300,
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_clock(301)
+    # humidity topic never delivered anything, ever
+
+    reading = driver.read()
+
+    assert reading["ok"] is False
+    assert reading["temperature_c"] == 21.5
+    assert "humidity_pct" not in reading
+    assert reading["last_value_age_seconds"] == pytest.approx(301)
 
 
 # --------------------------------------------------------------- switch ----

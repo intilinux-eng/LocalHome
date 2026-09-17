@@ -402,6 +402,12 @@ def _register_routes(app: Flask) -> None:
                 "sensor_ok": sensor_reading.get("ok", False),
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),
+                # Set only for the "every MQTT topic went stale, but at
+                # least one of them had a last-known value" fallback
+                # (drivers/mqtt/sensor.py) - lets the dashboard show
+                # "last known: X, stale for Yh" instead of blanking a
+                # reading it still actually has.
+                "sensor_last_value_age_seconds": sensor_reading.get("last_value_age_seconds"),
                 "valve_on": valve_reading.get("is_on", False),
                 "valve_ok": valve_reading.get("ok", False),
                 "valve_seconds_since_update": valve_reading.get("seconds_since_update"),

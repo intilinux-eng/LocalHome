@@ -14,6 +14,39 @@ function fmt(value, digits) {
   return typeof value === "number" ? value.toFixed(digits) : "--";
 }
 
+// Same compact age formatter as app.js, copied rather than shared -
+// see this file's own top comment.
+function formatAge(seconds) {
+  if (seconds == null) return null;
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+const LOCALE = (window.I18N && window.I18N.locale) || undefined;
+
+// The "last known value" fallback (drivers/mqtt/sensor.py's read())
+// only carries an age in seconds, not a timestamp - Date.now() at
+// render time is close enough (this is display-only; the thermostat
+// never uses this value, see services/thermostat.py's tick()) to turn
+// that into an actual date/time, which is what the operator actually
+// wants to see, not just a relative "19h ago".
+function staleValueNote(ageSeconds) {
+  const relative = formatAge(ageSeconds);
+  if (relative == null) return tr("sensors.stale_value_note", { date: "?", time: "?" });
+  const date = new Date(Date.now() - ageSeconds * 1000).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" });
+  return tr("sensors.stale_value_note", { date, time: relative });
+}
+
+// A zone's sensor can be stale (every MQTT topic past
+// stale_after_seconds - see drivers/mqtt/sensor.py's read()) while
+// still having a last known reading attached - most often a battery
+// sensor (Shelly H&T) between wake cycles, not broken hardware.
+function zoneHasLastKnownValue(zone) {
+  return !zone.sensor_ok && zone.temperature_c != null;
+}
+
 // ---------------------------------------------------------------- restart ----
 // Every save above needs this before it actually does anything - see
 // services/self_restart.py. Reused wherever a save's result or the
@@ -398,6 +431,7 @@ async function refreshExtraSensorStatus() {
       humidity_pct: reading.humidity_pct,
       battery_pct: reading.battery_pct,
       wifi_rssi_dbm: reading.wifi_rssi_dbm,
+      sensor_last_value_age_seconds: reading.last_value_age_seconds,
     };
     slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, "shelly")}</div>`;
   } catch (e) {
@@ -435,12 +469,21 @@ function sensorStatusHtml(zone, mode) {
     return `<span class="admin-status neutral">${tr("climate_admin.manual_no_value")}</span>`;
   }
   // shelly (or unknown - default to the same real-device reading)
-  if (zone.sensor_ok) {
+  if (zone.sensor_ok || zoneHasLastKnownValue(zone)) {
     let extra = "";
     if (zone.humidity_pct != null) extra += ` · ${fmt(zone.humidity_pct, 0)}%`;
     if (zone.battery_pct != null) extra += ` · ${tr("fields.battery_pct")} ${fmt(zone.battery_pct, 0)}%`;
     const wifi = wifiLabel(zone);
     if (wifi) extra += ` · ${wifi}`;
+    // Every MQTT topic went stale (see drivers/mqtt/sensor.py's
+    // read()) but at least one still has a last-known value - most
+    // often a battery sensor between wake cycles, not broken hardware.
+    // Neutral, not the red "offline" pill below: the value shown is
+    // real, just not necessarily current.
+    if (!zone.sensor_ok) {
+      const note = staleValueNote(zone.sensor_last_value_age_seconds);
+      return `<span class="admin-status neutral">${note}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
+    }
     return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
   }
   const error = zone.sensor_error || "";
@@ -611,6 +654,7 @@ async function refreshBroker() {
 async function refreshAll() {
   await refreshBroker();
   await refreshStatus();
+  await refreshExtraSensorStatus();
 }
 
 async function setManualValue(zoneName, button) {
@@ -667,4 +711,5 @@ document.addEventListener("visibilitychange", () => {
 loadMap();
 loadBroker();
 loadExtraSwitches();
+loadExtraSensor();
 startPolling();

@@ -54,6 +54,7 @@
   "sensors": {
     "peak_today": "Picco odierno",
     "updated_ago": "{time} fa",
+    "stale_value_note": "Ultimo valore noto del {date} - nessun aggiornamento da {time}",
     "switch_on": "acceso",
     "switch_off": "spento",
     "confirm_turn_off": "Spegnere questa presa? Assicurati di sapere cosa alimenta.",
@@ -192,6 +193,9 @@
     "extra_switches_heading": "Interruttori extra",
     "extra_switches_note": "Altri due interruttori on/off Shelly Plus 1 fissi, non legati a una zona e senza sensore - lascia vuoto quello non ancora collegato. Se thermostat.interlocks/mode_switches in config.yaml controllano già uno di questi con un nome diverso, aggiorna quella voce di config.yaml a \"Bathroom Bypass Valve\"/\"Dehumidifier\" - questo pannello usa sempre esattamente quei nomi.",
     "extra_bypass_valve_label": "ID dispositivo valvola bypass bagni",
-    "extra_dehumidifier_label": "ID dispositivo deumidificatore"
+    "extra_dehumidifier_label": "ID dispositivo deumidificatore",
+    "extra_sensor_heading": "Sensore esterno",
+    "extra_sensor_note": "Un altro sensore Shelly H&T Gen3 fisso, indipendente, non legato a nessuna zona - temperatura/umidità esterna. Sempre un dispositivo reale (nessuna modalità simulata/manuale, a differenza del sensore di una zona) - lascia vuoto se non ancora collegato.",
+    "extra_outdoor_sensor_label": "ID dispositivo sensore esterno"
   }
 }

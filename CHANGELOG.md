@@ -6,6 +6,39 @@ date rather than by tag.
 
 ## Unreleased
 
+### Fixed
+- A `mqtt_json` climate/power_meter sensor whose topics all went past
+  `stale_after_seconds` (most commonly a battery sensor like a Shelly
+  H&T between wake cycles, not actually broken hardware) used to
+  discard its last known reading entirely and show a blank
+  "unreachable" card. It now keeps showing the last known value,
+  labeled "last known value - no update in Xh", on the main dashboard,
+  a zone's card, and the climate admin panel's live status alike -
+  still `"ok": False` under the hood, so the thermostat/interlock still
+  correctly never acts on it as if it were fresh. See
+  `drivers/mqtt/sensor.py`'s `read()` and
+  [docs/integrations/mqtt.md](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
+
+### Added
+- A third fixed, standalone role in the climate admin panel: an
+  outdoor temperature/humidity sensor, always a real Shelly H&T Gen3
+  (no simulated/manual stand-in, unlike a zone's own sensor - there's
+  no thermostat decision riding on this one). Same "leave blank if not
+  wired yet" shape as the two extra switches, with its own live status
+  readout. See
+  [docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
+
+### Fixed
+- The main dashboard's per-zone chart could silently keep polling a
+  sensor/valve name that stopped existing - `climateZones` (which the
+  chart's own refresh loop reads `.sensor`/`.valve` from) was only ever
+  set once, at page load; a climate-admin save+restart that renamed a
+  zone's underlying driver (e.g. switching its sensor to/from "manual")
+  while the dashboard tab was already open left that tab's chart stuck
+  querying the old name until a full page reload. `refreshClimateZonesLive()`
+  (already polling every 5s for the live numbers) now keeps this array
+  in sync too.
+
 ### Changed
 - Redesigned the climate admin panel (`/climate-admin`): each zone's
   config form and its live status (sensor reading, valve state, manual

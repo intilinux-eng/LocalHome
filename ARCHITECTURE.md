@@ -209,6 +209,18 @@ reference one of these by a different literal name, moving it to the
 panel means updating that reference, since nothing here rewrites
 `config.yaml` for you.
 
+One more fixed, standalone Shelly H&T Gen3 *sensor* (`EXTRA_SENSOR_FIELDS`,
+`build_extra_sensor_integrations()`) follows the same additive shape -
+an outdoor temperature/humidity reading, not part of either zone (no
+valve, no thermostat decision riding on it). Unlike a zone's own
+sensor there's no simulated/manual mode: with nothing downstream
+deciding anything from this reading, there's nothing to exercise
+before the hardware exists, so it's either a real device id or not
+built at all. `validate_extra_switches()`/`validate_extra_sensors()`
+now cross-check each other's saved device ids too (not just zones'),
+since all three - zones, extra switches, extra sensor - share one
+device-id namespace.
+
 Every save needs a restart before it's actually running - `DeviceManager`
 only builds its drivers once, at process start, same as everything else
 in this document. What's new here is *telling the truth about it*
