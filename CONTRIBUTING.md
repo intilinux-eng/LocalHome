@@ -83,10 +83,8 @@ pip install -e ".[dev]"
 pytest
 ```
 
-(Same venv from the [README](README.md)'s Quick start, or
-[Trying it on your own computer](README.md#trying-it-on-your-own-computer-first),
-works fine here too - just add `[dev]` to the `pip install -e .` you
-already ran.)
+(Same venv from the [README](README.md)'s Quick start works fine here
+too - just add `[dev]` to the `pip install -e .` you already ran.)
 
 Tests must not require real hardware or real cloud credentials - mock or
 construct fake driver instances instead (see `tests/` for examples).

@@ -18,7 +18,7 @@ you've outgrown it - that's a fine outcome for a project this size.
 ## Screenshots
 
 All three captured against the `simulated` driver and example device
-ids (see below) - no real hardware needed to see this for yourself.
+ids - no real hardware needed to see this for yourself.
 
 | Home | Heating & Cooling |
 |---|---|
@@ -27,105 +27,40 @@ ids (see below) - no real hardware needed to see this for yourself.
 ![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, and live per-zone status](docs/screenshots/climate-admin.png)
 *Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
 
-## Quick start: Debian/Ubuntu (Arduino UNO Q, Raspberry Pi, ...)
-
-LocalHome is one small Python process: it talks to your devices
-directly over your LAN (or their local MQTT broker) - no hub, no
-cloud subscription - and serves a dashboard over plain HTTP. This is
-plain Debian/Ubuntu underneath, whatever board it's running on - an
-[Arduino UNO Q](https://www.arduino.cc/)'s Linux userspace *is* Debian
-trixie (SSH, bash, systemd, not a microcontroller-only board), a
-Raspberry Pi's is Raspberry Pi OS - so nothing below is board-specific.
-Getting it running is exactly three things: get the code and its
-Python dependencies onto the box, tell it about your devices in one
-config file, and let systemd keep it (and mosquitto, if you need MQTT)
-running so both survive a reboot or you closing the SSH session. The
-steps below are that, in order - see
-[docs/deployment.md](docs/deployment.md) for the same walkthrough with
-more detail, plus a Docker alternative and a hardened dedicated-user
-variant.
+## Quick start
 
 ```bash
-# 1. SSH into the box, then - mosquitto is only needed if any of your
-#    devices speak MQTT (Shelly, Tasmota, Zigbee2MQTT, ...):
-sudo apt update
-sudo apt install -y git mosquitto python3-venv || sudo apt install -y git mosquitto python3.13-venv
-# (the exact venv package name varies by distro version - if the first
-#  one 404s, apt's own error names the right one)
-
-# 2. Get the code and its dependencies:
-git clone <this-repo> ~/localhome
-cd ~/localhome
+git clone <this-repo> && cd <the-cloned-directory>
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
 
-# 3. Using MQTT devices? Point mosquitto at your LAN instead of just
-#    localhost (its systemd unit is already enabled by the package,
-#    so it already survives a reboot):
-printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
-sudo systemctl restart mosquitto
-
-# 4. Tell LocalHome about your devices:
 cp config/config.example.yaml config/config.yaml
-#    ...and the *.example.json files you need; see docs/configuration.md
-#    and docs/integrations/ - or, if every device is Shelly, skip this
-#    and use the climate admin panel instead (step 6).
+# ...and the *.example.json files you need - see docs/configuration.md
+# and docs/integrations/ for each device's own ids/keys/credentials.
 
-# 5. Sanity-check before trusting it to run unattended:
-.venv/bin/localhome-cli doctor
-
-# 6. Make LocalHome survive a reboot and closing the SSH session:
-sudo cp deploy/localhome.service /etc/systemd/system/
-# edit /etc/systemd/system/localhome.service first: replace YOUR_USER
-# with the account you just cloned as
-sudo systemctl daemon-reload
-sudo systemctl enable --now localhome
-sudo systemctl status localhome
-# -> dashboard at http://<box-ip>:5000 ; logs: sudo journalctl -u localhome -f
-```
-
-If step 1's venv package isn't found, or step 2's `python3 -m venv
-.venv` fails with "ensurepip is not available", your distro named the
-package differently - install the exact one apt's own error message
-names and retry; see [docs/troubleshooting.md](docs/troubleshooting.md).
-
-**Using Shelly devices?** Skip most of step 4 and use `/climate-admin`
-from the dashboard instead (device ids only, no file editing) - see
-[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
-
-## Trying it on your own computer first
-
-Want to see the dashboard before committing to a board? Same idea, on
-your own machine, with the `simulated` driver - no real hardware, and
-no systemd step, since you're not leaving it running unattended:
-
-```bash
-git clone <this-repo>
-cd <the-cloned-directory>
-
-python3 -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .
-
-cp config/config.example.yaml config/config.yaml
-localhome-cli doctor
-localhome
+.venv/bin/localhome-cli doctor   # sanity-checks config.yaml
+.venv/bin/localhome
 # -> dashboard at http://localhost:5000
 ```
 
-Always into a virtual environment, never a bare `pip install` against
-the system Python - modern Debian/Ubuntu actively refuse the latter
-(`externally-managed-environment`); see
-[docs/troubleshooting.md](docs/troubleshooting.md) if you hit that or
-the "ensurepip is not available" venv error.
+Runs the same way on your own computer (to try it out) or on the small
+Linux board you'll actually leave it running on (an
+[Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, ...) - see
+[docs/deployment.md](docs/deployment.md) for the full walkthrough,
+including mosquitto, systemd (so it survives a reboot), and a Docker
+alternative. Hit `externally-managed-environment` or "ensurepip is not
+available"? See [docs/troubleshooting.md](docs/troubleshooting.md) -
+both are one-line fixes.
+
+**Using Shelly devices?** Skip editing `config.yaml` by hand and use
+`/climate-admin` from the dashboard instead - see
+[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
 
 Nothing under `config/` other than the `*.example.*` files is ever
 meant to be committed - see [.gitignore](.gitignore). That's what keeps
 your own device inventory, API keys and account passwords out of git
-while this framework itself stays fully public. Rather run the script
-directly than install the `localhome` command? `python run.py` works
-the same way once `pip install -e .` has run.
+while this framework itself stays fully public.
 
 ## What's included
 
@@ -144,65 +79,33 @@ the same way once `pip install -e .` has run.
 output - for anything set to a level rather than toggled or driven
 open/closed.
 
-The web dashboard has two tabs.
+The dashboard has two tabs: **Home** (your enabled devices, estimated
+cover position, sqlite-backed history/charts, an optional power-budget
+alert) and **Heating & Cooling** (a multi-zone valve thermostat - a
+click-and-drag weekly schedule, on-hours stats, a one-tap away mode, a
+zone that can opt out of one mode entirely, and switch-follows-switch
+interlocks - see
+[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones)).
+Both support optional HTTP Basic Auth and a switchable UI language
+(English and Italian ship today - see
+[docs/configuration.md#language](docs/configuration.md#language)).
 
-**Home** - whatever combination of the devices above you have enabled,
-plus estimated 0-100% position for covers that only report a raw
-open/close/stop motor command, a sqlite-backed history/chart (with
-automatic old-row cleanup) for any numeric field a driver exposes, and
-an optional power-budget alert.
-
-**Heating & Cooling** - a multi-zone valve thermostat for a
-shared-plant radiant-panel setup (or anything similar): a
-click-and-drag weekly setpoint schedule per zone, editable straight
-from the dashboard; how many hours each zone's valve was on
-today/this week/this month; a one-tap "away for N days" override that
-closes every valve and resumes the normal schedule on its own; a zone
-that can opt out of one mode entirely (e.g. a bathroom that can't
-safely be cooled); and a generic "switch A forces switch B" rule for a
-device whose own operation depends on a specific valve (e.g. a
-dehumidifier sharing a zone's water circuit). See
-[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones) -
-and if every zone happens to be on Shelly hardware, see
-[the climate admin panel](#the-shelly-climate-admin-panel) below for
-configuring it from a browser instead of by hand.
-
-Both tabs get optional HTTP Basic Auth (off by default) and a UI
-language switchable with one config line - English and Italian ship
-today; see [docs/configuration.md#language](docs/configuration.md#language)
-for adding your own.
-
-Don't own any of the devices above? The point of this project is that
-adding your own driver is a self-contained, half-hour change - see
+Don't own any of the devices above? Adding your own driver is a
+self-contained, half-hour change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).
 
 ## The Shelly climate admin panel
 
-A dedicated `/climate-admin` page for the two-zone heating/cooling
-thermostat, built around one specific, common deployment: the exact
-same setup (two radiant-panel zones, one shared plant) installed
-across multiple homes that all standardize on the [Shelly](https://www.shelly.com/)
-device family (Gen3 H&T sensors, Plus 1 relays) - where redeploying to
-a new home should only ever mean typing in that home's own device ids,
-never touching code or config.yaml by hand. See
+A dedicated `/climate-admin` page for redeploying the same two-zone
+thermostat to a new home that standardizes on the
+[Shelly](https://www.shelly.com/) device family - map each zone's
+sensor/valve, the MQTT broker, and an outdoor sensor to that home's own
+device ids from the browser, no `config.yaml` editing. Simulated/manual
+test modes let the whole control loop be verified before any relay is
+wired, and a live status view gives plain-language guidance instead of
+raw error codes. See
 [docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel)
-for the full picture; in short, from the browser alone:
-
-- Map each zone's sensor to a real Shelly device, a simulated one (no
-  hardware installed yet), or a manually-typed debug value - and its
-  valve to a real relay or a simulated one - so the on/off control
-  logic can be verified end to end (including manual open/close test
-  buttons) before any hardware is actually wired.
-- Edit the MQTT broker connection, two more fixed Shelly Plus 1
-  switches (a bathroom bypass valve, a dehumidifier), and a standalone
-  outdoor temperature/humidity sensor (always a real Shelly H&T Gen3) -
-  a full install needs no file editing at all.
-- A live status view with plain-language guidance that tells a
-  battery sensor that simply hasn't reported yet apart from one that's
-  genuinely gone offline, a broker-reachability check kept separate
-  from per-device status (so a dead broker is never mistaken for six
-  dead devices at once), and a "Restart LocalHome" button so a change
-  can be applied from just a browser.
+for the full picture.
 
 ## Tested hardware
 
@@ -269,24 +172,18 @@ history/alerting story, while staying easy enough to read that adding
 
 ## Legal & licensing
 
-LocalHome is [MIT licensed](LICENSE). Most of its dependencies
-(tinytuya, Flask, aiohttp, meross-iot, requests, PyYAML, paho-mqtt) are
-under permissive licenses with no copyleft obligations - one exception,
-`python-kasa` (GPL-3.0-or-later, used only by the TP-Link driver), is
-called out explicitly - see
+LocalHome is [MIT licensed](LICENSE). Its dependencies are permissive
+(MIT/BSD/Apache) except `python-kasa` (GPL-3.0-or-later) - it's only
+pulled in if you opt into the `tplink_led_strip` driver's own
+`[tplink]` extra, never by a plain install - see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically)
-for the full list and what that exception actually means in practice.
-
-One exception worth knowing about explicitly: the `ewelink_powct` driver
-talks to eWeLink's cloud using unofficial, reverse-engineered app
-credentials (the same pattern the well-known
-[AlexxIT/SonoffLAN](https://github.com/AlexxIT/SonoffLAN) project uses) -
-not something Coolkit/eWeLink issued to this project or sanctioned. It's
-common practice in this space, but it's not a license grant from them,
-and skipping that one integration keeps everything else on unambiguous
-footing (your own Tuya/Meross developer accounts, standard SDK usage).
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically)
-for the full explanation.
+for what that means in practice. The `ewelink_powct` driver separately
+relies on unofficial, reverse-engineered eWeLink app credentials (the
+same pattern [AlexxIT/SonoffLAN](https://github.com/AlexxIT/SonoffLAN)
+uses) - not sanctioned by Coolkit/eWeLink; skip that one integration if
+that's not a tradeoff you want. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically)
+for the full explanation either way.
 
 This project is not affiliated with, endorsed by, or sponsored by Tuya,
 LoraTap, Sonoff, Coolkit/eWeLink, Meross, or Telegram. All trademarks
