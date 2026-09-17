@@ -64,19 +64,29 @@ class MerossPlugDriver(SwitchDriver):
                 password=self._credentials["password"],
             )
             manager = MerossManager(http_client=http_client)
-            await manager.async_init()
-            await manager.async_device_discovery()
-            return manager
+            try:
+                await manager.async_init()
+                await manager.async_device_discovery()
+                devices = manager.find_devices(
+                    device_uuids=[self._uuid] if self._uuid else None,
+                    device_name=self._device_name,
+                )
+                if not devices:
+                    raise RuntimeError(f"device '{self._device_name or self._uuid}' not found on Meross account")
+                return manager, devices[0]
+            except Exception:
+                # Without this, a bad device_name/uuid (or async_init()/
+                # async_device_discovery() itself failing) leaked the HTTP
+                # session and persistent MQTT connection this creates -
+                # AsyncPoller retries async_setup() every
+                # poll_interval_seconds until it succeeds, so a
+                # permanently-wrong config leaked one of each, forever.
+                manager.close()
+                await http_client.async_logout()
+                raise
 
-        manager = await asyncio.wait_for(_setup(), timeout=SETUP_TIMEOUT_SECONDS)
-
-        devices = manager.find_devices(
-            device_uuids=[self._uuid] if self._uuid else None,
-            device_name=self._device_name,
-        )
-        if not devices:
-            raise RuntimeError(f"device '{self._device_name or self._uuid}' not found on Meross account")
-        self._plug = devices[0]
+        _manager, plug = await asyncio.wait_for(_setup(), timeout=SETUP_TIMEOUT_SECONDS)
+        self._plug = plug
 
     async def async_read(self) -> dict[str, Any]:
         async def _read():

@@ -364,7 +364,7 @@ async function saveExtraSwitches(button) {
 // itself and this section's own live status. Fixed name, same
 // convention as the extra switches above - see
 // services/climate_map_store.py's EXTRA_SENSOR_FIELDS.
-const EXTRA_SENSOR_NAME = "Temperatura Esterna";
+const EXTRA_SENSOR_NAME = "Outdoor Sensor";
 let extraSensorRestartPending = false;
 
 async function loadExtraSensor() {

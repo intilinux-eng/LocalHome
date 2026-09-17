@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from localhome.drivers.mqtt.base import MqttJsonState, command_payload, require_payload
+from localhome.drivers.mqtt.base import Availability, MqttJsonState, command_payload, require_payload
 from tests.mqtt_fakes import FakeMqttConnection
 
 BROKER = {"host": "unused-in-tests"}
@@ -79,3 +79,47 @@ def test_a_fresh_message_resets_the_staleness_clock(fake_connection, fake_clock)
     fake_clock(299)
 
     assert require_payload(state) == {"reading": 2}
+
+
+# ------------------------------------------------------------ availability ----
+# A separate, opt-in "is this device even connected" signal (most
+# commonly a device's own MQTT Last Will and Testament) - see
+# drivers/mqtt/base.py's Availability docstring for why this exists
+# alongside stale_after_seconds rather than instead of it.
+
+def test_availability_is_none_when_no_topic_is_configured(fake_connection):
+    availability = Availability(BROKER, None)
+    assert availability.offline_reason() is None
+
+
+def test_availability_is_none_before_anything_is_ever_received(fake_connection):
+    availability = Availability(BROKER, "shellyht-XXXX/online")
+    assert availability.offline_reason() is None
+
+
+def test_availability_is_none_when_the_device_reports_online(fake_connection):
+    availability = Availability(BROKER, "shellyht-XXXX/online")
+    fake_connection.deliver("shellyht-XXXX/online", "true")
+    assert availability.offline_reason() is None
+
+
+def test_availability_reports_offline_when_the_device_says_so(fake_connection):
+    availability = Availability(BROKER, "shellyht-XXXX/online")
+    fake_connection.deliver("shellyht-XXXX/online", "false")
+    reason = availability.offline_reason()
+    assert reason is not None
+    assert "offline" in reason
+
+
+def test_availability_payload_match_is_case_insensitive(fake_connection):
+    availability = Availability(BROKER, "topic", available_payload="ON")
+    fake_connection.deliver("topic", "on")
+    assert availability.offline_reason() is None
+
+
+def test_availability_custom_available_payload(fake_connection):
+    # Not every ecosystem uses Shelly's "true"/"false" - available_payload
+    # lets a device that reports e.g. "online"/"offline" work the same way.
+    availability = Availability(BROKER, "topic", available_payload="online")
+    fake_connection.deliver("topic", "offline")
+    assert availability.offline_reason() is not None

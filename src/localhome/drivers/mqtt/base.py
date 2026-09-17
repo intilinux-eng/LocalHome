@@ -65,6 +65,10 @@ class MqttJsonState:
         with self._lock:
             return self._payload
 
+    def get_received_at(self) -> float | None:
+        with self._lock:
+            return self._received_at
+
     def seconds_since_message(self) -> float | None:
         with self._lock:
             received_at = self._received_at
@@ -76,6 +80,49 @@ class MqttJsonState:
 
     def publish(self, topic: str, payload: str) -> None:
         self._connection.publish(topic, payload)
+
+
+class Availability:
+    """Optional, opt-in per-device online/offline signal from a separate
+    MQTT topic - most commonly a device's own Last Will and Testament
+    (LWT), which the *broker* republishes the instant that device's MQTT
+    connection actually drops (`<id>/online` on Shelly Gen2+, `true`/
+    `false`, retained). That's a faster, more precise "is this device
+    really there" signal than stale_after_seconds's "hasn't published a
+    regular reading in a while" inference, which can't tell a genuinely
+    dead device apart from one that's alive but has nothing new to say
+    yet (a switch that only publishes on state change, say) unless you
+    already know its expected reporting cadence. Costs nothing when not
+    configured (availability_topic left unset - see mqtt_json's
+    `_create()` factories) - offline_reason() always returns None then,
+    so every existing config.yaml keeps behaving exactly as before.
+
+    Deliberately its own tiny class rather than another constructor
+    argument on MqttJsonState itself: an availability topic isn't a
+    *reading* to extract fields from, it's a gate other state's
+    readings get checked against - see sensor.py/switch.py/number.py's
+    read()/async_read() for how each folds offline_reason() in.
+    """
+
+    def __init__(self, broker: dict, topic: str | None, available_payload: str = "true", cache_path: str | None = None):
+        self._state = MqttJsonState(broker, topic, cache_path=cache_path) if topic else None
+        self._available_payload = available_payload
+
+    def offline_reason(self) -> str | None:
+        """None if there's no availability topic configured, or nothing
+        has ever arrived on it yet (silently deferring to the ordinary
+        stale_after_seconds check instead of guessing), or its last
+        message says the device is online. Otherwise, the reason to
+        treat this device as offline *right now*, regardless of how
+        fresh its other topics still look."""
+        if self._state is None:
+            return None
+        payload = self._state.get_payload()
+        if payload is None:
+            return None
+        if str(payload).strip().lower() == self._available_payload.strip().lower():
+            return None
+        return f"marked offline on its availability topic (last payload: {payload!r})"
 
 
 def require_payload(state: MqttJsonState) -> Any:

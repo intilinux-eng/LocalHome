@@ -1,3 +1,4 @@
+import threading
 import time
 
 from localhome.services.position_control import PositionStore
@@ -113,3 +114,30 @@ def test_observe_state_ignores_moves_this_app_triggered(tmp_path):
     # Not attributed to an external move, so the position estimate is left
     # alone - move_to_percent()/finish() is what would normally update it.
     assert store.get(cover.id) == 0
+
+
+def test_set_survives_many_covers_finishing_at_the_same_instant(tmp_path):
+    # Each cover's move_to_percent() finishes on its own threading.Timer
+    # (see finish() in move_to_percent()) - close enough moves can call
+    # set() for *different* cover ids at close enough to the same
+    # instant to race on positions.json's read-modify-write cycle.
+    # Before set() took its own lock around that cycle, the slower
+    # thread's save() could silently overwrite a faster thread's
+    # just-written position for a *different* cover, since both read
+    # the same on-disk snapshot before either had written back.
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover_ids = [f"cover-{i}" for i in range(20)]
+    barrier = threading.Barrier(len(cover_ids))
+
+    def set_one(cover_id):
+        barrier.wait()  # line every thread up so the writes actually overlap
+        store.set(cover_id, 42)
+
+    threads = [threading.Thread(target=set_one, args=(cid,)) for cid in cover_ids]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    for cover_id in cover_ids:
+        assert store.get(cover_id) == 42, f"{cover_id} lost its position to a concurrent write"

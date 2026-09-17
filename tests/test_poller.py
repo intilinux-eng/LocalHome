@@ -96,3 +96,73 @@ def test_async_poller_read_survives_a_failure_and_recovers():
     assert poller.get()["ok"] is False
     asyncio.run(poller.poll_once())
     assert poller.get()["ok"] is True
+
+
+# --------------------------------------------------------- last_update_ts ----
+# A driver that optionally exposes `last_update_ts` (the MQTT drivers do,
+# from the underlying message's own arrival time - see
+# drivers/mqtt/sensor.py/switch.py/number.py) gets its freshness reported
+# from *that*, not from whenever poll_once() happened to run. Without
+# this, re-polling a push-based MQTT cache every poll_interval_seconds
+# made an untouched reading look freshly updated every single cycle, even
+# hours after the device itself last said anything - exactly backwards
+# for a "how stale is this really" display.
+
+class DriverWithOwnTimestamp:
+    def __init__(self, ts):
+        self.poll_interval_seconds = 0
+        self._ts = ts
+
+    def read(self):
+        return {"ok": True, "value": 1}
+
+    @property
+    def last_update_ts(self):
+        return self._ts
+
+
+def test_sync_poller_reports_freshness_from_the_drivers_own_timestamp(monkeypatch):
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr("localhome.core.poller.time.time", lambda: now["t"])
+    driver = DriverWithOwnTimestamp(ts=now["t"] - 500)  # the underlying reading is already 500s old
+    poller = SyncPoller(driver)
+
+    poller.poll_once()
+    now["t"] += 10  # 10 more seconds pass before the dashboard asks
+
+    assert poller.get()["seconds_since_update"] == 510
+
+
+def test_sync_poller_falls_back_to_poll_time_without_a_last_update_ts(monkeypatch):
+    # Regression guard: every non-MQTT driver (Tuya, Meross, simulated,
+    # ...) has no last_update_ts at all and must keep behaving exactly
+    # as before - freshness is simply "when did poll_once() last run".
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr("localhome.core.poller.time.time", lambda: now["t"])
+    poller = SyncPoller(FlakySyncDriver())
+
+    poller.poll_once()
+    now["t"] += 10
+
+    assert poller.get()["seconds_since_update"] == 10
+
+
+def test_async_poller_reports_freshness_from_the_drivers_own_timestamp(monkeypatch):
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr("localhome.core.poller.time.time", lambda: now["t"])
+
+    class AsyncDriverWithOwnTimestamp:
+        poll_interval_seconds = 0
+
+        async def async_read(self):
+            return {"ok": True, "value": 1}
+
+        @property
+        def last_update_ts(self):
+            return now["t"] - 500
+
+    poller = AsyncPoller(AsyncDriverWithOwnTimestamp())
+    asyncio.run(poller.poll_once())
+    now["t"] += 10
+
+    assert poller.get()["seconds_since_update"] == 510

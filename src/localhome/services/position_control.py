@@ -65,9 +65,18 @@ class PositionStore:
         return cover_id in self._load()
 
     def set(self, cover_id: str, percent: int) -> None:
-        positions = self._load()
-        positions[cover_id] = percent
-        self._save(positions)
+        # Unlike get()'s read-only _load() (safe to leave unlocked -
+        # save_json_atomic()'s rename means a concurrent reader only
+        # ever sees a fully-old or fully-new file, never a torn one),
+        # this is read-modify-write: two covers finishing their moves
+        # close enough together (each on its own threading.Timer, see
+        # move_to_percent()) could otherwise both read the same
+        # on-disk snapshot and the second save() would silently
+        # overwrite the first cover's just-written position.
+        with self._lock:
+            positions = self._load()
+            positions[cover_id] = percent
+            self._save(positions)
 
     def cancel_pending_move(self, cover_id: str) -> None:
         with self._lock:

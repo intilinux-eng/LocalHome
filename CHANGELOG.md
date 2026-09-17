@@ -7,6 +7,66 @@ date rather than by tag.
 ## Unreleased
 
 ### Fixed
+- The "Xs/Xm/Xh ago" freshness shown for every `mqtt_json` sensor,
+  switch and number was computed from whenever `SyncPoller` last
+  *polled* (`poll_interval_seconds`, typically 20s), not from when the
+  underlying MQTT message actually arrived - since MQTT is push-based,
+  re-reading the same cached payload every poll made an untouched
+  reading look freshly updated every single cycle, even hours after a
+  battery sensor's last real report. The dashboard could show "5s ago"
+  on a value that was actually hours old (confirmed live: a real
+  Shelly H&T's reported freshness went from always ~5-20s to the
+  genuine ~4-5 minutes since its last report once fixed). `core/poller.py`
+  now asks the driver for its own `last_update_ts` when it defines one
+  (the three generic MQTT drivers do, from the cached message's actual
+  arrival time - see `drivers/mqtt/base.py`'s `get_received_at()`) and
+  only falls back to poll-time otherwise, so every non-MQTT driver
+  (Tuya, Meross, simulated, ...) is unaffected.
+
+### Added
+- `availability_topic`/`available_payload` on the generic `mqtt_json`
+  sensor/switch/number drivers - points at a device's own MQTT Last
+  Will and Testament (most Shelly Gen2/Gen3 devices publish `<id>/online`)
+  for immediate, precise offline detection instead of waiting for
+  `stale_after_seconds` to infer it from silence. Overrides even a
+  still-fresh regular reading; a switch that only publishes on state
+  change (which may have no sensible `stale_after_seconds` to set at
+  all) can now still be detected as offline. Optional, off by default -
+  every existing config.yaml keeps behaving exactly as before. See
+  [docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
+
+### Fixed
+- `PositionStore.set()` (a cover's persisted 0-100% position) read-
+  modified-wrote `positions.json` without the lock the rest of the
+  class already uses - two covers finishing their moves close enough
+  together (each on its own timer) could race, and the slower one's
+  save silently overwrote the faster one's just-written position (on
+  Windows, `os.replace()`'s stricter concurrent-rename semantics could
+  even raise instead of just losing data). Confirmed with 20 covers
+  finishing at the same instant losing positions before the fix, none
+  after.
+- `MerossPlugDriver.async_setup()` leaked the HTTP session and
+  persistent MQTT connection meross-iot opens whenever the account
+  login succeeded but the configured `device_name`/`uuid` didn't match
+  a real device (or `async_device_discovery()` itself failed) -
+  `AsyncPoller` retries `async_setup()` every `poll_interval_seconds`
+  until it succeeds, so a permanently-wrong config leaked one of each,
+  forever. Now closed on any failure after creation.
+- `ClimateMapStore.set_zones()`/`set_extra_switches()`/`set_extra_sensors()`
+  validated cross-references (duplicate device ids across zones/extra
+  switches/the extra sensor) against a snapshot read *outside* the
+  lock, then wrote inside it - two near-simultaneous saves (e.g. two
+  browser tabs on `/climate-admin`) could validate against an
+  already-stale snapshot. Now read, validated, and written against the
+  same snapshot in one lock acquisition.
+- Removed `EweLinkCloud.get_hours_kwh()` and `WS_DISPATCH_HOSTS` (an
+  undocumented websocket-based 31-day hourly-kWh history) - unused
+  anywhere in this project since it was added.
+- The climate admin panel's fixed outdoor-sensor role built its
+  Integration as `"Temperatura Esterna"` - the only non-English fixed
+  name in an otherwise English-named system (`EXTRA_SWITCH_FIELDS` uses
+  "Bathroom Bypass Valve"/"Dehumidifier"). Renamed to `"Outdoor Sensor"`
+  for consistency.
 - A `mqtt_json` climate/power_meter sensor whose topics all went past
   `stale_after_seconds` (most commonly a battery sensor like a Shelly
   H&T between wake cycles, not actually broken hardware) used to

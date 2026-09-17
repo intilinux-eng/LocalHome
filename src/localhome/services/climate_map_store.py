@@ -221,7 +221,7 @@ def validate_extra_switches(
 # EXTRA_SWITCH_FIELDS - see that constant and the module docstring for
 # what a matching config.yaml entry needs updating to.
 EXTRA_SENSOR_FIELDS = {
-    "outdoor_sensor_device_id": "Temperatura Esterna",
+    "outdoor_sensor_device_id": "Outdoor Sensor",
 }
 
 
@@ -518,12 +518,20 @@ class ClimateMapStore:
         return zones or None
 
     def set_zones(self, zones: list[dict]) -> None:
+        # Validated against the *same* snapshot that gets written back,
+        # both under one lock acquisition - not two get_extra_*() calls
+        # (each its own separate _load()) followed by a second, later
+        # _load() for the write. Reading the current extra_switches/
+        # extra_sensors, validating, and writing as three separate steps
+        # would leave a window where a concurrent save of the other one
+        # (two admin-panel tabs saving near-simultaneously, say) could
+        # validate against an already-stale snapshot.
         validate_zones(zones)
-        extra_switches, extra_sensors = self.get_extra_switches(), self.get_extra_sensors()
-        validate_extra_switches(extra_switches, zones, extra_sensors)
-        validate_extra_sensors(extra_sensors, zones, extra_switches)
         with self._lock:
             data = self._load()
+            extra_switches, extra_sensors = data.get("extra_switches") or {}, data.get("extra_sensors") or {}
+            validate_extra_switches(extra_switches, zones, extra_sensors)
+            validate_extra_sensors(extra_sensors, zones, extra_switches)
             data["zones"] = zones
             save_json_atomic(self.path, data)
 
@@ -537,9 +545,9 @@ class ClimateMapStore:
         return self._load().get("extra_switches") or {}
 
     def set_extra_switches(self, extra_switches: dict) -> None:
-        validate_extra_switches(extra_switches, self.get_zones(), self.get_extra_sensors())
         with self._lock:
             data = self._load()
+            validate_extra_switches(extra_switches, data.get("zones"), data.get("extra_sensors") or {})
             data["extra_switches"] = extra_switches
             save_json_atomic(self.path, data)
 
@@ -550,8 +558,8 @@ class ClimateMapStore:
         return self._load().get("extra_sensors") or {}
 
     def set_extra_sensors(self, extra_sensors: dict) -> None:
-        validate_extra_sensors(extra_sensors, self.get_zones(), self.get_extra_switches())
         with self._lock:
             data = self._load()
+            validate_extra_sensors(extra_sensors, data.get("zones"), data.get("extra_switches") or {})
             data["extra_sensors"] = extra_sensors
             save_json_atomic(self.path, data)

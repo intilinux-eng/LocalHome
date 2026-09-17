@@ -13,6 +13,10 @@ config.yaml options (in addition to sensor.py's broker_file):
   command_payload_field: if set, commands are sent as JSON
                `{command_payload_field: value}` instead of the raw
                number as the payload
+  availability_topic / available_payload: optional immediate offline
+               detection via the device's own MQTT Last Will and
+               Testament, instead of waiting for stale_after_seconds to
+               elapse - see drivers/mqtt/base.py's Availability.
 
 Example - a hypothetical Shelly 0-10V dimmer bridged over MQTT:
   kind: number
@@ -33,7 +37,7 @@ from typing import Any
 
 from localhome.core.interfaces import NumberDriver
 from localhome.core.registry import register_driver
-from localhome.drivers.mqtt.base import MqttJsonState, command_payload, require_payload
+from localhome.drivers.mqtt.base import Availability, MqttJsonState, command_payload, require_payload
 from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
@@ -53,6 +57,8 @@ class MqttNumberDriver(NumberDriver):
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
+        availability_topic: str | None = None,
+        available_payload: str = "true",
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
@@ -64,13 +70,29 @@ class MqttNumberDriver(NumberDriver):
         self._command_topic = command_topic
         self._command_payload_field = command_payload_field
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
     def read(self) -> dict[str, Any]:
+        # See drivers/mqtt/base.py's Availability - a definitive
+        # "disconnected" signal from the broker checked before the
+        # regular staleness check.
+        offline_reason = self._availability.offline_reason()
+        if offline_reason is not None:
+            raise RuntimeError(offline_reason)
         payload = require_payload(self._state)
         value = extract_path(payload, self._value_field)
         if value is None:
             raise RuntimeError(f"field '{self._value_field}' not present in the last MQTT message")
         return {"ok": True, "name": self.name, "value": float(value)}
+
+    @property
+    def last_update_ts(self) -> float | None:
+        # See MqttSwitchDriver.last_update_ts() in switch.py - same
+        # reason: without this, core/poller.py's SyncPoller stamps "now"
+        # on every successful poll regardless of whether the underlying
+        # MQTT payload actually changed, so a dimmer that hasn't been
+        # touched in hours would still show as freshly updated.
+        return self._state.get_received_at()
 
     def set_value(self, value: float) -> None:
         # max()/min() preserve whichever operand's type "won" the
@@ -96,6 +118,8 @@ def _create(options: dict) -> MqttNumberDriver:
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
         cache_path=state_cache_path(options),
+        availability_topic=options.get("availability_topic"),
+        available_payload=options.get("available_payload", "true"),
     )
 
 

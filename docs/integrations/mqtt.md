@@ -87,15 +87,43 @@ control loop never acts on it as if it were fresh - see
 
 Leave it unset for anything that only publishes on change (most
 switches) - a light that's been off for six hours isn't "unreachable",
-it's just off, and a timeout here would wrongly flag it. This is a
-best-effort timeout, not the "smart" way to detect an offline device;
-some Shelly/Zigbee2MQTT setups also publish a dedicated availability/LWT
-topic the broker updates the instant a device's connection actually
-drops (`true`/`false`, independent of the device's own reporting
-interval) - `mqtt_json` doesn't wire that up yet (there's no single
-convention across brands/firmware the way there is for `fields`), but
-nothing stops a future option doing that per-device if you need it more
-precisely than a timeout gives you.
+it's just off, and a timeout here would wrongly flag it.
+
+`stale_after_seconds` is a best-effort timeout, inferred from silence -
+it can't tell "the device died an hour ago" from "the device is fine
+and just hasn't had anything new to report" until the window elapses,
+and a switch that only publishes on change may have no sensible window
+to set at all. Most Shelly Gen2/Gen3 devices (and some other
+ecosystems) also publish a dedicated availability topic - the device's
+own MQTT Last Will and Testament, which the *broker itself* updates to
+`false` the instant that device's connection actually drops, independent
+of whatever the device would normally report. Point `availability_topic`
+at it for a faster, more precise signal than a timeout can give you -
+it overrides even a still-fresh regular reading, not just a stale one:
+
+```yaml
+- kind: switch
+  type: mqtt_json
+  name: "Desk Plug"
+  broker_file: "mqtt_broker.json"
+  state_topic: "shellyplus1pm-XXXXXX/status/switch:0"
+  command_topic: "shellyplus1pm-XXXXXX/command/switch:0"
+  state_field: "output"
+  payload_on: true
+  payload_off: false
+  availability_topic: "shellyplus1pm-XXXXXX/online"   # confirm with mosquitto_sub -t '<id>/#' -v
+  fields:
+    power_w: "apower"
+```
+
+`available_payload` (default `"true"`, Shelly's convention) is the
+payload that means "online" if your device uses a different one (e.g.
+`"online"`/`"offline"` instead of `"true"`/`"false"`). Optional and
+independent of `stale_after_seconds` - set either, both, or neither;
+when both are set, availability wins whenever it says offline, and
+`stale_after_seconds` still catches a device that goes quiet without
+ever publishing a "the connection dropped" message at all (a router
+reboot that silently drops the MQTT session, say).
 
 There's no network cost either way: `poll_interval_seconds` below only
 controls how often the *already-cached* value is read into the
@@ -379,6 +407,8 @@ for any brand.
 | `history_fields` | sensor kinds | subset of `fields` worth recording (default: all of them) |
 | `poll_interval_seconds` | all | how often the cached MQTT value is snapshotted into a reading/history row (default 20s - this doesn't trigger new network traffic, MQTT already pushes) |
 | `stale_after_seconds` | sensor, switch, number | mark the reading `"ok": False` once the last MQTT message is older than this (default: unset, never expires) - see "Detecting an offline device" above |
+| `availability_topic` | sensor, switch, number | topic reporting this device online/offline (often its own MQTT Last Will and Testament) - marks the reading `"ok": False` immediately when it says offline, overriding even a still-fresh regular reading (default: unset) - see "Detecting an offline device" above |
+| `available_payload` | sensor, switch, number | the `availability_topic` payload meaning "online" (default `"true"`, Shelly's convention) |
 
 `shelly_light` (switch/number) takes a different, smaller set of options - see "Shelly components without a retained status topic" above:
 

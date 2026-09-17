@@ -33,11 +33,11 @@ class ReadingCache:
         self._latest: dict[str, Any] = {"ok": False, "error": "not started yet"}
         self._last_update_ts: float | None = None
 
-    def set(self, reading: dict[str, Any]) -> None:
+    def set(self, reading: dict[str, Any], last_update_ts: float | None = None) -> None:
         with self._lock:
             self._latest = reading
             if reading.get("ok"):
-                self._last_update_ts = time.time()
+                self._last_update_ts = last_update_ts if last_update_ts is not None else time.time()
 
     def merge(self, partial: dict[str, Any]) -> None:
         """Patch a few keys into the latest reading without waiting for the
@@ -77,7 +77,11 @@ class SyncPoller:
         drive several iterations directly instead of starting a real
         thread and sleeping through real poll intervals to observe them."""
         try:
-            self.cache.set(self.driver.read())
+            reading = self.driver.read()
+            last_ts = getattr(self.driver, "last_update_ts", None)
+            if callable(last_ts):
+                last_ts = last_ts()
+            self.cache.set(reading, last_update_ts=last_ts)
         except Exception as exc:
             self.cache.set({"ok": False, "error": str(exc)})
 
@@ -123,7 +127,11 @@ class AsyncPoller:
 
     async def poll_once(self) -> None:
         try:
-            self.cache.set(await self.driver.async_read())
+            reading = await self.driver.async_read()
+            last_ts = getattr(self.driver, "last_update_ts", None)
+            if callable(last_ts):
+                last_ts = last_ts()
+            self.cache.set(reading, last_update_ts=last_ts)
         except Exception as exc:
             self.cache.set({"ok": False, "error": str(exc)})
 

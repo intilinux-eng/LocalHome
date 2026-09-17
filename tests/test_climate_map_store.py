@@ -226,7 +226,7 @@ def test_build_extra_sensor_integrations_shape():
 
     assert outdoor.kind == "climate"
     assert outdoor.type == "mqtt_json"
-    assert outdoor.options["name"] == "Temperatura Esterna"
+    assert outdoor.options["name"] == "Outdoor Sensor"
     assert outdoor.options["state_topic"] == [
         "shellyht-FFFF/status/temperature:0",
         "shellyht-FFFF/status/humidity:0",

@@ -359,3 +359,148 @@ def test_switch_seeds_its_on_off_state_from_a_persisted_cache(fake_connection, t
     )
 
     assert second_run.read()["is_on"] is True
+
+
+# ------------------------------------------------------------ availability ----
+# availability_topic (see drivers/mqtt/base.py's Availability) overrides
+# even a still-fresh regular reading - a definitive "the broker says this
+# device disconnected" signal beats an inferred one.
+
+def test_sensor_reports_offline_immediately_when_availability_says_so(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"}, availability_topic="shelly/online",
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_connection.deliver("shelly/online", "false")
+
+    reading = driver.read()
+
+    # Still surfaces the last known value (same fallback as a
+    # stale_after_seconds timeout) - just correctly not ok.
+    assert reading["ok"] is False
+    assert reading["temperature_c"] == 21.5
+    assert "offline" in reading["error"]
+
+
+def test_sensor_is_unaffected_by_availability_when_it_reports_online(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"}, availability_topic="shelly/online",
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_connection.deliver("shelly/online", "true")
+
+    reading = driver.read()
+
+    assert reading == {"ok": True, "name": "Bathroom Sensor", "temperature_c": 21.5}
+
+
+def test_switch_raises_immediately_when_availability_says_offline(fake_connection):
+    # A relay that only publishes on state change has no natural
+    # stale_after_seconds to set - availability_topic may be the *only*
+    # way this ever notices the device went offline.
+    driver = MqttSwitchDriver(
+        name="Bypass Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False,
+        availability_topic="shellyplus1-XXXX/online",
+    )
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+    fake_connection.deliver("shellyplus1-XXXX/online", "false")
+
+    with pytest.raises(RuntimeError, match="offline"):
+        driver.read()
+
+
+def test_number_raises_immediately_when_availability_says_offline(fake_connection):
+    driver = MqttNumberDriver(
+        name="VMC Dimmer", broker=BROKER,
+        state_topic="shellies/vmc-dimmer/status", command_topic="shellies/vmc-dimmer/set",
+        value_field="brightness", availability_topic="shellies/vmc-dimmer/online",
+    )
+    fake_connection.deliver("shellies/vmc-dimmer/status", json.dumps({"brightness": 42}))
+    fake_connection.deliver("shellies/vmc-dimmer/online", "false")
+
+    with pytest.raises(RuntimeError, match="offline"):
+        driver.read()
+
+
+def test_availability_topic_left_unset_behaves_exactly_as_before(fake_connection):
+    # No availability_topic configured (the default) - existing
+    # config.yaml entries must keep working unchanged.
+    driver = MqttSwitchDriver(
+        name="Bypass Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False,
+    )
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+
+    assert driver.read() == {"ok": True, "name": "Bypass Valve", "is_on": True}
+
+
+# ------------------------------------------------------------ last_update_ts --
+# core/poller.py's SyncPoller reports freshness from this instead of
+# "whenever poll_once() last ran", when a driver defines it - see
+# test_poller.py for why re-polling a push-based MQTT cache on a timer
+# otherwise makes a stale reading look freshly updated every cycle.
+
+def test_sensor_last_update_ts_is_the_mqtt_messages_own_arrival_time(fake_connection, fake_clock):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    message_ts = driver.last_update_ts
+    fake_clock(300)  # time passes with no new message - the poller might still poll_once() every cycle
+
+    assert driver.last_update_ts == message_ts  # unchanged - no new message arrived
+
+
+def test_sensor_last_update_ts_is_none_before_any_message(fake_connection):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER, state_topic="shelly/status/temperature:0",
+        fields={"temperature_c": "tC"},
+    )
+    assert driver.last_update_ts is None
+
+
+def test_sensor_last_update_ts_is_the_newest_of_several_topics(fake_connection, fake_clock):
+    driver = MqttSensorDriver(
+        name="Bathroom Sensor", broker=BROKER,
+        state_topic=["shelly/status/temperature:0", "shelly/status/humidity:0"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh"},
+    )
+    fake_connection.deliver("shelly/status/temperature:0", json.dumps({"tC": 21.5}))
+    fake_clock(60)
+    fake_connection.deliver("shelly/status/humidity:0", json.dumps({"rh": 47.0}))  # arrives 60s later
+
+    assert driver.last_update_ts == pytest.approx(driver._states[1].get_received_at())
+
+
+def test_switch_last_update_ts_is_the_mqtt_messages_own_arrival_time(fake_connection, fake_clock):
+    driver = MqttSwitchDriver(
+        name="Bypass Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False,
+    )
+    assert driver.last_update_ts is None
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+    message_ts = driver.last_update_ts
+    fake_clock(300)
+
+    assert driver.last_update_ts == message_ts
+
+
+def test_number_last_update_ts_is_the_mqtt_messages_own_arrival_time(fake_connection, fake_clock):
+    driver = MqttNumberDriver(
+        name="VMC Dimmer", broker=BROKER,
+        state_topic="shellies/vmc-dimmer/status", command_topic="shellies/vmc-dimmer/set",
+        value_field="brightness",
+    )
+    assert driver.last_update_ts is None
+    fake_connection.deliver("shellies/vmc-dimmer/status", json.dumps({"brightness": 42}))
+    message_ts = driver.last_update_ts
+    fake_clock(300)
+
+    assert driver.last_update_ts == message_ts

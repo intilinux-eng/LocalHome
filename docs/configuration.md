@@ -333,7 +333,7 @@ there's nothing tying it to `thermostat.zones`/`interlocks` the way the
 extra switches above can be - the only thing to update if a
 config.yaml entry already covers this is its own `dashboard_tab`/name
 if you want to keep both around, since this panel always builds it as
-"Temperatura Esterna".
+"Outdoor Sensor".
 
 The page's live status section reflects whichever mapping is *actually
 running* (since the last restart) - joined against the saved mapping to

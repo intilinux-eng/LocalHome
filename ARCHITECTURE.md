@@ -78,6 +78,20 @@ class attribute. Either way, the rest of the app calls `.get()` and gets
 back a plain dict with an `"ok"` key plus `seconds_since_update` - it
 never needs to know which flavor of poller is underneath.
 
+`seconds_since_update` defaults to "time since this poller last called
+`read()`/`async_read()` successfully" - correct for a driver that does
+a fresh, synchronous fetch every poll (Tuya, Meross, ...), but wrong
+for one that's really just re-reading an already-cached value on a
+timer, like every MQTT driver: MQTT pushes on its own schedule, not
+LocalHome's, so polling the *cache* every `poll_interval_seconds` made
+an untouched reading look freshly updated every cycle even hours after
+the device's last real message. A driver can opt out of that default by
+exposing its own `last_update_ts` property (the three generic MQTT
+drivers do, from the cached message's real arrival time - see
+`drivers/mqtt/base.py`'s `get_received_at()`); `SyncPoller`/`AsyncPoller`
+use it when present and fall back to poll-time otherwise, so this is
+invisible to every driver that doesn't need it.
+
 Both flavors guarantee the same thing over the long run, not just on a
 quick check: a poller never permanently stops just because one read (or,
 for `AsyncPoller`, the one-time `async_setup()`) fails once. Every read

@@ -521,7 +521,7 @@ def test_post_extra_sensors_saves_and_builds_a_real_driver_on_the_next_restart(t
     # Like a zone or an extra switch, a saved extra sensor only becomes a
     # real driver on the *next* create_app() (a restart).
     app2 = _app(tmp_path, CONFIG_NO_THERMOSTAT)
-    assert "Temperatura Esterna" in app2.config["MANAGER"].pollers
+    assert "Outdoor Sensor" in app2.config["MANAGER"].pollers
 
 
 def test_post_extra_sensors_rejects_a_duplicate_device_id_with_a_zone(tmp_path):

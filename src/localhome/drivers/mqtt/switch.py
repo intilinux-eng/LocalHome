@@ -13,6 +13,12 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
                `{command_payload_field: payload_on|payload_off}` (the
                Zigbee2MQTT convention, e.g. field "state") instead of the
                raw value as the payload (Tasmota's convention)
+  availability_topic / available_payload: optional immediate offline
+               detection via the device's own MQTT Last Will and
+               Testament, instead of waiting for stale_after_seconds to
+               elapse (which a switch that only publishes on state
+               change may never even have set) - see
+               drivers/mqtt/base.py's Availability.
 
 Example - a Zigbee2MQTT smartplug:
   kind: switch
@@ -31,7 +37,7 @@ from typing import Any
 
 from localhome.core.interfaces import SwitchDriver
 from localhome.core.registry import register_driver
-from localhome.drivers.mqtt.base import MqttJsonState, command_payload, require_payload
+from localhome.drivers.mqtt.base import Availability, MqttJsonState, command_payload, require_payload
 from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
@@ -51,6 +57,8 @@ class MqttSwitchDriver(SwitchDriver):
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
+        availability_topic: str | None = None,
+        available_payload: str = "true",
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
@@ -62,8 +70,18 @@ class MqttSwitchDriver(SwitchDriver):
         self._payload_off = payload_off
         self._command_payload_field = command_payload_field
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
     def read(self) -> dict[str, Any]:
+        # A definitive "the broker says this device disconnected" signal
+        # (see drivers/mqtt/base.py's Availability) is checked *before*
+        # require_payload() - a relay that only publishes on state
+        # change can otherwise sit "on" for days with no
+        # stale_after_seconds set at all, so availability may be the
+        # only way this ever notices it went offline.
+        offline_reason = self._availability.offline_reason()
+        if offline_reason is not None:
+            raise RuntimeError(offline_reason)
         payload = require_payload(self._state)
         raw_state = extract_path(payload, self._state_field)
         reading: dict[str, Any] = {"ok": True, "name": self.name, "is_on": raw_state == self._payload_on}
@@ -72,6 +90,18 @@ class MqttSwitchDriver(SwitchDriver):
             if value is not None:
                 reading[field] = value
         return reading
+
+    @property
+    def last_update_ts(self) -> float | None:
+        # Read by core/poller.py's SyncPoller.poll_once() instead of
+        # stamping "now" on every successful poll (the default when a
+        # driver doesn't define this) - MQTT is push-based, so re-polling
+        # the *cache* every poll_interval_seconds otherwise makes an
+        # untouched relay's reading look freshly-updated every cycle even
+        # when the device itself hasn't said anything new in hours,
+        # which is exactly backwards for a "how stale is this really"
+        # freshness display.
+        return self._state.get_received_at()
 
     def turn_on(self) -> None:
         self._send(self._payload_on)
@@ -97,6 +127,8 @@ def _create(options: dict) -> MqttSwitchDriver:
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
         cache_path=state_cache_path(options),
+        availability_topic=options.get("availability_topic"),
+        available_payload=options.get("available_payload", "true"),
     )
 
 

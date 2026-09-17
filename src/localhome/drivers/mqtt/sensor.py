@@ -21,6 +21,17 @@ config.yaml options:
           looked up against whichever subscribed topic's payload has it
   history_fields: optional subset of `fields` worth recording (defaults
                    to all of them)
+  availability_topic: optional - a separate topic that reports this
+               device online/offline (most commonly its own MQTT Last
+               Will and Testament), checked on every read() *in
+               addition to* the per-topic staleness check above. Marks
+               the reading unreachable immediately when the broker says
+               the device disconnected, rather than waiting for
+               stale_after_seconds to elapse - see
+               drivers/mqtt/base.py's Availability and
+               docs/integrations/mqtt.md.
+  available_payload: the payload on availability_topic that means
+               "online" (default "true", Shelly Gen2/Gen3's convention)
 
 Example - a Tasmota plug's periodic energy telemetry:
   kind: power_meter
@@ -56,7 +67,7 @@ from typing import Any
 
 from localhome.core.interfaces import PollingDriver
 from localhome.core.registry import register_driver
-from localhome.drivers.mqtt.base import MqttJsonState, require_payload
+from localhome.drivers.mqtt.base import Availability, MqttJsonState, require_payload
 from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
 
@@ -72,6 +83,8 @@ class MqttSensorDriver(PollingDriver):
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
+        availability_topic: str | None = None,
+        available_payload: str = "true",
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
@@ -82,6 +95,7 @@ class MqttSensorDriver(PollingDriver):
             MqttJsonState(broker, topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
             for topic in topics
         ]
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
     def read(self) -> dict[str, Any]:
         # Each subscribed topic is tried independently rather than
@@ -102,7 +116,13 @@ class MqttSensorDriver(PollingDriver):
                 value = extract_path(payload, path)
                 if value is not None:
                     reading[field] = value
-        if len(errors) == len(self._states):
+        # A definitive "the broker says this device disconnected" signal
+        # overrides even a still-within-window regular reading - see
+        # drivers/mqtt/base.py's Availability.
+        offline_reason = self._availability.offline_reason()
+        if offline_reason is not None:
+            errors.append(offline_reason)
+        if offline_reason is not None or len(errors) == len(self._states):
             # Every subscribed topic is stale/missing - a battery sensor
             # (e.g. a Shelly H&T) between wake cycles hits this often,
             # not just genuine offline hardware. Raising here (the old
@@ -141,6 +161,12 @@ class MqttSensorDriver(PollingDriver):
             reading["last_value_age_seconds"] = min(ages)
         return reading
 
+    @property
+    def last_update_ts(self) -> float | None:
+        timestamps = [s.get_received_at() for s in self._states]
+        valid = [t for t in timestamps if t is not None]
+        return max(valid) if valid else None
+
 
 def _create(options: dict) -> MqttSensorDriver:
     return MqttSensorDriver(
@@ -152,6 +178,8 @@ def _create(options: dict) -> MqttSensorDriver:
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
         cache_path=state_cache_path(options),
+        availability_topic=options.get("availability_topic"),
+        available_payload=options.get("available_payload", "true"),
     )
 
 
