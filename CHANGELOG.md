@@ -34,11 +34,19 @@ date rather than by tag.
   all) can now still be detected as offline. Optional, off by default -
   every existing config.yaml keeps behaving exactly as before. See
   [docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
-- Every Shelly device the `/climate-admin` panel builds (both zones'
-  sensors/valves, the two extra switches, the outdoor sensor) now gets
-  the `availability_topic` above for free, derived automatically as
-  `<device id>/online` - no field to fill in, since every Shelly
-  publishes this itself. See `services/climate_map_store.py`.
+- Every *valve/switch* the `/climate-admin` panel builds (both zones'
+  valves, the two extra switches) now gets the `availability_topic`
+  above for free, derived automatically as `<device id>/online` - no
+  field to fill in, since every Shelly publishes this itself. See
+  `services/climate_map_store.py`. Deliberately **not** wired up for
+  sensors (the zones' own H&T Gen3s, the outdoor sensor) - tried it
+  live against the two real ones governing this apartment's climate:
+  in battery mode, an H&T only actually connects to the broker to
+  publish a threshold/heartbeat report, so its "online" topic reads
+  false almost the entire time it's working perfectly normally, not
+  just when something's wrong. A mains-powered relay has no such
+  legitimate "disconnected on purpose" state, so it stays a
+  meaningful signal there.
 - A **sensor failsafe** on `ThermostatController`: a zone whose sensor
   stays actually unreachable (not just quiet - past
   `stale_after_seconds`) for longer than `sensor_failsafe_hours`

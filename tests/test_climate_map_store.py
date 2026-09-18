@@ -235,7 +235,10 @@ def test_build_extra_sensor_integrations_shape():
         "shellyht-FFFF/status/wifi",
     ]
     assert outdoor.options["fields"]["wifi_rssi_dbm"] == "rssi"
-    assert outdoor.options["availability_topic"] == "shellyht-FFFF/online"
+    # No availability_topic - a battery H&T's own "online" LWT topic
+    # reads false for most of its normal working life (it only connects
+    # to publish, not continuously) - see _shelly_sensor_options().
+    assert "availability_topic" not in outdoor.options
 
 
 def test_build_extra_sensor_integrations_skips_an_unset_field():
@@ -368,10 +371,10 @@ def test_build_climate_integrations_shelly_mode_shape():
         "wifi_rssi_dbm": "rssi",
     }
     assert sensor.options["stale_after_seconds"] == 21600
-    # Every Shelly device publishes this LWT-backed topic itself - see
-    # drivers/mqtt/base.py's Availability - so a panel-built sensor gets
-    # immediate offline detection for free, no field to fill in.
-    assert sensor.options["availability_topic"] == "shellyht-AAAA/online"
+    # No availability_topic on a battery H&T - see _shelly_sensor_options()'s
+    # own comment for why (its "online" LWT topic reads false for most
+    # of its normal working life, not just when something's wrong).
+    assert "availability_topic" not in sensor.options
 
 
 def test_build_climate_integrations_valve_shape_is_shelly_regardless_of_sensor_mode():

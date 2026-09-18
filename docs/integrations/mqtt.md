@@ -116,6 +116,20 @@ it overrides even a still-fresh regular reading, not just a stale one:
     power_w: "apower"
 ```
 
+Only point this at a device that's expected to stay connected the
+whole time it's working - a mains-powered relay/switch, say. A
+*battery* sensor that sleeps between reports (most Shelly H&T's, in
+battery mode - see the H&T example above) is a bad fit: it only
+actually connects to the broker to publish a threshold/heartbeat
+report, so its own availability topic reads "offline" for most of a
+perfectly healthy sensor's normal working life, not just when
+something's actually wrong - confirmed live against two real H&T Gen3
+sensors this project's own `/climate-admin` panel manages, which is why
+that panel's own auto-wiring of this (see
+[configuration.md#the-shelly-climate-admin-panel](../configuration.md#the-shelly-climate-admin-panel))
+only ever applies it to valves/relays, never to a sensor.
+`stale_after_seconds` alone is the right tool for a battery sensor.
+
 `available_payload` (default `"true"`, Shelly's convention) is the
 payload that means "online" if your device uses a different one (e.g.
 `"online"`/`"offline"` instead of `"true"`/`"false"`). Optional and

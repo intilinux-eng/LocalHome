@@ -346,14 +346,18 @@ reports: a battery sensor that hasn't reported *yet* (it only wakes on
 its own schedule, or a button press) reads differently from one that
 *was* reporting and has now gone quiet.
 
-Every device this panel builds (both zones' sensors/valves, the two
-extra switches, the outdoor sensor) also gets an `availability_topic`
-of `<device id>/online` for free, with no field to fill in - every
-Shelly publishes this itself (MQTT LWT, retained, updated by the broker
-the instant the device disconnects), so "was reporting, now
-unreachable" is detected immediately rather than only after
-`stale_after_seconds` (see `services/climate_map_store.py`'s
-`_shelly_sensor_options()`/`_valve_integration_options()`).
+Every *valve/switch* this panel builds (both zones' valves, the two
+extra switches) also gets an `availability_topic` of `<device id>/online`
+for free, with no field to fill in - every Shelly publishes this itself
+(MQTT LWT, retained, updated by the broker the instant the device
+disconnects), so "was reporting, now unreachable" is detected
+immediately rather than only after `stale_after_seconds` (see
+`services/climate_map_store.py`'s `_valve_integration_options()`). This
+is deliberately **not** wired up for sensors (the zones' own H&T
+sensors, the outdoor sensor): tried it live against the two real H&T
+Gen3 devices governing this apartment's climate and had to back it out
+- see "Sensor edge cases" just below for why a battery H&T's own
+"online" topic isn't a trustworthy signal at all.
 
 ### Sensor edge cases, explained in-panel
 
@@ -369,6 +373,25 @@ Telegram bot token or a phone being nearby:
   reading's age creeping toward 2h is normal, not a fault, and
   `stale_after_seconds` (6h) only trips on an actually-missed device,
   not a merely-quiet room.
+- **The device's own "online" status isn't a useful signal for a
+  battery sensor, on purpose.** In battery mode, an H&T wakes locally
+  about once a minute just to measure, but only actually connects to
+  publish when a threshold trips or its 2h heartbeat is due - the rest
+  of the time it isn't connected to the broker *at all*, to save power.
+  That means its MQTT availability topic (LWT-backed `<id>/online`)
+  reads "false" for most of a perfectly healthy sensor's normal working
+  life, not just when something's actually wrong - confirmed live
+  against this apartment's own two H&T Gen3 sensors, which is why this
+  panel doesn't wire `availability_topic` up for sensors at all (see
+  just above) and relies on `stale_after_seconds` alone instead. A
+  mains-powered device (a valve/relay) has no such legitimate
+  "disconnected on purpose" state, so its own availability topic stays
+  meaningful. Powering an H&T over USB instead of battery changes this
+  trade-off entirely - it then wakes and reports unconditionally every
+  5 minutes rather than only on a threshold, which would make its
+  online status a trustworthy signal too - but that's a different,
+  more power-hungry device configuration, not something this panel
+  assumes.
 - **Weak WiFi** shows as the existing signal-strength figure next to
   each reading - worth fixing physically (move the sensor, add a
   repeater), since it drains the battery faster than normal use.

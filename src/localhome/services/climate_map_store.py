@@ -271,13 +271,22 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
         },
         "stale_after_seconds": 21600,
         "dashboard_tab": "climate",
-        # Every Shelly device publishes its own LWT-backed "<id>/online"
-        # topic ("true"/"false", retained, updated by the broker itself
-        # the instant the device disconnects - confirmed live via
-        # mosquitto_sub) - deriving it here means every panel-built
-        # Shelly sensor gets fast, accurate offline detection with no
-        # extra field for the installer to fill in.
-        "availability_topic": f"{device_id}/online",
+        # Deliberately NO availability_topic here, unlike the valve
+        # builder below - tried it live against the two real H&T Gen3
+        # sensors this session and had to back it out. In battery mode
+        # (see docs/configuration.md#sensor-edge-cases-explained-in-panel)
+        # this device wakes every ~1 min but only actually connects to
+        # publish when a threshold trips or its 2h heartbeat is due -
+        # between those moments it isn't connected at all, so its own
+        # "<id>/online" LWT-backed topic reads "false" essentially the
+        # whole time it's working perfectly normally, not just when
+        # something's actually wrong. Wiring that up here made a
+        # healthy, correctly-reporting sensor look permanently offline.
+        # stale_after_seconds above already gives this the right signal
+        # (3x its 2h heartbeat) without that false positive - a mains-
+        # powered device (the valve below) has no such legitimate
+        # "disconnected on purpose" state, so availability_topic stays
+        # meaningful there.
     }
 
 
