@@ -170,6 +170,30 @@ class ScheduleStore:
         data["away_until"] = until.isoformat() if until else None
         self._save(data)
 
+    def get_diagnostic_mode(self) -> bool:
+        """A system-wide override, separate from away mode: while on,
+        both ThermostatController and InterlockController skip every
+        zone/interlock/mode_switch entirely, on every tick - not even a
+        forced close, the same "hands off completely" stance as
+        Zone.cool_enabled. Every valve this project knows about (zone
+        valves, the bathroom bypass, the dehumidifier) is then only
+        ever moved by a direct manual command from /climate-admin's own
+        "Diagnostic mode" section, which reuses the generic
+        /api/sensors/<name>/on|off routes (web/app.py's
+        api_sensor_action() lets a mode-switch-owned switch through
+        while this is on) - the flag itself is read/written through
+        POST /api/climate/diagnostic-mode and read back from GET
+        /api/climate/zones's own "diagnostic_mode" field. Meant for
+        on-site verification (does this valve's relay actually work?
+        which physical valve is which name?) without the thermostat
+        undoing what you just did on its next tick."""
+        return bool(self._load().get("diagnostic_mode", False))
+
+    def set_diagnostic_mode(self, enabled: bool) -> None:
+        data = self._load()
+        data["diagnostic_mode"] = enabled
+        self._save(data)
+
 
 class ThermostatController:
     """Background loop: for each zone, compares its current temperature to
@@ -186,14 +210,28 @@ class ThermostatController:
         zones: list[Zone],
         hysteresis_c: float = 0.3,
         poll_interval_seconds: float = 60,
+        sensor_failsafe_hours: float = 24.0,
     ):
         self.manager = manager
         self.schedule_store = schedule_store
         self.zones = zones
         self.hysteresis_c = hysteresis_c
         self.poll_interval_seconds = poll_interval_seconds
+        self.sensor_failsafe_hours = sensor_failsafe_hours
         self._valve_open: dict[str, bool] = {}
         self._started = False
+        # Battery sensors (Shelly H&T Gen3) can go quiet for perfectly
+        # normal reasons (weak WiFi, dead battery, someone unscrewing it
+        # to swap batteries) and manager.sensor_reading() already leaves
+        # the valve frozen in whatever state it was last commanded to -
+        # fine for a few missed reports, not fine forever. These two
+        # dicts track, per zone name, when a currently-unreachable sensor
+        # was FIRST seen unreachable (so a brief blip doesn't reset the
+        # clock on every tick) and whether the failsafe has already
+        # fired for it, so _apply() is only called once per unreachable
+        # spell instead of every tick after the threshold.
+        self._unreachable_since: dict[str, float] = {}
+        self._failsafe_active: dict[str, bool] = {}
 
     def start(self) -> None:
         if self._started:
@@ -210,6 +248,13 @@ class ThermostatController:
             time.sleep(self.poll_interval_seconds)
 
     def tick(self, now: datetime | None = None) -> None:
+        if self.schedule_store.get_diagnostic_mode():
+            # Hands off *everything*, not even a forced close - see
+            # ScheduleStore.get_diagnostic_mode()'s docstring. Whatever
+            # the valves are doing right now is left exactly as-is for
+            # the installer's manual toggles in /climate-admin to
+            # control directly.
+            return
         mode = self.schedule_store.get_mode()
         now = now or datetime.now()
         away_until = self.schedule_store.get_away_until()
@@ -235,10 +280,83 @@ class ThermostatController:
                 continue
             reading = self.manager.sensor_reading(zone.sensor)
             if not reading.get("ok") or "temperature_c" not in reading:
+                self._on_sensor_unreachable(zone)
                 continue
+            self._on_sensor_recovered(zone)
             target = self.schedule_store.get_target(zone.name, now)
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)
             self._apply(zone, desired)
+
+    def _on_sensor_unreachable(self, zone: Zone) -> None:
+        first_seen = self._unreachable_since.setdefault(zone.name, time.time())
+        hours = (time.time() - first_seen) / 3600
+        if hours >= self.sensor_failsafe_hours and not self._failsafe_active.get(zone.name):
+            logger.warning(
+                "Zone %r's sensor %r has been unreachable for %.1fh (>= %.1fh threshold) - "
+                "forcing valve %r closed as a failsafe. Clear this from /climate-admin once "
+                "the sensor is fixed, or use diagnostic mode to control the valve manually.",
+                zone.name, zone.sensor, hours, self.sensor_failsafe_hours, zone.valve,
+            )
+            self._failsafe_active[zone.name] = True
+            self._apply(zone, False)
+
+    def _on_sensor_recovered(self, zone: Zone) -> None:
+        if self._failsafe_active.get(zone.name):
+            logger.info("Zone %r's sensor %r is reporting again - failsafe lifted", zone.name, zone.sensor)
+        self._unreachable_since.pop(zone.name, None)
+        self._failsafe_active.pop(zone.name, None)
+
+    def is_failsafe_active(self, zone_name: str) -> bool:
+        return self._failsafe_active.get(zone_name, False)
+
+    def unreachable_hours(self, zone_name: str) -> float | None:
+        first_seen = self._unreachable_since.get(zone_name)
+        if first_seen is None:
+            return None
+        return (time.time() - first_seen) / 3600
+
+    def forget_valve_state(self) -> None:
+        """Discards _apply()'s memory of what it last commanded every
+        valve to. Needed specifically when leaving diagnostic mode: an
+        installer may have manually turned a valve on/off through
+        /climate-admin's diagnostic section while the thermostat was
+        hands-off, and _apply()'s "skip if this already matches what I
+        last commanded" optimization has no way to know that happened -
+        without this, the very next tick could wrongly skip a real
+        correction just because its own stale memory happens to already
+        agree with the newly-computed desired state, leaving the valve
+        stuck in whatever the manual test left it at. Call this once,
+        right before the first tick() after diagnostic mode turns off -
+        see web/app.py's api_climate_set_diagnostic_mode()."""
+        self._valve_open.clear()
+
+    def resync_after_diagnostic_mode(self) -> None:
+        """The other half of leaving diagnostic mode, alongside
+        forget_valve_state() (call both, then tick() - see
+        web/app.py's api_climate_set_diagnostic_mode()). forget_valve_state()
+        alone isn't enough for a zone whose sensor is *currently*
+        unreachable: tick()'s own per-zone loop skips such a zone
+        entirely (`if not reading.get("ok")... continue`, a few lines
+        up) precisely so a brief outage doesn't flap the valve back and
+        forth - it never even reaches decide()/_apply() for it, so
+        nothing about the tick that follows this would ever revisit
+        whatever an installer left that valve at during diagnostic
+        mode. That's fine during ordinary operation (there's no new
+        information to act on either way), but it's the wrong default
+        right when diagnostic mode ends: a manual test has no relation
+        at all to this zone's actual temperature, so trusting it any
+        longer than diagnostic mode itself was on is unsafe, the same
+        reasoning the sensor failsafe (_on_sensor_unreachable() above)
+        already applies after a long outage - just applied immediately
+        here instead of after sensor_failsafe_hours, because diagnostic
+        mode having been on is itself the signal that whatever state is
+        showing right now cannot be trusted. A zone whose sensor *is*
+        reachable needs nothing here - the tick() called right after
+        this recomputes it for real, from a real reading."""
+        for zone in self.zones:
+            reading = self.manager.sensor_reading(zone.sensor)
+            if not reading.get("ok") or "temperature_c" not in reading:
+                self._apply(zone, False)
 
     def decide(self, zone_name: str, current_c: float, target_c: float | None, mode: str) -> bool:
         """Pure decision logic, kept separate from _apply()/manager access

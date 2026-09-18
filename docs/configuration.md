@@ -346,6 +346,72 @@ reports: a battery sensor that hasn't reported *yet* (it only wakes on
 its own schedule, or a button press) reads differently from one that
 *was* reporting and has now gone quiet.
 
+Every device this panel builds (both zones' sensors/valves, the two
+extra switches, the outdoor sensor) also gets an `availability_topic`
+of `<device id>/online` for free, with no field to fill in - every
+Shelly publishes this itself (MQTT LWT, retained, updated by the broker
+the instant the device disconnects), so "was reporting, now
+unreachable" is detected immediately rather than only after
+`stale_after_seconds` (see `services/climate_map_store.py`'s
+`_shelly_sensor_options()`/`_valve_integration_options()`).
+
+### Sensor edge cases, explained in-panel
+
+The page's own "How this works" section (collapsed by default, above
+the zone cards) spells out, for the installer, exactly what a battery
+H&T Gen3's reporting behavior means for each status pill - deliberately
+kept there instead of a push notification, so it's always visible
+alongside the state it's explaining rather than depending on a
+Telegram bot token or a phone being nearby:
+
+- **A rock-stable reading isn't stale.** The sensor only sends on a
+  ≥0.5°C/5% change, or unconditionally every 2 hours regardless - so a
+  reading's age creeping toward 2h is normal, not a fault, and
+  `stale_after_seconds` (6h) only trips on an actually-missed device,
+  not a merely-quiet room.
+- **Weak WiFi** shows as the existing signal-strength figure next to
+  each reading - worth fixing physically (move the sensor, add a
+  repeater), since it drains the battery faster than normal use.
+- **Low battery** is highlighted in the same card, at the same 10%
+  threshold the main dashboard's own popup uses - no separate channel
+  needed to notice it.
+- **A sensor that's actually unreachable for a long time** - not just
+  quiet, no availability/heartbeat at all past `stale_after_seconds` -
+  eventually trips `ThermostatController`'s **sensor failsafe**:
+  configurable per-thermostat as `sensor_failsafe_hours` (default 24),
+  it forces that zone's valve closed rather than leaving it frozen in
+  whatever it was last doing indefinitely, and clears itself the moment
+  the sensor reports again. The zone's card shows the countdown
+  (`sensor_unreachable_hours` vs. the threshold) and whether it's
+  already tripped.
+
+### Diagnostic mode
+
+A system-wide override, toggled from its own section on `/climate-admin`
+(`POST /api/climate/diagnostic-mode`, persisted as `diagnostic_mode` in
+`schedules.json` via `ScheduleStore`) - while on, `ThermostatController`
+and `InterlockController` both skip every zone/interlock/mode_switch
+entirely on every tick, the same "hands off, not even a forced close"
+stance `cool_enabled: false` already takes for one zone. Every valve
+this project knows about (both zones' valves, plus the bathroom bypass
+and dehumidifier if wired) becomes directly, manually switchable from
+that same section - reusing the generic `/api/sensors/<name>/on|off`
+route every controllable device already has, including a mode_switch
+like the bypass valve, which that route normally refuses to touch
+manually (only while diagnostic mode is on).
+
+Meant for on-site verification - does this relay actually switch? which
+physical valve is which name? - without the thermostat undoing a manual
+test on its next cycle a few seconds later, and as a way to hold any
+valve open (or closed) for as long as needed while riding out a sensor
+failsafe or replacing a battery. Turning it back off resumes normal,
+sensor-driven control immediately (no restart, and no waiting for the
+next scheduled tick) - `ThermostatController.forget_valve_state()` is
+called first, so a manual change made during diagnostic mode is
+actually re-asserted on that first tick back, not silently skipped
+because the controller's own bookkeeping of "what I last commanded"
+still happens to agree with the newly-computed state.
+
 ## Language
 
 The dashboard's UI text (labels, buttons, alerts) comes from a JSON file

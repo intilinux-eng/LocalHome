@@ -139,6 +139,7 @@ def create_app(config_path: str | None = None) -> Flask:
             zones,
             hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.3),
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
+            sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 24.0),
         )
 
         interlocks = [
@@ -156,6 +157,7 @@ def create_app(config_path: str | None = None) -> Flask:
                 interlocks,
                 mode_switches,
                 mode_provider=schedule_store.get_mode,
+                diagnostic_mode_provider=schedule_store.get_diagnostic_mode,
                 poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             )
             interlock_followers = {link.leader: link.follower for link in interlocks}
@@ -176,6 +178,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["POWER_BUDGET"] = power_budget
     app.config["POWER_SENSOR"] = power_sensor
     app.config["THERMOSTAT"] = thermostat
+    app.config["INTERLOCK"] = interlock
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
     app.config["CLIMATE_MAP"] = climate_map
@@ -327,7 +330,9 @@ def _register_routes(app: Flask) -> None:
         switch = manager.switches.get(name)
         if switch is None:
             return jsonify(ok=False, error=f"'{name}' is not a controllable switch"), 404
-        if name in app.config["MODE_SWITCH_NAMES"]:
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        diagnostic_mode = bool(thermostat and thermostat.schedule_store.get_diagnostic_mode())
+        if name in app.config["MODE_SWITCH_NAMES"] and not diagnostic_mode:
             return jsonify(ok=False, error=f"'{name}' is controlled automatically by the thermostat mode"), 409
         try:
             switch.turn_on() if action == "on" else switch.turn_off()
@@ -413,12 +418,16 @@ def _register_routes(app: Flask) -> None:
                 "valve_seconds_since_update": valve_reading.get("seconds_since_update"),
                 "valve_error": valve_reading.get("error"),
                 "target_c": thermostat.schedule_store.get_target(zone.name, now),
+                "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
+                "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
+                "sensor_failsafe_hours": thermostat.sensor_failsafe_hours,
             })
         away_until = thermostat.schedule_store.get_away_until()
         return jsonify(
             ok=True,
             mode=thermostat.schedule_store.get_mode(),
             away_until=away_until.isoformat() if away_until else None,
+            diagnostic_mode=thermostat.schedule_store.get_diagnostic_mode(),
             zones=zones,
         )
 
@@ -460,6 +469,36 @@ def _register_routes(app: Flask) -> None:
         thermostat.schedule_store.set_away_until(None)
         thermostat.tick()
         return jsonify(ok=True)
+
+    @app.route("/api/climate/diagnostic-mode", methods=["POST"])
+    def api_climate_set_diagnostic_mode():
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return jsonify(ok=False, error="no thermostat configured"), 404
+        data = request.get_json(silent=True) or {}
+        enabled = data.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify(ok=False, error="'enabled' must be true or false"), 400
+        thermostat.schedule_store.set_diagnostic_mode(enabled)
+        if not enabled:
+            # Resume real control immediately, same "don't wait for the
+            # next scheduled tick" idiom as every other setter here -
+            # otherwise the panel would show every valve frozen in
+            # whatever the installer last left it at for up to a full
+            # poll_interval_seconds after switching back to normal.
+            # forget_valve_state() + resync_after_diagnostic_mode() first:
+            # a manual toggle made while diagnostic mode was on wouldn't
+            # otherwise be noticed by _apply()'s "already matches"
+            # shortcut, and a zone whose sensor is currently unreachable
+            # wouldn't be revisited by tick() at all (it skips such a
+            # zone outright) - see both methods' docstrings.
+            thermostat.forget_valve_state()
+            thermostat.resync_after_diagnostic_mode()
+            thermostat.tick()
+            interlock: InterlockController | None = app.config["INTERLOCK"]
+            if interlock:
+                interlock.tick()
+        return jsonify(ok=True, enabled=enabled)
 
     @app.route("/api/climate/zones/<name>/schedule")
     def api_climate_get_schedule(name):

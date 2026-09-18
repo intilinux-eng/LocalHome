@@ -173,6 +173,15 @@ else that speaks MQTT+JSON, instead of one driver per brand.
   circuit). Two controllers can safely share ownership of one switch only
   because each backs off completely outside the conditions where it's
   meant to act, rather than both trying to assert a value every tick.
+  Both controllers also accept a `diagnostic_mode_provider` callable
+  (`ScheduleStore.get_diagnostic_mode`) checked first on every tick - the
+  same "back off completely" idea taken system-wide, so an installer's
+  manual valve tests from `/climate-admin` aren't fought over by either
+  loop; see [docs/configuration.md#diagnostic-mode](docs/configuration.md#diagnostic-mode).
+  `ThermostatController` separately tracks how long each zone's sensor
+  has been continuously unreachable and, past `sensor_failsafe_hours`,
+  forces that valve closed rather than leaving it frozen forever - see
+  [docs/configuration.md#sensor-edge-cases-explained-in-panel](docs/configuration.md#sensor-edge-cases-explained-in-panel).
 
 ## The climate admin panel: config built at runtime, not by hand
 

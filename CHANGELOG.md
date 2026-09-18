@@ -34,6 +34,37 @@ date rather than by tag.
   all) can now still be detected as offline. Optional, off by default -
   every existing config.yaml keeps behaving exactly as before. See
   [docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline](docs/integrations/mqtt.md#dhcp-devices-and-detecting-one-thats-gone-offline).
+- Every Shelly device the `/climate-admin` panel builds (both zones'
+  sensors/valves, the two extra switches, the outdoor sensor) now gets
+  the `availability_topic` above for free, derived automatically as
+  `<device id>/online` - no field to fill in, since every Shelly
+  publishes this itself. See `services/climate_map_store.py`.
+- A **sensor failsafe** on `ThermostatController`: a zone whose sensor
+  stays actually unreachable (not just quiet - past
+  `stale_after_seconds`) for longer than `sensor_failsafe_hours`
+  (default 24) now has its valve forced closed automatically instead of
+  staying frozen in whatever it was last doing indefinitely - clears
+  itself the moment the sensor reports again. Surfaced on
+  `/climate-admin`'s zone cards as a countdown/warning, not a push
+  notification.
+- **Diagnostic mode**: a new system-wide override, toggled from its own
+  `/climate-admin` section, that takes every valve (both zones' + the
+  bathroom bypass + the dehumidifier) out of automatic control entirely
+  - `ThermostatController` and `InterlockController` both go hands-off
+  on every tick while it's on - and exposes each one as a direct manual
+  on/off switch (reusing the existing generic switch route, including
+  for a mode_switch like the bypass valve, normally blocked from manual
+  control). For on-site verification (does this relay actually switch?
+  which physical valve is which name?) without the thermostat undoing a
+  manual test moments later. Turning it back off resumes normal,
+  sensor-driven control immediately, no restart needed. See
+  [docs/configuration.md#diagnostic-mode](docs/configuration.md#diagnostic-mode).
+- The `/climate-admin` panel gained a "How this works" reference
+  section explaining every battery-sensor edge case in place (a stable
+  reading's 2h heartbeat, weak WiFi, low battery, the failsafe above) -
+  replacing an earlier plan to push these as Telegram notifications, so
+  the explanation lives next to the state it's explaining instead of a
+  separate channel that needs its own bot token.
 
 ### Fixed
 - `PositionStore.set()` (a cover's persisted 0-100% position) read-

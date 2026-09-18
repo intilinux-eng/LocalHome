@@ -107,6 +107,11 @@ let savedMap = null; // last GET /api/climate-admin/map response
 let extraSwitchesRestartPending = false; // from the last GET /api/climate-admin/extra-switches
 let pollTimer = null;
 
+// Same threshold as the main dashboard's app.js (LOW_BATTERY_PCT) -
+// copied rather than shared, matching this file's own "separate
+// bundle" convention (see the top of this file).
+const LOW_BATTERY_PCT = 10;
+
 // ------------------------------------------------------------ config form ----
 
 function zoneFormHtml(zone, index) {
@@ -472,7 +477,15 @@ function sensorStatusHtml(zone, mode) {
   if (zone.sensor_ok || zoneHasLastKnownValue(zone)) {
     let extra = "";
     if (zone.humidity_pct != null) extra += ` · ${fmt(zone.humidity_pct, 0)}%`;
-    if (zone.battery_pct != null) extra += ` · ${tr("fields.battery_pct")} ${fmt(zone.battery_pct, 0)}%`;
+    if (zone.battery_pct != null) {
+      // Same 10% threshold as the main dashboard's own low-battery
+      // popup (app.js) - highlighted here too so this page alone is
+      // enough to notice it, without needing that dashboard-only,
+      // session-scoped popup to still be around to have caught it.
+      const batteryClass = zone.battery_pct <= LOW_BATTERY_PCT ? "admin-status bad" : "";
+      const batteryText = `${tr("fields.battery_pct")} ${fmt(zone.battery_pct, 0)}%`;
+      extra += ` · ${batteryClass ? `<span class="${batteryClass}">${batteryText}</span>` : batteryText}`;
+    }
     const wifi = wifiLabel(zone);
     if (wifi) extra += ` · ${wifi}`;
     // Every MQTT topic went stale (see drivers/mqtt/sensor.py's
@@ -490,7 +503,14 @@ function sensorStatusHtml(zone, mode) {
   if (error.includes("no MQTT message received yet")) {
     return `<span class="admin-status neutral">${tr("climate_admin.not_reachable_battery")}</span>`;
   }
-  if (error.includes("probably offline")) {
+  // Same red "offline" treatment as the stale-inferred case below, just
+  // a stronger, LWT-confirmed reason (drivers/mqtt/base.py's
+  // Availability) - reachable in practice only when this device has
+  // never sent a single message in this process's lifetime (so there's
+  // no last-known value at all to fall back to above) while its
+  // broker-side availability was already false at that moment, e.g.
+  // right after a restart with the device already disconnected.
+  if (error.includes("marked offline on its availability topic") || error.includes("probably offline")) {
     return `<span class="admin-status bad">${tr("climate_admin.not_reachable_offline")}</span>`;
   }
   return `<span class="admin-status neutral">${error || tr("climate_admin.not_reachable_generic")}</span>`;
@@ -528,6 +548,24 @@ function modeExclusionNoticeHtml(zone, mode) {
   return `<p class="admin-mode-exclusion">${tr("climate_admin.zone_excluded_cool")}</p>`;
 }
 
+// Surfaces services/thermostat.py's ThermostatController failsafe (a
+// zone whose sensor has been unreachable long enough gets its valve
+// forced closed rather than left frozen in whatever it was doing
+// forever) - this, not a Telegram push, is where that gets seen.
+// sensor_unreachable_hours is only non-null while *currently*
+// unreachable (cleared the instant the sensor reports again - see
+// ThermostatController._on_sensor_recovered()), so this naturally
+// disappears again on recovery with no extra state to track here.
+function failsafeNoticeHtml(zone) {
+  if (zone.sensor_unreachable_hours == null) return "";
+  if (zone.sensor_failsafe_active) {
+    return `<p class="admin-mode-exclusion">${tr("climate_admin.failsafe_active", { hours: fmt(zone.sensor_unreachable_hours, 1) })}</p>`;
+  }
+  return `<p class="hint-text">${tr("climate_admin.failsafe_pending", {
+    hours: fmt(zone.sensor_unreachable_hours, 1), threshold: fmt(zone.sensor_failsafe_hours, 0),
+  })}</p>`;
+}
+
 // Fills #zone-status-N inside zoneFormHtml()'s own card - deliberately
 // not a standalone row with its own name/border the way this used to
 // render in a separate "Live status" section: the card it's inside
@@ -545,6 +583,7 @@ function zoneStatusInnerHtml(zone, mapEntry, mode) {
 
   return `
     <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, sensorMode)}</div>
+    ${failsafeNoticeHtml(zone)}
     <div>${targetHtml(zone)}</div>
     <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
     <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
@@ -575,6 +614,130 @@ function isTypingAManualValue() {
   return !!(active && active.matches && active.matches(".manual-temp-input, .manual-humidity-input"));
 }
 
+// ---------------------------------------------------------- diagnostic mode --
+// System-wide override (services/thermostat.py's ScheduleStore.
+// get_diagnostic_mode()) - while on, ThermostatController and
+// InterlockController both back off every valve entirely, so a manual
+// command here is the *only* thing moving anything, and it sticks
+// until changed again (or diagnostic mode turns off) instead of being
+// reasserted by the next control tick a few seconds later.
+
+let diagnosticModeEnabled = false;
+// Every switch tagged dashboard_tab: "climate" - not just this panel's
+// own fixed two zone valves and two extra-switch roles: an apartment
+// that still hand-configures its bypass valve/dehumidifier in
+// config.yaml directly (own name, own dashboard_tab: "climate", not
+// migrated to this panel's extra_switches store) must see those here
+// too, since diagnostic mode's whole point is "every valve this
+// installation has", not just the ones this panel happens to manage.
+// Fetched once at load from /api/devices (only ever lists drivers
+// DeviceManager actually built, so nothing not-yet-restarted shows up
+// as controllable before it actually is).
+let climateSwitchNames = [];
+
+async function loadClimateSwitchNames() {
+  try {
+    const res = await fetch("/api/devices");
+    const data = await res.json();
+    climateSwitchNames = (data.sensors || [])
+      .filter(s => s.kind === "switch" && s.tab === "climate")
+      .map(s => s.name);
+  } catch (e) {
+    climateSwitchNames = [];
+  }
+}
+
+async function onDiagnosticModeToggle(checkbox) {
+  const enabled = checkbox.checked;
+  if (enabled && !confirm(tr("climate_admin.diagnostic_confirm_on"))) {
+    checkbox.checked = false;
+    return;
+  }
+  checkbox.disabled = true;
+  try {
+    const res = await fetch("/api/climate/diagnostic-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(tr("sensors.error_prefix") + data.error);
+      checkbox.checked = !enabled;
+      return;
+    }
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+    checkbox.checked = !enabled;
+    return;
+  } finally {
+    checkbox.disabled = false;
+  }
+  refreshStatus();
+}
+
+function diagnosticValveRowHtml(name, isOn, isOk) {
+  const state = !isOk
+    ? `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span>`
+    : isOn
+      ? `<span class="admin-status ok">${tr("climate_admin.valve_open")}</span>`
+      : `<span class="admin-status neutral">${tr("climate_admin.valve_closed")}</span>`;
+  return `
+    <div class="admin-zone-card admin-diagnostic-row">
+      <div><strong>${name}</strong></div>
+      <div>${state}</div>
+      <div class="toolbar">
+        <button class="range-btn" onclick="diagnosticToggle('${name}', 'on', this)">${tr("climate_admin.valve_test_open")}</button>
+        <button class="range-btn" onclick="diagnosticToggle('${name}', 'off', this)">${tr("climate_admin.valve_test_close")}</button>
+      </div>
+    </div>
+  `;
+}
+
+// Same underlying route as testValve() (the generic on/off switch
+// route every controllable device already has) - the only difference
+// is what happens after: no thermostat/interlock tick is going to
+// reassert anything while diagnostic mode is on, so this command is
+// the valve's new, lasting state, not a transient test of it.
+async function diagnosticToggle(name, action, button) {
+  button.disabled = true;
+  try {
+    const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    refreshStatus();
+  } catch (e) {
+    alert(tr("sensors.request_failed"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshDiagnosticSection(data) {
+  const toggle = document.getElementById("diagnostic-mode-toggle");
+  const banner = document.getElementById("diagnostic-mode-banner");
+  const container = document.getElementById("diagnostic-valves");
+  diagnosticModeEnabled = !!data.diagnostic_mode;
+  if (toggle) toggle.checked = diagnosticModeEnabled;
+  if (banner) banner.hidden = !diagnosticModeEnabled;
+  if (!container) return;
+  if (!diagnosticModeEnabled) {
+    container.innerHTML = "";
+    return;
+  }
+  const rows = [];
+  for (const name of climateSwitchNames) {
+    try {
+      const res = await fetch(`/api/sensors/${encodeURIComponent(name)}`);
+      const reading = await res.json();
+      rows.push({ name, is_on: reading.is_on, ok: reading.ok });
+    } catch (e) {
+      rows.push({ name, is_on: false, ok: false });
+    }
+  }
+  container.innerHTML = `<div class="admin-diagnostic-grid">${rows.map(r => diagnosticValveRowHtml(r.name, r.is_on, r.ok)).join("")}</div>`;
+}
+
 async function refreshStatus() {
   // Only ever writes into #zone-status-N (one per card, appended by
   // zoneFormHtml()) - never the card as a whole, so a poll tick never
@@ -588,6 +751,7 @@ async function refreshStatus() {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
     document.getElementById("mode-away-line").innerHTML = modeAwayLineHtml(data);
+    await refreshDiagnosticSection(data);
     // A single all-or-nothing signal, not per-zone: a restart rebuilds
     // every zone's drivers together, so "one thing changed" means
     // every card's status is stale, not just the zone that changed -
@@ -712,4 +876,5 @@ loadMap();
 loadBroker();
 loadExtraSwitches();
 loadExtraSensor();
+loadClimateSwitchNames();
 startPolling();

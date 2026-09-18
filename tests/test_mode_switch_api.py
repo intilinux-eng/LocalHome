@@ -2,7 +2,10 @@
 it has no owner of its own - only the thermostat's current mode drives it -
 so the dashboard must show its state without offering a manual toggle that
 would just get overridden on the controller's next tick, and the API must
-reject a manual on/off call the same way even if something bypasses the UI.
+reject a manual on/off call the same way even if something bypasses the UI -
+*unless* diagnostic mode is on, in which case InterlockController itself
+backs off (services/thermostat.py's ScheduleStore.get_diagnostic_mode()) and
+the same manual call must be let through instead.
 """
 from localhome.web.app import create_app
 
@@ -60,6 +63,17 @@ def test_a_regular_switch_can_still_be_toggled(tmp_path):
     client = app.test_client()
 
     res = client.post("/api/sensors/Regular Valve/on")
+
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+
+
+def test_manually_toggling_a_mode_switch_is_allowed_in_diagnostic_mode(tmp_path):
+    app = _app(tmp_path)
+    client = app.test_client()
+    app.config["THERMOSTAT"].schedule_store.set_diagnostic_mode(True)
+
+    res = client.post("/api/sensors/Bypass Valve/on")
 
     assert res.status_code == 200
     assert res.get_json()["ok"] is True

@@ -93,3 +93,89 @@ def test_dew_point_c_is_none_without_a_usable_reading(tmp_path):
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
 
     assert zone["dew_point_c"] is None
+
+
+# ------------------------------------------------------- diagnostic mode -----
+
+def test_diagnostic_mode_defaults_to_false_in_the_zones_response(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+
+    body = client.get("/api/climate/zones").get_json()
+
+    assert body["diagnostic_mode"] is False
+    zone = next(z for z in body["zones"] if z["name"] == "Rooms")
+    assert zone["sensor_failsafe_active"] is False
+    assert zone["sensor_unreachable_hours"] is None
+    assert zone["sensor_failsafe_hours"] == 24.0
+
+
+def test_enabling_diagnostic_mode_via_the_api_is_reflected_back(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+
+    res = client.post("/api/climate/diagnostic-mode", json={"enabled": True})
+
+    assert res.get_json() == {"ok": True, "enabled": True}
+    assert client.get("/api/climate/zones").get_json()["diagnostic_mode"] is True
+
+
+def test_diagnostic_mode_rejects_a_non_boolean_value(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+
+    res = client.post("/api/climate/diagnostic-mode", json={"enabled": "yes"})
+
+    assert res.status_code == 400
+
+
+def test_disabling_diagnostic_mode_resumes_control_immediately(tmp_path):
+    # No waiting for the next scheduled tick - the same idiom as every
+    # other setter on this thermostat (mode/away/schedule). Manually
+    # force the valve open while diagnostic mode is on (as an installer
+    # would from the panel), then confirm turning diagnostic mode back
+    # off snaps it shut again right away, since this zone has no
+    # schedule target set at all - decide() always returns False without
+    # one, regardless of the valve's previous state.
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+    client.post("/api/climate/diagnostic-mode", json={"enabled": True})
+    client.post("/api/sensors/Room Valve/on")
+    assert client.get("/api/climate/zones").get_json()["zones"][0]["valve_on"] is True
+
+    client.post("/api/climate/diagnostic-mode", json={"enabled": False})
+
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["valve_on"] is False
+
+
+def test_disabling_diagnostic_mode_closes_a_zone_whose_sensor_is_unreachable(tmp_path):
+    # The real bug reported from live testing against the two actual
+    # battery H&T sensors (currently offline in the real apartment):
+    # with the sensor unreachable, tick()'s own per-zone loop skips
+    # that zone entirely (see services/thermostat.py) - forget_valve_state()
+    # alone wasn't enough, since tick() never even reaches decide()/
+    # _apply() for this zone to be affected by it. The valve stayed
+    # open after leaving diagnostic mode even though the temperature
+    # (unknown - the sensor is down) could never have justified it.
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+    app.config["MANAGER"].pollers["Room Sensor"].cache.set({"ok": False, "error": "sensor unreachable"})
+    client.post("/api/climate/diagnostic-mode", json={"enabled": True})
+    client.post("/api/sensors/Room Valve/on")
+    assert client.get("/api/climate/zones").get_json()["zones"][0]["valve_on"] is True
+
+    client.post("/api/climate/diagnostic-mode", json={"enabled": False})
+
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["valve_on"] is False

@@ -57,12 +57,14 @@ class InterlockController:
         interlocks: list[Interlock],
         mode_switches: list[ModeSwitch] = (),
         mode_provider=None,
+        diagnostic_mode_provider=None,
         poll_interval_seconds: float = 20,
     ):
         self.manager = manager
         self.interlocks = interlocks
         self.mode_switches = list(mode_switches)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
+        self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
         self.poll_interval_seconds = poll_interval_seconds
         self._started = False
 
@@ -81,6 +83,13 @@ class InterlockController:
             time.sleep(self.poll_interval_seconds)
 
     def tick(self) -> None:
+        if self.diagnostic_mode_provider and self.diagnostic_mode_provider():
+            # Same "hands off everything" stance as
+            # ThermostatController.tick() - a leader/follower or
+            # mode-switch relationship fighting the installer's manual
+            # toggle in /climate-admin would defeat the point of a
+            # diagnosis mode entirely.
+            return
         current_mode = self.mode_provider() if self.mode_provider else None
         for link in self.interlocks:
             if link.active_in_mode is not None and link.active_in_mode != current_mode:

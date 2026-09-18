@@ -196,6 +196,19 @@
     "extra_dehumidifier_label": "Dehumidifier device id",
     "extra_sensor_heading": "Outdoor sensor",
     "extra_sensor_note": "One more fixed, standalone Shelly H&T Gen3 sensor - outdoor temperature/humidity, not tied to any zone. Always a real device (no simulated/manual mode, unlike a zone's own sensor) - leave blank if not wired yet.",
-    "extra_outdoor_sensor_label": "Outdoor sensor device id"
+    "extra_outdoor_sensor_label": "Outdoor sensor device id",
+    "how_it_works_heading": "How this works - sensors, thresholds and edge cases",
+    "how_it_works_threshold": "A battery sensor (Shelly H&T Gen3) only sends a new reading when its temperature moves by at least 0.5°C or its humidity by at least 5% - or every 2 hours regardless, even if nothing changed at all. So a zone that sits at a rock-stable temperature for hours, with its reading's age creeping up toward 2h, is completely normal, not a fault - the 2h heartbeat is what keeps it \"Reporting\" instead of ever needing to be treated as stale just from being stable. Only a reading whose age passes stale_after_seconds (6h - well over double the heartbeat, so one missed heartbeat alone never trips it) is treated as actually unreachable.",
+    "how_it_works_wifi": "A zone card's WiFi signal figure (shown next to its reading, when reported) below \"fair\" means the sensor is spending more of its battery retrying its connection, not just reporting slower - moving it closer to the broker's access point, or adding a repeater, fixes battery drain that a firmware update or a config change here cannot.",
+    "how_it_works_battery": "Battery percentage is shown inline with each zone's reading, highlighted once it's at or below 10% - the same threshold the main dashboard's own low-battery popup uses. Replacing the batteries clears it on the sensor's next report; there's nothing to reset here.",
+    "how_it_works_failsafe": "If a zone's sensor stays unreachable (not just quiet - actually unreachable, see above) for longer than its failsafe threshold (24h by default), its valve is forced closed automatically rather than left frozen in whatever it was doing indefinitely - shown on that zone's card below as it approaches and crosses the threshold. It clears itself the moment the sensor reports again. To open that valve anyway before the sensor comes back (e.g. while replacing its battery), use Diagnostic mode below.",
+    "how_it_works_diagnostic": "Diagnostic mode (below) is the way to move any valve by hand regardless of what any sensor says - for verifying a relay actually switches, figuring out which physical valve is which name, or riding out a sensor failsafe or an extended away period without waiting.",
+    "diagnostic_heading": "Diagnostic mode",
+    "diagnostic_note": "Takes command over every valve this apartment has - both zones' valves and the two extra switches (bathroom bypass, dehumidifier), whichever are currently wired. While on, the thermostat and every interlock/mode switch stop touching any of them entirely, not even to force a safe state - each valve stays exactly where you (or its last real command before this turned on) left it, moved only by the buttons below. Turning it back off resumes normal sensor-driven control immediately, no restart needed.",
+    "diagnostic_toggle_label": "Diagnostic mode active",
+    "diagnostic_active_banner": "Diagnostic mode is ON - the thermostat and all interlocks are hands-off. Every valve below only moves when you press its button.",
+    "diagnostic_confirm_on": "Turn on diagnostic mode? The thermostat and all interlocks will stop controlling every valve until you turn this back off.",
+    "failsafe_active": "Failsafe active: this sensor has been unreachable for {hours}h, past its threshold - its valve has been forced closed automatically. It will resume normal control the moment the sensor reports again, or use Diagnostic mode above to open it sooner.",
+    "failsafe_pending": "Sensor unreachable for {hours}h - its valve stays as it was for now; it'll be forced closed automatically at {threshold}h unless the sensor recovers first."
   }
 }

@@ -144,6 +144,7 @@ def test_build_extra_switch_integrations_shape():
     assert dehumidifier.options["command_topic"] == "shellyplus1-EEEE/command/switch:0"
     assert dehumidifier.options["payload_on"] is True
     assert dehumidifier.options["payload_off"] is False
+    assert dehumidifier.options["availability_topic"] == "shellyplus1-EEEE/online"
 
 
 def test_build_extra_switch_integrations_skips_an_unset_field():
@@ -234,6 +235,7 @@ def test_build_extra_sensor_integrations_shape():
         "shellyht-FFFF/status/wifi",
     ]
     assert outdoor.options["fields"]["wifi_rssi_dbm"] == "rssi"
+    assert outdoor.options["availability_topic"] == "shellyht-FFFF/online"
 
 
 def test_build_extra_sensor_integrations_skips_an_unset_field():
@@ -366,6 +368,10 @@ def test_build_climate_integrations_shelly_mode_shape():
         "wifi_rssi_dbm": "rssi",
     }
     assert sensor.options["stale_after_seconds"] == 21600
+    # Every Shelly device publishes this LWT-backed topic itself - see
+    # drivers/mqtt/base.py's Availability - so a panel-built sensor gets
+    # immediate offline detection for free, no field to fill in.
+    assert sensor.options["availability_topic"] == "shellyht-AAAA/online"
 
 
 def test_build_climate_integrations_valve_shape_is_shelly_regardless_of_sensor_mode():
@@ -380,6 +386,7 @@ def test_build_climate_integrations_valve_shape_is_shelly_regardless_of_sensor_m
     assert valve.options["payload_on"] is True
     assert valve.options["payload_off"] is False
     assert "stale_after_seconds" not in valve.options
+    assert valve.options["availability_topic"] == "shellyplus1-CCCC/online"
 
 
 def test_build_climate_integrations_simulated_mode_shape():

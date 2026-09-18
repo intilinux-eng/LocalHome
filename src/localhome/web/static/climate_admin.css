@@ -214,3 +214,27 @@
   font-size: 0.72rem;
   margin: 0;
 }
+
+/* Diagnostic mode - see climate_admin.js's refreshDiagnosticSection().
+   The toggle itself reuses .admin-checkbox as-is; this just gives it
+   a bit more breathing room since it's the single most consequential
+   control on this whole page. */
+.admin-diagnostic-toggle {
+  margin: 4px 0 10px;
+  font-weight: 600;
+}
+
+.admin-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 8px 0 20px;
+}
+
+.admin-diagnostic-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}

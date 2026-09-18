@@ -271,6 +271,13 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
         },
         "stale_after_seconds": 21600,
         "dashboard_tab": "climate",
+        # Every Shelly device publishes its own LWT-backed "<id>/online"
+        # topic ("true"/"false", retained, updated by the broker itself
+        # the instant the device disconnects - confirmed live via
+        # mosquitto_sub) - deriving it here means every panel-built
+        # Shelly sensor gets fast, accurate offline detection with no
+        # extra field for the installer to fill in.
+        "availability_topic": f"{device_id}/online",
     }
 
 
@@ -288,6 +295,11 @@ def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) ->
         # No stale_after_seconds: a relay only publishes on state change,
         # so a timeout here would wrongly flag a valve that's just been
         # closed for a while as unreachable - see docs/integrations/mqtt.md.
+        # availability_topic still applies though - see the matching
+        # comment in _shelly_sensor_options() above. A mains-powered relay
+        # going offline is unambiguous (no battery-sleep case to confuse
+        # it with), so this is a clean signal for a valve too.
+        "availability_topic": f"{device_id}/online",
     }
 
 

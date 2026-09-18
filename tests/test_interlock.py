@@ -180,3 +180,30 @@ def test_interlocks_and_mode_switches_apply_independently_in_the_same_tick():
     # alone - but the bypass valve always opens in cool mode regardless.
     assert follower.calls == []
     assert bypass.calls == ["on"]
+
+
+def test_diagnostic_mode_stops_every_interlock_and_mode_switch():
+    follower = FakeSwitch()
+    bypass = FakeSwitch()
+    manager = FakeManager(
+        readings={
+            "Dehumidifier": {"ok": True, "is_on": True},
+            "Bathrooms Valve": {"ok": True, "is_on": False},
+            "Bypass Valve": {"ok": True, "is_on": False},
+        },
+        switches={"Bathrooms Valve": follower, "Bypass Valve": bypass},
+    )
+    controller = InterlockController(
+        manager,
+        [Interlock(leader="Dehumidifier", follower="Bathrooms Valve")],
+        [ModeSwitch(switch="Bypass Valve", active_in_mode="cool")],
+        mode_provider=lambda: "cool",
+        diagnostic_mode_provider=lambda: True,
+    )
+
+    controller.tick()
+
+    # Both would normally fire (leader on, mode matches) - diagnostic
+    # mode leaves every switch exactly as the installer set it manually.
+    assert follower.calls == []
+    assert bypass.calls == []

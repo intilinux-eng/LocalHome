@@ -25,6 +25,39 @@
        section, so it frames everything below instead of following it. -->
   <p class="admin-mode-banner" id="mode-away-line"></p>
 
+  <!-- Explains every non-obvious battery-sensor behavior this panel's
+       status pills can otherwise leave a technician guessing about
+       (see climate_admin.js's sensorStatusHtml()/zoneStatusInnerHtml())
+       - collapsed by default (it's reference material, read once per
+       install, not on every visit) but placed above the zone cards
+       so it's found before the technician starts guessing. -->
+  <details class="admin-details" id="how-it-works">
+    <summary>{{ t.climate_admin.how_it_works_heading }}</summary>
+    <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
+  </details>
+
+  <!-- System-wide override, not per-zone - see
+       services/thermostat.py's ScheduleStore.get_diagnostic_mode().
+       Deliberately its own always-visible section (not tucked into a
+       <details>, unlike the one-time setup sections below): whether
+       this is on changes what every valve state on this whole page
+       actually means, so it can't be something a technician has to
+       remember to expand first. -->
+  <div class="section-head">
+    <h2>{{ t.climate_admin.diagnostic_heading }}</h2>
+  </div>
+  <p class="hint-text">{{ t.climate_admin.diagnostic_note }}</p>
+  <label class="admin-checkbox admin-diagnostic-toggle">
+    <input type="checkbox" id="diagnostic-mode-toggle" onchange="onDiagnosticModeToggle(this)">
+    <span id="diagnostic-mode-toggle-label">{{ t.climate_admin.diagnostic_toggle_label }}</span>
+  </label>
+  <p class="admin-mode-exclusion" id="diagnostic-mode-banner" hidden>{{ t.climate_admin.diagnostic_active_banner }}</p>
+  <div id="diagnostic-valves"></div>
+
   <div class="section-head">
     <h2>{{ t.climate_admin.zones_heading }}</h2>
     <div class="toolbar">
