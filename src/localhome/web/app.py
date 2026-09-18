@@ -728,6 +728,14 @@ def _register_routes(app: Flask) -> None:
         zone = next((z for z in active_zones if z.get("name") == name), None)
         if zone is None or zone.get("sensor_mode") != "manual":
             return jsonify(ok=False, error=f"zone '{name}' is not currently configured in manual mode"), 409
+        # Diagnostic mode makes the thermostat.tick() below a no-op (see
+        # ScheduleStore.get_diagnostic_mode()), so setting a value here
+        # would silently do nothing to the valve - confusing during the
+        # exact "does the control logic actually react" check this quick-set
+        # box exists for. Same "reject, don't silently no-op" stance as the
+        # mode_switch block in api_sensor_action() below.
+        if thermostat and thermostat.schedule_store.get_diagnostic_mode():
+            return jsonify(ok=False, error="diagnostic mode is active - turn it off to let the thermostat react to a manual value"), 409
 
         data = request.get_json(silent=True) or {}
         if "temperature_c" not in data:

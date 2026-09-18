@@ -331,6 +331,28 @@ def test_manual_value_route_applies_immediately_with_no_restart(tmp_path):
     assert reading["manual_override"] is True
 
 
+def test_manual_value_route_rejects_a_value_while_diagnostic_mode_is_active(tmp_path):
+    # Found during live end-to-end testing of the manual quick-set box:
+    # with diagnostic mode on, ThermostatController.tick() is a no-op
+    # (see ScheduleStore.get_diagnostic_mode()), so the value applied
+    # here would sit there with no visible effect and no explanation -
+    # exactly the "why isn't the valve reacting" confusion this route
+    # exists to let an installer rule out. Reject instead of silently
+    # accepting a value that can't do anything yet.
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    client = app.test_client()
+    app.config["THERMOSTAT"].schedule_store.set_diagnostic_mode(True)
+
+    res = client.post("/api/climate-admin/zones/Bathrooms/manual-value", json={"temperature_c": 26.5})
+
+    assert res.status_code == 409
+    assert res.get_json()["ok"] is False
+    # Nothing was applied - the sensor still has no reading at all.
+    reading = app.config["MANAGER"].sensor_reading("Bathrooms Sensor")
+    assert reading["ok"] is False
+
+
 def test_manual_value_route_rejects_a_zone_not_in_manual_mode(tmp_path):
     ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
     app = _app(tmp_path, CONFIG_NO_THERMOSTAT)

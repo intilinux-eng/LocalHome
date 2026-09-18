@@ -57,7 +57,15 @@ date rather than by tag.
   control). For on-site verification (does this relay actually switch?
   which physical valve is which name?) without the thermostat undoing a
   manual test moments later. Turning it back off resumes normal,
-  sensor-driven control immediately, no restart needed. See
+  sensor-driven control immediately, no restart needed - including
+  force-closing any zone whose sensor is currently unreachable
+  (`ThermostatController.resync_after_diagnostic_mode()`), since
+  `tick()` would otherwise just skip such a zone and leave it exactly
+  where a manual test left it. The panel's manual quick-set value box
+  (for a zone in "manual" sensor mode) now also rejects a value outright
+  while diagnostic mode is on, rather than accepting one that would sit
+  there with no visible effect - the thermostat's `tick()` is a no-op
+  the whole time diagnostic mode is active. See
   [docs/configuration.md#diagnostic-mode](docs/configuration.md#diagnostic-mode).
 - The `/climate-admin` panel gained a "How this works" reference
   section explaining every battery-sensor edge case in place (a stable
