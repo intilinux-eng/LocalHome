@@ -269,7 +269,13 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
             "battery_pct": "battery.percent",
             "wifi_rssi_dbm": "rssi",
         },
-        "stale_after_seconds": 21600,
+        # 4h - just under 2x the 2h heartbeat these devices promise
+        # (confirmed live overnight: both real H&T sensors landed every
+        # heartbeat within a minute of exactly 2h, no exceptions once
+        # WiFi was stable), so one missed heartbeat alone never trips
+        # this, but two in a row does - catching a genuinely dead sensor
+        # in half the time the previous 6h value would have.
+        "stale_after_seconds": 14400,
         "dashboard_tab": "climate",
         # Deliberately NO availability_topic here, unlike the valve
         # builder below - tried it live against the two real H&T Gen3

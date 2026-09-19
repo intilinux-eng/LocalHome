@@ -463,6 +463,27 @@ function wifiLabel(zone) {
   return tr(`climate.wifi_${wifiQuality(zone.wifi_rssi_dbm)}`, { value: Math.round(zone.wifi_rssi_dbm) });
 }
 
+// A battery H&T only reports on a >=0.5C/5% change or an unconditional
+// heartbeat every ~2h (confirmed live: an overnight watch of two real
+// sensors landed every heartbeat within about a minute of exactly 2h,
+// regardless of firmware version or WiFi signal) - so an age climbing
+// toward 2h is completely normal, not a sign of trouble. Showing the
+// raw age alone ("110m fa") reads as a warning to anyone who doesn't
+// already know that; this is the one place that context gets attached
+// to the number itself, right where the age is displayed, instead of
+// only living in the "how this works" reference section above.
+const NORMAL_AGE_CONTEXT_SECONDS = 1800; // 30 min - below this, age alone needs no caveat
+function freshnessNote(zone, mode) {
+  if (mode !== "shelly") return ""; // only this device family has a known, steady heartbeat to compare against
+  const seconds = zone.sensor_seconds_since_update;
+  if (seconds == null) return "";
+  const time = formatAge(seconds);
+  if (seconds < NORMAL_AGE_CONTEXT_SECONDS) {
+    return ` · ${tr("sensors.updated_ago", { time })}`;
+  }
+  return ` · ${tr("climate_admin.updated_ago_normal_cadence", { time })}`;
+}
+
 function sensorStatusHtml(zone, mode) {
   if (mode === "simulated") {
     return `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ${fmt(zone.temperature_c, 1)}°C`;
@@ -497,7 +518,7 @@ function sensorStatusHtml(zone, mode) {
       const note = staleValueNote(zone.sensor_last_value_age_seconds);
       return `<span class="admin-status neutral">${note}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
     }
-    return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
+    return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${fmt(zone.temperature_c, 1)}°C${extra}${freshnessNote(zone, mode)}`;
   }
   const error = zone.sensor_error || "";
   if (error.includes("no MQTT message received yet")) {

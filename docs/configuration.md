@@ -371,8 +371,12 @@ Telegram bot token or a phone being nearby:
 - **A rock-stable reading isn't stale.** The sensor only sends on a
   ≥0.5°C/5% change, or unconditionally every 2 hours regardless - so a
   reading's age creeping toward 2h is normal, not a fault, and
-  `stale_after_seconds` (6h) only trips on an actually-missed device,
-  not a merely-quiet room.
+  `stale_after_seconds` (4h - just under double the heartbeat) only
+  trips on an actually-missed device (two heartbeats in a row), not a
+  merely-quiet room. An overnight watch of two real H&T Gen3 sensors
+  confirmed the 2h promise holds precisely - every heartbeat landed
+  within about a minute of exactly 2h, whatever their individual
+  firmware version or WiFi signal.
 - **The device's own "online" status isn't a useful signal for a
   battery sensor, on purpose.** In battery mode, an H&T wakes locally
   about once a minute just to measure, but only actually connects to

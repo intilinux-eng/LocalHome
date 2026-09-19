@@ -370,7 +370,7 @@ def test_build_climate_integrations_shelly_mode_shape():
         "battery_pct": "battery.percent",
         "wifi_rssi_dbm": "rssi",
     }
-    assert sensor.options["stale_after_seconds"] == 21600
+    assert sensor.options["stale_after_seconds"] == 14400
     # No availability_topic on a battery H&T - see _shelly_sensor_options()'s
     # own comment for why (its "online" LWT topic reads false for most
     # of its normal working life, not just when something's wrong).

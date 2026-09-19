@@ -6,6 +6,22 @@ date rather than by tag.
 
 ## Unreleased
 
+### Changed
+- `/climate-admin`'s "Reporting" status now shows a battery sensor's
+  reading age too, not just the value - and past 30 minutes, frames it
+  explicitly as normal ("30m ago - normal, this sensor reports on a
+  change or roughly every 2h") rather than leaving a technician to
+  guess whether an aging timestamp means trouble. Confirmed against an
+  overnight watch of the two real H&T Gen3 sensors governing this
+  apartment's climate: every heartbeat landed within about a minute of
+  exactly 2h, all night, regardless of individual firmware version or
+  WiFi signal - the panel was previously the one making a perfectly
+  healthy sensor look like it might be dying.
+- The battery sensor `stale_after_seconds` default dropped from 6h to
+  4h (just under double the confirmed 2h heartbeat) - a genuinely dead
+  sensor is now caught after missing two heartbeats instead of three,
+  with the same one-missed-heartbeat tolerance as before.
+
 ### Fixed
 - The "Xs/Xm/Xh ago" freshness shown for every `mqtt_json` sensor,
   switch and number was computed from whenever `SyncPoller` last
