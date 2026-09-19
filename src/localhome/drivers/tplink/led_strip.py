@@ -6,11 +6,16 @@ Tapo devices additionally need the TP-Link account username/password at
 connect time (checked locally against the device, never sent anywhere
 over the internet) - see docs/integrations/tplink.md.
 
-python-kasa is asyncio-native but holds no connection worth keeping
-across polls - every call below is its own short-lived request - so
-these stay plain sync PollingDrivers wrapping each call in its own
-asyncio.run(), the way the LAN-only Tuya drivers do, rather than the
-AsyncPoller shape the cloud-based Meross driver needs.
+python-kasa is asyncio-native, and these stay plain sync PollingDrivers
+wrapping each call in its own asyncio.run(), the way the LAN-only Tuya
+drivers do, rather than the AsyncPoller shape the cloud-based Meross
+driver needs. Each call therefore opens its own connection - and has to
+close it again: a kasa Device holds a live aiohttp session that the
+event loop ending does *not* tear down, so every connection must go
+through `_device()` below, never `Discover.discover_single()` directly.
+(This module used to assume kasa "holds no connection worth keeping
+across polls" and simply dropped each Device on the floor. It does hold
+one, and that leaked ~17k sessions a day here.)
 
 Two separate driver classes cover one physical strip: `switch` for
 on/off and `number` for brightness (see docs/adding-a-driver.md - one
@@ -22,6 +27,7 @@ one of the two invisible on the dashboard.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Any
 
 from kasa import Discover, Module
@@ -33,12 +39,28 @@ from localhome.util.jsonfile import load_json
 COMMAND_TIMEOUT_SECONDS = 10
 
 
-async def _connect(host: str, username: str | None, password: str | None):
+@asynccontextmanager
+async def _device(host: str, username: str | None, password: str | None):
+    """Opens a device connection and *always* closes it again.
+
+    The disconnect is the whole point: python-kasa keeps a real
+    connection alive behind the Device object (an aiohttp session, for
+    the KLAP transport these strips use), and the event loop ending does
+    not clean it up. Returning a connected Device and walking away - the
+    previous shape here - leaked one aiohttp session, its connector, its
+    socket and about one OS thread on every single read. With four
+    drivers (two strips x switch+brightness) polling every 20s that was
+    ~17k leaked connections a day, and the bulk of a leak that took the
+    process past 4.5GB of RAM in nine hours.
+    """
     dev = await Discover.discover_single(
         host, username=username, password=password, timeout=COMMAND_TIMEOUT_SECONDS
     )
-    await dev.update()
-    return dev
+    try:
+        await dev.update()
+        yield dev
+    finally:
+        await dev.disconnect()
 
 
 def _light_module(dev):
@@ -62,15 +84,15 @@ class TplinkLedStripDriver(SwitchDriver):
 
     def read(self) -> dict[str, Any]:
         async def _do() -> dict[str, Any]:
-            dev = await _connect(self._host, self._username, self._password)
-            reading: dict[str, Any] = {"ok": True, "name": self.name, "is_on": dev.is_on}
-            light = _light_module(dev)
-            if light is not None:
-                try:
-                    reading["brightness"] = light.brightness
-                except Exception:
-                    pass
-            return reading
+            async with _device(self._host, self._username, self._password) as dev:
+                reading: dict[str, Any] = {"ok": True, "name": self.name, "is_on": dev.is_on}
+                light = _light_module(dev)
+                if light is not None:
+                    try:
+                        reading["brightness"] = light.brightness
+                    except Exception:
+                        pass
+                return reading
 
         return asyncio.run(_do())
 
@@ -82,11 +104,11 @@ class TplinkLedStripDriver(SwitchDriver):
 
     def _set_power(self, on: bool) -> None:
         async def _do() -> None:
-            dev = await _connect(self._host, self._username, self._password)
-            if on:
-                await dev.turn_on()
-            else:
-                await dev.turn_off()
+            async with _device(self._host, self._username, self._password) as dev:
+                if on:
+                    await dev.turn_on()
+                else:
+                    await dev.turn_off()
 
         asyncio.run(_do())
 
@@ -112,21 +134,21 @@ class TplinkLedStripBrightnessDriver(NumberDriver):
 
     def read(self) -> dict[str, Any]:
         async def _do() -> dict[str, Any]:
-            dev = await _connect(self._host, self._username, self._password)
-            light = _light_module(dev)
-            if light is None:
-                raise RuntimeError(f"{self._host} has no dimmable light module")
-            return {"ok": True, "name": self.name, "value": light.brightness}
+            async with _device(self._host, self._username, self._password) as dev:
+                light = _light_module(dev)
+                if light is None:
+                    raise RuntimeError(f"{self._host} has no dimmable light module")
+                return {"ok": True, "name": self.name, "value": light.brightness}
 
         return asyncio.run(_do())
 
     def set_value(self, value: float) -> None:
         async def _do() -> None:
-            dev = await _connect(self._host, self._username, self._password)
-            light = _light_module(dev)
-            if light is None:
-                raise RuntimeError(f"{self._host} has no dimmable light module")
-            await light.set_brightness(int(value))
+            async with _device(self._host, self._username, self._password) as dev:
+                light = _light_module(dev)
+                if light is None:
+                    raise RuntimeError(f"{self._host} has no dimmable light module")
+                await light.set_brightness(int(value))
 
         asyncio.run(_do())
 
