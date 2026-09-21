@@ -164,6 +164,18 @@ system's water is either hot or cold for everyone at once - the
 dashboard's mode toggle changes it seasonally without editing
 config.yaml.
 
+**One schedule per season.** Each zone has a separate weekly grid for
+heating and for cooling, and the thermostat follows whichever matches
+the current mode - a single shared grid meant switching to cooling
+applied the winter setpoints as cooling targets. The dashboard paints
+each season from its own range (heating 16-24, cooling 20-27) and labels
+which grid it's showing. In `schedules.json` the heating grids stay
+under the original `zones` key and the cooling ones sit alongside under
+`zones_cool`, so a file written before the split needs no migration: it
+is the heating schedule, and cooling starts empty - every valve stays
+closed while cooling until a summer schedule is painted, and the
+dashboard says so on each zone.
+
 **No real hardware yet?** Use [`type: simulated`](integrations/simulated.md)
 for both `sensor` and `valve` - the exact same schedule/API/dashboard
 works, and the simulated sensor even drifts toward a hotter/colder value

@@ -21,6 +21,23 @@ date rather than by tag.
   the one actually being applied. New `GET /api/server-time`; see
   `services/system_clock.py`. The deployment guide now sets the
   timezone as part of the first-time setup.
+- **Separate heating and cooling schedules.** Each zone now has one
+  weekly grid per season, and the thermostat follows the one matching
+  the current mode. With a single shared grid, switching the real
+  deployment to cooling applied the winter setpoints as cooling
+  targets - it was cooling a 26.5C room toward 19C. Stored additively:
+  heating stays under `schedules.json`'s original `zones` key, cooling
+  goes under `zones_cool`, so existing files need no migration and
+  cooling simply starts empty (valves closed, with a notice on each
+  zone card) until a summer schedule is painted. The dashboard labels
+  which season's grid it's showing, and an edit saved in the same
+  instant as a season switch still lands in the season it was painted
+  for. `GET/POST /api/climate/zones/<name>/schedule` take an optional
+  `mode`, defaulting to the current season.
+- `ScheduleStore` now serializes its read-modify-write saves with a
+  lock - two saves landing together (both zones' grids, or a grid and
+  a season switch) could previously each read the old file and the
+  second write would silently drop the first.
 - The weekly schedule palette now depends on the season: heating paints
   from 16/18/**19**/20/21/22/24 (19 fills the 18-20 gap), cooling from
   its own 20-27 range, each with its own color scale - on the heating

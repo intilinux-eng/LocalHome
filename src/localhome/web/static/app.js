@@ -1177,6 +1177,7 @@ function buildZoneCard(zone) {
       </div>
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
 
+      <div class="sched-season-label">${tr(`climate.schedule_heading_${climateMode}`)}</div>
       <div class="sched-palette">
         ${schedulePresets().map(v => `
           <button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
@@ -1184,6 +1185,7 @@ function buildZoneCard(zone) {
         `).join("")}
       </div>
       <p class="hint-text">${tr("climate.schedule_hint")}</p>
+      <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
 
       <div class="sched-hour-axis-wrap">
         <div class="sched-hour-axis">${hourAxisHtml()}</div>
@@ -1333,17 +1335,32 @@ function copyMondayToWeek(zoneName, zoneId, weekdaysOnly) {
   scheduleSave(zoneName);
 }
 
+// Which season each loaded grid belongs to (heating and cooling are
+// separate grids - see services/thermostat.py's SEASON_KEYS). Saves go to
+// the season the grid was *loaded* for, never "whatever the season is by
+// the time the debounced save fires": a season switch in between would
+// otherwise file a winter grid as the summer one.
+const scheduleWeekModes = {};
+
+function updateEmptyScheduleHint(zoneName) {
+  const hint = document.getElementById(`sched-empty-${slug(zoneName)}`);
+  const week = scheduleWeeks[zoneName];
+  if (hint && week) hint.hidden = Object.values(week).some(hours => hours.some(v => v != null));
+}
+
 function scheduleSave(zoneName) {
+  updateEmptyScheduleHint(zoneName);
   clearTimeout(saveTimers[zoneName]);
   saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), 600);
 }
 
 async function saveSchedule(zoneName) {
+  delete saveTimers[zoneName];
   try {
     const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ week: scheduleWeeks[zoneName] }),
+      body: JSON.stringify({ week: scheduleWeeks[zoneName], mode: scheduleWeekModes[zoneName] || climateMode }),
     });
     const data = await res.json();
     if (!data.ok) alert(`${tr("climate.save_failed")}: ${data.error}`);
@@ -1352,13 +1369,23 @@ async function saveSchedule(zoneName) {
   }
 }
 
+// Saves any edit still waiting on its debounce right now, before a reload
+// replaces the working copy it would have saved.
+async function flushPendingScheduleSaves() {
+  const pending = Object.keys(saveTimers);
+  pending.forEach(zoneName => clearTimeout(saveTimers[zoneName]));
+  await Promise.all(pending.map(saveSchedule));
+}
+
 async function loadZoneSchedule(zoneName) {
   try {
-    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule`);
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule?mode=${encodeURIComponent(climateMode)}`);
     const data = await res.json();
     if (!data.ok) return;
     scheduleWeeks[zoneName] = data.week;
+    scheduleWeekModes[zoneName] = data.mode || climateMode;
     buildScheduleGrid(slug(zoneName), data.week);
+    updateEmptyScheduleHint(zoneName);
   } catch (e) { /* grid stays empty; next tab visit retries */ }
 }
 
@@ -1483,6 +1510,7 @@ async function refreshClimateZonesLive() {
 // toggle, which zone cards exist, and each card's palette and grid colors
 // (both season-specific - see SCHEDULE_PRESETS / TEMP_COLOR_STOPS).
 async function rerenderClimateForSeason(zonesData) {
+  await flushPendingScheduleSaves();
   updateSeasonHeading();
   applyClimateModeVisibility();
   const toggle = document.getElementById("climate-mode-toggle");

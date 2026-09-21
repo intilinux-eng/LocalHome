@@ -33,7 +33,7 @@ from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services.system_clock import server_time
-from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
+from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -508,12 +508,18 @@ def _register_routes(app: Flask) -> None:
                 interlock.tick()
         return jsonify(ok=True, enabled=enabled)
 
+    # Each season has its own grid (services/thermostat.py's SEASON_KEYS);
+    # `mode` picks which one, defaulting to the current season so a
+    # client that predates the split still reads/writes the live grid.
     @app.route("/api/climate/zones/<name>/schedule")
     def api_climate_get_schedule(name):
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
-        return jsonify(ok=True, week=thermostat.schedule_store.get_week(name))
+        mode = request.args.get("mode") or thermostat.schedule_store.get_mode()
+        if mode not in MODES:
+            return jsonify(ok=False, error=f"mode must be one of {MODES}"), 400
+        return jsonify(ok=True, mode=mode, week=thermostat.schedule_store.get_week(name, mode))
 
     @app.route("/api/climate/zones/<name>/schedule", methods=["POST"])
     def api_climate_set_schedule(name):
@@ -524,8 +530,11 @@ def _register_routes(app: Flask) -> None:
         week = data.get("week")
         if not isinstance(week, dict):
             return jsonify(ok=False, error="missing 'week'"), 400
+        mode = data.get("mode")
+        if mode is not None and mode not in MODES:
+            return jsonify(ok=False, error=f"mode must be one of {MODES}"), 400
         try:
-            thermostat.schedule_store.set_week(name, week)
+            thermostat.schedule_store.set_week(name, week, mode)
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         # Same reasoning as the mode switch above: don't leave the valve

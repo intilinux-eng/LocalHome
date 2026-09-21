@@ -510,3 +510,117 @@ def test_failsafe_clears_once_the_sensor_reports_again(tmp_path, monkeypatch):
 
     assert controller.is_failsafe_active("Rooms") is False
     assert controller.unreachable_hours("Rooms") is None
+
+
+# ----------------------------------------------------- per-season grids -----
+# Heating and cooling each have their own weekly grid. With one shared grid,
+# switching the real deployment to cooling applied the winter setpoints as
+# cooling targets - it was cooling a 26.5C room toward 19C.
+
+def _flat_week(value):
+    return {day: [value] * 24 for day in ScheduleStore.empty_week()}
+
+
+def test_each_season_keeps_its_own_grid(tmp_path):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_week("Rooms", _flat_week(20.0), mode="heat")
+    store.set_week("Rooms", _flat_week(26.0), mode="cool")
+
+    assert store.get_week("Rooms", "heat")["mon"][10] == 20.0
+    assert store.get_week("Rooms", "cool")["mon"][10] == 26.0
+
+
+def test_no_mode_means_the_current_season(tmp_path):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_week("Rooms", _flat_week(20.0), mode="heat")
+    store.set_week("Rooms", _flat_week(26.0), mode="cool")
+    when = datetime(2026, 9, 14, 10, 0)
+
+    store.set_mode("heat")
+    assert store.get_target("Rooms", when) == 20.0
+    store.set_mode("cool")
+    assert store.get_target("Rooms", when) == 26.0
+
+
+def test_a_file_from_before_the_split_is_the_heating_grid(tmp_path):
+    # schedules.json files written before seasons were split only have
+    # "zones" - that must keep meaning the heating grid, untouched, with
+    # an empty (all-off) cooling grid next to it.
+    path = tmp_path / "schedules.json"
+    path.write_text(json.dumps({"mode": "heat", "zones": {"Rooms": _flat_week(21)}}), encoding="utf-8")
+    store = ScheduleStore(str(path))
+
+    assert store.get_week("Rooms", "heat")["mon"][10] == 21
+    assert all(v is None for v in store.get_week("Rooms", "cool")["mon"])
+
+
+def test_an_old_file_left_in_cooling_does_not_cool_toward_winter_setpoints(tmp_path):
+    # The exact state of the real deployment when this was found: an old
+    # single-grid file, season set to cool. After the split its cooling
+    # grid is empty, so the valve stays closed instead of chasing 19C.
+    path = tmp_path / "schedules.json"
+    path.write_text(json.dumps({"mode": "cool", "zones": {"Rooms": _flat_week(19)}}), encoding="utf-8")
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": 26.5}}, switches={"Rooms Valve": switch})
+    controller = ThermostatController(manager, ScheduleStore(str(path)), zones, hysteresis_c=0.5)
+
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))
+
+    assert switch.calls == ["off"]
+
+
+def test_cooling_follows_the_cooling_grid(tmp_path):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": 26.5}}, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_week("Rooms", _flat_week(20.0), mode="heat")  # heating would keep this closed at 26.5C
+    store.set_week("Rooms", _flat_week(25.0), mode="cool")
+    store.set_mode("cool")
+
+    ThermostatController(manager, store, zones, hysteresis_c=0.5).tick(now=datetime(2026, 9, 21, 8, 0))
+
+    assert switch.calls == ["on"]  # 26.5 > 25 + 0.5 -> cooling
+
+
+def test_an_explicit_season_is_saved_there_whatever_the_current_one(tmp_path):
+    # The dashboard saves with the season the grid was loaded for, so a
+    # season switch between painting and the debounced save can't file
+    # the grid under the wrong season.
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("cool")
+    store.set_week("Rooms", _flat_week(19.0), mode="heat")
+
+    assert store.get_week("Rooms", "heat")["mon"][0] == 19.0
+    assert all(v is None for v in store.get_week("Rooms", "cool")["mon"])
+
+
+def test_rejects_an_unknown_season(tmp_path):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    with pytest.raises(ValueError):
+        store.set_week("Rooms", _flat_week(20.0), mode="spring")
+
+
+def test_concurrent_saves_do_not_lose_each_other(tmp_path):
+    # Read-modify-write of one shared file from a threaded web server:
+    # without the store's lock, saves landing together could each read
+    # the old file and the last write would drop the others.
+    import threading
+
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    names = [f"Zone{i}" for i in range(12)]
+    barrier = threading.Barrier(len(names))
+
+    def save(name, value):
+        barrier.wait()
+        store.set_week(name, _flat_week(value), mode="heat")
+
+    threads = [threading.Thread(target=save, args=(n, 18.0 + i * 0.5)) for i, n in enumerate(names)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    for i, name in enumerate(names):
+        assert store.get_week(name, "heat")["mon"][0] == 18.0 + i * 0.5

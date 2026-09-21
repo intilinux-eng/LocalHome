@@ -27,6 +27,15 @@ DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 HOURS_PER_DAY = 24
 MODES = ("heat", "cool")
 
+# Each season has its own weekly grid - heating and cooling setpoints live
+# in different ranges, and a single shared grid meant switching to cooling
+# applied the winter values as cooling targets (a real deployment was
+# cooling toward 19C this way). "zones" is the original key and stays the
+# heating grid, so every schedules.json written before the split keeps
+# working untouched, and older code reading the same file still finds its
+# grid where it expects it. A season with no grid yet reads as all-off.
+SEASON_KEYS = {"heat": "zones", "cool": "zones_cool"}
+
 
 @dataclass
 class Zone:
@@ -44,15 +53,27 @@ class Zone:
 
 
 class ScheduleStore:
-    """Persists the weekly per-zone setpoint grid and the shared heat/cool
-    mode as one small JSON file (schedules.json) - the thermostat
-    equivalent of positions.json. A schedule slot is either a number
-    (target °C for that hour) or null (zone off for that hour,
-    regardless of temperature)."""
+    """Persists the weekly per-zone setpoint grids (one per season - see
+    SEASON_KEYS) and the shared heat/cool mode as one small JSON file
+    (schedules.json) - the thermostat equivalent of positions.json. A
+    schedule slot is either a number (target °C for that hour) or null
+    (zone off for that hour, regardless of temperature)."""
 
     def __init__(self, path: str, default_mode: str = "heat"):
         self.path = path
         self.default_mode = default_mode
+        # Every write here is read-modify-write of the whole file. Without
+        # this, two saves landing together (both zones' grids, or a grid
+        # and a mode switch - the web server is threaded) could each read
+        # the old file and the second write would silently drop the
+        # first's change. Same fix PositionStore needed.
+        self._lock = threading.Lock()
+
+    def _season_key(self, mode: str | None, data: dict) -> str:
+        season = mode or data.get("mode", self.default_mode)
+        if season not in MODES:
+            raise ValueError(f"mode must be one of {MODES}")
+        return SEASON_KEYS[season]
 
     def _load(self) -> dict:
         if not os.path.exists(self.path):
@@ -77,17 +98,19 @@ class ScheduleStore:
     def set_mode(self, mode: str) -> None:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
-        data = self._load()
-        data["mode"] = mode
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            data["mode"] = mode
+            self._save(data)
 
     @staticmethod
     def empty_week() -> dict[str, list]:
         return {day: [None] * HOURS_PER_DAY for day in DAYS}
 
-    def get_week(self, zone_name: str) -> dict[str, list]:
+    def get_week(self, zone_name: str, mode: str | None = None) -> dict[str, list]:
+        """`mode` picks the season's grid; None means the current season."""
         data = self._load()
-        week = data.get("zones", {}).get(zone_name)
+        week = data.get(self._season_key(mode, data), {}).get(zone_name)
         if not week:
             return self.empty_week()
         # set_week() rejects a non-numeric value going forward, but this
@@ -113,7 +136,11 @@ class ScheduleStore:
             clean[day] = clean_hours
         return clean
 
-    def set_week(self, zone_name: str, week: dict[str, list]) -> None:
+    def set_week(self, zone_name: str, week: dict[str, list], mode: str | None = None) -> None:
+        """`mode` picks the season's grid; None means the current season.
+        Callers that know which season a grid was edited for should pass
+        it - a season switch between editing and saving would otherwise
+        file the grid under the wrong one."""
         for day in DAYS:
             hours = week.get(day)
             if not isinstance(hours, list) or len(hours) != HOURS_PER_DAY:
@@ -127,12 +154,13 @@ class ScheduleStore:
                 # ever telling anyone what was actually wrong.
                 if value is not None and not isinstance(value, (int, float)):
                     raise ValueError(f"week['{day}'][{hour}] must be a number or null, got {value!r}")
-        data = self._load()
-        data.setdefault("zones", {})[zone_name] = week
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            data.setdefault(self._season_key(mode, data), {})[zone_name] = week
+            self._save(data)
 
-    def get_target(self, zone_name: str, when: datetime) -> float | None:
-        week = self.get_week(zone_name)
+    def get_target(self, zone_name: str, when: datetime, mode: str | None = None) -> float | None:
+        week = self.get_week(zone_name, mode)
         value = week[DAYS[when.weekday()]][when.hour]
         if value is None:
             return None
@@ -166,9 +194,10 @@ class ScheduleStore:
         return datetime.fromisoformat(value) if value else None
 
     def set_away_until(self, until: datetime | None) -> None:
-        data = self._load()
-        data["away_until"] = until.isoformat() if until else None
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            data["away_until"] = until.isoformat() if until else None
+            self._save(data)
 
     def get_diagnostic_mode(self) -> bool:
         """A system-wide override, separate from away mode: while on,
@@ -190,9 +219,10 @@ class ScheduleStore:
         return bool(self._load().get("diagnostic_mode", False))
 
     def set_diagnostic_mode(self, enabled: bool) -> None:
-        data = self._load()
-        data["diagnostic_mode"] = enabled
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            data["diagnostic_mode"] = enabled
+            self._save(data)
 
 
 class ThermostatController:
@@ -283,7 +313,10 @@ class ThermostatController:
                 self._on_sensor_unreachable(zone)
                 continue
             self._on_sensor_recovered(zone)
-            target = self.schedule_store.get_target(zone.name, now)
+            # The same `mode` this tick already decided with, not a fresh
+            # read - a season switch landing mid-tick must not pair one
+            # season's grid with the other season's heat/cool decision.
+            target = self.schedule_store.get_target(zone.name, now, mode)
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)
             self._apply(zone, desired)
 

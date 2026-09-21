@@ -179,3 +179,48 @@ def test_disabling_diagnostic_mode_closes_a_zone_whose_sensor_is_unreachable(tmp
 
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
     assert zone["valve_on"] is False
+
+
+# ------------------------------------------------- per-season schedules -----
+
+def _week(value):
+    return {day: [value] * 24 for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+
+
+def test_schedule_api_keeps_heating_and_cooling_apart(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    client = create_app(str(config_path)).test_client()
+
+    assert client.post("/api/climate/zones/Rooms/schedule", json={"week": _week(20), "mode": "heat"}).status_code == 200
+    assert client.post("/api/climate/zones/Rooms/schedule", json={"week": _week(26), "mode": "cool"}).status_code == 200
+
+    heat = client.get("/api/climate/zones/Rooms/schedule?mode=heat").get_json()
+    cool = client.get("/api/climate/zones/Rooms/schedule?mode=cool").get_json()
+    assert (heat["mode"], heat["week"]["mon"][0]) == ("heat", 20)
+    assert (cool["mode"], cool["week"]["mon"][0]) == ("cool", 26)
+
+
+def test_schedule_api_defaults_to_the_current_season(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    client = create_app(str(config_path)).test_client()
+    client.post("/api/climate/zones/Rooms/schedule", json={"week": _week(20), "mode": "heat"})
+    client.post("/api/climate/mode", json={"mode": "cool"})
+
+    body = client.get("/api/climate/zones/Rooms/schedule").get_json()
+
+    # Cooling has nothing painted yet: off, not the winter grid.
+    assert body["mode"] == "cool"
+    assert all(v is None for v in body["week"]["mon"])
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["target_c"] is None
+
+
+def test_schedule_api_rejects_an_unknown_season(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    client = create_app(str(config_path)).test_client()
+
+    assert client.get("/api/climate/zones/Rooms/schedule?mode=spring").status_code == 400
+    assert client.post("/api/climate/zones/Rooms/schedule", json={"week": _week(20), "mode": "spring"}).status_code == 400
