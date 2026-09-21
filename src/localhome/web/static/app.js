@@ -1312,15 +1312,26 @@ const TEMP_COLOR_STOPS = {
     { v: 27, h: 140, s: 26, l: 36 },
   ],
 };
-// Cooling targets from this value up are "economy" (less cooling, lower
-// consumption), below it "comfort" - shown above the palette and next to
-// the zone's current target, so the choice is explained, not just coloured.
-const ECONOMY_FROM = { cool: 26 };
+// Each season's targets split into "comfort" and "economy" (less heating
+// or cooling, lower consumption): heating is economy below 20°C, cooling
+// from 26°C up. Shown as two boxes around the palette and next to the
+// zone's current target, so the choice is explained, not just coloured.
+const TIER_OF = {
+  heat: v => (v < 20 ? "economy" : "comfort"),
+  cool: v => (v >= 26 ? "economy" : "comfort"),
+};
+
+const TIER_ICONS = {
+  // flame / snowflake for comfort (matches the season), leaf for economy
+  heat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
+  cool: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M3.34 7 20.66 17"/><path d="M20.66 7 3.34 17"/></svg>`,
+  economy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`,
+};
 
 function targetTier(value) {
-  const from = ECONOMY_FROM[climateMode];
-  if (from == null || value == null) return null;
-  return value >= from ? "economy" : "comfort";
+  const tierOf = TIER_OF[climateMode];
+  if (!tierOf || value == null) return null;
+  return tierOf(value);
 }
 
 function swatchHtml(v) {
@@ -1330,15 +1341,18 @@ function swatchHtml(v) {
 
 function paletteHtml() {
   const values = schedulePresets();
-  if (ECONOMY_FROM[climateMode] == null) return values.map(swatchHtml).join("");
+  if (!TIER_OF[climateMode]) return values.map(swatchHtml).join("");
   const off = values.filter(v => v == null);
-  const tier = name => values.filter(v => v != null && targetTier(v) === name);
-  const group = name => `
-    <div class="sched-tier sched-tier-${name}">
-      <span class="sched-tier-label">${tr(`climate.tier_${name}`)}</span>
-      <div class="sched-tier-swatches">${tier(name).map(swatchHtml).join("")}</div>
+  const temps = values.filter(v => v != null);
+  // Boxes in the palette's own order: economy first when heating (lower
+  // targets), comfort first when cooling.
+  const order = [...new Set(temps.map(targetTier))];
+  const box = name => `
+    <div class="sched-tier sched-tier-${name} sched-tier-${climateMode}">
+      <span class="sched-tier-label">${TIER_ICONS[name === "economy" ? "economy" : climateMode]}${tr(`climate.tier_${name}`)}</span>
+      <div class="sched-tier-swatches">${temps.filter(v => targetTier(v) === name).map(swatchHtml).join("")}</div>
     </div>`;
-  return `${off.map(swatchHtml).join("")}${group("comfort")}${group("economy")}`;
+  return `${off.map(swatchHtml).join("")}${order.map(box).join("")}`;
 }
 
 function tempColor(value) {

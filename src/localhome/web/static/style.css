@@ -832,21 +832,40 @@ input[type="range"]:disabled {
 .sched-swatch.active {
   border-color: white;
 }
-/* Cooling palette split into Comfort / Economy - see paletteHtml(). */
+/* The palette split into Comfort / Economy boxes - see paletteHtml(). The
+   label sits on the box's top edge, like a fieldset legend. */
 .sched-tier {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  --tier: #ff9f0a;
+  position: relative;
+  padding: 13px 8px 8px;
+  border: 1.5px solid color-mix(in srgb, var(--tier) 70%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier) 16%, transparent), color-mix(in srgb, var(--tier) 5%, transparent));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset, 0 4px 14px -6px color-mix(in srgb, var(--tier) 55%, transparent);
 }
+.sched-tier-comfort.sched-tier-cool { --tier: #3987e5; }
+.sched-tier-economy { --tier: #34c47c; }
 .sched-tier-label {
+  position: absolute;
+  top: -9px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: var(--tier);
+  color: #10131a;
   font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  line-height: 1.3;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
-.sched-tier-economy .sched-tier-label {
-  color: hsl(150, 40%, 60%);
+.sched-tier-label svg {
+  width: 11px;
+  height: 11px;
 }
 .sched-tier-swatches {
   display: flex;
@@ -855,7 +874,9 @@ input[type="range"]:disabled {
 }
 .sched-palette:has(.sched-tier) {
   align-items: flex-end;
-  column-gap: 12px;
+  gap: 16px 10px;
+  margin-top: 12px;
+  margin-bottom: 8px;
 }
 
 /* A zone excluded from cooling: its valve's real state, in place of its

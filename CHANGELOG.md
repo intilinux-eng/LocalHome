@@ -8,10 +8,12 @@ date rather than by tag.
 
 ### Added
 - Cooling palette in blues - the deeper the blue, the cooler the target -
-  split into **Comfort** (20-25°C) and **Economy** (26°C and up, a muted
-  green), labelled above the swatches and next to each zone's current
-  target. Previously the higher cooling setpoints came out orange and
-  red, reading as "hot".
+  and a muted green for economy; previously the higher cooling setpoints
+  came out orange and red, reading as "hot". Both seasons' palettes are
+  now split into two boxes, **Comfort** and **Economy** (heating: economy
+  below 20°C; cooling: economy from 26°C), each with its label and icon
+  on the box's edge, and each zone's current target says which one it
+  is.
 - While cooling, a zone excluded from it (the bathrooms) shows a panel
   with its valve's real state instead of just being hidden: "closed ✓",
   "open: feeding <dehumidifier>", "still open: closing" or "state
