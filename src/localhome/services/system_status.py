@@ -18,6 +18,10 @@ import time
 # imported while create_app() builds everything else.
 PROCESS_STARTED_TS = time.time()
 
+# CPU temperature worth flagging. Idle, the UNO Q's cores sit around
+# 45°C; boards like it start throttling in the 85-95°C range.
+CPU_HOT_C = 80
+
 # Disk-space thresholds for flagging a problem - the history database
 # and the JSON stores all live on the same (on the board, eMMC) disk,
 # and a full disk fails every one of their writes at once.
@@ -127,6 +131,28 @@ def _meminfo() -> dict[str, int]:
     return values
 
 
+def cpu_temperature_c(sys_root: str = "/sys") -> float | None:
+    """The hottest CPU thermal zone, in °C - zones whose type names the
+    CPU ("cpuss0-thermal" on the UNO Q, "cpu-thermal" on a Pi), or every
+    zone if none does. None where the kernel exposes none (a PC)."""
+    base = os.path.join(sys_root, "class", "thermal")
+    try:
+        zones = [z for z in os.listdir(base) if z.startswith("thermal_zone")]
+    except OSError:
+        return None
+    readings = []
+    for zone in zones:
+        kind = _read(os.path.join(base, zone, "type")) or ""
+        raw = _read(os.path.join(base, zone, "temp"))
+        try:
+            readings.append((kind, int(raw) / 1000))
+        except (TypeError, ValueError):
+            continue
+    cpu = [t for kind, t in readings if "cpu" in kind.lower()]
+    values = cpu or [t for _, t in readings]
+    return round(max(values), 1) if values else None
+
+
 def host_stats() -> dict:
     meminfo = _meminfo()
     try:
@@ -144,6 +170,7 @@ def host_stats() -> dict:
         "mem_total_bytes": meminfo.get("MemTotal"),
         "mem_available_bytes": meminfo.get("MemAvailable"),
         "uptime_seconds": uptime,
+        "cpu_temp_c": cpu_temperature_c(),
     }
 
 
@@ -248,6 +275,7 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
 
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
+    cpu_temp_c: float | None = None,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -265,6 +293,8 @@ def problems(
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
     if disk.get("low"):
         found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
+    if cpu_temp_c is not None and cpu_temp_c >= CPU_HOT_C:
+        found.append({"code": "cpu_hot", "subject": f"{cpu_temp_c:.0f}°C", "detail": None})
     if storage and (storage["pre_eol"] in ("warning", "urgent") or (storage["wear_percent_max"] or 0) >= 80):
         found.append({"code": "storage_wear", "subject": storage.get("name") or "eMMC",
                       "detail": f"{storage['wear_percent_max']}% - {storage['pre_eol']}"})

@@ -304,7 +304,7 @@ def _register_routes(app: Flask) -> None:
         storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
         return jsonify(
             ok=True,
-            problems=system_status.problems(devices, failed, disk, loops, storage),
+            problems=system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c")),
             storage=storage,
             failed_integrations=failed,
             skipped_driver_modules=skipped,

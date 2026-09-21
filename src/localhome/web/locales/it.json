@@ -295,7 +295,9 @@
     "system_emmc_unknown": "{wear}",
     "system_emmc_writes": "Scritture eMMC",
     "system_emmc_per_day": "{amount} al giorno (media dall'avvio)",
-    "system_problem_storage_wear": "Memoria {subject} consumata: pianifica la sostituzione"
+    "system_problem_storage_wear": "Memoria {subject} consumata: pianifica la sostituzione",
+    "system_cpu_temp": "Temperatura CPU",
+    "system_problem_cpu_hot": "CPU molto calda ({subject}): controlla ventilazione e posizione della scheda"
   },
   "vmc_presets": {
     "night": "Notte",

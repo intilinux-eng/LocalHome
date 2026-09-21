@@ -237,3 +237,35 @@ def test_a_worn_emmc_is_a_problem(tmp_path):
 
     assert storage["wear_percent_max"] == 90
     assert [(p["code"], p["subject"]) for p in problems] == [("storage_wear", "BUTC42")]
+
+
+def _fake_thermal(tmp_path, zones):
+    base = tmp_path / "sys" / "class" / "thermal"
+    for i, (kind, millideg) in enumerate(zones):
+        zone = base / f"thermal_zone{i}"
+        zone.mkdir(parents=True)
+        (zone / "type").write_text(kind + "\n")
+        (zone / "temp").write_text(f"{millideg}\n")
+    return str(tmp_path / "sys")
+
+
+def test_cpu_temperature_is_the_hottest_cpu_zone(tmp_path):
+    # As read on the real UNO Q: the GPU/modem zones don't count.
+    sys_root = _fake_thermal(tmp_path, [("mapss-thermal", 41000), ("cpuss0-thermal", 44800),
+                                        ("cpuss1-thermal", 46100), ("gpu-thermal", 52000)])
+    assert system_status.cpu_temperature_c(sys_root) == 46.1
+
+
+def test_cpu_temperature_falls_back_to_every_zone(tmp_path):
+    sys_root = _fake_thermal(tmp_path, [("soc-thermal", 51000), ("board", 40000)])
+    assert system_status.cpu_temperature_c(sys_root) == 51.0
+
+
+def test_cpu_temperature_is_none_without_thermal_zones(tmp_path):
+    assert system_status.cpu_temperature_c(str(tmp_path / "nothing")) is None
+
+
+def test_a_hot_cpu_is_a_problem():
+    problems = system_status.problems([], [], {"low": False}, [], None, 83.4)
+    assert [(p["code"], p["subject"]) for p in problems] == [("cpu_hot", "83°C")]
+    assert system_status.problems([], [], {"low": False}, [], None, 45.0) == []

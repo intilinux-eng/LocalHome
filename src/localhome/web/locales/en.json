@@ -295,7 +295,9 @@
     "system_emmc_unknown": "{wear}",
     "system_emmc_writes": "eMMC writes",
     "system_emmc_per_day": "{amount} a day (average since boot)",
-    "system_problem_storage_wear": "{subject} storage worn: plan a replacement"
+    "system_problem_storage_wear": "{subject} storage worn: plan a replacement",
+    "system_cpu_temp": "CPU temperature",
+    "system_problem_cpu_hot": "CPU running hot ({subject}): check the board's airflow and placement"
   },
   "vmc_presets": {
     "night": "Night",

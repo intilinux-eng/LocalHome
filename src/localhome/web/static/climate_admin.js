@@ -1035,6 +1035,8 @@ function systemStatusHtml(data) {
     ].join("")],
     [tr("climate_admin.system_group_host"), [
       statRowHtml(tr("climate_admin.system_host_ram"), freeOf(h.mem_available_bytes, h.mem_total_bytes)),
+      statRowHtml(tr("climate_admin.system_cpu_temp"),
+        typeof h.cpu_temp_c === "number" ? `${h.cpu_temp_c.toFixed(0)}°C` : "--", h.cpu_temp_c >= 80),
       statRowHtml(tr("climate_admin.system_load"), h.load_average ? `${h.load_average.join(" / ")} (${h.cpu_count} CPU)` : "--"),
       statRowHtml(tr("climate_admin.system_host_uptime"), formatDuration(h.uptime_seconds)),
       statRowHtml(tr("climate_admin.system_disk"), freeOf(disk.free_bytes, disk.total_bytes), disk.low),
