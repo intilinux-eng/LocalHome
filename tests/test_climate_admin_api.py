@@ -670,3 +670,29 @@ def test_devices_api_exposes_the_vmc_modes_and_hidden_toggle(tmp_path, fake_rpc)
     assert by_name["VMC"]["hide_toggle"] is True
     assert [p["value"] for p in by_name["VMC Speed"]["presets"]] == [20, 50, 100]
     assert "presets" not in by_name["VMC"]
+
+
+def test_a_command_re_reads_the_device_and_its_paired_partner():
+    from localhome.web.app import _wake_poller
+
+    woken = []
+
+    class Poller:
+        def __init__(self, name):
+            self.name = name
+
+        def wake(self):
+            woken.append(self.name)
+
+    class Manager:
+        paired_switch = {"VMC Speed": "VMC"}
+        pollers = {n: Poller(n) for n in ("VMC", "VMC Speed", "Other")}
+
+    _wake_poller(Manager, "VMC")
+    assert sorted(woken) == ["VMC", "VMC Speed"]
+    woken.clear()
+    _wake_poller(Manager, "VMC Speed")
+    assert sorted(woken) == ["VMC", "VMC Speed"]
+    woken.clear()
+    _wake_poller(Manager, "Other")
+    assert woken == ["Other"]

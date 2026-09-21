@@ -204,3 +204,30 @@ def test_drivers_without_the_option_keep_their_interval():
     for _ in range(5):
         poller.poll_once()
     assert poller.next_delay() == 20
+
+
+def test_a_successful_command_ends_the_back_off_at_once():
+    import threading
+    import time as _time
+
+    driver = _FlakyDriver()
+    driver.poll_interval_seconds = 5
+    poller = SyncPoller(driver)
+    for _ in range(4):
+        poller.poll_once()
+    assert poller.next_delay() == 80  # slowed down while it was off
+
+    reads = []
+    original = driver.read
+    driver.read = lambda: (reads.append(1), original())[1]
+    driver.ok = True
+    threading.Thread(target=poller._loop, daemon=True).start()
+    _time.sleep(0.2)
+    reads.clear()
+
+    poller.wake()  # e.g. the dashboard just switched it on
+    _time.sleep(0.3)
+
+    assert reads, "not re-read right after the wake"
+    assert poller.next_delay() == 5
+    assert poller.get()["ok"] is True

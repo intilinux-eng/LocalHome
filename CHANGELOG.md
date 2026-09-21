@@ -13,7 +13,9 @@ date rather than by tag.
   rows (confirmed: 0 rows from 9 offline devices in a 16-minute test).
 - A device queried over the network on every read (the Shelly dimmer
   via RPC) is asked less and less often while it doesn't answer - 20s,
-  40s, 80s, then every 2 minutes - and back to normal on its first reply.
+  40s, 80s, then every 2 minutes - and back to normal on its first reply,
+  or at once when a command to it goes through (it and its paired
+  switch/number are re-read immediately).
 - `config/config.climate.example.yaml`: a climate-only, Shelly-only
   starting point for a new apartment - no devices in the file at all,
   every one added from the admin panel - and a deployment-guide section,

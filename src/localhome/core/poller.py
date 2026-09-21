@@ -61,6 +61,7 @@ class SyncPoller:
         self.cache = cache or ReadingCache()
         self._started = False
         self._failures = 0  # consecutive failed reads - see next_delay()
+        self._wake = threading.Event()
 
     def start(self) -> None:
         if self._started:
@@ -71,7 +72,16 @@ class SyncPoller:
     def _loop(self) -> None:
         while True:
             self.poll_once()
-            time.sleep(self.next_delay())
+            self._wake.wait(self.next_delay())
+            self._wake.clear()
+
+    def wake(self) -> None:
+        """Read the device again now, at the normal pace from then on - for
+        right after a command it accepted: it's evidently reachable, so a
+        slowed-down polling (see next_delay()) mustn't keep its card showing
+        it offline for up to the back-off maximum."""
+        self._failures = 0
+        self._wake.set()
 
     def next_delay(self) -> float:
         """The driver's own interval - or, for a driver that asks the device

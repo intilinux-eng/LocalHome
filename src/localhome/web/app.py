@@ -294,6 +294,18 @@ def create_app(config_path: str | None = None) -> Flask:
     return app
 
 
+def _wake_poller(manager: DeviceManager, name: str) -> None:
+    """The command went through: re-read that device now. For a paired
+    switch/number (the VMC's on/off and speed) the partner too - one
+    device, so both cards should come back together."""
+    names = {name, manager.paired_switch.get(name)}
+    names |= {number for number, switch in manager.paired_switch.items() if switch == name}
+    for key in names - {None}:
+        wake = getattr(manager.pollers.get(key), "wake", None)
+        if wake is not None:
+            wake()
+
+
 def _valve_driver(manager: DeviceManager, link) -> dict | None:
     if link is None:
         return None
@@ -520,6 +532,7 @@ def _register_routes(app: Flask) -> None:
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 502
         manager.pollers[name].cache.merge({"is_on": action == "on"})
+        _wake_poller(manager, name)
         return jsonify(ok=True)
 
     @app.route("/api/sensors/<name>/set-value", methods=["POST"])
@@ -536,6 +549,7 @@ def _register_routes(app: Flask) -> None:
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 502
         manager.pollers[name].cache.merge({"value": data["value"]})
+        _wake_poller(manager, name)
         return jsonify(ok=True)
 
     @app.route("/api/sensors/<name>/history")
