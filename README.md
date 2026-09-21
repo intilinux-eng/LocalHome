@@ -27,14 +27,68 @@ ids - no real hardware needed to see this for yourself.
 ![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, and live per-zone status](docs/screenshots/climate-admin.png)
 *Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
 
-## Quick start
+## Install on an Arduino UNO Q, step by step
 
-**The reference installation is an Arduino UNO Q controlling one
-apartment's heating/cooling with Shelly devices, managed entirely from
-the web admin panel** - see [docs/arduino-uno-q.md](docs/arduino-uno-q.md)
-for that path from a new board to years of unattended running. The
-steps below are the generic ones, for trying LocalHome on any computer.
+The reference installation: an Arduino UNO Q running one apartment's
+heating/cooling with Shelly devices, managed entirely from the web admin
+panel. The board must already be on your Wi-Fi (first setup with Arduino
+App Lab); then, over SSH (`ssh arduino@<board-ip>`) or `adb shell`:
 
+```bash
+# 1. Time zone - the board ships in UTC, and the schedules run on its clock
+sudo timedatectl set-timezone Europe/Rome
+
+# 2. The board's name - devices and browsers reach it as <name>.local, never
+#    by IP. Choose it now: renaming later means reconfiguring every device.
+sudo hostnamectl set-hostname localhome
+sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tlocalhome/" /etc/hosts
+
+# 3. System packages
+sudo apt update
+sudo apt install -y git mosquitto avahi-daemon libnss-mdns python3.13-venv
+
+# 4. MQTT broker, reachable by the Shelly devices on the LAN
+printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+sudo systemctl restart mosquitto avahi-daemon
+
+# 5. LocalHome
+git clone <this-repo> ~/localhome && cd ~/localhome
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e .
+
+# 6. Configuration - climate only, no devices in the file (they're added
+#    from the admin panel)
+cp config/config.climate.example.yaml config/config.yaml
+cp config/mqtt_broker.example.json config/mqtt_broker.json
+.venv/bin/localhome-cli doctor
+
+# 7. Start it at every boot
+sed "s/YOUR_USER/$USER/g" deploy/localhome.service | sudo tee /etc/systemd/system/localhome.service > /dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable --now localhome
+
+# 8. Tune the board for years of unattended running on its eMMC - REQUIRED
+#    on every new board: system log in RAM, no background update downloads,
+#    broker log in RAM, no desktop. Add --lean to also remove Arduino App
+#    Lab and Docker (recommended on the 2 GB model). Safe to run again.
+sudo sh deploy/tune-board.sh
+```
+
+9. **Open the admin panel** at `http://localhome.local:5000/climate-admin`
+   and follow its four steps: choose the season, enter each Shelly's id
+   (zones, bypass, dehumidifier, outdoor sensor, VMC), restart, check.
+   On each Shelly, set the MQTT server to `localhome.local:1883` with
+   "Generic status update over MQTT" on.
+
+Everything after this - devices, schedules, settings, backups, reset -
+is done from the admin panel. The full guide, with what each step does,
+the limits and troubleshooting: [docs/arduino-uno-q.md](docs/arduino-uno-q.md).
+
+## Try it on a PC
+
+The generic steps, to try LocalHome on any computer with the example
+devices:
 
 ```bash
 git clone <this-repo> && cd <the-cloned-directory>
@@ -51,9 +105,7 @@ cp config/config.example.yaml config/config.yaml
 # -> dashboard at http://localhost:5000
 ```
 
-Runs the same way on your own computer (to try it out) or on the small
-Linux board you'll actually leave it running on (an
-[Arduino UNO Q](https://www.arduino.cc/), a Raspberry Pi, ...) - see
+For any other Linux board (a Raspberry Pi, ...) see
 [docs/deployment.md](docs/deployment.md) for the full walkthrough,
 including mosquitto, systemd (so it survives a reboot), and a Docker
 alternative. Hit `externally-managed-environment` or "ensurepip is not

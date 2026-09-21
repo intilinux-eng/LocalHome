@@ -64,8 +64,9 @@ cp config/config.climate.example.yaml config/config.yaml
 cp config/mqtt_broker.example.json config/mqtt_broker.json     # "host": "localhost"
 .venv/bin/localhome-cli doctor
 
-# 6. Run it as a service (edit User/WorkingDirectory/ExecStart first).
-sudo cp deploy/localhome.service /etc/systemd/system/
+# 6. Run it as a service - started at every boot, restarted if it fails.
+#    (Assumes the code is in ~/localhome; otherwise edit the paths.)
+sed "s/YOUR_USER/$USER/g" deploy/localhome.service | sudo tee /etc/systemd/system/localhome.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable --now localhome
 
@@ -73,7 +74,8 @@ sudo systemctl enable --now localhome
 #    http://localhome.local:5000            dashboard
 #    http://localhome.local:5000/climate-admin   admin panel
 
-# 8. Tune the board for years of unattended running (see below).
+# 8. REQUIRED on every new board: tune it for years of unattended running
+#    (see "Tune the board" below). Safe to run again at any time.
 sudo sh deploy/tune-board.sh          # add --lean to also remove App Lab & co.
 ```
 

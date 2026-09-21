@@ -7,6 +7,9 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- The README opens with the Arduino UNO Q installation step by step,
+  ready to copy - including `deploy/tune-board.sh` as a required step and
+  a one-line command that fills in the systemd unit's user and paths.
 - `docs/arduino-uno-q.md`: the reference installation end to end - the
   board versions and measured resource use, install steps, configuring
   from the admin panel only (and each Shelly's MQTT settings), what runs
