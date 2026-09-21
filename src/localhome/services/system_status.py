@@ -1,0 +1,215 @@
+"""Process, host and storage health for the admin panel's system status.
+
+Everything here is read from the standard library and /proc, not psutil:
+one more compiled dependency isn't worth it for a handful of numbers,
+and the board this runs on in production is Linux anyway. Where a value
+can't be read on the current platform it's None, and the UI shows a dash.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import threading
+import time
+
+# When this process started, as close to it as this module gets: it's
+# imported while create_app() builds everything else.
+PROCESS_STARTED_TS = time.time()
+
+# Disk-space thresholds for flagging a problem - the history database
+# and the JSON stores all live on the same (on the board, eMMC) disk,
+# and a full disk fails every one of their writes at once.
+DISK_LOW_FRACTION = 0.10
+DISK_LOW_BYTES = 500 * 1024 * 1024
+
+_cpu_lock = threading.Lock()
+# (wall clock, process CPU seconds) at the previous reading - seeded here
+# so the first reading doesn't count the CPU spent before this import.
+_cpu_last: tuple[float, float] = (PROCESS_STARTED_TS, time.process_time())
+
+
+def _proc_status() -> dict[str, int]:
+    """VmRSS/VmHWM/Threads from /proc/self/status, in kB (or a count)."""
+    values: dict[str, int] = {}
+    try:
+        with open("/proc/self/status", encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                key, _, rest = line.partition(":")
+                if key in ("VmRSS", "VmHWM", "Threads"):
+                    values[key] = int(rest.split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    return values
+
+
+def _windows_memory() -> tuple[int, int] | None:
+    """(current, peak) working set in bytes, on Windows - for a dev machine."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Counters(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = Counters()
+        counters.cb = ctypes.sizeof(Counters)
+        kernel32 = ctypes.WinDLL("kernel32")
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi = ctypes.WinDLL("psapi")
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+            return None
+        return counters.WorkingSetSize, counters.PeakWorkingSetSize
+    except Exception:
+        return None
+
+
+def _cpu_percent() -> float | None:
+    """This process's CPU use since the previous call (or since startup,
+    on the first one), as a percentage of one core."""
+    global _cpu_last
+    now, cpu = time.time(), time.process_time()
+    with _cpu_lock:
+        last_wall, last_cpu = _cpu_last
+        _cpu_last = (now, cpu)
+    elapsed = now - last_wall
+    if elapsed <= 0:
+        return None
+    return round(100 * (cpu - last_cpu) / elapsed, 1)
+
+
+def process_stats() -> dict:
+    status = _proc_status()
+    rss = status.get("VmRSS", 0) * 1024 or None
+    peak = status.get("VmHWM", 0) * 1024 or None
+    if rss is None:
+        windows = _windows_memory()
+        if windows:
+            rss, peak = windows
+    return {
+        "pid": os.getpid(),
+        "uptime_seconds": round(time.time() - PROCESS_STARTED_TS),
+        "rss_bytes": rss,
+        "peak_rss_bytes": peak,
+        # /proc counts every OS thread (including ones native libraries
+        # start); threading only knows Python's own. Prefer the former.
+        "threads": status.get("Threads") or threading.active_count(),
+        "cpu_percent": _cpu_percent(),
+        "python": sys.version.split()[0],
+    }
+
+
+def _meminfo() -> dict[str, int]:
+    values: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                key, _, rest = line.partition(":")
+                if key in ("MemTotal", "MemAvailable"):
+                    values[key] = int(rest.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return values
+
+
+def host_stats() -> dict:
+    meminfo = _meminfo()
+    try:
+        load = [round(x, 2) for x in os.getloadavg()]
+    except (AttributeError, OSError):
+        load = None
+    try:
+        with open("/proc/uptime", encoding="ascii") as fh:
+            uptime = round(float(fh.read().split()[0]))
+    except (OSError, ValueError, IndexError):
+        uptime = None
+    return {
+        "cpu_count": os.cpu_count(),
+        "load_average": load,
+        "mem_total_bytes": meminfo.get("MemTotal"),
+        "mem_available_bytes": meminfo.get("MemAvailable"),
+        "uptime_seconds": uptime,
+    }
+
+
+def disk_stats(path: str) -> dict:
+    """Space on the disk holding `path` (the history database's folder)."""
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return {"path": path, "total_bytes": None, "free_bytes": None, "low": False}
+    low = usage.free < DISK_LOW_BYTES or usage.free < usage.total * DISK_LOW_FRACTION
+    return {"path": path, "total_bytes": usage.total, "free_bytes": usage.free, "low": low}
+
+
+def device_health(manager) -> list[dict]:
+    """Every polled device's latest reading reduced to what a diagnosis
+    needs: reachable or not, why not, and how old its data is."""
+    devices = []
+    for name, poller in manager.pollers.items():
+        reading = poller.get()
+        devices.append(
+            {
+                "name": name,
+                "kind": manager.sensor_kinds.get(name, "unknown"),
+                "ok": bool(reading.get("ok")),
+                "error": None if reading.get("ok") else reading.get("error"),
+                "seconds_since_update": reading.get("seconds_since_update"),
+            }
+        )
+    return devices
+
+
+def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, now: float | None = None) -> dict:
+    """Whether a background loop is still completing its cycles. Stalled
+    after three missed intervals - but not during the first ones after
+    startup, when a loop that hasn't finished its first cycle yet is
+    normal."""
+    now = time.time() if now is None else now
+    grace = 3 * interval_seconds
+    if last_ok_ts is None:
+        stalled = now - PROCESS_STARTED_TS > grace
+        ago = None
+    else:
+        ago = round(now - last_ok_ts)
+        stalled = ago > grace
+    return {"name": name, "interval_seconds": interval_seconds, "last_ok_seconds_ago": ago, "stalled": stalled}
+
+
+def problems(
+    devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = ()
+) -> list[dict]:
+    """The things worth a technician's attention, most serious first.
+    `code` keys the UI's own translated wording; the rest is detail.
+
+    A driver module skipped for a missing optional package isn't one of
+    them on its own - nobody may be using it. If an integration does use
+    it, that integration is in `failed`, with the install command in its
+    error (see core/registry.py's create())."""
+    found = []
+    for item in failed:
+        found.append({"code": "integration_failed", "subject": item.get("name") or f"{item['kind']}/{item['type']}",
+                      "detail": item["error"]})
+    for loop in loops:
+        if loop["stalled"]:
+            found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
+    if disk.get("low"):
+        found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
+    for device in devices:
+        if not device["ok"]:
+            found.append({"code": "device_offline", "subject": device["name"], "detail": device["error"]})
+    return found

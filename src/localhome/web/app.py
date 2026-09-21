@@ -10,6 +10,8 @@ docs/adding-a-driver.md.
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import datetime, timedelta
 
 from flask import Flask, jsonify, render_template, request
@@ -17,6 +19,7 @@ from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.core.registry import skipped_driver_modules
 from localhome.services.climate_map_store import (
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
@@ -32,6 +35,7 @@ from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.self_restart import is_supported, schedule_restart
+from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
@@ -184,6 +188,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["POSITIONS"] = positions
     app.config["HISTORY"] = store
     app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
+    app.config["RECORDER"] = recorder
     app.config["POWER_BUDGET"] = power_budget
     app.config["POWER_SENSOR"] = power_sensor
     app.config["THERMOSTAT"] = thermostat
@@ -226,6 +231,62 @@ def _register_routes(app: Flask) -> None:
         # a wrongly-set board timezone is visible instead of silently
         # shifting every schedule slot. See services/system_clock.py.
         return jsonify(ok=True, **server_time())
+
+    # The history table scan behind these numbers is the one slow part of
+    # a system-status request; its growth only matters over hours.
+    db_stats_cache = {"ts": 0.0, "value": None}
+    DB_STATS_MAX_AGE_SECONDS = 600
+
+    @app.route("/api/system-status")
+    def api_system_status():
+        # What the admin panel's system-status section shows: anything
+        # that failed to load and why, which devices aren't reporting,
+        # whether the background loops are still cycling, and the
+        # process/disk/database numbers that tell a slow leak or a disk
+        # filling up apart from normal - see services/system_status.py.
+        manager: DeviceManager = app.config["MANAGER"]
+        store: HistoryStore = app.config["HISTORY"]
+        recorder: HistoryRecorder = app.config["RECORDER"]
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+
+        now = time.time()
+        if db_stats_cache["value"] is None or now - db_stats_cache["ts"] > DB_STATS_MAX_AGE_SECONDS:
+            try:
+                db_stats_cache["value"] = store.stats()
+            except Exception:
+                logger.exception("Failed to read history database stats")
+                db_stats_cache["value"] = {}
+            db_stats_cache["ts"] = now
+        database = {
+            **db_stats_cache["value"],
+            "path": str(store.db_path),
+            "retention_days": recorder.retention_days,
+            "stats_age_seconds": round(now - db_stats_cache["ts"]),
+        }
+
+        loops = [system_status.loop_health("history", recorder.last_write_ok_ts, recorder.poll_interval_seconds, now)]
+        if thermostat is not None:
+            loops.append(
+                system_status.loop_health("thermostat", thermostat.last_tick_ok_ts, thermostat.poll_interval_seconds, now)
+            )
+        devices = system_status.device_health(manager)
+        failed = manager.failed_integrations
+        skipped = skipped_driver_modules()
+        disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
+        return jsonify(
+            ok=True,
+            problems=system_status.problems(devices, failed, disk, loops),
+            failed_integrations=failed,
+            skipped_driver_modules=skipped,
+            devices=devices,
+            loops=loops,
+            process=system_status.process_stats(),
+            host=system_status.host_stats(),
+            disk=disk,
+            database=database,
+            config_path=str(config.path),
+        )
 
     @app.route("/api/devices")
     def api_devices():

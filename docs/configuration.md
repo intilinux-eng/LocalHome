@@ -513,9 +513,12 @@ localhome-cli doctor
 
 It catches two different kinds of problem:
 
-- A driver that fails to **construct** - a missing `devices_file`, bad
-  credentials - is logged loudly as it happens (`DeviceManager` already
-  does this; `doctor` doesn't repeat it).
+- A driver that fails to **load** - a missing `devices_file`, bad
+  credentials, or a driver whose optional package isn't installed (e.g.
+  `tplink_led_strip` without `pip install -e .[tplink]`) - is listed as
+  a problem with its error, which names the install command where one
+  applies. Optional drivers that aren't installed but aren't used either
+  are mentioned as a note, not a problem.
 - A **name that doesn't match anything**, which otherwise fails silently:
   a typo in `thermostat.zones[].sensor`/`valve`, a `paired_switch`
   pointing at the wrong switch, an `energy.sensor` that doesn't exist.
@@ -524,8 +527,18 @@ It catches two different kinds of problem:
   which is exactly why they're worth a dedicated check on a new install
   rather than discovering them by noticing something never turns on.
 
+It also prints the thermostat's current season as stored in
+`schedules.json` (the one switched from the dashboard - `thermostat.mode`
+in `config.yaml` is only the default for a fresh install), and whether
+diagnostic mode or away mode is on.
+
 Exits `0` with "No configuration problems found" when everything checks
 out, `1` otherwise - safe to drop into a setup script or CI.
+
+On a running install the same faults - plus devices that stopped
+responding, a stalled control or recording loop, low disk space and the
+process's memory/CPU - are shown live in the **System status** section
+of `/climate-admin` (`GET /api/system-status`).
 
 ## Adding your own config keys
 

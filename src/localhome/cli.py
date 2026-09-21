@@ -13,7 +13,9 @@ import sys
 
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
+from localhome.core.registry import skipped_driver_modules
 from localhome.services.climate_map_store import apply_to_config
+from localhome.services.thermostat import ScheduleStore
 
 
 def _find_covers(manager: DeviceManager, name: str):
@@ -50,6 +52,9 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
     """
     problems: list[str] = []
 
+    for failure in manager.failed_integrations:
+        label = f"{failure['kind']}/{failure['type']}" + (f" '{failure['name']}'" if failure["name"] else "")
+        problems.append(f"{label} failed to load: {failure['error']}")
     thermostat_cfg = thermostat_cfg or {}
     for zone in thermostat_cfg.get("zones", []):
         zone_name = zone.get("name", "<unnamed>")
@@ -79,8 +84,29 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
         f"Numbers: {len(manager.numbers)}  Other sensors: {other_sensors}"
     )
     if thermostat_cfg:
-        print(f"Thermostat zones: {len(thermostat_cfg.get('zones', []))} (mode: {thermostat_cfg.get('mode', 'heat')})")
+        # The season actually in force lives in schedules.json (switched
+        # from the dashboard); config.yaml's `mode` is only the default for
+        # a fresh install, so reporting that one would be misleading.
+        schedules = ScheduleStore(
+            config.resolve(thermostat_cfg.get("schedules_file", "schedules.json")),
+            default_mode=thermostat_cfg.get("mode", "heat"),
+        )
+        state = [f"mode: {schedules.get_mode()}"]
+        if schedules.get_diagnostic_mode():
+            state.append("DIAGNOSTIC MODE ON - thermostat not driving valves")
+        away_until = schedules.get_away_until()
+        if away_until:
+            state.append(f"away until {away_until:%Y-%m-%d %H:%M}")
+        print(f"Thermostat zones: {len(thermostat_cfg.get('zones', []))} ({', '.join(state)})")
     print(f"Notifier configured: {'yes' if manager.notifier else 'no'}")
+    # Not a problem on its own - an optional driver nobody configured is
+    # expected to be missing. One that *is* configured already fails
+    # above, with the same install command in its error.
+    for skipped in skipped_driver_modules():
+        print(
+            f"Optional driver not installed: {skipped['module']} "
+            f"(package '{skipped['missing_package']}' - {skipped['install']})"
+        )
 
     if problems:
         print(f"\n{len(problems)} problem(s) found:")

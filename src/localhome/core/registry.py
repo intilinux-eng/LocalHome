@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 _FACTORIES: dict[tuple[str, str], Callable[[dict], Any]] = {}
 _loaded = False
+# driver module -> the top-level package its import was missing, for the
+# admin panel's system status and `localhome-cli doctor` - a skipped
+# module otherwise only shows up as one warning line in the startup log.
+_SKIPPED: dict[str, str] = {}
+# Missing package -> the pyproject.toml extra that installs it, so the
+# remedy shown is the project's own install command, not a bare pip name.
+_EXTRA_FOR_PACKAGE = {"kasa": "tplink"}
 
 
 def register_driver(kind: str, type_name: str):
@@ -56,13 +63,31 @@ def load_builtin_drivers() -> None:
     for module_info in pkgutil.walk_packages(drivers_pkg.__path__, prefix="localhome.drivers."):
         try:
             importlib.import_module(module_info.name)
-        except ImportError:
+        except ImportError as exc:
+            missing = (exc.name or "?").split(".")[0]
+            _SKIPPED[module_info.name] = missing
             logger.warning(
-                "Skipping driver module %s - a required package isn't installed "
-                "(if this is a driver you need, check its docs/integrations/*.md "
-                "page for the extra pip install it needs)",
+                "Skipping driver module %s - package %r isn't installed "
+                "(if this is a driver you need: %s)",
                 module_info.name,
+                missing,
+                install_hint(missing),
             )
+
+
+def install_hint(package: str) -> str:
+    extra = _EXTRA_FOR_PACKAGE.get(package)
+    return f"pip install -e .[{extra}]" if extra else f"pip install {package}"
+
+
+def skipped_driver_modules() -> list[dict]:
+    """Driver modules that couldn't be imported, each with the package
+    it was missing and the command that installs it."""
+    load_builtin_drivers()
+    return [
+        {"module": module, "missing_package": package, "install": install_hint(package)}
+        for module, package in sorted(_SKIPPED.items())
+    ]
 
 
 def create(kind: str, type_name: str, options: dict) -> list:
@@ -78,10 +103,13 @@ def create(kind: str, type_name: str, options: dict) -> list:
     factory = _FACTORIES.get(key)
     if factory is None:
         available = sorted(f"{k}/{t}" for k, t in _FACTORIES)
-        raise ValueError(
-            f"No driver registered for kind={kind!r} type={type_name!r}. "
-            f"Available kind/type combinations: {available}"
-        )
+        message = f"No driver registered for kind={kind!r} type={type_name!r}."
+        if _SKIPPED:
+            # The likeliest cause by far: the driver exists but its
+            # optional package isn't installed. Say so before the list.
+            skipped = ", ".join(f"{m} (needs: {install_hint(p)})" for m, p in sorted(_SKIPPED.items()))
+            message += f" Driver modules skipped for a missing package: {skipped}."
+        raise ValueError(f"{message} Available kind/type combinations: {available}")
     result = factory(options)
     return result if isinstance(result, list) else [result]
 

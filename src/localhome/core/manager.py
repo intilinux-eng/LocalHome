@@ -51,6 +51,11 @@ class DeviceManager:
         # sense to show while cooling). Unset means always visible.
         self.visible_in_mode: dict[str, str] = {}
         self.notifier: Notifier | None = None
+        # Integration entries whose driver couldn't be built, with the
+        # reason - skipped so the rest still starts, but listed here so the
+        # admin panel and `localhome-cli doctor` can show them instead of
+        # leaving them in the startup log only.
+        self.failed_integrations: list[dict] = []
         self._build()
 
     def _build(self) -> None:
@@ -58,8 +63,9 @@ class DeviceManager:
             options = _resolve_paths(self.config, entry.options)
             try:
                 drivers = create(entry.kind, entry.type, options)
-            except Exception:
+            except Exception as exc:
                 logger.exception("Failed to create %s/%s driver, skipping it", entry.kind, entry.type)
+                self._record_failure(entry.kind, entry.type, options.get("name"), exc)
                 continue
             for driver in drivers:
                 self._register(entry.kind, driver)
@@ -74,8 +80,14 @@ class DeviceManager:
             options = _resolve_paths(self.config, self.config.notifier.options)
             try:
                 (self.notifier,) = create("notifier", self.config.notifier.type, options)
-            except Exception:
+            except Exception as exc:
                 logger.exception("Failed to create notifier, alerts will be silently dropped")
+                self._record_failure("notifier", self.config.notifier.type, None, exc)
+
+    def _record_failure(self, kind: str, type_name: str, name: str | None, exc: Exception) -> None:
+        self.failed_integrations.append(
+            {"kind": kind, "type": type_name, "name": name, "error": f"{type(exc).__name__}: {exc}"}
+        )
 
     def _register(self, kind: str, driver) -> None:
         if driver.name in self.sensor_kinds or driver.name in self.covers:

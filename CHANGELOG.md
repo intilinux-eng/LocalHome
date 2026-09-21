@@ -7,6 +7,16 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- A **System status** section on `/climate-admin`, plus a problems box
+  at the top of the page whenever something is wrong: integrations that
+  failed to load (with the reason and, for a missing optional package,
+  the install command), devices not responding with how long since
+  their last update, a thermostat or history loop that stopped
+  completing its cycles, and low disk space. It also shows the process's
+  uptime, memory (current and peak), CPU and threads, the board's
+  memory/load/uptime, and the history database's size and growth - the
+  numbers that tell a slow leak or a filling disk apart from normal.
+  New `GET /api/system-status`; see `services/system_status.py`.
 - A clock in the header of both the dashboard and `/climate-admin`
   showing the **server's** date and time - not the browser's - plus a
   prominent warning when the server's timezone or clock disagrees with
@@ -58,6 +68,13 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Fixed
+- `localhome-cli doctor` said "No configuration problems found" even
+  when a configured driver had failed to load (the real case: python-kasa
+  not installed on the board, so the TP-Link devices silently never
+  appeared). It now lists every integration that failed with its error,
+  and names the pip extra to install when that's the cause. It also
+  reported `config.yaml`'s default season instead of the one actually in
+  force; it now reads `schedules.json` and flags diagnostic/away mode.
 - The TP-Link LED strip drivers opened a python-kasa connection on
   every read and command and never closed it, leaking an aiohttp
   session, its socket and about one OS thread per call - with four

@@ -130,6 +130,28 @@ class HistoryStore:
         finally:
             conn.close()
 
+    def stats(self, now: int | None = None) -> dict:
+        """Size and growth of the history, for the admin panel's system
+        status: file size on disk (the database plus its WAL), total rows,
+        rows written in the last 24h and the oldest sample kept. Scans the
+        whole table - callers cache it rather than asking on every poll."""
+        import os
+
+        now = int(time.time()) if now is None else now
+        file_bytes = 0
+        for suffix in ("", "-wal"):
+            try:
+                file_bytes += os.path.getsize(self.db_path + suffix)
+            except OSError:
+                pass
+        conn = self._connect()
+        try:
+            rows, oldest_ts = conn.execute("SELECT COUNT(*), MIN(ts) FROM readings").fetchone()
+            (rows_24h,) = conn.execute("SELECT COUNT(*) FROM readings WHERE ts >= ?", (now - 86400,)).fetchone()
+        finally:
+            conn.close()
+        return {"file_bytes": file_bytes, "rows": rows, "rows_24h": rows_24h, "oldest_ts": oldest_ts}
+
     def query_peak_today(self, sensor: str, field: str) -> dict:
         now = time.localtime()
         start_of_today = time.struct_time((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, now.tm_isdst))
@@ -234,6 +256,9 @@ class HistoryRecorder:
         # applied per-zone target, set by create_app() once the thermostat
         # exists (it's built after this recorder).
         self.extra_samples = None
+        # When the last cycle's samples were written - see
+        # ThermostatController.last_tick_ok_ts for why this is tracked.
+        self.last_write_ok_ts: float | None = None
 
     def start(self) -> None:
         if self._started:
@@ -280,6 +305,7 @@ class HistoryRecorder:
             except Exception:
                 logger.exception("Failed to collect extra history samples - recording the rest")
         self.store.record_many(now, batch)
+        self.last_write_ok_ts = time.time()
         self._maybe_prune(now)
 
     def _maybe_prune(self, now: int) -> None:

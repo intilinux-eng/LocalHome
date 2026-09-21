@@ -238,3 +238,102 @@
   flex-wrap: wrap;
   gap: 8px 12px;
 }
+
+/* System status - see climate_admin.js's systemStatusHtml(). */
+.admin-problems {
+  border: 1px solid var(--accent-close);
+  background: rgba(255, 69, 58, 0.1);
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+}
+
+.admin-problems ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.admin-problems li + li {
+  margin-top: 4px;
+}
+
+.admin-problems a {
+  color: var(--accent-close);
+  font-weight: 600;
+}
+
+.admin-problem-detail {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+/* File paths have no spaces to wrap at - long ones would widen the page. */
+.admin-path {
+  overflow-wrap: anywhere;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-stat-group h3,
+#system-status-body > h3 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+#system-status-body > h3 {
+  margin-top: 16px;
+}
+
+.admin-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+  padding: 3px 0;
+}
+
+.admin-stat span {
+  color: var(--text-dim);
+}
+
+.admin-stat strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-stat.bad strong {
+  color: var(--accent-close);
+}
+
+.admin-device-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 0.82rem;
+}
+
+.admin-device-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--card-border);
+  overflow-wrap: anywhere;
+}
+
+.admin-device-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.admin-device-age {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}

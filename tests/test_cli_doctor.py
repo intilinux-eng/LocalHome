@@ -20,6 +20,7 @@ class FakeManager:
         self.paired_switch = paired_switch
         self.notifier = notifier
         self.covers = {}
+        self.failed_integrations = []
 
 
 def test_doctor_reports_no_problems_for_a_consistent_setup(tmp_path, capsys):

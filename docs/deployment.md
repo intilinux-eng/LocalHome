@@ -48,6 +48,10 @@ cd ~/localhome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
+#    Some drivers need an optional extra on top - only if you use them,
+#    e.g. TP-Link Kasa devices: .venv/bin/pip install -e .[tplink]
+#    (GPL-licensed, hence opt-in - see THIRD_PARTY_NOTICES.md). Step 5's
+#    doctor names any extra a configured device is missing.
 
 # 3. Using MQTT devices? Point mosquitto at your LAN instead of just
 #    localhost (apt's package already enabled its systemd unit, so it

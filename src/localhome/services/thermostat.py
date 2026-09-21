@@ -263,6 +263,10 @@ class ThermostatController:
         # spell instead of every tick after the threshold.
         self._unreachable_since: dict[str, float] = {}
         self._failsafe_active: dict[str, bool] = {}
+        # Wall-clock time of the last tick that finished without raising -
+        # the admin panel's system status flags a control loop that has
+        # stopped completing, which nothing else on the dashboard would show.
+        self.last_tick_ok_ts: float | None = None
 
     def start(self) -> None:
         if self._started:
@@ -289,6 +293,7 @@ class ThermostatController:
         applied: dict[str, float] = {}
         try:
             self._tick(now, applied)
+            self.last_tick_ok_ts = time.time()
         finally:
             self._applied_targets = applied
 
