@@ -7,6 +7,10 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- A pages open during an update now say so ("LocalHome was updated -
+  Reload") instead of silently running the old code, and every static
+  URL carries a version so no browser keeps a stale copy. Found when a
+  new admin-panel status group didn't show until a reload.
 - The system status shows the board's network: Wi-Fi name, signal (with
   a problem raised below 30%), band and channel, IP address and its
   `.local` name - read from NetworkManager, never changed.
@@ -127,6 +131,13 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- The heating/cooling season moved from the dashboard's settings gear to
+  a **Season** section at the top of `/climate-admin`: two cards, the
+  active one marked, each listing what that season does on this
+  installation (zones, valves held closed, bypass, dehumidifier).
+  Switching needs the new season's name typed (ESTATE / INVERNO), and
+  now updates the bypass and dehumidifier at once too. The dashboard
+  shows the season read-only, linking there.
 - The dashboard/API now runs on **Waitress**, a production WSGI server,
   instead of Flask's own development server (werkzeug's `app.run()`,
   which Flask itself says not to use in production). Still one

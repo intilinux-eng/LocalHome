@@ -25,6 +25,7 @@
   const SKEW_WARN_MS = 2 * 60 * 1000;
 
   let state = null;       // { skewMs, offsetMin, tzName, tzAbbrev }
+  let appVersion = null;  // the dashboard's files as first loaded - see showUpdateBanner()
   let lastMinuteKey = null;
 
   function tr(path, vars) {
@@ -138,6 +139,20 @@
     if (clock) clock.classList.toggle("is-warning", messages.length > 0);
   }
 
+  // LocalHome was updated while this page stayed open: it's still running
+  // the old code, which may not know about new data (it once hid a whole
+  // new status group). Offer a reload instead of forcing one mid-edit.
+  function showUpdateBanner() {
+    if (document.getElementById("update-banner")) return;
+    const banner = document.createElement("div");
+    banner.id = "update-banner";
+    banner.className = "update-banner";
+    banner.innerHTML = `<span>${esc(tr("clock.update_available"))}</span>`
+      + `<button type="button">${esc(tr("clock.update_reload"))}</button>`;
+    banner.querySelector("button").addEventListener("click", () => location.reload());
+    document.body.prepend(banner);
+  }
+
   async function sync() {
     try {
       const sent = Date.now();
@@ -155,6 +170,10 @@
       };
       render();
       renderWarning();
+      if (data.app_version) {
+        if (appVersion === null) appVersion = data.app_version;
+        else if (data.app_version !== appVersion) showUpdateBanner();
+      }
     } catch (e) {
       // Keep ticking from the last known sync - a transient network blip
       // shouldn't blank the clock or raise a false alarm.

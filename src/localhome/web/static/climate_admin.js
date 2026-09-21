@@ -863,6 +863,7 @@ async function refreshStatus() {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
     document.getElementById("mode-away-line").innerHTML = modeAwayLineHtml(data);
+    renderSeason(data);
     await refreshDiagnosticSection(data);
     // A single all-or-nothing signal, not per-zone: a restart rebuilds
     // every zone's drivers together, so "one thing changed" means
@@ -1147,6 +1148,109 @@ async function refreshSystemStatus(force) {
     document.getElementById("system-status-body").innerHTML = systemStatusHtml(data);
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
+  }
+}
+
+// --------------------------------------------------------------- season ----
+// Heating or cooling for the whole plant. Seasonal - so it's here, not on
+// the dashboard, and switching needs the new season's name typed in. Each
+// card spells out what that season does on *this* installation (which
+// zones run, what's held closed, what the mode switches do).
+
+const SEASON_ICONS = {
+  heat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
+  cool: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M3.34 7 20.66 17"/><path d="M20.66 7 3.34 17"/></svg>`,
+};
+let seasonPending = null;   // the season being confirmed, or null
+
+function seasonEffects(mode, data) {
+  const zones = data.zones || [];
+  const effects = data.season_effects || {};
+  const items = [];
+  const running = mode === "cool" ? zones.filter(z => z.cool_enabled !== false) : zones;
+  if (running.length) items.push(tr(`climate_admin.season_zones_${mode}`, { zones: running.map(z => escapeHtml(z.name)).join(", ") }));
+  if (mode === "cool") {
+    zones.filter(z => z.cool_enabled === false).forEach(z => items.push(tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) })));
+  }
+  (effects.mode_switches || []).forEach(m => items.push(tr(
+    m.active_in_mode === mode ? "climate_admin.season_switch_on" : "climate_admin.season_switch_off", { name: escapeHtml(m.switch) })));
+  (effects.mode_limited || []).forEach(m => items.push(tr(
+    m.only_in_mode === mode ? "climate_admin.season_limited_usable" : "climate_admin.season_limited_off", { name: escapeHtml(m.switch) })));
+  items.push(tr(`climate_admin.season_schedule_${mode}`));
+  return items;
+}
+
+function renderSeason(data) {
+  const el = document.getElementById("season-cards");
+  if (!el || !data || !data.mode) return;
+  el.innerHTML = ["heat", "cool"].map(mode => {
+    const active = data.mode === mode;
+    const action = active
+      ? `<span class="season-active-pill">${tr("climate_admin.season_active")}</span>`
+      : `<button class="range-btn season-switch-btn" onclick="askSeason('${mode}')">${tr(`climate_admin.season_switch_to_${mode}`)}</button>`;
+    return `
+      <div class="season-card season-${mode}${active ? " active" : ""}">
+        <div class="season-card-head">
+          <span class="season-icon">${SEASON_ICONS[mode]}</span>
+          <div>
+            <div class="season-name">${tr(`climate.mode_${mode}`)}</div>
+            <div class="season-sub">${tr(mode === "heat" ? "climate.season_winter" : "climate.season_summer")}</div>
+          </div>
+          ${action}
+        </div>
+        <ul class="season-effects">${seasonEffects(mode, data).map(i => `<li>${i}</li>`).join("")}</ul>
+      </div>`;
+  }).join("");
+}
+
+function askSeason(mode) {
+  seasonPending = mode;
+  const word = tr(`climate_admin.season_word_${mode}`);
+  document.getElementById("season-confirm-text").textContent = tr("climate_admin.season_confirm", { word });
+  const input = document.getElementById("season-confirm-input");
+  input.value = "";
+  input.placeholder = word;
+  document.getElementById("season-confirm-go").disabled = true;
+  document.getElementById("season-confirm").hidden = false;
+  document.getElementById("season-result").textContent = "";
+  input.focus();
+}
+
+function onSeasonConfirmInput(input) {
+  const word = seasonPending ? tr(`climate_admin.season_word_${seasonPending}`) : null;
+  document.getElementById("season-confirm-go").disabled = input.value.trim().toUpperCase() !== word;
+}
+
+function cancelSeason() {
+  seasonPending = null;
+  document.getElementById("season-confirm").hidden = true;
+}
+
+async function confirmSeason(button) {
+  const mode = seasonPending;
+  const result = document.getElementById("season-result");
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + data.error;
+      result.className = "hint-text admin-error";
+      return;
+    }
+    cancelSeason();
+    result.textContent = tr("climate_admin.season_done", { season: tr(`climate.mode_${mode}`) });
+    result.className = "hint-text admin-success";
+    refreshStatus();
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
   }
 }
 

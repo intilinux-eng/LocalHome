@@ -5,7 +5,9 @@
     "hours": "{n} h",
     "minutes": "{n} min",
     "warning_timezone": "<strong>The system's timezone differs from this device's.</strong> The system uses {server}, this device {device}. The hourly schedule follows the system clock, so every slot is applied {shift} off. If the system isn't set to the home's timezone, fix it on the board with <code>sudo timedatectl set-timezone {zone}</code> and restart LocalHome.",
-    "warning_skew": "<strong>The system clock is {minutes} min off</strong> compared to this device. Check that NTP sync is active on the board (<code>timedatectl</code>)."
+    "warning_skew": "<strong>The system clock is {minutes} min off</strong> compared to this device. Check that NTP sync is active on the board (<code>timedatectl</code>).",
+    "update_available": "LocalHome was updated: this page is still running the previous version.",
+    "update_reload": "Reload"
   },
   "app": {
     "title": "LocalHome"
@@ -81,8 +83,7 @@
   },
   "settings": {
     "heading": "Settings",
-    "close": "Close",
-    "mode_label": "Heating / cooling season"
+    "close": "Close"
   },
   "climate": {
     "season_winter": "Winter",
@@ -147,7 +148,8 @@
     "excluded_valve_feeding": "{zone} valve open: feeding {driver} (on)",
     "excluded_valve_closing": "{zone} valve still open: closing",
     "excluded_valve_unknown": "{zone} valve: state unknown - {error}",
-    "excluded_driver_note": "It opens only while {driver} runs, then closes again. If {driver} stops answering, it stays closed."
+    "excluded_driver_note": "It opens only while {driver} runs, then closes again. If {driver} stops answering, it stays closed.",
+    "season_change_hint": "The season is changed from the admin panel"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
@@ -333,7 +335,25 @@
     "system_wifi_none": "none (or can't tell)",
     "system_ip": "IP address",
     "system_name": "Name on the network",
-    "system_problem_wifi_weak": "Weak Wi-Fi signal on {subject}: move the board closer to the router or use an extender"
+    "system_problem_wifi_weak": "Weak Wi-Fi signal on {subject}: move the board closer to the router or use an extender",
+    "season_heading": "Season",
+    "season_note": "Heating or cooling for the whole plant: one central unit sends hot or cold water to every zone. It changes twice a year, so switching asks for confirmation. Each season has its own schedule.",
+    "season_active": "Active",
+    "season_switch_to_heat": "Switch to heating",
+    "season_switch_to_cool": "Switch to cooling",
+    "season_zones_heat": "Zones heated on schedule: {zones}",
+    "season_zones_cool": "Zones cooled on schedule: {zones}",
+    "season_zone_excluded": "{zone}: valve always closed (condensation)",
+    "season_switch_on": "{name}: on",
+    "season_switch_off": "{name}: off",
+    "season_limited_usable": "{name}: available, you switch it on",
+    "season_limited_off": "{name}: off and hidden",
+    "season_schedule_heat": "Uses the winter schedule",
+    "season_schedule_cool": "Uses the summer schedule",
+    "season_word_heat": "WINTER",
+    "season_word_cool": "SUMMER",
+    "season_confirm": "Type {word} to confirm the season change:",
+    "season_done": "Season changed: {season}. Valves, bypass and dehumidifier are already updated."
   },
   "vmc_presets": {
     "night": "Night",

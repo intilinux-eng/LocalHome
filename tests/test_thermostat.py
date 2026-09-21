@@ -746,3 +746,45 @@ def test_an_offline_valve_is_not_commanded_on_every_tick(tmp_path):
         controller.tick(now=datetime(2026, 9, 14, 8, minute))
 
     assert switch.calls == ["on"]
+
+
+@pytest.mark.parametrize("mode, temperature", [("heat", 10.0), ("cool", 32.0)])
+def test_an_off_hour_holds_the_valve_closed_even_if_it_was_open(tmp_path, mode, temperature):
+    # An hour painted "off" (no target) must close the valve and keep it
+    # closed - whatever the room's temperature, in either season, and even
+    # if the valve was open (from the previous hour, or opened by hand).
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    readings = {"Rooms Temp": {"ok": True, "temperature_c": temperature}, "Rooms Valve": {"ok": True, "is_on": True}}
+    manager = FakeManager(readings=readings, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode(mode)
+    week = _flat_week(21.0)
+    week["mon"][14] = None  # Monday 14:00-15:00 is off
+    store.set_week("Rooms", week)
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    controller.tick(now=datetime(2026, 9, 14, 14, 5))
+    assert switch.calls == ["off"]
+    assert controller.applied_target("Rooms") is None
+
+    readings["Rooms Valve"] = {"ok": True, "is_on": False}
+    controller.tick(now=datetime(2026, 9, 14, 14, 30))
+    assert switch.calls == ["off"]  # stays closed, nothing more to send
+
+    readings["Rooms Valve"] = {"ok": True, "is_on": True}  # opened by hand
+    controller.tick(now=datetime(2026, 9, 14, 14, 45))
+    assert switch.calls == ["off", "off"]
+
+
+def test_a_zone_with_no_schedule_at_all_keeps_its_valve_closed(tmp_path):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    readings = {"Rooms Temp": {"ok": True, "temperature_c": 10.0}, "Rooms Valve": {"ok": True, "is_on": True}}
+    manager = FakeManager(readings=readings, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))  # nothing painted, e.g. right after "clear schedules"
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+
+    assert switch.calls == ["off"]

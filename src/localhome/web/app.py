@@ -47,8 +47,33 @@ from localhome.web.i18n import load_translations
 logger = logging.getLogger(__name__)
 
 
+def _asset_version() -> str:
+    """Changes whenever the dashboard's own files do (an update copied to
+    the board): the newest modification time among static files and
+    templates. Appended to every static URL, so no browser keeps an old
+    copy, and reported by /api/server-time, so an already-open page can
+    tell it's out of date."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    newest = 0.0
+    for folder in ("static", "templates", "locales"):
+        for root, _, files in os.walk(os.path.join(base, folder)):
+            for name in files:
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(root, name)))
+                except OSError:
+                    pass
+    return str(int(newest))
+
+
 def create_app(config_path: str | None = None) -> Flask:
     app = Flask(__name__)
+    asset_version = _asset_version()
+    app.config["ASSET_VERSION"] = asset_version
+
+    @app.url_defaults
+    def _version_static_urls(endpoint, values):
+        if endpoint == "static" and "filename" in values:
+            values.setdefault("v", asset_version)
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc):
@@ -208,6 +233,14 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
+    # What switching season does besides the zones - shown next to the
+    # season switch in /climate-admin, so it's clear before confirming.
+    app.config["SEASON_EFFECTS"] = {
+        "mode_switches": [{"switch": m.switch, "active_in_mode": m.active_in_mode} for m in interlock.mode_switches]
+        if interlock else [],
+        "mode_limited": [{"switch": m.switch, "only_in_mode": m.only_in_mode} for m in interlock.mode_limited]
+        if interlock else [],
+    }
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
     # A snapshot of exactly what was loaded to build the integrations
@@ -274,7 +307,7 @@ def _register_routes(app: Flask) -> None:
         # The clock both pages show - the server's, not the browser's, so
         # a wrongly-set board timezone is visible instead of silently
         # shifting every schedule slot. See services/system_clock.py.
-        return jsonify(ok=True, **server_time())
+        return jsonify(ok=True, app_version=app.config["ASSET_VERSION"], **server_time())
 
     # The history table scan behind these numbers is the one slow part of
     # a system-status request; its growth only matters over hours.
@@ -569,6 +602,7 @@ def _register_routes(app: Flask) -> None:
             # For the chart's band around the target: the valve only
             # changes state once the temperature leaves target ± this.
             hysteresis_c=thermostat.hysteresis_c,
+            season_effects=app.config["SEASON_EFFECTS"],
             zones=zones,
         )
 
@@ -583,9 +617,14 @@ def _register_routes(app: Flask) -> None:
             return jsonify(ok=False, error="mode must be 'heat' or 'cool'"), 400
         thermostat.schedule_store.set_mode(mode)
         # Re-evaluate right away instead of leaving valves showing stale
-        # state until the background loop's next scheduled tick - a mode
-        # switch changes every zone's heat/cool logic at once.
+        # state until the background loops' next scheduled tick - a mode
+        # switch changes every zone's heat/cool logic at once, and the
+        # mode switches (a bypass valve) and mode-limited switches (a
+        # dehumidifier) with it.
         thermostat.tick()
+        interlock: InterlockController | None = app.config["INTERLOCK"]
+        if interlock is not None:
+            interlock.tick()
         return jsonify(ok=True)
 
     @app.route("/api/climate/away", methods=["POST"])

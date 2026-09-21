@@ -399,3 +399,113 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Season - see climate_admin.js's season section. */
+.season-section {
+  margin-bottom: 20px;
+}
+.season-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.season-card {
+  --season: #ff9f0a;
+  border: 1.5px solid var(--card-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  opacity: 0.75;
+}
+.season-card.season-cool {
+  --season: #3987e5;
+}
+.season-card.active {
+  opacity: 1;
+  border-color: var(--season);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--season) 18%, transparent), color-mix(in srgb, var(--season) 4%, transparent));
+  box-shadow: 0 6px 22px -10px var(--season);
+}
+.season-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.season-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--season) 22%, transparent);
+  color: var(--season);
+}
+.season-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.season-name {
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+.season-sub {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.season-active-pill {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--season);
+  color: #10131a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.season-switch-btn {
+  margin-left: auto;
+}
+.season-effects {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.season-card.active .season-effects {
+  color: var(--text);
+}
+.season-effects li + li {
+  margin-top: 3px;
+}
+.season-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--card-border);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.85rem;
+}
+.season-confirm[hidden] {
+  display: none;
+}
+.season-confirm input {
+  width: 120px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  letter-spacing: 0.08em;
+}
+.season-confirm button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

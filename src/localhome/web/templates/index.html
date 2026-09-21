@@ -14,33 +14,9 @@
       <a class="icon-btn-sm" href="/climate-admin" title="{{ t.climate_admin.link_title }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
       </a>
-      <button class="icon-btn-sm settings-btn" onclick="openSettings()" title="{{ t.settings.heading }}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      </button>
     </div>
   </header>
   <div class="server-clock-warning" id="server-clock-warning" hidden></div>
-
-  <div id="settings-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeSettings()">
-    <div class="modal-panel">
-      <div class="modal-head">
-        <h2>{{ t.settings.heading }}</h2>
-        <button class="icon-btn-sm" onclick="closeSettings()" title="{{ t.settings.close }}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div class="settings-row">
-        <div>
-          <div class="settings-label">{{ t.settings.mode_label }}</div>
-          <p class="hint-text">{{ t.climate.mode_note }}</p>
-        </div>
-        <label class="mode-toggle">
-          <input type="checkbox" id="climate-mode-toggle" onchange="onModeToggle(this)">
-          <span class="mode-track"><span class="mode-label-heat">{{ t.climate.mode_heat }}</span><span class="mode-label-cool">{{ t.climate.mode_cool }}</span></span>
-        </label>
-      </div>
-    </div>
-  </div>
 
   <div id="away-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeAway()">
     <div class="modal-panel">
@@ -105,9 +81,13 @@
 
   <div id="tab-climate" class="tab-panel" hidden>
     <div class="section-head">
-      <h2 title="{{ t.settings.heading }}">
-        <span id="climate-season-icon"></span>
-        <span id="climate-season-label">{{ t.climate.season_winter }}</span>
+      <h2>
+        <!-- The season is seasonal, not a daily control: it's changed from
+             the admin panel (with a confirmation), shown here read-only. -->
+        <a class="season-link" href="/climate-admin#season" title="{{ t.climate.season_change_hint }}">
+          <span id="climate-season-icon"></span>
+          <span id="climate-season-label">{{ t.climate.season_winter }}</span>
+        </a>
       </h2>
       <div class="toolbar">
         <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>

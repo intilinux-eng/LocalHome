@@ -5,7 +5,9 @@
     "hours": "{n} h",
     "minutes": "{n} min",
     "warning_timezone": "<strong>Il fuso orario del sistema è diverso da quello di questo dispositivo.</strong> Il sistema usa {server}, questo dispositivo {device}. La programmazione oraria segue l'orologio del sistema, quindi le fasce vengono applicate con {shift} di sfasamento. Se il sistema non è impostato sul fuso della casa, correggilo sulla scheda con <code>sudo timedatectl set-timezone {zone}</code> e riavvia LocalHome.",
-    "warning_skew": "<strong>L'orologio del sistema è sfasato di {minutes} min</strong> rispetto a questo dispositivo. Verifica che la sincronizzazione NTP sia attiva sulla scheda (<code>timedatectl</code>)."
+    "warning_skew": "<strong>L'orologio del sistema è sfasato di {minutes} min</strong> rispetto a questo dispositivo. Verifica che la sincronizzazione NTP sia attiva sulla scheda (<code>timedatectl</code>).",
+    "update_available": "LocalHome è stato aggiornato: questa pagina usa ancora la versione precedente.",
+    "update_reload": "Ricarica"
   },
   "app": {
     "title": "LocalHome"
@@ -81,8 +83,7 @@
   },
   "settings": {
     "heading": "Impostazioni",
-    "close": "Chiudi",
-    "mode_label": "Stagione riscaldamento / raffrescamento"
+    "close": "Chiudi"
   },
   "climate": {
     "season_winter": "Inverno",
@@ -147,7 +148,8 @@
     "excluded_valve_feeding": "Valvola {zone} aperta: alimenta {driver} (acceso)",
     "excluded_valve_closing": "Valvola {zone} ancora aperta: in chiusura",
     "excluded_valve_unknown": "Valvola {zone}: stato sconosciuto - {error}",
-    "excluded_driver_note": "Si apre solo mentre {driver} è acceso, poi si richiude. Se {driver} non risponde, resta chiusa."
+    "excluded_driver_note": "Si apre solo mentre {driver} è acceso, poi si richiude. Se {driver} non risponde, resta chiusa.",
+    "season_change_hint": "La stagione si cambia dal pannello amministratore"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
@@ -333,7 +335,25 @@
     "system_wifi_none": "nessuna (o non rilevabile)",
     "system_ip": "Indirizzo IP",
     "system_name": "Nome sulla rete",
-    "system_problem_wifi_weak": "Segnale Wi-Fi debole su {subject}: avvicina la scheda al router o usa un ripetitore"
+    "system_problem_wifi_weak": "Segnale Wi-Fi debole su {subject}: avvicina la scheda al router o usa un ripetitore",
+    "season_heading": "Stagione",
+    "season_note": "Riscaldamento o raffrescamento per tutto l'impianto: un'unica centrale manda acqua calda o fredda a tutte le zone. Si cambia due volte l'anno, quindi il passaggio chiede conferma. Ogni stagione ha la sua programmazione.",
+    "season_active": "Attiva",
+    "season_switch_to_heat": "Passa al riscaldamento",
+    "season_switch_to_cool": "Passa al raffrescamento",
+    "season_zones_heat": "Zone riscaldate secondo la programmazione: {zones}",
+    "season_zones_cool": "Zone raffrescate secondo la programmazione: {zones}",
+    "season_zone_excluded": "{zone}: valvola sempre chiusa (anti-condensa)",
+    "season_switch_on": "{name}: acceso",
+    "season_switch_off": "{name}: spento",
+    "season_limited_usable": "{name}: disponibile, lo accendi tu",
+    "season_limited_off": "{name}: spento e nascosto",
+    "season_schedule_heat": "Usa la programmazione invernale",
+    "season_schedule_cool": "Usa la programmazione estiva",
+    "season_word_heat": "INVERNO",
+    "season_word_cool": "ESTATE",
+    "season_confirm": "Scrivi {word} per confermare il cambio di stagione:",
+    "season_done": "Stagione cambiata: {season}. Valvole, bypass e deumidificatore sono già stati aggiornati."
   },
   "vmc_presets": {
     "night": "Notte",

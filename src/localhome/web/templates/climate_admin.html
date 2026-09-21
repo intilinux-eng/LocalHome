@@ -33,6 +33,25 @@
        GET /api/system-status. At the top so it can't be missed. -->
   <div class="admin-problems" id="system-problems" hidden></div>
 
+  <!-- The heating/cooling season: seasonal, changed twice a year, so it
+       lives here (not on the dashboard) and needs the new season's name
+       typed to switch - see climate_admin.js's season section. -->
+  <section class="season-section" id="season">
+    <div class="section-head">
+      <h2>{{ t.climate_admin.season_heading }}</h2>
+    </div>
+    <p class="hint-text">{{ t.climate_admin.season_note }}</p>
+    <div class="season-cards" id="season-cards"></div>
+    <div class="season-confirm" id="season-confirm" hidden>
+      <span id="season-confirm-text"></span>
+      <input type="text" id="season-confirm-input" autocomplete="off" autocapitalize="characters" spellcheck="false"
+             oninput="onSeasonConfirmInput(this)">
+      <button class="tbtn open" id="season-confirm-go" disabled onclick="confirmSeason(this)">{{ t.climate_admin.maint_confirm_button }}</button>
+      <button class="range-btn" onclick="cancelSeason()">{{ t.climate_admin.maint_cancel_button }}</button>
+    </div>
+    <p class="hint-text" id="season-result"></p>
+  </section>
+
   <!-- Explains every non-obvious battery-sensor behavior this panel's
        status pills can otherwise leave a technician guessing about
        (see climate_admin.js's sensorStatusHtml()/zoneStatusInnerHtml())

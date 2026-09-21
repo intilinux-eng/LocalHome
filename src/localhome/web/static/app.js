@@ -1085,20 +1085,6 @@ function switchTab(tab) {
   try { localStorage.setItem("localhome-tab", tab); } catch (e) { /* private browsing etc - just skip remembering it */ }
 }
 
-// A deliberately low-key settings panel (a gear icon, not a prominent
-// control on the main tab) for anything that shouldn't be one accidental
-// tap away - right now just the heat/cool season switch, which stays in
-// effect until someone opens this and changes it again (persisted to
-// schedules.json - see ScheduleStore in services/thermostat.py - so it
-// survives a restart/power cut, not just a page reload).
-function openSettings() {
-  document.getElementById("settings-modal").hidden = false;
-}
-
-function closeSettings() {
-  document.getElementById("settings-modal").hidden = true;
-}
-
 // Same "season" framing the settings modal's toggle already uses
 // ("Stagione riscaldamento / raffrescamento") - a snowflake+"Inverno" or
 // sun+"Estate" reads as the current state at a glance, instead of a
@@ -1545,7 +1531,7 @@ function buildZoneCard(zone) {
 function renderClimateZones() {
   ensurePaintValueForMode();
   const container = document.getElementById("climate-zones");
-  const toggleLabel = document.querySelector(".mode-toggle");
+  const toggleLabel = document.querySelector(".season-link");
   if (!climateZones.length) {
     container.innerHTML = `<p class="hint-text">${tr("climate.no_zones")}</p>`;
     if (toggleLabel) toggleLabel.style.display = "none";
@@ -1873,8 +1859,6 @@ async function rerenderClimateForSeason(zonesData) {
   await flushPendingScheduleSaves();
   updateSeasonHeading();
   applyClimateModeVisibility();
-  const toggle = document.getElementById("climate-mode-toggle");
-  if (toggle) toggle.checked = climateMode === "cool";
   climateAwayUntil = zonesData.away_until || null;
   updateAwayBadge();
   climateZones = zonesData.zones;
@@ -1886,37 +1870,6 @@ async function rerenderClimateForSeason(zonesData) {
   updateNowHighlight();
 }
 
-async function onModeToggle(el) {
-  const mode = el.checked ? "cool" : "heat";
-  try {
-    const res = await fetch("/api/climate/mode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
-      el.checked = !el.checked;
-      return;
-    }
-    climateMode = mode;
-    // A full reload, not just refreshClimateZonesLive()'s in-place patch:
-    // switching mode can change *which* zone cards should even exist (a
-    // cool_enabled:false zone's card only appears in heat mode), which a
-    // live-patch of already-rendered cards can't add or remove.
-    const zonesRes = await fetch("/api/climate/zones").then(r => r.json()).catch(() => null);
-    if (zonesRes && zonesRes.ok) {
-      await rerenderClimateForSeason(zonesRes);
-    } else {
-      updateSeasonHeading();
-      applyClimateModeVisibility();
-    }
-  } catch (e) {
-    alert(tr("sensors.request_failed"));
-    el.checked = !el.checked;
-  }
-}
 
 // ---------------------------------------------------------------- boot -----
 
@@ -1959,8 +1912,6 @@ async function boot() {
     updateAwayBadge();
     climateZones = climateData.zones;
     renderClimateZones();
-    const toggle = document.getElementById("climate-mode-toggle");
-    if (toggle) toggle.checked = climateMode === "cool";
     for (const zone of climateZones) {
       await loadZoneSchedule(zone.name);
       refreshOnHours(zone.name);
