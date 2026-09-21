@@ -127,6 +127,28 @@ Map your zones onto this home's actual Shelly device ids from
 Remember it needs a restart (`sudo systemctl restart localhome`) after
 every save before a change actually takes effect.
 
+## Updating LocalHome on the board
+
+However the new code gets there - `git pull`, or a copy of the repo from
+your PC - always reinstall and restart afterwards:
+
+```bash
+cd ~/localhome
+.venv/bin/pip install -e .           # picks up new or changed dependencies
+.venv/bin/localhome-cli doctor       # optional sanity check
+sudo systemctl restart localhome
+```
+
+Skipping the `pip install` works until an update adds a dependency - then
+the service fails at startup with a `ModuleNotFoundError` (e.g.
+`No module named 'waitress'`) and systemd keeps restarting it. Your
+`config/` files are never touched by an update.
+
+The dashboard runs on [Waitress](https://github.com/Pylons/waitress), a
+production web server: one process with several threads, so the
+thermostat and device polling run exactly once. Flask's own `app.run()`
+development server isn't used.
+
 ## Tune the board for long unattended running
 
 **Do this on every new board** (quick start step 7). An Arduino UNO Q
