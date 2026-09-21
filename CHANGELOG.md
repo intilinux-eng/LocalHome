@@ -178,6 +178,11 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- Temperature and humidity are two separate charts now, each with its
+  own title and time axis ("Temperature and valve" above, "Humidity"
+  below) - one crowded plot mixing degrees and percent was hard to read.
+  Hovering either marks the same moment on both; a sensor without
+  humidity shows no empty chart.
 - Automatic backups keep one history copy (was two), and skip it when it
   would leave less than 500 MB free on the disk.
 - A device that stays unreachable is logged in full once, then with one

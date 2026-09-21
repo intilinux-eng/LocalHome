@@ -149,7 +149,8 @@
     "excluded_valve_closing": "{zone} valve still open: closing",
     "excluded_valve_unknown": "{zone} valve: state unknown - {error}",
     "excluded_driver_note": "It opens only while {driver} runs, then closes again. If {driver} stops answering, it stays closed.",
-    "season_change_hint": "The season is changed from the admin panel"
+    "season_change_hint": "The season is changed from the admin panel",
+    "chart_temperature_valve": "Temperature and valve"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",

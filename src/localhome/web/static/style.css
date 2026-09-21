@@ -648,6 +648,23 @@ input[type="range"]:disabled {
   color: var(--text-dim);
   font-weight: 400;
 }
+/* Each chart's own title - temperature and humidity are separate charts. */
+.chart-title {
+  margin: 12px 0 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.humidity-chart {
+  margin-top: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--card-border);
+}
+.humidity-chart[hidden] {
+  display: none;
+}
 .chart-wrap {
   position: relative;
   margin-top: 10px;

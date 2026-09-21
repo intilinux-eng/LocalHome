@@ -290,6 +290,18 @@ function sliderRowHtml(sensor) {
   `;
 }
 
+// The humidity chart, below the temperature one - hidden by
+// drawClimateChart() for a sensor that reports no humidity.
+function humidityChartHtml(id) {
+  return `
+    <div class="humidity-chart" id="humchart-${id}">
+      <div class="chart-title">${tr("fields.humidity_pct")}</div>
+      <div class="chart-wrap">
+        <svg id="chart-${id}-hum" viewBox="0 0 400 80" preserveAspectRatio="none"></svg>
+      </div>
+    </div>`;
+}
+
 function buildSensorCard(sensor) {
   const id = slug(sensor.name);
   const hasChart = sensor.kind === "power_meter" || sensor.kind === "climate";
@@ -325,10 +337,12 @@ function buildSensorCard(sensor) {
           <button class="range-btn" data-sensor="${id}" data-range="7d">7d</button>
         </div>
         <div class="chart-readout" id="readout-${id}"></div>
+        ${sensor.kind === "climate" ? `<div class="chart-title">${tr("fields.temperature_c")}</div>` : ""}
         <div class="chart-wrap">
           <svg id="chart-${id}" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
           <div class="chart-tooltip" id="tooltip-${id}" hidden></div>
         </div>
+        ${sensor.kind === "climate" ? humidityChartHtml(id) : ""}
       ` : ""}
     </div>
   `;
@@ -541,8 +555,6 @@ function updateSensorCard(sensor, reading, linkedReading) {
   if (sensor.kind === "power_meter" && sensor.power_budget) {
     const b = sensor.power_budget;
     html += `<div class="limit-note"><span class="swatch"></span> ${tr("sensors.power_budget_note", { available: (b.available_power_w / 1000).toFixed(2), trip: (b.trip_risk_w / 1000).toFixed(1) })}</div>`;
-  } else if (sensor.kind === "climate" && "humidity_pct" in reading) {
-    html += `<div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")}</div>`;
   }
 
   metrics.innerHTML = html;
@@ -819,32 +831,20 @@ function nearestPoint(points, ts) {
   return nearest;
 }
 
-// The climate chart is three panels stacked on one shared time axis, so
-// each series gets its own space instead of competing for one:
+// A climate sensor's history is two separate charts on the same time
+// range, each with its own title and time axis - one crowded plot mixing
+// degrees and percent was hard to read:
 //   1. temperature, with the target it was held to (a band of +-
-//      hysteresis around a solid line) - the valve only changes state
-//      once the temperature leaves that band;
-//   2. a strip showing when the valve was actually open (zone charts only);
-//   3. humidity, smaller - context, not what drives the valve.
-// Everything is in viewBox units (CHART_W wide); the height follows from
-// which panels are present.
-const CLIMATE_LAYOUT = { padL: 34, padR: 8, tempTop: 8, tempH: 104, gap: 9, laneH: 14, humH: 34, axisH: 14 };
+//      hysteresis around a solid line) and, for a zone, where its valve
+//      opened and a strip showing when it was open;
+//   2. humidity, below it - context, not what drives the valve.
+// Hovering (or touching) either one moves a marker on both and fills the
+// readout line above them. Everything is in viewBox units (CHART_W wide).
+const TEMP_CHART = { padL: 34, padR: 8, top: 8, plotH: 110, gap: 9, laneH: 14, axisH: 14 };
+const HUM_CHART = { top: 8, plotH: 52, axisH: 14 };
 
-// `textScale` > 1 on a chart rendered narrower than its viewBox (a phone):
-// the SVG scales down as a whole, so its text and the room left for the
-// axis labels are scaled back up to stay readable.
-function climateLayout(hasValve, textScale = 1) {
-  const L = { ...CLIMATE_LAYOUT, padL: Math.round(CLIMATE_LAYOUT.padL * textScale) };
-  const tempBottom = L.tempTop + L.tempH;
-  const laneTop = tempBottom + L.gap;
-  const laneBottom = hasValve ? laneTop + L.laneH : tempBottom;
-  const humTop = laneBottom + L.gap;
-  const humBottom = humTop + L.humH;
-  return { ...L, tempBottom, laneTop, laneBottom, humTop, humBottom, height: humBottom + Math.round(L.axisH * textScale), plotL: L.padL, plotR: CHART_W - L.padR };
-}
-
-// Round local-time ticks for the shared time axis: every hour on 6h,
-// every 6 hours on 24h, every midnight on 7d.
+// Round local-time ticks for the time axis: every hour on 6h, every 6
+// hours on 24h, every midnight on 7d.
 function timeTicks(minTs, maxTs, range) {
   const ticks = [];
   const d = new Date(minTs * 1000);
@@ -876,41 +876,9 @@ function formatTick(ts, range) {
 // state the pointer or the refresh leaves behind.
 const climateChartState = {};
 
-function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetPoints) {
-  const svg = document.getElementById(`chart-${id}`);
-  if (!svg) return;
-  const hasValve = valvePoints != null;
-  const renderedWidth = svg.getBoundingClientRect().width || CHART_W;
-  const textScale = Math.min(1.6, Math.max(1, CHART_W / renderedWidth));
-  const lay = climateLayout(hasValve, textScale);
-  svg.setAttribute("viewBox", `0 0 ${CHART_W} ${lay.height}`);
-  svg.innerHTML = "";
-  const temps = tempPoints || [], hums = humPoints || [];
-  if (temps.length < 2) {
-    delete climateChartState[id];
-    renderClimateReadout(id, null);
-    return drawEmpty(svg, lay.height);
-  }
-
-  const bucket = CHART_BUCKET_SECONDS[range] || 300;
-  const hyst = climateHysteresis || 0;
-  const minTs = temps[0].ts, maxTs = temps[temps.length - 1].ts;
-  const targets = (targetPoints || []).filter(p => p.ts >= minTs - bucket && p.ts <= maxTs);
-  const valves = valvePoints || [];
-  const plotW = lay.plotR - lay.plotL;
-  const xOf = ts => lay.plotL + ((ts - minTs) / Math.max(1, maxTs - minTs)) * plotW;
-  const clampX = x => Math.max(lay.plotL, Math.min(lay.plotR, x));
-
-  // Temperature axis in whole degrees, always an even span so the middle
-  // gridline is a whole degree too. It fits the target band as well, or a
-  // target far from the room's reading would be clipped off.
-  let [tMin, tMax] = niceBounds(temps.map(p => p.value).concat(targets.flatMap(p => [p.value - hyst, p.value + hyst])), 0.4, 1);
-  if ((tMax - tMin) % 2) tMax += 1;
-  const yT = t => lay.tempBottom - ((t - tMin) / (tMax - tMin)) * lay.tempH;
-  const humValues = hums.map(p => p.value);
-  const [hMin, hMax] = humValues.length ? niceBounds(humValues, 2, 10) : [0, 100];
-  const yH = h => lay.humBottom - ((h - hMin) / Math.max(1, hMax - hMin)) * lay.humH;
-
+// Helpers bound to one SVG: add elements, write axis text (scaled back up
+// on a phone, where the whole SVG is drawn smaller), draw the time grid.
+function chartCanvas(svg, textScale) {
   const add = (tag, attrs) => svg.appendChild(svgEl(tag, attrs));
   const text = (x, y, content, attrs) => {
     const el = add("text", { x, y, fill: AXIS_TEXT_COLOR, ...attrs });
@@ -918,42 +886,93 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
     el.textContent = content;
     return el;
   };
-  const stepRects = (points, fromX, toX) => points.forEach((p, i) => {
+  return { add, text };
+}
+
+function drawTimeAxis(canvas, ticks, xOf, top, bottom, plotL, plotR, range, textScale) {
+  for (const ts of ticks) {
+    const x = xOf(ts);
+    canvas.add("line", { x1: x, x2: x, y1: top, y2: bottom, stroke: GRID_COLOR, "stroke-width": 1 });
+    if (x > plotL + 14 * textScale && x < plotR - 14 * textScale) {
+      canvas.text(x, bottom + 4 + 7 * textScale, formatTick(ts, range), { "text-anchor": "middle" });
+    }
+  }
+}
+
+function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetPoints) {
+  const svg = document.getElementById(`chart-${id}`);
+  if (!svg) return;
+  const humSvg = document.getElementById(`chart-${id}-hum`);
+  const humWrap = document.getElementById(`humchart-${id}`);
+  const hasValve = valvePoints != null;
+  const renderedWidth = svg.getBoundingClientRect().width || CHART_W;
+  const textScale = Math.min(1.6, Math.max(1, CHART_W / renderedWidth));
+  const L = TEMP_CHART;
+  const plotL = Math.round(L.padL * textScale), plotR = CHART_W - L.padR, plotW = plotR - plotL;
+  const tempBottom = L.top + L.plotH;
+  const laneTop = tempBottom + L.gap;
+  const tempAxisAt = hasValve ? laneTop + L.laneH : tempBottom;
+  const tempHeight = tempAxisAt + Math.round(L.axisH * textScale);
+  const humBottom = HUM_CHART.top + HUM_CHART.plotH;
+  const humHeight = humBottom + Math.round(HUM_CHART.axisH * textScale);
+  svg.setAttribute("viewBox", `0 0 ${CHART_W} ${tempHeight}`);
+  svg.innerHTML = "";
+  if (humSvg) {
+    humSvg.setAttribute("viewBox", `0 0 ${CHART_W} ${humHeight}`);
+    humSvg.innerHTML = "";
+  }
+
+  const temps = tempPoints || [], hums = humPoints || [];
+  if (humWrap) humWrap.hidden = hums.length < 2;  // a sensor without humidity: no empty chart
+  if (temps.length < 2) {
+    delete climateChartState[id];
+    renderClimateReadout(id, null);
+    return drawEmpty(svg, tempHeight);
+  }
+
+  const bucket = CHART_BUCKET_SECONDS[range] || 300;
+  const hyst = climateHysteresis || 0;
+  const minTs = temps[0].ts, maxTs = temps[temps.length - 1].ts;
+  const targets = (targetPoints || []).filter(p => p.ts >= minTs - bucket && p.ts <= maxTs);
+  const valves = valvePoints || [];
+  const xOf = ts => plotL + ((ts - minTs) / Math.max(1, maxTs - minTs)) * plotW;
+  const clampX = x => Math.max(plotL, Math.min(plotR, x));
+  const ticks = timeTicks(minTs, maxTs, range);
+  const stepRects = (points, draw) => points.forEach((p, i) => {
     const x1 = clampX(xOf(p.ts));
     const next = points[i + 1];
     const x2 = clampX(next && next.ts - p.ts <= bucket * 1.5 ? xOf(next.ts) : xOf(p.ts + bucket));
-    fromX(x1, Math.max(1, x2 - x1), p);
+    draw(x1, Math.max(1, x2 - x1), p);
   });
 
-  // Shared time axis: one vertical gridline per tick through all panels.
-  for (const ts of timeTicks(minTs, maxTs, range)) {
-    const x = xOf(ts);
-    add("line", { x1: x, x2: x, y1: lay.tempTop, y2: lay.humBottom, stroke: GRID_COLOR, "stroke-width": 1 });
-    if (x > lay.plotL + 14 * textScale && x < lay.plotR - 14 * textScale) {
-      text(x, lay.humBottom + 4 + 7 * textScale, formatTick(ts, range), { "text-anchor": "middle" });
-    }
-  }
+  // ------------------------------------------------ 1. temperature chart --
+  const t = chartCanvas(svg, textScale);
+  // Whole degrees, always an even span so the middle gridline is a whole
+  // degree too; it fits the target band as well, or a target far from the
+  // room's reading would be clipped off.
+  let [tMin, tMax] = niceBounds(temps.map(p => p.value).concat(targets.flatMap(p => [p.value - hyst, p.value + hyst])), 0.4, 1);
+  if ((tMax - tMin) % 2) tMax += 1;
+  const yT = v => tempBottom - ((v - tMin) / (tMax - tMin)) * L.plotH;
 
-  // --- 1. temperature panel
+  drawTimeAxis(t, ticks, xOf, L.top, tempAxisAt, plotL, plotR, range, textScale);
   [0, 0.5, 1].forEach(frac => {
-    const y = lay.tempBottom - lay.tempH * frac;
-    add("line", { x1: lay.plotL, x2: lay.plotR, y1: y, y2: y, stroke: GRID_COLOR, "stroke-width": 1 });
-    text(lay.plotL - 6, y + 3 * textScale, `${Math.round(tMin + (tMax - tMin) * frac)}°`, { "text-anchor": "end", fill: TEMP_COLOR });
+    const y = tempBottom - L.plotH * frac;
+    t.add("line", { x1: plotL, x2: plotR, y1: y, y2: y, stroke: GRID_COLOR, "stroke-width": 1 });
+    t.text(plotL - 6, y + 3 * textScale, `${Math.round(tMin + (tMax - tMin) * frac)}°`, { "text-anchor": "end", fill: TEMP_COLOR });
   });
 
   const openValves = valves.filter(p => p.value >= 0.5);
   // A faint echo of the valve strip below, so an open valve lines up with
-  // the temperature it was reacting to without reading across panels.
-  stepRects(openValves, (x, w) => add("rect", {
-    x, y: lay.tempTop, width: w, height: lay.tempH, fill: VALVE_BAND_COLOR, opacity: 0.07,
+  // the temperature it was reacting to.
+  stepRects(openValves, (x, w) => t.add("rect", {
+    x, y: L.top, width: w, height: L.plotH, fill: VALVE_BAND_COLOR, opacity: 0.07,
   }));
 
-  const targetRuns = consecutiveRuns(targets, bucket);
-  for (const run of targetRuns) {
+  for (const run of consecutiveRuns(targets, bucket)) {
     let d = "";
     stepRects(run, (x, w, p) => {
       if (hyst > 0) {
-        add("rect", {
+        t.add("rect", {
           x, y: yT(p.value + hyst), width: w, height: Math.max(1, yT(p.value - hyst) - yT(p.value + hyst)),
           fill: TARGET_COLOR, opacity: 0.16,
         });
@@ -961,15 +980,15 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
       const y = yT(p.value).toFixed(1);
       d += `${d ? "L" : "M"}${x.toFixed(1)},${y} L${(x + w).toFixed(1)},${y} `;
     });
-    add("path", { d, fill: "none", stroke: TARGET_COLOR, "stroke-width": 1.4, opacity: 0.9 });
+    t.add("path", { d, fill: "none", stroke: TARGET_COLOR, "stroke-width": 1.4, opacity: 0.9 });
   }
   if (hasValve && !targets.length) {
-    text(lay.plotL + 6, lay.tempTop + 4 + 7 * textScale, tr("climate.no_target_in_range"), { "font-size": 8.5 });
+    t.text(plotL + 6, L.top + 4 + 7 * textScale, tr("climate.no_target_in_range"), { "font-size": 8.5 });
   }
 
   for (const run of consecutiveRuns(temps, bucket)) {
     const d = run.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.ts).toFixed(1)},${yT(p.value).toFixed(1)}`).join(" ");
-    add("path", { d, fill: "none", stroke: TEMP_COLOR, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    t.add("path", { d, fill: "none", stroke: TEMP_COLOR, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" });
   }
 
   // Where the valve opened, marked on the temperature line itself: the
@@ -977,58 +996,72 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   valves.forEach((p, i) => {
     if (p.value < 0.5 || (i > 0 && valves[i - 1].value >= 0.5)) return;
     if (p.ts < minTs || p.ts > maxTs) return;
-    const t = nearestPoint(temps, p.ts);
-    if (!t || Math.abs(t.ts - p.ts) > bucket * 1.5) return;
-    add("circle", { cx: xOf(p.ts), cy: yT(t.value), r: 3, fill: VALVE_BAND_COLOR, stroke: "#141414", "stroke-width": 1.2 });
+    const near = nearestPoint(temps, p.ts);
+    if (!near || Math.abs(near.ts - p.ts) > bucket * 1.5) return;
+    t.add("circle", { cx: xOf(p.ts), cy: yT(near.value), r: 3, fill: VALVE_BAND_COLOR, stroke: "#141414", "stroke-width": 1.2 });
   });
 
-  // --- 2. valve strip
   if (hasValve) {
-    text(lay.plotL - 6, lay.laneTop + lay.laneH / 2 + 3 * textScale, tr("climate.valve_lane"), { "text-anchor": "end", "font-size": 8.5 });
-    add("rect", { x: lay.plotL, y: lay.laneTop, width: plotW, height: lay.laneH, rx: 3, fill: "#232322" });
-    stepRects(openValves, (x, w) => add("rect", {
-      x, y: lay.laneTop, width: w, height: lay.laneH, fill: VALVE_BAND_COLOR, opacity: 0.85,
+    t.text(plotL - 6, laneTop + L.laneH / 2 + 3 * textScale, tr("climate.valve_lane"), { "text-anchor": "end", "font-size": 8.5 });
+    t.add("rect", { x: plotL, y: laneTop, width: plotW, height: L.laneH, rx: 3, fill: "#232322" });
+    stepRects(openValves, (x, w) => t.add("rect", {
+      x, y: laneTop, width: w, height: L.laneH, fill: VALVE_BAND_COLOR, opacity: 0.85,
     }));
   }
 
-  // --- 3. humidity panel
-  [0, 1].forEach(frac => {
-    const y = lay.humBottom - lay.humH * frac;
-    add("line", { x1: lay.plotL, x2: lay.plotR, y1: y, y2: y, stroke: GRID_COLOR, "stroke-width": 1 });
-    text(lay.plotL - 6, y + 3 * textScale, `${Math.round(hMin + (hMax - hMin) * frac)}%`, { "text-anchor": "end", fill: HUM_COLOR });
-  });
-  for (const run of consecutiveRuns(hums, bucket)) {
-    const d = run.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.ts).toFixed(1)},${yH(p.value).toFixed(1)}`).join(" ");
-    add("path", { d, fill: "none", stroke: HUM_COLOR, "stroke-width": 1.5, "stroke-linecap": "round", "stroke-linejoin": "round" });
+  // --------------------------------------------------- 2. humidity chart --
+  let h = null, yH = null;
+  if (humSvg && hums.length >= 2) {
+    h = chartCanvas(humSvg, textScale);
+    const [hMin, hMax] = niceBounds(hums.map(p => p.value), 2, 10);
+    yH = v => humBottom - ((v - hMin) / Math.max(1, hMax - hMin)) * HUM_CHART.plotH;
+    drawTimeAxis(h, ticks, xOf, HUM_CHART.top, humBottom, plotL, plotR, range, textScale);
+    [0, 0.5, 1].forEach(frac => {
+      const y = humBottom - HUM_CHART.plotH * frac;
+      h.add("line", { x1: plotL, x2: plotR, y1: y, y2: y, stroke: GRID_COLOR, "stroke-width": 1 });
+      h.text(plotL - 6, y + 3 * textScale, `${Math.round(hMin + (hMax - hMin) * frac)}%`, { "text-anchor": "end", fill: HUM_COLOR });
+    });
+    for (const run of consecutiveRuns(hums, bucket)) {
+      const d = run.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.ts).toFixed(1)},${yH(p.value).toFixed(1)}`).join(" ");
+      h.add("path", { d, fill: "none", stroke: HUM_COLOR, "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    }
   }
 
-  // --- hover: one crosshair through every panel, values in the readout
-  const cross = add("line", { y1: lay.tempTop, y2: lay.humBottom, stroke: "#ffffff", "stroke-width": 1, opacity: 0.45, visibility: "hidden" });
-  const dot = add("circle", { r: 3.5, fill: TEMP_COLOR, stroke: "#141414", "stroke-width": 1.2, visibility: "hidden" });
+  // ------------------------------- hover: one moment, marked on both charts --
+  const cross = t.add("line", { y1: L.top, y2: tempAxisAt, stroke: "#ffffff", "stroke-width": 1, opacity: 0.45, visibility: "hidden" });
+  const dot = t.add("circle", { r: 3.5, fill: TEMP_COLOR, stroke: "#141414", "stroke-width": 1.2, visibility: "hidden" });
+  const humCross = h && h.add("line", { y1: HUM_CHART.top, y2: humBottom, stroke: "#ffffff", "stroke-width": 1, opacity: 0.45, visibility: "hidden" });
+  const humDot = h && h.add("circle", { r: 3.5, fill: HUM_COLOR, stroke: "#141414", "stroke-width": 1.2, visibility: "hidden" });
 
   const state = { range, bucket, hyst, temps, hums, targets, valves, hasValve };
   climateChartState[id] = state;
   renderClimateReadout(id, readingAt(state, maxTs), true);
 
-  const hit = add("rect", { x: lay.plotL, y: 0, width: plotW, height: lay.height, fill: "transparent" });
-  const onMove = e => {
-    const rect = svg.getBoundingClientRect();
+  const show = (el, attrs) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
+  const hide = () => [cross, dot, humCross, humDot].forEach(el => el && el.setAttribute("visibility", "hidden"));
+  const onMove = (e, target) => {
+    const rect = target.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (CHART_W / rect.width);
-    const ts = minTs + ((x - lay.plotL) / plotW) * (maxTs - minTs);
-    const reading = readingAt(state, ts);
+    const reading = readingAt(state, minTs + ((x - plotL) / plotW) * (maxTs - minTs));
     if (!reading) return;
     const cx = xOf(reading.ts);
-    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
-    dot.setAttribute("cx", cx); dot.setAttribute("cy", yT(reading.temp)); dot.setAttribute("visibility", "visible");
+    show(cross, { x1: cx, x2: cx, visibility: "visible" });
+    show(dot, { cx, cy: yT(reading.temp), visibility: "visible" });
+    if (humCross) {
+      show(humCross, { x1: cx, x2: cx, visibility: "visible" });
+      if (reading.hum != null) show(humDot, { cx, cy: yH(reading.hum), visibility: "visible" });
+      else humDot.setAttribute("visibility", "hidden");
+    }
     renderClimateReadout(id, reading, false);
   };
-  hit.addEventListener("pointermove", onMove);
-  hit.addEventListener("pointerdown", onMove);
-  hit.addEventListener("pointerleave", () => {
-    cross.setAttribute("visibility", "hidden");
-    dot.setAttribute("visibility", "hidden");
-    renderClimateReadout(id, readingAt(state, maxTs), true);
-  });
+  const onLeave = () => { hide(); renderClimateReadout(id, readingAt(state, maxTs), true); };
+  for (const [target, canvas, height] of [[svg, t, tempHeight], [humSvg, h, humHeight]]) {
+    if (!canvas) continue;
+    const hit = canvas.add("rect", { x: plotL, y: 0, width: plotW, height, fill: "transparent" });
+    hit.addEventListener("pointermove", e => onMove(e, target));
+    hit.addEventListener("pointerdown", e => onMove(e, target));
+    hit.addEventListener("pointerleave", onLeave);
+  }
 }
 
 // Every series' value at one moment, for the readout.
@@ -1514,16 +1547,17 @@ function buildZoneCard(zone) {
         <button class="range-btn" data-sensor="${chartId}" data-range="7d">7d</button>
       </div>
       <div class="chart-readout" id="readout-${chartId}"></div>
+      <div class="chart-title">${tr("climate.chart_temperature_valve")}</div>
       <div class="chart-wrap">
-        <svg id="chart-${chartId}" viewBox="0 0 400 200" preserveAspectRatio="none"></svg>
+        <svg id="chart-${chartId}" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
       </div>
       <div class="chart-legend">
         <span><span class="legend-dot" style="background:#ff9f0a"></span>${tr("fields.temperature_c")}</span>
         <span><span class="legend-target"></span>${tr("climate.target_line")}</span>
         <span><span class="legend-band legend-valve"></span>${tr("climate.valve_on_band")}</span>
         <span><span class="legend-open-dot"></span>${tr("climate.valve_opened_marker")}</span>
-        <span><span class="legend-dot" style="background:#3987e5"></span>${tr("fields.humidity_pct")}</span>
       </div>
+      ${humidityChartHtml(chartId)}
     </div>
   `;
 }

@@ -149,7 +149,8 @@
     "excluded_valve_closing": "Valvola {zone} ancora aperta: in chiusura",
     "excluded_valve_unknown": "Valvola {zone}: stato sconosciuto - {error}",
     "excluded_driver_note": "Si apre solo mentre {driver} è acceso, poi si richiude. Se {driver} non risponde, resta chiusa.",
-    "season_change_hint": "La stagione si cambia dal pannello amministratore"
+    "season_change_hint": "La stagione si cambia dal pannello amministratore",
+    "chart_temperature_valve": "Temperatura e valvola"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
