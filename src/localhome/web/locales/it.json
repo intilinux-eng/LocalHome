@@ -92,9 +92,9 @@
     "target_off": "Spento",
     "valve_open": "Valvola aperta",
     "valve_closed": "Valvola chiusa",
-    "valve_on_band": "Valvola accesa",
-    "target_line": "Target (± isteresi)",
-    "no_target": "Nessun target per quest'ora",
+    "valve_on_band": "Valvola aperta",
+    "target_line": "Target ± isteresi",
+    "no_target": "nessun target",
     "status_active": "Target {target} · valvola aperta",
     "status_reached": "Target {target} raggiunto · valvola chiusa",
     "status_away": "Fuori casa · valvola chiusa",
@@ -133,7 +133,11 @@
     "dew_point": "Punto di rugiada {value}°C",
     "wifi_good": "WiFi ottimo ({value} dBm)",
     "wifi_fair": "WiFi discreto ({value} dBm)",
-    "wifi_poor": "WiFi debole ({value} dBm)"
+    "wifi_poor": "WiFi debole ({value} dBm)",
+    "valve_opened_marker": "Apertura valvola",
+    "valve_lane": "Valvola",
+    "no_target_in_range": "Nessun target attivo in questo intervallo",
+    "readout_latest": "Ultimo dato {time}"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",

@@ -419,7 +419,7 @@ input[type="range"]:disabled {
   margin-right: 3px;
   background: rgba(48, 209, 88, 0.35);
 }
-/* Dashed like the chart's target line, over a faint band like its
+/* A solid line over a faint band, like the chart's target and its
    hysteresis band - see drawClimateChart() in app.js. */
 .legend-target {
   width: 16px;
@@ -428,9 +428,74 @@ input[type="range"]:disabled {
   vertical-align: middle;
   margin-right: 3px;
   background:
-    linear-gradient(90deg, #d9dde8 55%, transparent 55%) 0 50% / 5px 1.5px repeat-x,
-    rgba(217, 221, 232, 0.12);
+    linear-gradient(#d9dde8, #d9dde8) 0 50% / 100% 1.5px no-repeat,
+    rgba(217, 221, 232, 0.18);
   border-radius: 2px;
+}
+.legend-band.legend-valve {
+  background: rgba(48, 209, 88, 0.85);  /* the chart's valve strip */
+}
+.legend-open-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 3px;
+  background: #30d158;
+  box-shadow: 0 0 0 1.5px #141414;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.chart-legend > span {
+  white-space: nowrap;
+}
+
+/* Values at the latest sample, or under the pointer - drawClimateChart()
+   uses this instead of a floating tooltip over the lines being read. */
+.chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-height: 1.4em;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.chart-readout:empty {
+  display: none;
+}
+.chart-readout .ro-time {
+  color: var(--text-dim);
+}
+.chart-readout .ro-val {
+  font-weight: 700;
+}
+.chart-readout .ro-target {
+  color: #d9dde8;
+}
+.chart-readout .ro-dim {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.chart-readout .ro-valve {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+}
+.chart-readout .ro-valve.open {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30d158;
 }
 
 .switch-body {

@@ -92,9 +92,9 @@
     "target_off": "Off",
     "valve_open": "Valve open",
     "valve_closed": "Valve closed",
-    "valve_on_band": "Valve on",
-    "target_line": "Target (± hysteresis)",
-    "no_target": "No target set for this hour",
+    "valve_on_band": "Valve open",
+    "target_line": "Target ± hysteresis",
+    "no_target": "no target",
     "status_active": "Target {target} · valve open",
     "status_reached": "Target {target} reached · valve closed",
     "status_away": "Away · valve closed",
@@ -133,7 +133,11 @@
     "dew_point": "Dew point {value}°C",
     "wifi_good": "WiFi excellent ({value} dBm)",
     "wifi_fair": "WiFi fair ({value} dBm)",
-    "wifi_poor": "WiFi weak ({value} dBm)"
+    "wifi_poor": "WiFi weak ({value} dBm)",
+    "valve_opened_marker": "Valve opened",
+    "valve_lane": "Valve",
+    "no_target_in_range": "No target active in this range",
+    "readout_latest": "Latest {time}"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
