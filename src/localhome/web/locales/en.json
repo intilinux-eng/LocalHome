@@ -93,6 +93,7 @@
     "valve_open": "Valve open",
     "valve_closed": "Valve closed",
     "valve_on_band": "Valve on",
+    "target_line": "Target (± hysteresis)",
     "no_target": "No target set for this hour",
     "status_active": "Target {target} · valve open",
     "status_reached": "Target {target} reached · valve closed",

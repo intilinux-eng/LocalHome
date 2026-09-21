@@ -624,3 +624,53 @@ def test_concurrent_saves_do_not_lose_each_other(tmp_path):
 
     for i, name in enumerate(names):
         assert store.get_week(name, "heat")["mon"][0] == 18.0 + i * 0.5
+
+
+# ------------------------------------------------------ applied targets -----
+# What the chart plots as "why the valve moved": only a target that actually
+# drove the valve this tick. Anything else (away, diagnostic, excluded,
+# unreachable) must read as "no target in control", not a stale value.
+
+def _room_setup(tmp_path, temperature=18.0, ok=True):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    reading = {"ok": True, "temperature_c": temperature} if ok else {"ok": False}
+    manager = FakeManager(readings={"Rooms Temp": reading}, switches={"Rooms Valve": FakeSwitch()})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_week("Rooms", _flat_week(21.0), mode="heat")
+    return ThermostatController(manager, store, zones, hysteresis_c=0.5), store
+
+
+def test_applied_target_is_the_one_the_valve_was_driven_against(tmp_path):
+    controller, _ = _room_setup(tmp_path)
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))
+    assert controller.applied_target("Rooms") == 21.0
+
+
+def test_no_applied_target_while_away(tmp_path):
+    controller, store = _room_setup(tmp_path)
+    store.set_away_until(datetime(2026, 9, 22, 0, 0))
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))
+    assert controller.applied_target("Rooms") is None
+
+
+def test_no_applied_target_in_diagnostic_mode(tmp_path):
+    controller, store = _room_setup(tmp_path)
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))
+    store.set_diagnostic_mode(True)
+    controller.tick(now=datetime(2026, 9, 21, 8, 1))  # the previous tick's target must not linger
+    assert controller.applied_target("Rooms") is None
+
+
+def test_no_applied_target_with_the_sensor_unreachable(tmp_path):
+    controller, _ = _room_setup(tmp_path, ok=False)
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))
+    assert controller.applied_target("Rooms") is None
+
+
+def test_no_applied_target_in_an_off_hour(tmp_path):
+    controller, store = _room_setup(tmp_path)
+    week = _flat_week(21.0)
+    week["mon"][8] = None
+    store.set_week("Rooms", week, mode="heat")
+    controller.tick(now=datetime(2026, 9, 21, 8, 0))  # a Monday, 08:00 is "off"
+    assert controller.applied_target("Rooms") is None

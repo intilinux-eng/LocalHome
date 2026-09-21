@@ -249,6 +249,7 @@ class ThermostatController:
         self.poll_interval_seconds = poll_interval_seconds
         self.sensor_failsafe_hours = sensor_failsafe_hours
         self._valve_open: dict[str, bool] = {}
+        self._applied_targets: dict[str, float] = {}
         self._started = False
         # Battery sensors (Shelly H&T Gen3) can go quiet for perfectly
         # normal reasons (weak WiFi, dead battery, someone unscrewing it
@@ -278,6 +279,25 @@ class ThermostatController:
             time.sleep(self.poll_interval_seconds)
 
     def tick(self, now: datetime | None = None) -> None:
+        # Rebuilt from scratch every tick and swapped in whole at the end
+        # (a single assignment - the history recorder reads it from its
+        # own thread). Only a zone whose valve this tick actually decided
+        # from a schedule target gets an entry: away, diagnostic mode, a
+        # cooling-excluded zone or an unreachable sensor all mean no target
+        # was governing the valve, and the chart should show a gap there
+        # rather than a line that implies otherwise.
+        applied: dict[str, float] = {}
+        try:
+            self._tick(now, applied)
+        finally:
+            self._applied_targets = applied
+
+    def applied_target(self, zone_name: str) -> float | None:
+        """The target the last tick actually drove this zone's valve
+        against, or None if no target was in control - see tick()."""
+        return self._applied_targets.get(zone_name)
+
+    def _tick(self, now: datetime | None, applied: dict[str, float]) -> None:
         if self.schedule_store.get_diagnostic_mode():
             # Hands off *everything*, not even a forced close - see
             # ScheduleStore.get_diagnostic_mode()'s docstring. Whatever
@@ -317,6 +337,8 @@ class ThermostatController:
             # read - a season switch landing mid-tick must not pair one
             # season's grid with the other season's heat/cool decision.
             target = self.schedule_store.get_target(zone.name, now, mode)
+            if target is not None:
+                applied[zone.name] = target
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)
             self._apply(zone, desired)
 

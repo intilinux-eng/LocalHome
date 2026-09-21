@@ -21,6 +21,16 @@ date rather than by tag.
   the one actually being applied. New `GET /api/server-time`; see
   `services/system_clock.py`. The deployment guide now sets the
   timezone as part of the first-time setup.
+- The zone chart now shows **why** a valve moved: the target the
+  thermostat actually drove it against is recorded every cycle and
+  drawn as a dashed step line with its hysteresis band, so the valve
+  bands line up visibly with the temperature leaving that band. Only a
+  target that was really in control is recorded - away, diagnostic
+  mode, an off hour, a cooling-excluded zone or an unreachable sensor
+  show as a gap rather than a line implying otherwise. The hover
+  tooltip includes the target at that moment, and no longer runs off
+  the card near the chart's edges. Starts recording from this version
+  on; earlier history has no target to show.
 - **Separate heating and cooling schedules.** Each zone now has one
   weekly grid per season, and the thermostat follows the one matching
   the current mode. With a single shared grid, switching the real

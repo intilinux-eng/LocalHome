@@ -419,6 +419,19 @@ input[type="range"]:disabled {
   margin-right: 3px;
   background: rgba(48, 209, 88, 0.35);
 }
+/* Dashed like the chart's target line, over a faint band like its
+   hysteresis band - see drawClimateChart() in app.js. */
+.legend-target {
+  width: 16px;
+  height: 8px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 3px;
+  background:
+    linear-gradient(90deg, #d9dde8 55%, transparent 55%) 0 50% / 5px 1.5px repeat-x,
+    rgba(217, 221, 232, 0.12);
+  border-radius: 2px;
+}
 
 .switch-body {
   display: flex;

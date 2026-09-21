@@ -142,6 +142,14 @@ def create_app(config_path: str | None = None) -> Flask:
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 24.0),
         )
+        # The target each zone's valve was actually driven against, recorded
+        # next to that zone's temperature so the dashboard chart can show
+        # *why* the valve opened - see ThermostatController.tick().
+        recorder.extra_samples = lambda: {
+            zone.sensor: {"target_c": target}
+            for zone in thermostat.zones
+            if (target := thermostat.applied_target(zone.name)) is not None
+        }
 
         interlocks = [
             Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
@@ -436,6 +444,9 @@ def _register_routes(app: Flask) -> None:
             mode=thermostat.schedule_store.get_mode(),
             away_until=away_until.isoformat() if away_until else None,
             diagnostic_mode=thermostat.schedule_store.get_diagnostic_mode(),
+            # For the chart's band around the target: the valve only
+            # changes state once the temperature leaves target ± this.
+            hysteresis_c=thermostat.hysteresis_c,
             zones=zones,
         )
 

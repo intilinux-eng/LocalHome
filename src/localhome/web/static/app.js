@@ -581,13 +581,19 @@ async function loadChart(sensor) {
       // temperature/humidity series - is_on is just another recorded
       // history_fields entry on that switch (see services/history.py),
       // keyed by the valve's own name instead of the sensor's.
-      const fetches = [fetch(`/api/sensors/${encodeURIComponent(sensor.name)}/history?field=temperature_c&field=humidity_pct&range=${range}`)];
+      // target_c is the target the thermostat actually drove the valve
+      // against, recorded next to the zone's own temperature (only while
+      // one was in control - see ThermostatController.tick()).
+      const fields = sensor.valve ? "field=temperature_c&field=humidity_pct&field=target_c" : "field=temperature_c&field=humidity_pct";
+      const fetches = [fetch(`/api/sensors/${encodeURIComponent(sensor.name)}/history?${fields}&range=${range}`)];
       if (sensor.valve) fetches.push(fetch(`/api/sensors/${encodeURIComponent(sensor.valve)}/history?field=is_on&range=${range}`));
       const [res, valveRes] = await Promise.all(fetches);
       const data = await res.json();
       const valveData = valveRes ? await valveRes.json() : null;
       if (data.ok) {
-        drawClimateChart(id, data.series.temperature_c, data.series.humidity_pct, range, valveData && valveData.ok ? valveData.series.is_on : null);
+        drawClimateChart(id, data.series.temperature_c, data.series.humidity_pct, range,
+          valveData && valveData.ok ? valveData.series.is_on : null,
+          sensor.valve ? (data.series.target_c || []) : null);
       }
     } catch (e) { /* keep previous render */ }
   }
@@ -695,7 +701,18 @@ function onPowerChartHover(e, id, svg, xOf, range) {
   const tooltip = document.getElementById(`tooltip-${id}`);
   tooltip.hidden = false;
   tooltip.innerHTML = `<span class="val">${nearest.value.toFixed(0)} W</span> · ${formatTime(nearest.ts, range)}`;
-  tooltip.style.left = (xOf(nearest.ts) * (rect.width / CHART_W)) + "px";
+  placeTooltip(tooltip, xOf(nearest.ts) * (rect.width / CHART_W));
+}
+
+// Centers the tooltip over the hovered point (it's styled translate(-50%)),
+// but keeps it inside its chart - near either edge it used to hang off the
+// card and get clipped, now more noticeably since the climate tooltip also
+// carries the target.
+function placeTooltip(tooltip, centerX) {
+  const container = tooltip.offsetParent;
+  const half = tooltip.offsetWidth / 2;
+  const max = container ? container.clientWidth - half : centerX;
+  tooltip.style.left = Math.max(half, Math.min(centerX, max)) + "px";
   tooltip.style.top = "0px";
 }
 
@@ -719,14 +736,38 @@ function niceBounds(values, pad, step) {
 // independent Y scale - °C on the left, % on the right - since the two
 // units have nothing to do with each other and forcing them onto one
 // scale would make at least one line uselessly flat.
-function drawClimateChart(id, tempPoints, humPoints, range, valvePoints) {
+// Bucket width per range - must match services/history.py's RANGE_BUCKETS.
+// Used to tell a real gap (no target in control) from consecutive buckets.
+const CHART_BUCKET_SECONDS = { "6h": 60, "24h": 300, "7d": 3600 };
+const TARGET_COLOR = "#d9dde8";
+
+// Splits a bucketed series into runs of consecutive buckets, so a stretch
+// with no target (away, off hours, sensor down...) shows as a gap instead
+// of a line bridging across it.
+function consecutiveRuns(points, bucketSeconds) {
+  const runs = [];
+  for (const p of points) {
+    const run = runs[runs.length - 1];
+    if (run && p.ts - run[run.length - 1].ts <= bucketSeconds * 1.5) run.push(p);
+    else runs.push([p]);
+  }
+  return runs;
+}
+
+function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetPoints) {
   const svg = document.getElementById(`chart-${id}`);
   if (!svg) return;
   svg.innerHTML = "";
   if (!tempPoints || tempPoints.length < 2 || !humPoints || humPoints.length < 2) return drawEmpty(svg);
 
   const CLIMATE_PAD_R = 34;
-  const [tMin, tMax] = niceBounds(tempPoints.map(p => p.value), 1, 2);
+  const hyst = climateHysteresis || 0;
+  const targets = targetPoints || [];
+  // The target band has to fit on the temperature axis too, or a target
+  // well above/below the room's reading would be clipped off the chart.
+  const [tMin, tMax] = niceBounds(
+    tempPoints.map(p => p.value).concat(targets.flatMap(p => [p.value - hyst, p.value + hyst])), 1, 2,
+  );
   const [hMin, hMax] = niceBounds(humPoints.map(p => p.value), 5, 10);
   const minTs = tempPoints[0].ts, maxTs = tempPoints[tempPoints.length - 1].ts;
   const plotW = CHART_W - CHART_PAD_L - CLIMATE_PAD_R, plotH = CHART_H - CHART_PAD_TOP - CHART_PAD_BOTTOM;
@@ -754,6 +795,27 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints) {
     }
   }
 
+  // The target in effect, as a step line with its hysteresis band: the
+  // valve only changes state once the temperature line leaves that band,
+  // so the three together answer "why did it open/close here" at a
+  // glance. Each bucket's value holds until the next bucket (a step).
+  const bucketSeconds = CHART_BUCKET_SECONDS[range] || 300;
+  const plotRight = CHART_W - CLIMATE_PAD_R;
+  const targetRuns = consecutiveRuns(targets, bucketSeconds);
+  for (const run of targetRuns) {
+    run.forEach((p, i) => {
+      const x1 = xOf(p.ts);
+      const x2 = Math.min(plotRight, i + 1 < run.length ? xOf(run[i + 1].ts) : xOf(p.ts + bucketSeconds));
+      if (hyst > 0) {
+        svg.appendChild(svgEl("rect", {
+          x: x1, y: yOfTemp(p.value + hyst), width: Math.max(1, x2 - x1),
+          height: Math.max(1, yOfTemp(p.value - hyst) - yOfTemp(p.value + hyst)),
+          fill: TARGET_COLOR, opacity: 0.11,
+        }));
+      }
+    });
+  }
+
   [0, 0.5, 1].forEach(frac => {
     const y = CHART_PAD_TOP + plotH * (1 - frac);
     svg.appendChild(svgEl("line", { x1: CHART_PAD_L, x2: CHART_W - CLIMATE_PAD_R, y1: y, y2: y, stroke: "#2c2c2a", "stroke-width": 1 }));
@@ -769,16 +831,31 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints) {
     const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.ts).toFixed(1)},${yOf(p.value).toFixed(1)}`).join(" ");
     svg.appendChild(svgEl("path", { d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" }));
   };
+  // Dashed and under the measured temperature, so the real reading always
+  // reads as the primary line and the target as the reference it's held to.
+  for (const run of targetRuns) {
+    let d = "";
+    run.forEach((p, i) => {
+      const x1 = xOf(p.ts);
+      const x2 = Math.min(plotRight, i + 1 < run.length ? xOf(run[i + 1].ts) : xOf(p.ts + bucketSeconds));
+      const y = yOfTemp(p.value).toFixed(1);
+      d += `${i === 0 ? "M" : "L"}${x1.toFixed(1)},${y} L${x2.toFixed(1)},${y} `;
+    });
+    svg.appendChild(svgEl("path", {
+      d, fill: "none", stroke: TARGET_COLOR, "stroke-width": 1.5, "stroke-dasharray": "4 3", opacity: 0.85,
+    }));
+  }
+
   lineFor(tempPoints, yOfTemp, TEMP_COLOR);
   lineFor(humPoints, yOfHum, HUM_COLOR);
 
   const hit = svgEl("rect", { x: CHART_PAD_L, y: 0, width: plotW, height: CHART_H, fill: "transparent" });
-  hit.addEventListener("pointermove", e => onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints));
+  hit.addEventListener("pointermove", e => onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints, targets));
   hit.addEventListener("pointerleave", () => hideTooltip(id));
   svg.appendChild(hit);
 }
 
-function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints) {
+function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valvePoints, targetPoints) {
   const rect = svg.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (CHART_W / rect.width);
   let nearest = tempPoints[0], nearestHum = humPoints[0], best = Infinity;
@@ -794,12 +871,16 @@ function onClimateChartHover(e, id, svg, xOf, tempPoints, humPoints, range, valv
       if (dist < vBest) { vBest = dist; valveOn = p.value >= 0.5; }
     }
   }
+  // The target in effect at that moment - only if one was, i.e. there's a
+  // target point in the same bucket as the hovered reading.
+  const bucketSeconds = CHART_BUCKET_SECONDS[range] || 300;
+  const target = (targetPoints || []).find(p => Math.abs(p.ts - nearest.ts) < bucketSeconds / 2);
   const tooltip = document.getElementById(`tooltip-${id}`);
   tooltip.hidden = false;
   const valveLabel = valveOn == null ? "" : ` · <span class="val" style="color:${VALVE_BAND_COLOR}">${valveOn ? tr("climate.valve_open") : tr("climate.valve_closed")}</span>`;
-  tooltip.innerHTML = `<span class="val" style="color:${TEMP_COLOR}">${nearest.value.toFixed(1)}°C</span> · <span class="val" style="color:${HUM_COLOR}">${nearestHum.value.toFixed(0)}%</span>${valveLabel} · ${formatTime(nearest.ts, range)}`;
-  tooltip.style.left = (xOf(nearest.ts) * (rect.width / CHART_W)) + "px";
-  tooltip.style.top = "0px";
+  const targetLabel = target ? ` · <span class="val" style="color:${TARGET_COLOR}">${tr("climate.target")} ${target.value.toFixed(1)}°</span>` : "";
+  tooltip.innerHTML = `<span class="val" style="color:${TEMP_COLOR}">${nearest.value.toFixed(1)}°C</span> · <span class="val" style="color:${HUM_COLOR}">${nearestHum.value.toFixed(0)}%</span>${valveLabel}${targetLabel} · ${formatTime(nearest.ts, range)}`;
+  placeTooltip(tooltip, xOf(nearest.ts) * (rect.width / CHART_W));
 }
 
 // ----------------------------------------------------------------- tabs ----
@@ -991,6 +1072,7 @@ const DEFAULT_PAINT_VALUE = { heat: 21, cool: 24 };
 
 let climateZones = [];
 let climateMode = "heat";
+let climateHysteresis = null; // thermostat-wide, from /api/climate/zones - drawn as the band around the target
 const scheduleWeeks = {};   // zone name -> working copy of its week grid
 const saveTimers = {};      // zone name -> debounce timer for schedule saves
 let paintValue = DEFAULT_PAINT_VALUE.heat;
@@ -1216,7 +1298,7 @@ function buildZoneCard(zone) {
         <svg id="chart-${chartId}" viewBox="0 0 400 130" preserveAspectRatio="none"></svg>
         <div class="chart-tooltip" id="tooltip-${chartId}" hidden></div>
       </div>
-      <div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")} <span class="legend-band" style="margin-left:10px"></span> ${tr("climate.valve_on_band")}</div>
+      <div class="limit-note"><span class="legend-dot" style="background:#ff9f0a"></span> ${tr("fields.temperature_c")} <span class="legend-dot" style="background:#3987e5;margin-left:10px"></span> ${tr("fields.humidity_pct")} <span class="legend-band" style="margin-left:10px"></span> ${tr("climate.valve_on_band")} <span class="legend-target" style="margin-left:10px"></span> ${tr("climate.target_line")}</div>
     </div>
   `;
 }
@@ -1448,6 +1530,7 @@ async function refreshClimateZonesLive() {
     if (!data.ok) return;
     const previousMode = climateMode;
     climateMode = data.mode || climateMode;
+    if (data.hysteresis_c != null) climateHysteresis = data.hysteresis_c;
     // Season switched from somewhere else (another phone, /climate-admin):
     // the palette, grid colors and even which zone cards exist all depend
     // on it, so rebuild instead of patching values into stale cards.
@@ -1590,6 +1673,7 @@ async function boot() {
 
   if (climateData.ok) {
     climateMode = climateData.mode || "heat";
+    if (climateData.hysteresis_c != null) climateHysteresis = climateData.hysteresis_c;
     climateAwayUntil = climateData.away_until || null;
     updateSeasonHeading();
     updateAwayBadge();

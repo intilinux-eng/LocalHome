@@ -93,6 +93,7 @@
     "valve_open": "Valvola aperta",
     "valve_closed": "Valvola chiusa",
     "valve_on_band": "Valvola accesa",
+    "target_line": "Target (± isteresi)",
     "no_target": "Nessun target per quest'ora",
     "status_active": "Target {target} · valvola aperta",
     "status_reached": "Target {target} raggiunto · valvola chiusa",
