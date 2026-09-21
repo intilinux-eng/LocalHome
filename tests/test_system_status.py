@@ -341,3 +341,13 @@ def test_an_unsynchronized_clock_is_a_problem():
     problems = system_status.problems([], [], {"low": False}, [], None, None, None, {"clock_synced": False})
     assert [p["code"] for p in problems] == ["clock_unsynced"]
     assert system_status.problems([], [], {"low": False}, [], None, None, None, {"clock_synced": None}) == []
+
+
+def test_problem_details_drop_the_list_of_every_driver():
+    error = ("ValueError: No driver registered for kind='switch' type='tplink_led_strip'. Driver modules skipped "
+             "for a missing package: localhome.drivers.tplink.led_strip (needs: pip install -e .[tplink]). "
+             "Available kind/type combinations: ['climate/simulated', 'switch/simulated']")
+    (problem,) = system_status.problems([], [{"kind": "switch", "type": "tplink_led_strip", "name": "Divano",
+                                              "error": error}], {"low": False})
+    assert problem["detail"].endswith("(needs: pip install -e .[tplink]).")
+    assert "Available kind/type" not in problem["detail"]

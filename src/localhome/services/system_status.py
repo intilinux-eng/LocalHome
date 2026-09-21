@@ -396,6 +396,13 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
     return {"name": name, "interval_seconds": interval_seconds, "last_ok_seconds_ago": ago, "stalled": stalled}
 
 
+def _short_error(error: str) -> str:
+    """The part of a driver error worth showing: the list of every
+    registered driver that "no driver registered" errors end with is
+    useful in the log, noise in a list of problems."""
+    return error.split(" Available kind/type combinations:")[0].strip()
+
+
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
     cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
@@ -410,7 +417,7 @@ def problems(
     found = []
     for item in failed:
         found.append({"code": "integration_failed", "subject": item.get("name") or f"{item['kind']}/{item['type']}",
-                      "detail": item["error"]})
+                      "detail": _short_error(item["error"])})
     for loop in loops:
         if loop["stalled"]:
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
