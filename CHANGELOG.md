@@ -7,6 +7,9 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- The admin panel's system status shows the board's eMMC wear (as the
+  chip reports it, in 10% steps) and its writes per day, and flags worn
+  storage as a problem.
 - Cooling palette in blues - the deeper the blue, the cooler the target -
   and a muted green for economy; previously the higher cooling setpoints
   came out orange and red, reading as "hot". Both seasons' palettes are
@@ -121,6 +124,11 @@ date rather than by tag.
   off instead of leaving it as it was.
 
 ### Fixed
+- The history database opened a new connection for every write and
+  every chart read; the last one closing folded the whole WAL back into
+  the database and deleted the -wal/-shm files, recreated on the next
+  30s cycle - on the board, ~1.3 GB a day of eMMC writes for a few KB of
+  samples. One connection is now held open and shared under a lock.
 - The thermostat compared each command with the last one it sent, not
   with the valve's real state: a relay that rebooted into "off", or was
   switched from its own app, stayed wrong until the decision itself

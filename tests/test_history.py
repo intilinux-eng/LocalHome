@@ -234,3 +234,46 @@ def test_a_failing_extra_samples_provider_does_not_lose_the_cycle(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 1
     finally:
         conn.close()
+
+
+def test_the_wal_is_kept_between_cycles(tmp_path):
+    # A connection per call deleted the -wal file on every close, so each
+    # 30s cycle wrote the WAL and the database both. Held open, it stays.
+    import os
+
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        for ts in range(1000, 1005):
+            store.record_many(ts, {"Rooms Sensor": {"temperature_c": 20.0 + ts % 3}})
+            store.query("Rooms Sensor", "temperature_c", "24h")
+        assert os.path.exists(str(tmp_path / "history.db-wal"))
+    finally:
+        store.close()
+
+
+def test_one_connection_is_safe_across_threads(tmp_path):
+    import threading
+    import time as _time
+
+    store = HistoryStore(str(tmp_path / "history.db"))
+    now = int(_time.time())
+    errors = []
+
+    def writer(n):
+        try:
+            for i in range(50):
+                store.record_many(now - i, {f"Sensor {n}": {"value": float(i)}})
+                store.query(f"Sensor {n}", "value", "6h")
+        except Exception as exc:  # pragma: no cover - the assertion reports it
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    try:
+        assert errors == []
+        assert store.stats(now)["rows"] == 200
+    finally:
+        store.close()

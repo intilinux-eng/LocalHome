@@ -287,7 +287,15 @@
     "vmc_offline_hint": "mains-powered device: check the id, that it's powered and connected to the MQTT broker.",
     "vmc_on": "On",
     "vmc_off": "Off",
-    "vmc_speed": "speed {value}%"
+    "vmc_speed": "speed {value}%",
+    "system_emmc_wear": "eMMC wear",
+    "system_emmc_normal": "{wear} (normal)",
+    "system_emmc_warning": "{wear} - using reserve blocks",
+    "system_emmc_urgent": "{wear} - nearly worn out",
+    "system_emmc_unknown": "{wear}",
+    "system_emmc_writes": "eMMC writes",
+    "system_emmc_per_day": "{amount} a day (average since boot)",
+    "system_problem_storage_wear": "{subject} storage worn: plan a replacement"
   },
   "vmc_presets": {
     "night": "Night",

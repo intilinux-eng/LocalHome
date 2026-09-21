@@ -197,3 +197,43 @@ def test_system_status_route_reports_the_failed_integration(tmp_path):
     # The recorder thread may already have written its first cycle.
     assert isinstance(body["database"]["rows"], int)
     assert body["process"]["uptime_seconds"] >= 0
+
+
+def _fake_emmc(tmp_path, life_time="0x01 0x01", pre_eol="0x01"):
+    card = tmp_path / "sys" / "class" / "mmc_host" / "mmc0" / "mmc0_0001"  # "mmc0:0001" on Linux; NTFS has no colons
+    card.mkdir(parents=True)
+    (card / "type").write_text("MMC\n")
+    (card / "name").write_text("BUTC42\n")
+    (card / "life_time").write_text(life_time + "\n")
+    (card / "pre_eol_info").write_text(pre_eol + "\n")
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    # 6183775 sectors written, as measured on the real board after ~24.8h
+    (proc / "diskstats").write_text(" 179 0 mmcblk0 1 0 2 3 273180 0 6183775 9 0 10 11\n")
+    return str(tmp_path / "sys"), str(proc)
+
+
+def test_storage_health_reads_the_emmc_wear_and_write_rate(tmp_path):
+    sys_root, proc_root = _fake_emmc(tmp_path)
+
+    health = system_status.storage_health(sys_root, proc_root, uptime_seconds=89324)
+
+    assert health["name"] == "BUTC42"
+    assert health["wear_percent_max"] == 10
+    assert health["pre_eol"] == "normal"
+    assert health["written_since_boot_bytes"] == 6183775 * 512
+    assert round(health["written_per_day_bytes"] / 1e9, 1) == 3.1
+
+
+def test_storage_health_is_none_without_an_emmc(tmp_path):
+    assert system_status.storage_health(str(tmp_path / "nothing"), str(tmp_path)) is None
+
+
+def test_a_worn_emmc_is_a_problem(tmp_path):
+    sys_root, proc_root = _fake_emmc(tmp_path, life_time="0x03 0x09", pre_eol="0x02")
+    storage = system_status.storage_health(sys_root, proc_root, uptime_seconds=3600)
+
+    problems = system_status.problems([], [], {"low": False}, [], storage)
+
+    assert storage["wear_percent_max"] == 90
+    assert [(p["code"], p["subject"]) for p in problems] == [("storage_wear", "BUTC42")]

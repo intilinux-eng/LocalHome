@@ -300,15 +300,18 @@ def _register_routes(app: Flask) -> None:
         failed = manager.failed_integrations
         skipped = skipped_driver_modules()
         disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
+        host = system_status.host_stats()
+        storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
         return jsonify(
             ok=True,
-            problems=system_status.problems(devices, failed, disk, loops),
+            problems=system_status.problems(devices, failed, disk, loops, storage),
+            storage=storage,
             failed_integrations=failed,
             skipped_driver_modules=skipped,
             devices=devices,
             loops=loops,
             process=system_status.process_stats(),
-            host=system_status.host_stats(),
+            host=host,
             disk=disk,
             database=database,
             config_path=str(config.path),

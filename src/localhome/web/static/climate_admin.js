@@ -1038,6 +1038,15 @@ function systemStatusHtml(data) {
       statRowHtml(tr("climate_admin.system_load"), h.load_average ? `${h.load_average.join(" / ")} (${h.cpu_count} CPU)` : "--"),
       statRowHtml(tr("climate_admin.system_host_uptime"), formatDuration(h.uptime_seconds)),
       statRowHtml(tr("climate_admin.system_disk"), freeOf(disk.free_bytes, disk.total_bytes), disk.low),
+      ...(data.storage ? [
+        statRowHtml(tr("climate_admin.system_emmc_wear"),
+          tr(`climate_admin.system_emmc_${data.storage.pre_eol}`, {
+            wear: data.storage.wear_percent_max == null ? "?" : `${Math.max(0, data.storage.wear_percent_max - 10)}-${data.storage.wear_percent_max}%`,
+          }),
+          data.storage.pre_eol !== "normal"),
+        statRowHtml(tr("climate_admin.system_emmc_writes"),
+          data.storage.written_per_day_bytes == null ? "--" : tr("climate_admin.system_emmc_per_day", { amount: formatBytes(data.storage.written_per_day_bytes) })),
+      ] : []),
     ].join("")],
     [tr("climate_admin.system_group_history"), [
       statRowHtml(tr("climate_admin.system_db_size"), formatBytes(db.file_bytes)),

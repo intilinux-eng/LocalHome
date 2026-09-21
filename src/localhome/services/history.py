@@ -33,22 +33,59 @@ _ON_HOURS_RANGE_START = {
 }
 
 
+class _Borrowed:
+    """The store's one connection, lent to a single caller at a time:
+    close() hands it back (releases the lock) instead of closing it."""
+
+    def __init__(self, conn: sqlite3.Connection, lock: threading.RLock):
+        self._conn = conn
+        self._lock = lock
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self) -> None:
+        self._lock.release()
+
+
 class HistoryStore:
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self._lock = threading.RLock()
+        self._conn: sqlite3.Connection | None = None
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        # timeout: the web server reads while the recorder writes - wait for
-        # the lock briefly instead of failing the request/cycle outright.
-        conn = sqlite3.connect(self.db_path, timeout=10)
-        # With WAL (set once in _init_schema), NORMAL only fsyncs at
-        # checkpoints instead of on every commit. A power cut can lose the
-        # last few seconds of samples, never corrupt the file - the right
-        # trade for a board meant to run for years on eMMC/SD, where every
-        # fsync is flash wear.
-        conn.execute("PRAGMA synchronous=NORMAL")
-        return conn
+    def _connect(self) -> _Borrowed:
+        """One connection for the store's whole life, shared under a lock.
+        A connection per call meant the last one closing checkpointed the
+        whole WAL back into the database and deleted the -wal/-shm files,
+        only for the next 30s cycle (or chart request) to recreate them -
+        every cycle paid for the WAL and the database both, plus the file
+        churn, on the board's eMMC. Held open, the WAL is folded back only
+        every ~1000 pages (SQLite's auto-checkpoint)."""
+        self._lock.acquire()
+        try:
+            if self._conn is None:
+                # timeout: another process (the CLI, a backup) may hold the
+                # database briefly - wait instead of failing the cycle.
+                conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)
+                # With WAL (set once in _init_schema), NORMAL only fsyncs at
+                # checkpoints instead of on every commit. A power cut can
+                # lose the last few seconds of samples, never corrupt the
+                # file - the right trade for a board meant to run for years
+                # on eMMC/SD, where every fsync is flash wear.
+                conn.execute("PRAGMA synchronous=NORMAL")
+                self._conn = conn
+            return _Borrowed(self._conn, self._lock)
+        except BaseException:
+            self._lock.release()
+            raise
+
+    def close(self) -> None:
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
 
     def _init_schema(self) -> None:
         import os

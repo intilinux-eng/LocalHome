@@ -8,6 +8,7 @@ can't be read on the current platform it's None, and the UI shows a dash.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import threading
@@ -146,6 +147,61 @@ def host_stats() -> dict:
     }
 
 
+def _read(path: str) -> str | None:
+    try:
+        with open(path, encoding="ascii") as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def storage_health(sys_root: str = "/sys", proc_root: str = "/proc", uptime_seconds: float | None = None) -> dict | None:
+    """The board's eMMC as it reports itself: wear in 10% steps (JEDEC
+    DEVICE_LIFE_TIME_EST, the worse of its two estimates), whether it
+    has entered its reserve blocks (PRE_EOL_INFO), and how much has been
+    written since boot, per day. None where there's no eMMC to ask (a PC,
+    an SD card)."""
+    mmc_host = os.path.join(sys_root, "class", "mmc_host")
+    try:
+        hosts = sorted(os.listdir(mmc_host))
+    except OSError:
+        return None
+    for host in hosts:
+        try:
+            cards = sorted(os.listdir(os.path.join(mmc_host, host)))
+        except OSError:
+            continue
+        for card in cards:
+            base = os.path.join(mmc_host, host, card)
+            life_time = _read(os.path.join(base, "life_time"))
+            if not life_time or _read(os.path.join(base, "type")) != "MMC":
+                continue
+            try:
+                steps = [int(v, 16) for v in life_time.split()]
+                pre_eol = int(_read(os.path.join(base, "pre_eol_info")) or "0", 16)
+            except ValueError:
+                continue
+            worst = max(steps) if steps else 0
+            written = None
+            for line in (_read(os.path.join(proc_root, "diskstats")) or "").splitlines():
+                fields = line.split()
+                if len(fields) > 9 and re.fullmatch(r"mmcblk\d+", fields[2]):
+                    written = int(fields[9]) * 512
+                    break
+            per_day = None
+            if written is not None and uptime_seconds:
+                per_day = round(written / uptime_seconds * 86400)
+            return {
+                "name": _read(os.path.join(base, "name")),
+                # 0x01 = 0-10% used ... 0x0A = 90-100%, 0x0B = past its rated life
+                "wear_percent_max": min(worst, 11) * 10 if worst else None,
+                "pre_eol": {1: "normal", 2: "warning", 3: "urgent"}.get(pre_eol, "unknown"),
+                "written_since_boot_bytes": written,
+                "written_per_day_bytes": per_day,
+            }
+    return None
+
+
 def disk_stats(path: str) -> dict:
     """Space on the disk holding `path` (the history database's folder)."""
     try:
@@ -191,7 +247,7 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
 
 
 def problems(
-    devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = ()
+    devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -209,6 +265,9 @@ def problems(
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
     if disk.get("low"):
         found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
+    if storage and (storage["pre_eol"] in ("warning", "urgent") or (storage["wear_percent_max"] or 0) >= 80):
+        found.append({"code": "storage_wear", "subject": storage.get("name") or "eMMC",
+                      "detail": f"{storage['wear_percent_max']}% - {storage['pre_eol']}"})
     for device in devices:
         if not device["ok"]:
             found.append({"code": "device_offline", "subject": device["name"], "detail": device["error"]})
