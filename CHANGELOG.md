@@ -7,7 +7,7 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
-- A pages open during an update now say so ("LocalHome was updated -
+- Pages open during an update now say so ("LocalHome was updated -
   Reload") instead of silently running the old code, and every static
   URL carries a version so no browser keeps a stale copy. Found when a
   new admin-panel status group didn't show until a reload.
