@@ -509,3 +509,16 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Recent boots - see climate_admin.js's bootsHtml(). */
+.boot-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.boot-end {
+  font-weight: 600;
+}
+.boot-end.boot-running { color: var(--accent-open); }
+.boot-end.boot-clean { color: var(--text-dim); }
+.boot-end.boot-crash { color: var(--accent-stop); }

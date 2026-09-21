@@ -7,6 +7,13 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- The system status shows when LocalHome and the board last started (and
+  for how long), the installed version (git commit and date), the
+  operating system, whether the clock is NTP-synchronized (a problem if
+  not), and the board's recent boots with how each session ended -
+  properly shut down, or interrupted (a power cut or a hang). The
+  problems box moved from the top of the page into the system status
+  section; its count stays visible in the section header.
 - Pages open during an update now say so ("LocalHome was updated -
   Reload") instead of silently running the old code, and every static
   URL carries a version so no browser keeps a stale copy. Found when a

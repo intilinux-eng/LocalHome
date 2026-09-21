@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import subprocess
 import time
 from datetime import datetime, timedelta
 
@@ -65,9 +66,25 @@ def _asset_version() -> str:
     return str(int(newest))
 
 
+def _software_version() -> dict:
+    """The installed code's commit and date, when it's a git checkout (the
+    usual install) - so it's visible whether the board runs the latest."""
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    try:
+        out = subprocess.run(["git", "-C", repo, "log", "-1", "--format=%h %cI"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return {"commit": None, "date": None}
+    parts = out.stdout.split()
+    if out.returncode != 0 or len(parts) != 2:
+        return {"commit": None, "date": None}
+    return {"commit": parts[0], "date": parts[1]}
+
+
 def create_app(config_path: str | None = None) -> Flask:
     app = Flask(__name__)
     asset_version = _asset_version()
+    app.config["SOFTWARE_VERSION"] = _software_version()
     app.config["ASSET_VERSION"] = asset_version
 
     @app.url_defaults
@@ -356,7 +373,9 @@ def _register_routes(app: Flask) -> None:
         network = system_status.network_status()
         return jsonify(
             ok=True,
-            problems=system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network),
+            problems=system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host),
+            boots=system_status.boot_history(),
+            software=app.config["SOFTWARE_VERSION"],
             network=network,
             storage=storage,
             failed_integrations=failed,

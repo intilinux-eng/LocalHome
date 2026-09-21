@@ -27,12 +27,6 @@
        section, so it frames everything below instead of following it. -->
   <p class="admin-mode-banner" id="mode-away-line"></p>
 
-  <!-- Only shown when something is wrong with the installation itself
-       (a driver that didn't load, a device gone quiet, a stalled loop,
-       a full disk) - see the system status section at the bottom and
-       GET /api/system-status. At the top so it can't be missed. -->
-  <div class="admin-problems" id="system-problems" hidden></div>
-
   <!-- The heating/cooling season: seasonal, changed twice a year, so it
        lives here (not on the dashboard) and needs the new season's name
        typed to switch - see climate_admin.js's season section. -->
@@ -255,6 +249,11 @@
       {{ t.climate_admin.system_heading }}
       <span id="system-status-summary" class="admin-broker-status"></span>
     </summary>
+    <!-- Only shown when something is wrong with the installation itself
+         (a driver that didn't load, a device gone quiet, a stalled loop,
+         a full disk) - see GET /api/system-status. The section's header
+         shows the count even while it's collapsed. -->
+    <div class="admin-problems" id="system-problems" hidden></div>
     <p class="hint-text">{{ t.climate_admin.system_note }}</p>
     <div id="system-status-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
   </details>

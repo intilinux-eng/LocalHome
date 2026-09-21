@@ -1035,6 +1035,31 @@ function networkRows(network) {
   return rows.join("");
 }
 
+function formatWhen(epochSeconds) {
+  return new Date(epochSeconds * 1000).toLocaleString(LOCALE, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+// "21 set, 18:35 (1d 4h fa)" - when, and how long it's been running.
+function sinceText(epochSeconds, uptimeSeconds) {
+  if (typeof epochSeconds !== "number") return formatDuration(uptimeSeconds);
+  return tr("climate_admin.system_since", { when: formatWhen(epochSeconds), ago: formatDuration(uptimeSeconds) });
+}
+
+function versionText(software) {
+  if (!software || !software.commit) return "--";
+  const date = software.date ? new Date(software.date).toLocaleDateString(LOCALE, { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return date ? `${software.commit} · ${date}` : software.commit;
+}
+
+function bootsHtml(boots) {
+  if (!boots || !boots.length) return "";
+  const rows = boots.map(b => `<li><span>${escapeHtml(formatWhen(b.booted_at))}</span>`
+    + `<span class="boot-end boot-${b.ended}">${escapeHtml(tr(`climate_admin.system_boot_${b.ended}`))}</span></li>`).join("");
+  return `<h3>${tr("climate_admin.system_boots_heading")}</h3>
+    <p class="hint-text">${tr("climate_admin.system_boots_note")}</p>
+    <ul class="admin-device-list boot-list">${rows}</ul>`;
+}
+
 function systemStatusHtml(data) {
   const p = data.process || {};
   const h = data.host || {};
@@ -1059,7 +1084,8 @@ function systemStatusHtml(data) {
 
   const groups = [
     [tr("climate_admin.system_group_process"), [
-      statRowHtml(tr("climate_admin.system_uptime"), formatDuration(p.uptime_seconds)),
+      statRowHtml(tr("climate_admin.system_started"), sinceText(p.started_at, p.uptime_seconds)),
+      statRowHtml(tr("climate_admin.system_version"), versionText(data.software)),
       statRowHtml(tr("climate_admin.system_ram"), `${formatBytes(p.rss_bytes)} (${tr("climate_admin.system_peak")} ${formatBytes(p.peak_rss_bytes)})`),
       statRowHtml(tr("climate_admin.system_cpu"), typeof p.cpu_percent === "number" ? `${p.cpu_percent.toFixed(1)}%` : "--"),
       statRowHtml(tr("climate_admin.system_threads"), p.threads ?? "--"),
@@ -1070,7 +1096,11 @@ function systemStatusHtml(data) {
       statRowHtml(tr("climate_admin.system_cpu_temp"),
         typeof h.cpu_temp_c === "number" ? `${h.cpu_temp_c.toFixed(0)}°C` : "--", h.cpu_temp_c >= 80),
       statRowHtml(tr("climate_admin.system_load"), h.load_average ? `${h.load_average.join(" / ")} (${h.cpu_count} CPU)` : "--"),
-      statRowHtml(tr("climate_admin.system_host_uptime"), formatDuration(h.uptime_seconds)),
+      statRowHtml(tr("climate_admin.system_last_boot"), sinceText(h.booted_at, h.uptime_seconds)),
+      statRowHtml(tr("climate_admin.system_clock"),
+        h.clock_synced == null ? "--" : tr(h.clock_synced ? "climate_admin.system_clock_ok" : "climate_admin.system_clock_bad"),
+        h.clock_synced === false),
+      statRowHtml(tr("climate_admin.system_os"), h.os ? `${h.os}${h.kernel ? ` · ${h.kernel}` : ""}` : "--"),
       statRowHtml(tr("climate_admin.system_disk"), freeOf(disk.free_bytes, disk.total_bytes), disk.low),
       ...(data.storage ? [
         statRowHtml(tr("climate_admin.system_emmc_wear"),
@@ -1117,6 +1147,7 @@ function systemStatusHtml(data) {
     <div class="admin-stat-grid">${statsHtml}</div>
     <h3>${tr("climate_admin.system_devices_heading", { count: devices.length })}</h3>
     <ul class="admin-device-list">${deviceRows}</ul>
+    ${bootsHtml(data.boots)}
     ${skippedHtml}
     <p class="hint-text admin-path">${escapeHtml(tr("climate_admin.system_config_path", { path: data.config_path }))}</p>`;
 }
@@ -1132,8 +1163,7 @@ function renderSystemProblems(problems) {
   box.hidden = false;
   box.innerHTML = `
     <strong>${tr("climate_admin.system_problems_heading", { count: problems.length })}</strong>
-    <ul>${problems.map(problemHtml).join("")}</ul>
-    <a href="#system-status" onclick="document.getElementById('system-status').open = true">${tr("climate_admin.system_problems_link")}</a>`;
+    <ul>${problems.map(problemHtml).join("")}</ul>`;
   summary.innerHTML = `<span class="admin-status bad">${tr("climate_admin.system_problems_count", { count: problems.length })}</span>`;
 }
 

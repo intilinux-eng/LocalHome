@@ -8,6 +8,7 @@ can't be read on the current platform it's None, and the UI shows a dash.
 from __future__ import annotations
 
 import os
+import platform
 import re
 import shutil
 import socket
@@ -116,6 +117,7 @@ def process_stats() -> dict:
         # start); threading only knows Python's own. Prefer the former.
         "threads": status.get("Threads") or threading.active_count(),
         "cpu_percent": _cpu_percent(),
+        "started_at": round(PROCESS_STARTED_TS),
         "python": sys.version.split()[0],
     }
 
@@ -172,8 +174,61 @@ def host_stats() -> dict:
         "mem_total_bytes": meminfo.get("MemTotal"),
         "mem_available_bytes": meminfo.get("MemAvailable"),
         "uptime_seconds": uptime,
+        "booted_at": round(time.time() - uptime) if uptime is not None else None,
         "cpu_temp_c": cpu_temperature_c(),
+        "os": _os_name(),
+        "kernel": platform.release(),
+        "clock_synced": _clock_synced(),
     }
+
+
+def _os_name() -> str | None:
+    for line in (_read("/etc/os-release") or "").splitlines():
+        if line.startswith("PRETTY_NAME="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return None
+
+
+def _clock_synced() -> bool | None:
+    """Whether systemd says the clock is synchronized over NTP - the
+    schedules run on it. None where there's no timedatectl (a PC)."""
+    try:
+        out = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = out.stdout.strip()
+    return {"yes": True, "no": False}.get(value)
+
+
+_LAST_LINE = re.compile(
+    r"^reboot\s+system boot\s+\S+\s+(\w{3} \w{3} +\d+ [\d:]+ \d{4})\s+-\s+(still running|crash|\w{3} \w{3} +\d+ [\d:]+ \d{4})"
+)
+
+
+def boot_history(limit: int = 5, run=None) -> list[dict]:
+    """The board's last boots, newest first, each with how that session
+    ended: "running" (this one), "clean" (a proper shutdown or reboot) or
+    "crash" (the power went, or the board hung) - from the system's own
+    login records (`last`). Empty where they aren't available."""
+    try:
+        out = (run or subprocess.run)(["last", "-x", "-F", "-n", str(limit), "reboot"],
+                                      capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    boots = []
+    for line in out.stdout.splitlines():
+        match = _LAST_LINE.match(line)
+        if not match:
+            continue
+        try:
+            booted = time.mktime(time.strptime(re.sub(r" +", " ", match.group(1)), "%a %b %d %H:%M:%S %Y"))
+        except ValueError:
+            continue
+        end = match.group(2)
+        boots.append({"booted_at": round(booted),
+                      "ended": "running" if end == "still running" else "crash" if end == "crash" else "clean"})
+    return boots
 
 
 def _nmcli_fields(line: str) -> list[str]:
@@ -343,7 +398,7 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
 
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
-    cpu_temp_c: float | None = None, network: dict | None = None,
+    cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -361,6 +416,8 @@ def problems(
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
     if disk.get("low"):
         found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
+    if host and host.get("clock_synced") is False:
+        found.append({"code": "clock_unsynced", "subject": "NTP", "detail": None})
     wifi = (network or {}).get("wifi") or {}
     if wifi.get("signal_percent") is not None and wifi["signal_percent"] < WIFI_WEAK_PERCENT:
         found.append({"code": "wifi_weak", "subject": wifi.get("ssid") or "Wi-Fi", "detail": f"{wifi['signal_percent']}%"})

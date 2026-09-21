@@ -309,3 +309,35 @@ def test_a_weak_wifi_signal_is_a_problem():
     network = {"wifi": {"ssid": "Casa", "signal_percent": 22}}
     problems = system_status.problems([], [], {"low": False}, [], None, None, network)
     assert [(p["code"], p["subject"]) for p in problems] == [("wifi_weak", "Casa")]
+
+
+class _Out:
+    def __init__(self, stdout):
+        self.stdout = stdout
+
+
+def test_boot_history_reads_how_each_session_ended():
+    # `last -x -F -n 5 reboot` as printed on the real UNO Q
+    output = (
+        "reboot   system boot  7.0.0-g122c2c22d Sun Sep 20 18:33:51 2026   still running\n".replace("   still", " - still")
+        + "reboot   system boot  7.0.0-g122c2c22d Sun Sep 20 18:28:40 2026 - crash                    (00:04)\n"
+        + "reboot   system boot  7.0.0-g122c2c22d Thu May 28 13:23:02 2026 - Thu May 28 14:00:10 2026  (00:37)\n"
+        + "\nwtmp begins Thu May 28 13:23:02 2026\n"
+    )
+
+    boots = system_status.boot_history(run=lambda *a, **k: _Out(output))
+
+    assert [b["ended"] for b in boots] == ["running", "crash", "clean"]
+    assert boots[0]["booted_at"] > boots[1]["booted_at"] > boots[2]["booted_at"]
+
+
+def test_boot_history_is_empty_without_last():
+    def missing(*args, **kwargs):
+        raise OSError("no last here")
+    assert system_status.boot_history(run=missing) == []
+
+
+def test_an_unsynchronized_clock_is_a_problem():
+    problems = system_status.problems([], [], {"low": False}, [], None, None, None, {"clock_synced": False})
+    assert [p["code"] for p in problems] == ["clock_unsynced"]
+    assert system_status.problems([], [], {"low": False}, [], None, None, None, {"clock_synced": None}) == []
