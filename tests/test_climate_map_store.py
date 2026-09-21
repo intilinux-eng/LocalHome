@@ -570,3 +570,8 @@ def test_vmc_card_has_modes_and_no_toggle():
     assert switch.options["hide_toggle"] is True
     assert [(p["key"], p["value"]) for p in speed.options["presets"]] == [("night", 20), ("day", 50), ("boost", 100)]
     assert speed.options["on_with_value"] is True
+
+
+def test_extra_switches_are_shown_only_while_cooling():
+    for integration in build_extra_switch_integrations(VALID_EXTRA_SWITCHES, "broker.json"):
+        assert integration.options["visible_in_mode"] == "cool"

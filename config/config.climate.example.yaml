@@ -1,0 +1,50 @@
+# LocalHome - climate only, Shelly devices only.
+#
+# For an apartment where LocalHome runs just the heating/cooling. There
+# are no devices in this file on purpose: every one is set up from the
+# admin panel (http://<board>.local:5000/climate-admin) by its Shelly id -
+# the two zones (H&T sensor + relay valve), the bathroom bypass valve,
+# the dehumidifier, the outdoor sensor and the VMC.
+#
+#   cp config/config.climate.example.yaml config/config.yaml
+#   cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
+#
+# A device that isn't installed, switched off or unreachable is never a
+# problem for the rest: its card shows it, the admin panel's system
+# status lists it, and the thermostat simply leaves that zone alone -
+# closing its valve after `sensor_failsafe_hours` without a reading.
+# See docs/deployment.md#a-new-apartment-climate-only.
+
+web:
+  host: "0.0.0.0"
+  port: 5000
+  language: "it"
+
+# Nothing here: the admin panel adds the Shelly devices.
+integrations: []
+
+thermostat:
+  # The season a fresh install starts in - after that it's switched from
+  # the admin panel's Season section and remembered in schedules.json.
+  mode: "heat"
+  # Matches the Shelly H&T Gen3's own 0.5°C reporting step.
+  hysteresis_c: 0.5
+  schedules_file: "schedules.json"
+  poll_interval_seconds: 60
+  # No reading from a zone's sensor for this long: its valve is closed.
+  sensor_failsafe_hours: 24
+  # The names below are the fixed ones the admin panel gives these two
+  # devices. If an apartment doesn't have one, leave its admin-panel field
+  # blank: LocalHome notes it once in the log and carries on.
+  mode_switches:
+    - switch: "Bathroom Bypass Valve"   # on while cooling, off while heating
+      active_in_mode: "cool"
+  mode_limited_switches:
+    - switch: "Dehumidifier"            # usable while cooling, off otherwise
+      only_in_mode: "cool"
+
+positions_file: "positions.json"
+history:
+  db_file: "data/history.db"
+  poll_interval_seconds: 30
+  retention_days: 30

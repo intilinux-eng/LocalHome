@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 
+from localhome.services.log_throttle import FailureLog
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -280,6 +281,8 @@ class ThermostatController:
         # a water-based dehumidifier fed through it); any other excluded
         # valve is held closed in cool mode - see _tick().
         self.interlock_owned_valves: dict[str, str | None] = {}
+        self._missing_valves: set[str] = set()
+        self._failures = FailureLog(logger)
 
     def start(self) -> None:
         if self._started:
@@ -484,13 +487,19 @@ class ThermostatController:
             return
         switch = self.manager.switches.get(zone.valve)
         if switch is None:
-            logger.warning("Zone %r's valve %r is not a known switch, skipping", zone.name, zone.valve)
+            if zone.valve not in self._missing_valves:  # once, not every tick
+                self._missing_valves.add(zone.valve)
+                logger.warning("Zone %r's valve %r is not a known switch, skipping", zone.name, zone.valve)
             return
         try:
             switch.turn_on() if desired_open else switch.turn_off()
         except Exception:
-            logger.exception("Failed to %s zone %r's valve %r", "open" if desired_open else "close", zone.name, zone.valve)
+            # Retried every tick until it works; logged in full once, then
+            # briefly every 10 minutes - see services/log_throttle.py.
+            self._failures.failed(zone.valve, "Failed to %s zone %r's valve %r",
+                                  "open" if desired_open else "close", zone.name, zone.valve)
             return
+        self._failures.succeeded(zone.valve)
         poller = self.manager.pollers.get(zone.valve)
         if poller is not None:
             poller.cache.merge({"is_on": desired_open})

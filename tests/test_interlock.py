@@ -235,3 +235,15 @@ def test_mode_limited_switch_is_left_to_the_user_in_its_mode():
         controller, switch = _limited("cool", is_on=is_on)
         controller.tick()
         assert switch.calls == []
+
+
+def test_a_missing_switch_is_reported_once_not_every_tick(caplog):
+    # An apartment without a bypass valve wired yet, while the config names it.
+    controller = InterlockController(
+        FakeManager(readings={}, switches={}), [], [ModeSwitch(switch="Bathroom Bypass Valve", active_in_mode="cool")],
+        mode_provider=lambda: "cool",
+    )
+    for _ in range(5):
+        controller.tick()
+    warnings = [r for r in caplog.records if "Bathroom Bypass Valve" in r.getMessage()]
+    assert len(warnings) == 1

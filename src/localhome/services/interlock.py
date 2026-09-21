@@ -34,6 +34,8 @@ import threading
 import time
 from dataclasses import dataclass
 
+from localhome.services.log_throttle import FailureLog
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,6 +79,8 @@ class InterlockController:
         self.interlocks = interlocks
         self.mode_switches = list(mode_switches)
         self.mode_limited = list(mode_limited)
+        self._missing_warned: set[str] = set()
+        self._failures = FailureLog(logger)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
         self.poll_interval_seconds = poll_interval_seconds
@@ -124,7 +128,12 @@ class InterlockController:
     def _apply(self, follower_name: str, desired_on: bool) -> None:
         switch = self.manager.switches.get(follower_name)
         if switch is None:
-            logger.warning("Interlock follower %r is not a known switch, skipping", follower_name)
+            # Normal on an apartment without that device (no bypass valve
+            # wired yet): say so once, not on every tick for as long as the
+            # process runs.
+            if follower_name not in self._missing_warned:
+                self._missing_warned.add(follower_name)
+                logger.warning("%r is named in the thermostat config but isn't a known switch - skipping it", follower_name)
             return
         current = self.manager.sensor_reading(follower_name)
         if current.get("ok") and bool(current.get("is_on")) == desired_on:
@@ -132,8 +141,9 @@ class InterlockController:
         try:
             switch.turn_on() if desired_on else switch.turn_off()
         except Exception:
-            logger.exception("Failed to %s interlock follower %r", "open" if desired_on else "close", follower_name)
+            self._failures.failed(follower_name, "Failed to %s %r", "switch on" if desired_on else "switch off", follower_name)
             return
+        self._failures.succeeded(follower_name)
         poller = self.manager.pollers.get(follower_name)
         if poller is not None:
             poller.cache.merge({"is_on": desired_on})

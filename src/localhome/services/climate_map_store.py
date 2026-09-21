@@ -427,7 +427,13 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
         device_id = (extra_switches or {}).get(key)
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
-            integrations.append(Integration("switch", "mqtt_json", _valve_integration_options(zone_shaped, display_name, broker_file)))
+            options = _valve_integration_options(zone_shaped, display_name, broker_file)
+            # Both roles only matter while cooling (the bypass keeps chilled
+            # water out of the bathroom panels, the dehumidifier runs in
+            # summer): their cards are hidden in winter, like the
+            # hand-written ones on the first installation.
+            options["visible_in_mode"] = "cool"
+            integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 
 

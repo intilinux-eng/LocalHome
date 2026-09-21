@@ -7,6 +7,12 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- `config/config.climate.example.yaml`: a climate-only, Shelly-only
+  starting point for a new apartment - no devices in the file at all,
+  every one added from the admin panel - and a deployment-guide section,
+  "A new apartment (climate only)". Soak-tested with every device
+  unreachable and with the MQTT broker down: memory, threads and the
+  control loops stayed flat, and the sensor failsafe closed the valves.
 - The system status shows when LocalHome and the board last started (and
   for how long), the installed version (git commit and date), the
   operating system, whether the clock is NTP-synchronized (a problem if
@@ -138,6 +144,14 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- A device that stays unreachable is logged in full once, then with one
+  line every 10 minutes while it keeps failing, and once more when it
+  works again - with the MQTT broker down, the control loops used to log
+  a traceback per device on every tick (hundreds of lines a minute). A
+  switch named in the thermostat config that doesn't exist is reported
+  once, not every tick.
+- The admin panel's bathroom bypass valve and dehumidifier are shown
+  only while cooling, like hand-written ones.
 - The heating/cooling season moved from the dashboard's settings gear to
   a **Season** section at the top of `/climate-admin`: two cards, the
   active one marked, each listing what that season does on this

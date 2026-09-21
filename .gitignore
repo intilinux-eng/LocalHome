@@ -6,7 +6,7 @@
 config/*.json
 config/*.yaml
 !config/*.example.json
-!config/config.example.yaml
+!config/*.example.yaml
 # Automatic backups (they include credentials) and hand-made copies.
 config/backups/
 config/*.bak-*

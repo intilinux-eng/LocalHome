@@ -85,6 +85,9 @@ sudo systemctl restart mosquitto
 
 # 4. Configure LocalHome itself - either by hand:
 cp config/config.example.yaml config/config.yaml
+#    (Heating/cooling with Shelly devices only? Copy
+#    config/config.climate.example.yaml instead - see "A new apartment
+#    (climate only)" below.)
 #    ...and the *.example.json files you need; see docs/configuration.md
 #    and docs/integrations/ - or, if every device is Shelly, skip this
 #    and use the climate admin panel instead (step 6).
@@ -126,6 +129,40 @@ Map your zones onto this home's actual Shelly device ids from
 [docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
 Remember it needs a restart (`sudo systemctl restart localhome`) after
 every save before a change actually takes effect.
+
+## A new apartment (climate only)
+
+When LocalHome only runs the heating/cooling with Shelly devices - the
+usual case for a new apartment - start from the climate-only example
+instead of `config.example.yaml` in quick start step 4:
+
+```bash
+cp config/config.climate.example.yaml config/config.yaml
+cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
+```
+
+It has no devices at all: no Tuya, Meross, eWeLink or TP-Link entries to
+remove, nothing that fails to load. Every device is added from
+`/climate-admin` by its Shelly id - the two zones (H&T sensor + relay
+valve), the bathroom bypass valve, the dehumidifier, the outdoor sensor
+and the VMC - and each Shelly's MQTT server is set to
+`<board-name>.local:1883` (see
+[Addressing](#addressing-names-not-ip-addresses)).
+
+**A device that's missing, switched off or unreachable never stops the
+rest.** Tested with every device of the configuration unreachable, and
+with the MQTT broker itself down:
+
+- its card and the admin panel's system status show it as not
+  responding; nothing else changes;
+- the thermostat leaves a zone without a sensor reading alone, and after
+  `sensor_failsafe_hours` (24 by default) closes its valve;
+- a zone with no schedule for the current hour keeps its valve closed;
+- a device named in `mode_switches`/`mode_limited_switches` that the
+  apartment doesn't have (no bypass valve wired, say) is noted once in
+  the log and skipped;
+- memory, threads and the control loops stay flat - see the admin
+  panel's system status on the board.
 
 ## Updating LocalHome on the board
 
