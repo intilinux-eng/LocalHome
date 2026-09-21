@@ -73,3 +73,20 @@ def test_a_missing_directory_is_created_on_save(tmp_path):
     save_cached(cache_path, BROKER, "shelly/status/temperature:0", {"tC": 21.5}, 1000.0)
 
     assert load_cached(cache_path, BROKER, "shelly/status/temperature:0") == ({"tC": 21.5}, 1000.0)
+
+
+def test_a_re_addressed_broker_keeps_the_last_reading(tmp_path):
+    # The broker moved from its IP to "localhost" - same broker, same topic.
+    path = str(tmp_path / "mqtt_state_cache.json")
+    save_cached(path, {"host": "192.168.1.28", "port": 1883}, "sensor/status/temperature:0", {"tC": 21.5}, 1000.0)
+
+    assert load_cached(path, {"host": "localhost", "port": 1883}, "sensor/status/temperature:0") == ({"tC": 21.5}, 1000.0)
+    assert load_cached(path, {"host": "localhost", "port": 1883}, "other/topic") is None
+
+
+def test_the_newest_reading_wins_across_addresses(tmp_path):
+    path = str(tmp_path / "mqtt_state_cache.json")
+    save_cached(path, {"host": "a"}, "t", {"v": 1}, 100.0)
+    save_cached(path, {"host": "b"}, "t", {"v": 2}, 200.0)
+
+    assert load_cached(path, {"host": "c"}, "t") == ({"v": 2}, 200.0)

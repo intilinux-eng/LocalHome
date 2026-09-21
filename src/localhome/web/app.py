@@ -922,6 +922,10 @@ def _register_routes(app: Flask) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    # One INFO line per HTTP request was ~98% of everything this process
+    # logged - ~33k lines a day with a dashboard open, all rewritten to the
+    # board's eMMC by journald. Errors (a bad request, a 500) still show.
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = create_app()
     config = app.config["LOCALHOME_CONFIG"]
     app.run(host=config.web_host, port=config.web_port, debug=False)

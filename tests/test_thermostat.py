@@ -708,3 +708,41 @@ def test_cool_disabled_valve_opened_by_hand_is_closed_again(tmp_path):
     controller.tick(now=datetime(2026, 9, 14, 14, 1))
 
     assert switch.calls == ["off", "off"]
+
+
+def test_a_valve_that_drifted_from_the_last_command_is_corrected(tmp_path):
+    # Heating, valve commanded open - then the relay reboots into "off"
+    # (or is switched off from its own app). The decision is still "open",
+    # so the old check "same as my last command? skip" never resent it.
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    readings = {"Rooms Temp": {"ok": True, "temperature_c": 18.0}, "Rooms Valve": {"ok": True, "is_on": False}}
+    manager = FakeManager(readings=readings, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    store.set_week("Rooms", _flat_week(22.0))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+    readings["Rooms Valve"] = {"ok": True, "is_on": True}
+    controller.tick(now=datetime(2026, 9, 14, 8, 1))  # really open: nothing to send
+    readings["Rooms Valve"] = {"ok": True, "is_on": False}  # relay rebooted
+    controller.tick(now=datetime(2026, 9, 14, 8, 2))
+
+    assert switch.calls == ["on", "on"]
+
+
+def test_an_offline_valve_is_not_commanded_on_every_tick(tmp_path):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    readings = {"Rooms Temp": {"ok": True, "temperature_c": 18.0}, "Rooms Valve": {"ok": False, "error": "offline"}}
+    manager = FakeManager(readings=readings, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    store.set_week("Rooms", _flat_week(22.0))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    for minute in range(3):
+        controller.tick(now=datetime(2026, 9, 14, 8, minute))
+
+    assert switch.calls == ["on"]

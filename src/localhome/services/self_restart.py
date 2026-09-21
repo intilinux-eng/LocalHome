@@ -5,10 +5,14 @@ can offer a "Restart LocalHome" button instead of every saved change
 (a new zone mode, a broker setting, an extra switch) requiring someone
 to SSH in and restart the process by hand before it takes effect.
 
-On Linux (the deployment target) this is a real execve() syscall: the
-old process's listening socket closes as part of that same transition
-(Python sockets are non-inheritable across exec by default since PEP
-446), so the new process's bind() doesn't race it.
+On Linux (the deployment target) this is a real execve() syscall. Python
+sockets are normally non-inheritable across exec (PEP 446), but
+werkzeug's run_simple() - the server Flask's app.run() uses - marks its
+listening socket inheritable on purpose (for its own reloader) and
+records it in WERKZEUG_SERVER_FD. Left like that, the new process
+inherited port 5000 still bound, failed with "Address already in use"
+and only came back because systemd restarts it on failure (seen on the
+real board). _release_server_socket() undoes that just before the exec.
 
 On Windows this is considerably worse than "a small window that might
 race" - confirmed empirically, not just in theory: the C runtime's
@@ -35,11 +39,24 @@ def is_supported() -> bool:
     return not sys.platform.startswith("win")
 
 
+def _release_server_socket() -> None:
+    """Keeps werkzeug's listening socket from surviving the exec - see
+    the module docstring."""
+    fd = os.environ.pop("WERKZEUG_SERVER_FD", None)
+    if fd is None:
+        return
+    try:
+        os.set_inheritable(int(fd), False)
+    except (OSError, ValueError):
+        pass  # already closed, or not a number - nothing left to release
+
+
 def _restart() -> None:
     # A short delay so the HTTP response confirming the request was
     # received can flush back to the browser before the process
     # actually turns over.
     time.sleep(1.0)
+    _release_server_socket()
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 

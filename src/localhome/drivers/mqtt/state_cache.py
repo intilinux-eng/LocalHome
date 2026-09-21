@@ -64,7 +64,16 @@ def load_cached(cache_path: str, broker: dict, topic: str) -> tuple[Any, float] 
     from a previous run, or None (a fresh setup, or a cache that
     predates this topic being added)."""
     with _lock:
-        entry = _read_all(cache_path).get(_key(broker, topic))
+        data = _read_all(cache_path)
+    entry = data.get(_key(broker, topic))
+    if entry is None:
+        # Same topic under a different broker address - the broker was
+        # re-addressed (e.g. an IP replaced by "localhost" or a .local
+        # name), not replaced: without this, every battery sensor lost its
+        # last reading and read as unreachable until it next woke up. The
+        # newest match wins if several addresses have one.
+        matches = [e for k, e in data.items() if k.split("/", 1)[-1] == topic and isinstance(e, dict)]
+        entry = max(matches, key=lambda e: e.get("received_at") or 0, default=None)
     if entry is None:
         return None
     return entry.get("payload"), entry.get("received_at")

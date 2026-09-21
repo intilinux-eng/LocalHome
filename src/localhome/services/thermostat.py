@@ -347,11 +347,8 @@ class ThermostatController:
                 # season can't keep feeding chilled water to these panels.
                 if self.valve_owned_by_interlock(zone.valve, mode):
                     continue
-                # Checked against the valve's real state every tick, not
-                # just the last command sent: opened by hand (or by anything
-                # else) it closes again at the next tick.
-                if self.manager.sensor_reading(zone.valve).get("is_on"):
-                    self._valve_open.pop(zone.name, None)
+                # _apply() checks the valve's real state, so one opened by
+                # hand (or by anything else) closes again at the next tick.
                 self._apply(zone, False)
                 continue
             reading = self.manager.sensor_reading(zone.sensor)
@@ -458,7 +455,25 @@ class ThermostatController:
         return previously_open  # inside the dead band - keep doing whatever it was doing
 
     def _apply(self, zone: Zone, desired_open: bool) -> None:
-        if self._valve_open.get(zone.name) == desired_open:
+        # Compared with the valve's real state whenever it's answering, not
+        # just with the last command sent: a relay that rebooted into "off",
+        # or was switched from its own app, used to stay wrong until the
+        # decision itself changed - a heating zone with a closed valve kept
+        # cooling down, the thermostat convinced it was open. The last
+        # command is only the fallback while the valve isn't answering, so
+        # an offline valve isn't sent a command on every tick.
+        reading = self.manager.sensor_reading(zone.valve)
+        if reading.get("ok") and "is_on" in reading:
+            if bool(reading["is_on"]) == desired_open:
+                self._valve_open[zone.name] = desired_open
+                return
+            if self._valve_open.get(zone.name) == desired_open:
+                logger.warning(
+                    "Zone %r's valve %r is %s but should be %s - sending the command again",
+                    zone.name, zone.valve, "open" if reading["is_on"] else "closed",
+                    "open" if desired_open else "closed",
+                )
+        elif self._valve_open.get(zone.name) == desired_open:
             return
         switch = self.manager.switches.get(zone.valve)
         if switch is None:

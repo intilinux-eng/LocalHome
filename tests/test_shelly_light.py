@@ -167,3 +167,13 @@ def test_value_alone_leaves_the_output_as_it_is_by_default(fake_connection):
     driver.set_value(20)
 
     assert "on" not in json.loads(fake_connection.published[0][1])["params"]
+
+
+def test_default_reply_address_is_unique_to_this_process(fake_connection):
+    # Two LocalHome instances on one broker must not read each other's replies.
+    from localhome.drivers.mqtt import rpc
+
+    client = ShellyRpcClient(BROKER, DEVICE_ID)
+
+    assert client._reply_topic == f"{rpc.PROCESS_REPLY_ID}/rpc"
+    assert rpc.PROCESS_REPLY_ID.startswith("localhome-") and rpc.PROCESS_REPLY_ID != "localhome"

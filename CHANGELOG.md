@@ -121,6 +121,28 @@ date rather than by tag.
   off instead of leaving it as it was.
 
 ### Fixed
+- The thermostat compared each command with the last one it sent, not
+  with the valve's real state: a relay that rebooted into "off", or was
+  switched from its own app, stayed wrong until the decision itself
+  changed - a heating zone could keep cooling down with its valve shut.
+  It now checks the real state whenever the valve is answering (and
+  logs the correction), falling back to its last command only while the
+  valve is offline.
+- The admin panel's "Restart LocalHome" failed on the board with
+  "Address already in use" (systemd brought it back 5s later): werkzeug
+  marks its listening socket inheritable, so it survived the re-exec.
+  It's now released just before.
+- Shelly RPC replies went to a fixed `localhome/rpc` address: two
+  LocalHome instances on one broker (a dev PC and the board) could take
+  each other's replies - ids start at 1 in both - as their own. The
+  reply address is now unique per process.
+- Changing the broker's address (an IP to `localhost` or a `.local`
+  name) dropped every MQTT device's saved last reading, so battery
+  sensors read as unreachable until they next woke up (up to 2h). The
+  same topic under the old address is used now.
+- One log line per HTTP request made up ~98% of LocalHome's log
+  (~33k lines a day with a dashboard open), all written to the board's
+  eMMC by journald. Request logging is off; errors still show.
 - Translated texts with the same placeholder twice (e.g. `{driver}`)
   only filled in the first one.
 - The VMC speed set from the dashboard was never applied: LocalHome

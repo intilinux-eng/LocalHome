@@ -27,15 +27,24 @@ from __future__ import annotations
 import itertools
 import json
 import threading
+import uuid
 from typing import Any
 
 from localhome.drivers.mqtt.client import get_connection
 
 _next_id = itertools.count(1)
 
+# The reply address (the device answers on "<reply_id>/rpc"), unique per
+# process. A fixed "localhome" meant two LocalHome instances on one broker
+# (a dev PC and the board, say) each received the other's replies - and
+# since both count request ids from 1, a reply to the other instance's
+# request could be taken as the answer to this one.
+PROCESS_REPLY_ID = f"localhome-{uuid.uuid4().hex[:8]}"
+
 
 class ShellyRpcClient:
-    def __init__(self, broker: dict, device_id: str, reply_id: str = "localhome", timeout: float = 5.0):
+    def __init__(self, broker: dict, device_id: str, reply_id: str | None = None, timeout: float = 5.0):
+        reply_id = reply_id or PROCESS_REPLY_ID
         self._device_id = device_id
         self._request_topic = f"{device_id}/rpc"
         self._reply_topic = f"{reply_id}/rpc"
