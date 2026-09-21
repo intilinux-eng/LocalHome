@@ -29,6 +29,20 @@ system's own Python is used for). See
 unit that keeps this running after you close the SSH session, instead of
 dying with it.
 
+**Every MQTT device stopped reporting at once, e.g. after a router reboot**
+The board probably got a new IP address from the router's DHCP, and the
+devices (or `config/mqtt_broker.json`) still point at the old one.
+Check the board's current address with `hostname -I`, then move every
+link to names so it can't happen again: `"host": "localhost"` in
+`mqtt_broker.json`, and `<name>.local:1883` as each device's MQTT
+server - see
+[docs/deployment.md#addressing-names-not-ip-addresses](deployment.md#addressing-names-not-ip-addresses).
+If the devices already use the name, check the name is still
+announced: `systemctl status avahi-daemon` and `journalctl -u
+avahi-daemon | grep -iE "host name is|conflict"` on the board, then
+`ping <name>.local` from a PC (not from the board itself - its own
+resolver may not look up its own `.local` name).
+
 **`FileNotFoundError: Config file not found: .../config/config.yaml`**
 You haven't created your own config yet:
 ```bash

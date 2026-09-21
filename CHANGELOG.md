@@ -7,6 +7,17 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- Deployment guide: **"Addressing: names, not IP addresses"** - how to
+  keep an install working when the router's DHCP changes the board's
+  IP, with no router changes: LocalHome reaches mosquitto at
+  `localhost`, every device reaches the broker at `<name>.local:1883`,
+  people reach the dashboard at `http://<name>.local:5000`. Covers what
+  that makes the board's hostname responsible for (choose it before
+  configuring devices, keep it unique, keep avahi running, same network
+  segment), setting a Shelly's MQTT server including battery devices,
+  and fallbacks (the router's DNS name, a static IP set on the board).
+  The quick start now sets the hostname and installs avahi in step 1;
+  `mqtt_broker.example.json` and the admin panel default to `localhost`.
 - The VMC is configurable from `/climate-admin` like the other Shelly
   devices: one device id of its Shelly 0/1-10V Dimmer Gen3 builds the
   on/off switch "VMC" and its "VMC Speed" slider, with a live

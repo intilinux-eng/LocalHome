@@ -41,6 +41,22 @@ sudo apt install -y git mosquitto python3-venv || sudo apt install -y git mosqui
 sudo timedatectl set-timezone Europe/Rome   # your own zone - `timedatectl list-timezones`
 timedatectl                                  # -> "Time zone: Europe/Rome", "synchronized: yes"
 
+#    Give the board its permanent name now, before any device is
+#    pointed at it: from here on your browser and every device reach it
+#    by this name, never by its IP, so the router's DHCP can change the
+#    IP freely. Choose it once - renaming later means reconfiguring
+#    every device. Read "Addressing: names, not IP addresses" below:
+sudo hostnamectl set-hostname localhome            # your choice; unique on the LAN
+sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tlocalhome/" /etc/hosts
+sudo apt install -y avahi-daemon libnss-mdns       # announces it as localhome.local
+sudo systemctl restart avahi-daemon
+journalctl -u avahi-daemon | grep "Host name is" | tail -1   # -> "Host name is localhome.local"
+#    ...and from your PC/phone: ping localhome.local -> answers with the
+#    board's current IP. (Don't test the .local name from the board
+#    itself: its own resolver may not look up its own .local name, while
+#    every other device does. LocalHome doesn't need it - it uses
+#    localhost.)
+
 # 2. Get the code and its dependencies - a normal user account is fine,
 #    no dedicated system user needed for a single-purpose device:
 git clone <this-repo> ~/localhome
@@ -72,6 +88,10 @@ cp config/config.example.yaml config/config.yaml
 #    ...and the *.example.json files you need; see docs/configuration.md
 #    and docs/integrations/ - or, if every device is Shelly, skip this
 #    and use the climate admin panel instead (step 6).
+#    MQTT: config/mqtt_broker.json's "host" is "localhost" - mosquitto
+#    runs on this same board (step 3), so LocalHome reaches it with no
+#    IP address at all. Devices use the board's name instead, see
+#    "Addressing: names, not IP addresses" below.
 
 # 5. Sanity-check before trusting it to run unattended:
 .venv/bin/localhome-cli doctor
@@ -84,7 +104,8 @@ sudo cp deploy/localhome.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now localhome
 sudo systemctl status localhome
-# -> dashboard at http://<device-ip>:5000 ; logs: sudo journalctl -u localhome -f
+# -> dashboard at http://localhome.local:5000 (the name from step 1)
+#    logs: sudo journalctl -u localhome -f
 ```
 
 If step 1's `python3-venv` package isn't found, or step 2's `python3 -m
@@ -100,6 +121,89 @@ Map your zones onto this home's actual Shelly device ids from
 [docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
 Remember it needs a restart (`sudo systemctl restart localhome`) after
 every save before a change actually takes effect.
+
+## Addressing: names, not IP addresses
+
+**Read this before pointing any device at the board.** Most home
+routers hand out IP addresses by DHCP, and nothing guarantees the board
+keeps the same one: a router reboot, a lease expiring while the board
+was off, or a router replacement can all move it. Anything configured
+with the board's IP address then silently stops working - the Shelly
+devices stop reporting, a bookmarked dashboard stops loading.
+
+The fix doesn't need any change on the router: every link to the board
+uses a **name** instead of an address.
+
+| Who connects | To what | Use |
+|---|---|---|
+| LocalHome | the MQTT broker (mosquitto, on the same board) | `"host": "localhost"` in `config/mqtt_broker.json` |
+| Every Shelly / MQTT device | the MQTT broker | `<name>.local:1883` as the device's MQTT server |
+| You (browser, phone) | the dashboard | `http://<name>.local:5000` |
+
+`<name>` is the board's hostname (step 1 of the quick start above). The
+board announces it on the LAN over mDNS (`avahi-daemon`), so
+`<name>.local` always resolves to whatever IP it has right now.
+Windows 10+, macOS, iOS and Android 12+ resolve `.local` names with no
+setup.
+
+The result: **the installation no longer depends on any IP address -
+it depends on the board's name.** Treat that name accordingly:
+
+1. **Choose it once, before configuring any device.** Every device
+   stores the name in its own settings. Renaming the board later means
+   changing it on every single device again, battery ones included.
+2. **Keep it unique on the LAN.** If a second machine answers to the
+   same name (a spare board being tested, a cloned SD card/image),
+   `avahi-daemon` silently renames one of them to `<name>-2.local` and
+   devices may end up talking to the wrong one. `journalctl -u
+   avahi-daemon | grep -i conflict` shows it happening.
+3. **Keep `avahi-daemon` running and enabled** (`systemctl is-enabled
+   avahi-daemon`). It is what answers `<name>.local` - without it the
+   name stops resolving even though the board is up. Check the name it
+   announces with `journalctl -u avahi-daemon | grep "Host name is"`,
+   and test it from another machine (`ping <name>.local`) - not from the
+   board itself, whose own resolver may not look up its own `.local`
+   name even while every other device does.
+4. **mDNS doesn't cross network segments.** Devices on a guest WiFi, a
+   separate VLAN, or an access point with client isolation turned on
+   can't see `.local` names. Keep the board and its devices on the same
+   network.
+
+### Setting a Shelly's MQTT server to the board's name
+
+In the Shelly app or the device's own web page: **Settings -> MQTT**,
+set the server to `<name>.local:1883`, save. The device reboots and
+reconnects by name.
+
+- **Battery devices (H&T sensors)** are asleep most of the time and only
+  accept a settings change while awake: press the device's button, then
+  change and save within the next minute or so. The new server is used
+  from its next wake-up (a report, at the latest after its ~2h
+  heartbeat).
+- **Check it worked** from the board itself - each device shows up by
+  its id as it connects:
+  ```bash
+  sudo grep "New client connected" /var/log/mosquitto/mosquitto.log | tail
+  ```
+  or in `/climate-admin`, where the device's status turns to reporting.
+- Confirmed on a real install: a Shelly 0/1-10V Dimmer Gen3 resolves the
+  board's `.local` name by itself and connects with it.
+
+### If a device can't resolve `.local`
+
+- **The router's own DNS name.** Most home routers also register each
+  DHCP client's hostname in their DNS, under a suffix that depends on
+  the router (`.home`, `.lan`, `.fritz.box`, ...). Find it with `ping
+  <name>` from a PC on the LAN - the reply shows the full name, e.g.
+  `<name>.home`. That's ordinary DNS, which any device using the router
+  as its DNS server can resolve.
+- **Last resort: a static IP set on the board itself**, outside the
+  router's DHCP range (read the range from the router's settings page -
+  nothing needs changing there). With NetworkManager:
+  `sudo nmcli con mod <connection> ipv4.method manual ipv4.addresses
+  192.168.1.250/24 ipv4.gateway 192.168.1.1 ipv4.dns 192.168.1.1`, then
+  `sudo nmcli con up <connection>`. Pick an address outside the DHCP
+  range, or the router may hand the same address to another device.
 
 ## Docker
 

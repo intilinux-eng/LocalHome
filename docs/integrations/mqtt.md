@@ -45,13 +45,16 @@ If your devices get their IP from DHCP (the common case, and no
 different from any other WiFi gadget on your LAN), you don't need
 static IPs or DHCP reservations for MQTT specifically - LocalHome never
 talks to a device's IP at all. Each device pushes its own state to the
-*broker* (whatever fixed host you set in `mqtt_broker.json`), and
+*broker* (whatever host you set in `mqtt_broker.json`), and
 LocalHome only ever talks to that broker; if a device's IP changes, it
 just reconnects to the same broker from the new one and nothing here
 needs to know. The one address that has to stay reachable is the
-broker's own - typically something you run yourself (Mosquitto on the
-same machine as LocalHome, or on a small always-on box), so keeping
-that one on a static IP/DHCP reservation is enough.
+broker's own - and that doesn't need a fixed IP either: with mosquitto
+on the same board as LocalHome, `mqtt_broker.json` says `localhost`,
+and every device is configured with the board's **name**
+(`<name>.local:1883`) instead of its IP. See
+[docs/deployment.md#addressing-names-not-ip-addresses](../deployment.md#addressing-names-not-ip-addresses) -
+it also covers what that makes the board's name responsible for.
 
 That said, on its own this can't tell "device is offline" from "device
 just hasn't changed state in a while" - MQTT only pushes when the
@@ -154,13 +157,16 @@ cp config/mqtt_broker.example.json config/mqtt_broker.json
 
 ```json
 {
-  "host": "192.168.1.5",
+  "host": "localhost",
   "port": 1883,
   "username": "mqtt_user",
   "password": "mqtt_password"
 }
 ```
 
+`localhost` when mosquitto runs on the same board as LocalHome (the
+usual setup). A broker on another machine: use that machine's name
+(`broker.local`), not its IP - an IP handed out by DHCP can change.
 Omit `username`/`password` for an anonymous-access broker. Every
 `mqtt_json` integration below references this same file via
 `broker_file`.
