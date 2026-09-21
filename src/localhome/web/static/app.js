@@ -978,30 +978,65 @@ function updateNowHighlight() {
 }
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const SCHEDULE_PRESETS = [null, 16, 18, 20, 21, 22, 24];
+// Each season paints from its own range: heating setpoints live around
+// 16-24C, cooling ones around 20-27C, and offering 16/18 while cooling (or
+// 27 while heating) is just noise. 19 fills the 18-20 gap in heating.
+// There's still one weekly grid per zone, shared by both seasons - this
+// only changes what you can paint with and how it's colored.
+const SCHEDULE_PRESETS = {
+  heat: [null, 16, 18, 19, 20, 21, 22, 24],
+  cool: [null, 20, 21, 22, 23, 24, 25, 26, 27],
+};
+const DEFAULT_PAINT_VALUE = { heat: 21, cool: 24 };
 
 let climateZones = [];
 let climateMode = "heat";
 const scheduleWeeks = {};   // zone name -> working copy of its week grid
 const saveTimers = {};      // zone name -> debounce timer for schedule saves
-let paintValue = 21;
+let paintValue = DEFAULT_PAINT_VALUE.heat;
 let isPainting = false;
+
+function schedulePresets() {
+  return SCHEDULE_PRESETS[climateMode] || SCHEDULE_PRESETS.heat;
+}
+
+// Keeps the selected brush valid across a season switch - a heating 18
+// isn't on the cooling palette, and painting with an invisible value
+// would be confusing.
+function ensurePaintValueForMode() {
+  if (!schedulePresets().includes(paintValue)) paintValue = DEFAULT_PAINT_VALUE[climateMode] ?? DEFAULT_PAINT_VALUE.heat;
+}
 
 // A continuous hue ramp put 4 of the 6 preset values (18/20/21/22) all in
 // the same green band, hard to tell apart at a glance - see user feedback.
-// These stops instead give each preset its own clearly-named color (blue,
-// teal, green, gold, orange, red); values in between (e.g. old data outside
-// the current presets) interpolate between the nearest two stops.
-const TEMP_COLOR_STOPS = [
-  { v: 16, h: 212, s: 70, l: 50 },
-  { v: 18, h: 184, s: 65, l: 42 },
-  { v: 20, h: 140, s: 55, l: 42 },
-  { v: 21, h: 48, s: 75, l: 48 },
-  { v: 22, h: 28, s: 80, l: 50 },
-  { v: 24, h: 4, s: 70, l: 52 },
-];
+// These stops instead give each preset its own clearly-named color;
+// values in between (e.g. old data outside the current presets)
+// interpolate between the nearest two stops. Cooling gets its own stops:
+// on the heating scale 24-27 would all come out the same red. Both run
+// cold-colored to warm-colored, so a lower setpoint always reads "colder".
+const TEMP_COLOR_STOPS = {
+  heat: [
+    { v: 16, h: 212, s: 70, l: 50 },
+    { v: 18, h: 184, s: 65, l: 42 },
+    { v: 19, h: 162, s: 58, l: 40 },
+    { v: 20, h: 140, s: 55, l: 42 },
+    { v: 21, h: 48, s: 75, l: 48 },
+    { v: 22, h: 28, s: 80, l: 50 },
+    { v: 24, h: 4, s: 70, l: 52 },
+  ],
+  cool: [
+    { v: 20, h: 228, s: 65, l: 52 },
+    { v: 21, h: 208, s: 70, l: 48 },
+    { v: 22, h: 190, s: 68, l: 42 },
+    { v: 23, h: 168, s: 55, l: 40 },
+    { v: 24, h: 140, s: 55, l: 42 },
+    { v: 25, h: 48, s: 75, l: 48 },
+    { v: 26, h: 28, s: 80, l: 50 },
+    { v: 27, h: 4, s: 70, l: 52 },
+  ],
+};
 function tempColor(value) {
-  const stops = TEMP_COLOR_STOPS;
+  const stops = TEMP_COLOR_STOPS[climateMode] || TEMP_COLOR_STOPS.heat;
   if (value <= stops[0].v) return `hsl(${stops[0].h}, ${stops[0].s}%, ${stops[0].l}%)`;
   for (let i = 0; i < stops.length - 1; i++) {
     const a = stops[i], b = stops[i + 1];
@@ -1143,7 +1178,7 @@ function buildZoneCard(zone) {
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
 
       <div class="sched-palette">
-        ${SCHEDULE_PRESETS.map(v => `
+        ${schedulePresets().map(v => `
           <button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
                   style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : v}</button>
         `).join("")}
@@ -1185,6 +1220,7 @@ function buildZoneCard(zone) {
 }
 
 function renderClimateZones() {
+  ensurePaintValueForMode();
   const container = document.getElementById("climate-zones");
   const toggleLabel = document.querySelector(".mode-toggle");
   if (!climateZones.length) {
@@ -1383,7 +1419,15 @@ async function refreshClimateZonesLive() {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
     if (!data.ok) return;
+    const previousMode = climateMode;
     climateMode = data.mode || climateMode;
+    // Season switched from somewhere else (another phone, /climate-admin):
+    // the palette, grid colors and even which zone cards exist all depend
+    // on it, so rebuild instead of patching values into stale cards.
+    if (climateMode !== previousMode) {
+      await rerenderClimateForSeason(data);
+      return;
+    }
     climateAwayUntil = data.away_until || null;
     // A zone's underlying sensor/valve driver *name* can change without
     // this page reloading - a climate-admin save+restart while this tab
@@ -1435,6 +1479,22 @@ async function refreshClimateZonesLive() {
   } catch (e) { /* keep last render */ }
 }
 
+// Everything that depends on the season, rebuilt together: heading and
+// toggle, which zone cards exist, and each card's palette and grid colors
+// (both season-specific - see SCHEDULE_PRESETS / TEMP_COLOR_STOPS).
+async function rerenderClimateForSeason(zonesData) {
+  updateSeasonHeading();
+  applyClimateModeVisibility();
+  const toggle = document.getElementById("climate-mode-toggle");
+  if (toggle) toggle.checked = climateMode === "cool";
+  climateAwayUntil = zonesData.away_until || null;
+  updateAwayBadge();
+  climateZones = zonesData.zones;
+  renderClimateZones();
+  for (const zone of climateZones) await loadZoneSchedule(zone.name);
+  updateNowHighlight();
+}
+
 async function onModeToggle(el) {
   const mode = el.checked ? "cool" : "heat";
   try {
@@ -1450,20 +1510,16 @@ async function onModeToggle(el) {
       return;
     }
     climateMode = mode;
-    updateSeasonHeading();
-    applyClimateModeVisibility();
     // A full reload, not just refreshClimateZonesLive()'s in-place patch:
     // switching mode can change *which* zone cards should even exist (a
     // cool_enabled:false zone's card only appears in heat mode), which a
     // live-patch of already-rendered cards can't add or remove.
     const zonesRes = await fetch("/api/climate/zones").then(r => r.json()).catch(() => null);
     if (zonesRes && zonesRes.ok) {
-      climateAwayUntil = zonesRes.away_until || null;
-      updateAwayBadge();
-      climateZones = zonesRes.zones;
-      renderClimateZones();
-      for (const zone of climateZones) await loadZoneSchedule(zone.name);
-      updateNowHighlight();
+      await rerenderClimateForSeason(zonesRes);
+    } else {
+      updateSeasonHeading();
+      applyClimateModeVisibility();
     }
   } catch (e) {
     alert(tr("sensors.request_failed"));

@@ -21,6 +21,14 @@ date rather than by tag.
   the one actually being applied. New `GET /api/server-time`; see
   `services/system_clock.py`. The deployment guide now sets the
   timezone as part of the first-time setup.
+- The weekly schedule palette now depends on the season: heating paints
+  from 16/18/**19**/20/21/22/24 (19 fills the 18-20 gap), cooling from
+  its own 20-27 range, each with its own color scale - on the heating
+  scale 24-27 would all have come out the same red. The weekly grid is
+  still shared by both seasons; only the brush and colors change. A
+  season switched from another device now re-draws an already-open
+  dashboard's palette and grid within one refresh, instead of leaving
+  the previous season's palette in place until a reload.
 
 ### Fixed
 - The TP-Link LED strip drivers opened a python-kasa connection on
