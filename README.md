@@ -29,6 +29,13 @@ ids - no real hardware needed to see this for yourself.
 
 ## Quick start
 
+**The reference installation is an Arduino UNO Q controlling one
+apartment's heating/cooling with Shelly devices, managed entirely from
+the web admin panel** - see [docs/arduino-uno-q.md](docs/arduino-uno-q.md)
+for that path from a new board to years of unattended running. The
+steps below are the generic ones, for trying LocalHome on any computer.
+
+
 ```bash
 git clone <this-repo> && cd <the-cloned-directory>
 python3 -m venv .venv
@@ -149,6 +156,7 @@ and why they're split this way.
 
 ## Documentation
 
+- [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: Arduino UNO Q, Shelly-only climate control, limits, tuning, updating
 - [ARCHITECTURE.md](ARCHITECTURE.md) - the driver/registry/manager design and why it looks like this
 - [docs/configuration.md](docs/configuration.md) - full config.yaml reference, including optional web auth
 - [docs/adding-a-driver.md](docs/adding-a-driver.md) - how to add a new brand or device kind

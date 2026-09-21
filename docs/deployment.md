@@ -9,6 +9,10 @@ systemd - not a microcontroller-only board), so everything below -
 Docker and bare-metal/systemd alike - applies to it exactly as
 written; no board-specific steps.
 
+> **Arduino UNO Q, climate only with Shelly devices?** Follow
+> [arduino-uno-q.md](arduino-uno-q.md) instead: the same steps, in the
+> order that board needs, with its limits and tuning explained.
+
 ## Quick start: a fresh Debian/Ubuntu box, start to finish
 
 The single ordered path from a brand-new box to a running,

@@ -7,6 +7,12 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- `docs/arduino-uno-q.md`: the reference installation end to end - the
+  board versions and measured resource use, install steps, configuring
+  from the admin panel only (and each Shelly's MQTT settings), what runs
+  on its own, a table of every limit, what `tune-board.sh` and
+  `--lean` remove (with undo), updating, backup/reset, troubleshooting.
+  Linked from the README and the deployment guide.
 - A **Settings** section in `/climate-admin`: hysteresis, thermostat
   check interval, safety-close hours, history days and size cap, page
   language - changed there instead of in config.yaml, within safe

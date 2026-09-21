@@ -534,6 +534,18 @@ actually re-asserted on that first tick back, not silently skipped
 because the controller's own bookkeeping of "what I last commanded"
 still happens to agree with the newly-computed state.
 
+### Settings: tuning without editing config.yaml
+
+The admin panel's **Settings** section changes the operating parameters
+without touching this file: `thermostat.hysteresis_c`,
+`thermostat.poll_interval_seconds`, `thermostat.sensor_failsafe_hours`,
+`history.retention_days`, `history.max_db_mb` and `web.language`. Each
+has a safe range (a value outside it is refused), and each field shows
+whether its value comes from the panel, from config.yaml or from the
+built-in default. Saved in `config/panel_settings.json`, they take
+precedence over config.yaml after a restart; "Restore defaults" removes
+them. A factory reset removes them too.
+
 ### Maintenance: backup, clear, factory reset
 
 A collapsed **Maintenance** section at the bottom of `/climate-admin`:
