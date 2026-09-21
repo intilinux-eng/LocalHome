@@ -19,6 +19,10 @@ config.yaml options:
   component_id: which light component, default 0 (a single-channel
                dimmer only ever has one)
   min_value / max_value / unit: number-kind only, defaults 0-100 "%"
+  on_with_value: number-kind only - setting a value also switches the
+               output on (for something that must keep running, like a
+               VMC, whose card then has no on/off toggle - see
+               `hide_toggle` in docs/configuration.md)
 
 Example - a Shelly 0/1-10V Dimmer Gen3 modulating a VMC's speed:
   kind: switch
@@ -82,9 +86,11 @@ class ShellyLightNumberDriver(NumberDriver):
         max_value: float = 100.0,
         unit: str = "%",
         poll_interval_seconds: float = 20.0,
+        on_with_value: bool = False,
     ):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
+        self.on_with_value = on_with_value
         self.min_value = min_value
         self.max_value = max_value
         self.unit = unit
@@ -100,8 +106,14 @@ class ShellyLightNumberDriver(NumberDriver):
         return {"ok": True, "name": self.name, "value": float(brightness)}
 
     def set_value(self, value: float) -> None:
-        clamped = float(max(self.min_value, min(self.max_value, float(value))))
-        self._rpc.call("Light.Set", {"id": self._component_id, "brightness": clamped})
+        clamped = max(self.min_value, min(self.max_value, float(value)))
+        # A whole number: a Shelly Gen3 dimmer (0/1-10V Dimmer Gen3, fw 2.0)
+        # silently ignores a fractional brightness like 30.0 - not applied,
+        # no proper reply - while 30 is applied at once. Confirmed live.
+        params = {"id": self._component_id, "brightness": int(round(clamped))}
+        if self.on_with_value:
+            params["on"] = True
+        self._rpc.call("Light.Set", params)
 
 
 def _create_switch(options: dict) -> ShellyLightSwitchDriver:
@@ -124,6 +136,7 @@ def _create_number(options: dict) -> ShellyLightNumberDriver:
         max_value=options.get("max_value", 100.0),
         unit=options.get("unit", "%"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
+        on_with_value=bool(options.get("on_with_value", False)),
     )
 
 

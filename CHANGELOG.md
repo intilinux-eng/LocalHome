@@ -7,6 +7,13 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- VMC speed modes: the VMC card has no on/off toggle anymore
+  (mechanical ventilation runs continuously) and offers three one-tap
+  modes - Night 20%, Day 50%, Boost 100% - above the slider, with the
+  current one highlighted. Picking a mode also starts the VMC if it was
+  stopped from elsewhere. Built from three new generic options:
+  `hide_toggle` (switch), `presets` (number) and `on_with_value`
+  (`shelly_light` number); the admin panel's VMC gets them by default.
 - Deployment guide: **"Addressing: names, not IP addresses"** - how to
   keep an install working when the router's DHCP changes the board's
   IP, with no router changes: LocalHome reaches mosquitto at
@@ -89,6 +96,12 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Fixed
+- The VMC speed set from the dashboard was never applied: LocalHome
+  sent the brightness as `30.0`, which the Shelly 0/1-10V Dimmer Gen3
+  silently ignores, while the dashboard showed the new value as if it
+  had worked. It's now sent as a whole number (confirmed live: applied
+  within the dimmer's 3s transition), and the card refreshes right
+  after a change.
 - `/climate-admin` kept saying "saved, but not running yet" after an
   extra device's id was cleared again without a restart - a cleared
   field and nothing saved build the same drivers, and are now treated

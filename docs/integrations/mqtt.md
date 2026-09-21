@@ -379,6 +379,14 @@ correlation and `drivers/mqtt/shelly_light.py` for the driver itself.
   paired_switch: "VMC Dimmer"   # one dashboard card: toggle + slider
 ```
 
+For a VMC, see the `hide_toggle`/`presets`/`on_with_value` options in
+[docs/configuration.md](../configuration.md) - one card with speed modes
+and no on/off toggle.
+
+Brightness is always sent as a whole number: a Shelly 0/1-10V Dimmer
+Gen3 (firmware 2.0) silently ignores a fractional value like `30.0` -
+not applied, and no proper reply - while `30` is applied at once.
+
 `device_id` is the Shelly RPC id, visible on the device's own web UI
 (same string the H&T's topics use as a prefix, e.g.
 `shellyazht-XXXXXXXXXXXX`). `component_id` (default `0`) selects which

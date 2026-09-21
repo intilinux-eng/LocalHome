@@ -134,4 +134,36 @@ def test_number_set_value_clamps_and_sends_a_light_set_rpc_call(fake_connection)
     request = json.loads(payload)
     assert topic == f"{DEVICE_ID}/rpc"
     assert request["method"] == "Light.Set"
-    assert request["params"] == {"id": 0, "brightness": 100.0}
+    assert request["params"] == {"id": 0, "brightness": 100}
+    assert isinstance(request["params"]["brightness"], int)
+
+
+def test_number_sends_a_whole_brightness(fake_connection):
+    # A Shelly Gen3 dimmer ignores a fractional brightness (30.0) outright.
+    driver = ShellyLightNumberDriver(name="VMC Dimmer Speed", broker=BROKER, device_id=DEVICE_ID)
+    _respond_once(fake_connection, "localhome")
+
+    driver.set_value(29.6)
+
+    request = json.loads(fake_connection.published[0][1])
+    assert request["params"]["brightness"] == 30
+    assert '"brightness": 30}' in fake_connection.published[0][1]
+
+
+def test_on_with_value_also_switches_the_output_on(fake_connection):
+    # A VMC's card has no on/off toggle - picking a speed must start it.
+    driver = ShellyLightNumberDriver(name="VMC Speed", broker=BROKER, device_id=DEVICE_ID, on_with_value=True)
+    _respond_once(fake_connection, "localhome")
+
+    driver.set_value(20)
+
+    assert json.loads(fake_connection.published[0][1])["params"] == {"id": 0, "brightness": 20, "on": True}
+
+
+def test_value_alone_leaves_the_output_as_it_is_by_default(fake_connection):
+    driver = ShellyLightNumberDriver(name="Lamp", broker=BROKER, device_id=DEVICE_ID)
+    _respond_once(fake_connection, "localhome")
+
+    driver.set_value(20)
+
+    assert "on" not in json.loads(fake_connection.published[0][1])["params"]

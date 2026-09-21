@@ -70,7 +70,10 @@
     "not_enough_data": "not enough data yet",
     "power_budget_note": "{available} kW safe indefinitely · up to {trip} kW tolerated briefly · breaker trips quickly above that",
     "trip_risk": "trip risk ({value}kW)",
-    "safe_limit": "safe limit ({value}kW)"
+    "safe_limit": "safe limit ({value}kW)",
+    "running": "Running",
+    "stopped": "Stopped",
+    "stopped_pick_preset": "Pick a mode to start it again."
   },
   "tabs": {
     "home": "Home",
@@ -278,5 +281,10 @@
     "vmc_on": "On",
     "vmc_off": "Off",
     "vmc_speed": "speed {value}%"
+  },
+  "vmc_presets": {
+    "night": "Night",
+    "day": "Day",
+    "boost": "Boost"
   }
 }

@@ -275,6 +275,15 @@ EXTRA_DIMMER_FIELDS = {
     "vmc_device_id": "VMC",
 }
 DIMMER_SPEED_SUFFIX = " Speed"
+# The VMC runs continuously - residential mechanical ventilation isn't
+# meant to be switched off - so its card has no on/off toggle, only these
+# speeds, and picking one also switches it back on if it was off.
+# `key` names the dashboard's translated label (vmc_presets.<key>).
+VMC_PRESETS = [
+    {"key": "night", "value": 20},
+    {"key": "day", "value": 50},
+    {"key": "boost", "value": 100},
+]
 
 
 def validate_extra_dimmers(
@@ -447,9 +456,10 @@ def build_extra_dimmer_integrations(extra_dimmers: dict, broker_file: str) -> li
         device_id = (extra_dimmers or {}).get(key)
         if device_id:
             base = {"broker_file": broker_file, "device_id": device_id.strip()}
-            integrations.append(Integration("switch", "shelly_light", {**base, "name": display_name}))
+            integrations.append(Integration("switch", "shelly_light", {**base, "name": display_name, "hide_toggle": True}))
             integrations.append(Integration("number", "shelly_light", {
                 **base, "name": display_name + DIMMER_SPEED_SUFFIX, "paired_switch": display_name,
+                "presets": VMC_PRESETS, "on_with_value": True,
             }))
     return integrations
 

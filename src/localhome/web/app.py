@@ -322,6 +322,7 @@ def _register_routes(app: Flask) -> None:
             }
             if name in interlock_followers:
                 entry["linked_valve"] = interlock_followers[name]
+            entry.update(manager.ui_options.get(name, {}))
             if power_budget is not None and name == power_sensor:
                 entry["power_budget"] = {
                     "contract_limit_w": power_budget.contract_limit_w,

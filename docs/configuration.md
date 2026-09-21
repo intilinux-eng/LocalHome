@@ -108,6 +108,42 @@ that only makes sense while cooling. This only affects visibility, not
 behavior: the device keeps running (and recording history) regardless,
 it just doesn't clutter the tab in the season it isn't relevant.
 
+Two more dashboard-only options, for a device meant to keep running at a
+chosen level - a VMC, typically:
+
+- `hide_toggle: true` on a `switch` - its card shows whether it's
+  running, but offers no on/off control.
+- `presets` on a `number` - one-tap buttons above its slider, each
+  `{key: <name>, value: <number>}` (the label is the dashboard's
+  translation of `vmc_presets.<key>`: `night`, `day`, `boost`) or
+  `{label: "<text>", value: <number>}` for your own wording. The button
+  matching the current value is highlighted.
+
+With `shelly_light`, add `on_with_value: true` to the number so picking
+a value also switches the output on - otherwise a device stopped from
+elsewhere (its own app) would have no way back on from the dashboard.
+The climate admin panel's VMC gets all three automatically.
+
+```yaml
+- kind: switch
+  type: shelly_light
+  name: "VMC"
+  device_id: "shelly0110dimg3-XXXXXXXXXXXX"
+  broker_file: "mqtt_broker.json"
+  hide_toggle: true
+- kind: number
+  type: shelly_light
+  name: "VMC Speed"
+  device_id: "shelly0110dimg3-XXXXXXXXXXXX"
+  broker_file: "mqtt_broker.json"
+  paired_switch: "VMC"
+  on_with_value: true
+  presets:
+    - {key: night, value: 20}
+    - {key: day, value: 50}
+    - {key: boost, value: 100}
+```
+
 ## `energy` (power-budget alerting)
 
 If set, `energy.sensor` must name a `power_meter` integration by its
@@ -350,8 +386,12 @@ if you want to keep both around, since this panel always builds it as
 The VMC (mechanical ventilation) has its own section too: one device id
 of the Shelly 0/1-10V Dimmer Gen3 driving its speed builds both an on/off
 switch named "VMC" and its speed as "VMC Speed", paired into one
-dashboard card with a slider. If config.yaml already has a `shelly_light`
-entry for a dimmer, the section offers its device id pre-filled.
+dashboard card. The card has no on/off toggle - residential mechanical
+ventilation is meant to run continuously - and three speed modes:
+Night 20%, Day 50%, Boost 100%, plus the slider for anything in between.
+Picking a mode also starts the VMC if it was stopped from elsewhere. If
+config.yaml already has a `shelly_light` entry for a dimmer, the section
+offers its device id pre-filled.
 
 A device id the panel manages replaces any config.yaml integration for
 the same device (matched by its `device_id` or its MQTT topic prefix):

@@ -660,3 +660,13 @@ def test_clearing_an_unloaded_extra_device_is_not_a_pending_restart(tmp_path, fa
 
     assert client.get("/api/climate-admin/extra-dimmers").get_json()["restart_pending"] is False
     assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
+
+
+def test_devices_api_exposes_the_vmc_modes_and_hidden_toggle(tmp_path, fake_rpc):
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_extra_dimmers({"vmc_device_id": "shelly0110dimg3-AAAA"})
+    body = _app(tmp_path, CONFIG_NO_THERMOSTAT).test_client().get("/api/devices").get_json()
+
+    by_name = {s["name"]: s for s in body["sensors"]}
+    assert by_name["VMC"]["hide_toggle"] is True
+    assert [p["value"] for p in by_name["VMC Speed"]["presets"]] == [20, 50, 100]
+    assert "presets" not in by_name["VMC"]

@@ -256,10 +256,32 @@ function attachPairings(sensors) {
   });
 }
 
+// One-tap values configured as `presets` on a number (e.g. a VMC's
+// night/day/boost speeds). A preset's label is its own `label`, or the
+// translated vmc_presets.<key>.
+function presetLabel(preset) {
+  return preset.label || tr(`vmc_presets.${preset.key}`);
+}
+
+function presetRowHtml(sensor) {
+  if (!sensor.presets || !sensor.presets.length) return "";
+  const unit = (sensor.range || {}).unit || "";
+  return `
+    <div class="preset-row" id="number-presets-${slug(sensor.name)}">
+      ${sensor.presets.map(p => `
+        <button class="preset-btn" data-name="${sensor.name}" data-value="${p.value}">
+          <span class="preset-name">${presetLabel(p)}</span>
+          <span class="preset-value">${p.value}${unit === "%" ? "%" : ` ${unit}`}</span>
+        </button>`).join("")}
+    </div>
+  `;
+}
+
 function sliderRowHtml(sensor) {
   const id = slug(sensor.name);
   const range = sensor.range || { min: 0, max: 100, unit: "%" };
   return `
+    ${presetRowHtml(sensor)}
     <div class="slider-row" style="margin-top:4px">
       <input type="range" min="${range.min}" max="${range.max}" value="${range.min}"
              class="number-slider" id="number-slider-${id}" data-name="${sensor.name}">
@@ -312,7 +334,7 @@ function buildSensorCard(sensor) {
   `;
 }
 
-async function setNumberValue(name, value) {
+async function setNumberValue(name, value, sensors) {
   try {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/set-value`, {
       method: "POST",
@@ -323,6 +345,14 @@ async function setNumberValue(name, value) {
     if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
   } catch (e) {
     alert(tr("sensors.request_failed"));
+  }
+  // Re-read both the number and the switch it's paired into: with
+  // on_with_value, setting a speed can also have switched it on.
+  const number = (sensors || []).find(s => s.name === name);
+  if (number) {
+    refreshSensor(number);
+    const owner = sensors.find(s => s.name === number.paired_switch);
+    if (owner) refreshSensor(owner);
   }
 }
 
@@ -354,7 +384,16 @@ function renderSensors(sensors, containerId = "sensor-cards") {
     slider.addEventListener("input", () => {
       if (valueEl) valueEl.textContent = `${slider.value} ${unit}`;
     });
-    slider.addEventListener("change", () => setNumberValue(name, slider.value));
+    slider.addEventListener("change", () => setNumberValue(name, slider.value, sensors));
+  });
+
+  el.querySelectorAll(".preset-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.name;
+      // Show the choice at once; the refresh after the command confirms it.
+      btn.parentElement.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b === btn));
+      setNumberValue(name, btn.dataset.value, sensors);
+    });
   });
 
   for (const sensor of sensors) {
@@ -435,7 +474,9 @@ function updateSensorCard(sensor, reading, linkedReading) {
     // status headline but no toggle: a manual flip here would just get
     // overridden on the controller's next tick, so offering one would
     // be misleading rather than actually inert.
-    const toggleHtml = sensor.controllable ? `
+    // `hide_toggle`: something meant to keep running (a VMC) - its state
+    // is shown, but switching it off from here isn't offered.
+    const toggleHtml = sensor.controllable && !sensor.hide_toggle ? `
         <label class="toggle">
           <input type="checkbox" ${reading.is_on ? "checked" : ""} onchange="onSwitchToggle('${sensor.name}', this)">
           <span class="track"></span>
@@ -443,7 +484,8 @@ function updateSensorCard(sensor, reading, linkedReading) {
     html += `
       <div class="switch-body">
         <div>
-          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
+          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : sensor.hide_toggle ? (reading.is_on ? tr("sensors.running") : tr("sensors.stopped")) : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
+          ${sensor.hide_toggle && !reading.is_on && sensor.pairedBrightness && sensor.pairedBrightness.presets ? `<div class="switch-sub">${tr("sensors.stopped_pick_preset")}</div>` : ""}
           <div class="switch-sub">${reading.voltage_v != null ? fmt(reading.voltage_v, 0) + " V · " + fmt(reading.current_a, 2) + " A" : ""}</div>
         </div>
         ${toggleHtml}
@@ -461,6 +503,9 @@ function updateSensorCard(sensor, reading, linkedReading) {
     const valueEl = document.getElementById(`number-value-${id}`);
     if (sliderEl && document.activeElement !== sliderEl) sliderEl.value = reading.value;
     if (valueEl) valueEl.textContent = `${fmt(reading.value, 0)} ${unit}`;
+    document.querySelectorAll(`#number-presets-${id} .preset-btn`).forEach(btn => {
+      btn.classList.toggle("active", Math.round(reading.value) === Number(btn.dataset.value));
+    });
   }
 
   const gridFields = sensor.kind === "climate"

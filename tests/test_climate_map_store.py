@@ -562,3 +562,11 @@ def test_integration_device_id_reads_rpc_ids_and_topic_prefixes():
     assert integration_device_id(Integration("switch", "shelly_light", {"device_id": "dimmer-1"})) == "dimmer-1"
     assert integration_device_id(Integration("switch", "mqtt_json", {"state_topic": "relay-1/status/switch:0"})) == "relay-1"
     assert integration_device_id(Integration("switch", "simulated", {"name": "x"})) is None
+
+
+def test_vmc_card_has_modes_and_no_toggle():
+    switch, speed = build_extra_dimmer_integrations({"vmc_device_id": "shelly0110dimg3-AAAA"}, "broker.json")
+
+    assert switch.options["hide_toggle"] is True
+    assert [(p["key"], p["value"]) for p in speed.options["presets"]] == [("night", 20), ("day", 50), ("boost", 100)]
+    assert speed.options["on_with_value"] is True

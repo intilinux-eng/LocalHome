@@ -70,7 +70,10 @@
     "not_enough_data": "dati non ancora sufficienti",
     "power_budget_note": "{available} kW sostenibili senza limiti · fino a {trip} kW tollerati brevemente · oltre, l'interruttore scatta rapidamente",
     "trip_risk": "rischio scatto ({value}kW)",
-    "safe_limit": "limite sicuro ({value}kW)"
+    "safe_limit": "limite sicuro ({value}kW)",
+    "running": "In funzione",
+    "stopped": "Ferma",
+    "stopped_pick_preset": "Scegli una modalità per riavviarla."
   },
   "tabs": {
     "home": "Casa",
@@ -278,5 +281,10 @@
     "vmc_on": "Accesa",
     "vmc_off": "Spenta",
     "vmc_speed": "velocità {value}%"
+  },
+  "vmc_presets": {
+    "night": "Notte",
+    "day": "Giorno",
+    "boost": "Massimo"
   }
 }

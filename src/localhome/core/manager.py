@@ -50,6 +50,11 @@ class DeviceManager:
         # current mode doesn't match (e.g. a dehumidifier that only makes
         # sense to show while cooling). Unset means always visible.
         self.visible_in_mode: dict[str, str] = {}
+        # sensor name -> dashboard-only options from its integration entry:
+        # `presets` (a number's one-tap values, e.g. a VMC's night/day/boost
+        # speeds) and `hide_toggle` (a switch that should stay on, so the
+        # card shows its state but offers no on/off control).
+        self.ui_options: dict[str, dict] = {}
         self.notifier: Notifier | None = None
         # Integration entries whose driver couldn't be built, with the
         # reason - skipped so the rest still starts, but listed here so the
@@ -75,6 +80,9 @@ class DeviceManager:
                     self.dashboard_tab[driver.name] = options["dashboard_tab"]
                 if options.get("visible_in_mode"):
                     self.visible_in_mode[driver.name] = options["visible_in_mode"]
+                ui = {key: options[key] for key in ("presets", "hide_toggle") if options.get(key)}
+                if ui:
+                    self.ui_options[driver.name] = ui
 
         if self.config.notifier:
             options = _resolve_paths(self.config, self.config.notifier.options)
