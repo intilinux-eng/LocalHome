@@ -1,13 +1,17 @@
 import pytest
 
-from localhome.config import Integration
+from localhome.config import Integration, load_config
 from localhome.services.climate_map_store import (
     ClimateMapStore,
+    apply_to_config,
     build_climate_integrations,
+    build_extra_dimmer_integrations,
     build_extra_sensor_integrations,
     build_extra_switch_integrations,
     build_zone_configs,
+    integration_device_id,
     snapshot_from_config,
+    validate_extra_dimmers,
     validate_extra_sensors,
     validate_extra_switches,
     validate_zones,
@@ -492,3 +496,69 @@ def test_snapshot_falls_back_to_an_empty_shelly_slot_for_an_unknown_driver_type(
     assert snapshot[0]["sensor_device_id"] is None
     assert snapshot[0]["valve_mode"] == "shelly"
     assert snapshot[0]["valve_device_id"] is None
+
+
+# ---------------------------------------------------------------- VMC ----
+# The ventilation unit's Shelly 0/1-10V dimmer - one device id, two
+# integrations (see services/climate_map_store.py's EXTRA_DIMMER_FIELDS).
+
+def test_vmc_builds_a_switch_and_its_paired_speed():
+    switch, speed = build_extra_dimmer_integrations({"vmc_device_id": " shelly0110dimg3-AAAA "}, "broker.json")
+
+    assert (switch.kind, switch.type, switch.options["name"]) == ("switch", "shelly_light", "VMC")
+    assert (speed.kind, speed.type, speed.options["name"]) == ("number", "shelly_light", "VMC Speed")
+    assert speed.options["paired_switch"] == "VMC"
+    assert switch.options["device_id"] == speed.options["device_id"] == "shelly0110dimg3-AAAA"
+    assert switch.options["broker_file"] == "broker.json"
+
+
+def test_vmc_not_built_while_blank():
+    assert build_extra_dimmer_integrations({"vmc_device_id": None}, "broker.json") == []
+    assert build_extra_dimmer_integrations({}, "broker.json") == []
+
+
+def test_vmc_device_id_may_not_double_up_with_another_role(tmp_path):
+    with pytest.raises(ValueError, match="duplicate id"):
+        validate_extra_dimmers({"vmc_device_id": "shellyplus1-DDDD"}, extra_switches=VALID_EXTRA_SWITCHES)
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_extra_dimmers({"vmc_device_id": "shelly0110dimg3-AAAA"})
+    # ...and the other way round: a later extra switch can't take its id.
+    with pytest.raises(ValueError, match="duplicate id"):
+        store.set_extra_switches({"bypass_valve_device_id": "shelly0110dimg3-AAAA"})
+    assert store.get_extra_dimmers() == {"vmc_device_id": "shelly0110dimg3-AAAA"}
+
+
+def test_panel_device_replaces_a_hand_written_entry_for_the_same_device(tmp_path):
+    (tmp_path / "config.yaml").write_text(
+        """
+integrations:
+  - kind: switch
+    type: shelly_light
+    name: "VMC Dimmer"
+    broker_file: "mqtt_broker.json"
+    device_id: "shelly0110dimg3-AAAA"
+  - kind: number
+    type: shelly_light
+    name: "VMC Dimmer Speed"
+    broker_file: "mqtt_broker.json"
+    device_id: "shelly0110dimg3-AAAA"
+    paired_switch: "VMC Dimmer"
+  - kind: switch
+    type: simulated
+    name: "Something Else"
+""",
+        encoding="utf-8",
+    )
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_extra_dimmers({"vmc_device_id": "shelly0110dimg3-AAAA"})
+    config = load_config(tmp_path / "config.yaml")
+
+    apply_to_config(config)
+
+    names = [i.options["name"] for i in config.integrations]
+    assert names == ["Something Else", "VMC", "VMC Speed"]
+
+
+def test_integration_device_id_reads_rpc_ids_and_topic_prefixes():
+    assert integration_device_id(Integration("switch", "shelly_light", {"device_id": "dimmer-1"})) == "dimmer-1"
+    assert integration_device_id(Integration("switch", "mqtt_json", {"state_topic": "relay-1/status/switch:0"})) == "relay-1"
+    assert integration_device_id(Integration("switch", "simulated", {"name": "x"})) is None

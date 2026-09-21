@@ -444,6 +444,93 @@ async function refreshExtraSensorStatus() {
   }
 }
 
+// ----------------------------------------------------------------- VMC ----
+// The ventilation unit, on a Shelly 0/1-10V Dimmer Gen3: one device id
+// builds its on/off switch and its speed (see services/climate_map_store.py's
+// EXTRA_DIMMER_FIELDS). Mains powered, so unlike a battery sensor "not
+// responding" is never normal - the status says so plainly.
+const VMC_NAME = "VMC";
+const VMC_SPEED_NAME = "VMC Speed";
+let vmcRestartPending = false;
+
+async function loadVmc() {
+  const res = await fetch("/api/climate-admin/extra-dimmers");
+  const data = await res.json();
+  const input = document.getElementById("extra-vmc-id");
+  const hint = document.getElementById("vmc-suggestion");
+  input.value = data.vmc_device_id || "";
+  vmcRestartPending = !!data.restart_pending;
+  // Not managed here yet, but config.yaml already has one: pre-fill it,
+  // and say that saving takes it over.
+  if (!data.vmc_device_id && data.suggested_vmc) {
+    input.value = data.suggested_vmc.device_id;
+    hint.textContent = tr("climate_admin.vmc_suggestion", { name: data.suggested_vmc.name || "?" });
+    hint.hidden = false;
+  } else {
+    hint.hidden = true;
+  }
+}
+
+async function saveVmc(button) {
+  const resultEl = document.getElementById("save-vmc-result");
+  const body = { vmc_device_id: document.getElementById("extra-vmc-id").value.trim() || null };
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate-admin/extra-dimmers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
+    resultEl.className = "hint-text admin-success";
+    await loadVmc();
+    refreshVmcStatus();
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshVmcStatus() {
+  const slot = document.getElementById("vmc-status");
+  if (!slot) return;
+  if (!document.getElementById("extra-vmc-id").value.trim() || !document.getElementById("vmc-suggestion").hidden) {
+    slot.innerHTML = "";
+    return;
+  }
+  if (vmcRestartPending) {
+    slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+    return;
+  }
+  try {
+    const [switchRes, speedRes] = await Promise.all([
+      fetch(`/api/sensors/${encodeURIComponent(VMC_NAME)}`),
+      fetch(`/api/sensors/${encodeURIComponent(VMC_SPEED_NAME)}`),
+    ]);
+    const sw = await switchRes.json();
+    const speed = await speedRes.json();
+    if (!sw.ok) {
+      slot.innerHTML = `<div><span class="admin-status bad">${tr("climate_admin.vmc_offline")}</span> ${tr("climate_admin.vmc_offline_hint")}</div>`
+        + (sw.error ? `<div class="admin-problem-detail">${escapeHtml(sw.error)}</div>` : "");
+      return;
+    }
+    const state = sw.is_on ? tr("climate_admin.vmc_on") : tr("climate_admin.vmc_off");
+    const speedText = speed.ok && typeof speed.value === "number"
+      ? ` · ${tr("climate_admin.vmc_speed", { value: Math.round(speed.value) })}` : "";
+    slot.innerHTML = `<div><span class="admin-status ok">${tr("climate_admin.vmc_reachable")}</span> ${state}${speedText}</div>`;
+  } catch (e) {
+    // Transient fetch failure - leave the last rendering in place.
+  }
+}
+
 // -------------------------------------------------------------- status ----
 // Reuses /api/climate/zones as-is (see web/app.py) - joined client-side
 // against the *saved* map by zone name, so a config edit not yet applied
@@ -840,6 +927,7 @@ async function refreshAll() {
   await refreshBroker();
   await refreshStatus();
   await refreshExtraSensorStatus();
+  await refreshVmcStatus();
   await refreshSystemStatus();
 }
 
@@ -1048,6 +1136,7 @@ loadMap();
 loadBroker();
 loadExtraSwitches();
 loadExtraSensor();
+loadVmc();
 loadClimateSwitchNames();
 refreshSystemStatus(true);
 startPolling();

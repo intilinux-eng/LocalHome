@@ -7,6 +7,14 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- The VMC is configurable from `/climate-admin` like the other Shelly
+  devices: one device id of its Shelly 0/1-10V Dimmer Gen3 builds the
+  on/off switch "VMC" and its "VMC Speed" slider, with a live
+  reachable/on/speed status. A dimmer already hand-wired in config.yaml
+  is offered pre-filled. New `GET/POST /api/climate-admin/extra-dimmers`.
+- A device the climate admin panel manages now replaces a config.yaml
+  integration for the same device id, with a warning, instead of both
+  polling and commanding the same hardware under two names.
 - A **System status** section on `/climate-admin`, plus a problems box
   at the top of the page whenever something is wrong: integrations that
   failed to load (with the reason and, for a missing optional package,
@@ -70,6 +78,10 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Fixed
+- `/climate-admin` kept saying "saved, but not running yet" after an
+  extra device's id was cleared again without a restart - a cleared
+  field and nothing saved build the same drivers, and are now treated
+  the same.
 - `localhome-cli doctor` said "No configuration problems found" even
   when a configured driver had failed to load (the real case: python-kasa
   not installed on the board, so the TP-Link devices silently never

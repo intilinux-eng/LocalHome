@@ -267,6 +267,16 @@
     "system_skipped_heading": "Driver opzionali non installati",
     "system_skipped_note": "Normale se non usi quei dispositivi. Se invece ne hai configurato uno, compare anche tra le anomalie e si installa con il comando indicato.",
     "system_skipped_line": "manca il pacchetto {package}, si installa con",
-    "system_config_path": "Configurazione: {path}"
+    "system_config_path": "Configurazione: {path}",
+    "vmc_heading": "VMC",
+    "vmc_note": "La ventilazione meccanica, comandata da uno Shelly 0/1-10V Dimmer Gen3: un solo ID crea l'interruttore acceso/spento e il cursore della velocità, visibili nella dashboard. Lascia vuoto se non ancora collegata.",
+    "vmc_label": "ID dispositivo dimmer VMC",
+    "vmc_suggestion": "Trovato in config.yaml (\"{name}\"). Salva per gestirlo da qui: dopo il riavvio la voce di config.yaml per questo dispositivo viene ignorata e la VMC appare come \"VMC\".",
+    "vmc_reachable": "Raggiungibile",
+    "vmc_offline": "Non risponde",
+    "vmc_offline_hint": "dispositivo alimentato da rete: controlla l'ID, che sia acceso e connesso al broker MQTT.",
+    "vmc_on": "Accesa",
+    "vmc_off": "Spenta",
+    "vmc_speed": "velocità {value}%"
   }
 }

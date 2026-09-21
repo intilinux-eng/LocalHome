@@ -155,6 +155,21 @@
     <div class="admin-zone-status" id="extra-sensor-status"></div>
   </details>
 
+  <details class="admin-details">
+    <summary>{{ t.climate_admin.vmc_heading }}</summary>
+    <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
+    <div class="admin-zone-card" id="vmc-form">
+      <div class="admin-field">
+        <label>{{ t.climate_admin.vmc_label }}</label>
+        <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
+      </div>
+      <p class="hint-text" id="vmc-suggestion" hidden></p>
+    </div>
+    <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_button }}</button>
+    <p class="hint-text" id="save-vmc-result"></p>
+    <div class="admin-zone-status" id="vmc-status"></div>
+  </details>
+
   <!-- Open by default: this is what someone diagnosing the board came
        for. Not one-time setup like the collapsed sections above it. -->
   <details class="admin-details" id="system-status" open>

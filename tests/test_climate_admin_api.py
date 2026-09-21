@@ -596,3 +596,67 @@ def test_restart_route_refuses_cleanly_when_the_platform_cant_restart_safely(tmp
     assert body["ok"] is False
     assert body["platform_unsupported"] is True
     assert called == []
+
+
+# ---------------------------------------------------------------- VMC ----
+# The ventilation unit's Shelly 0/1-10V dimmer - see
+# services/climate_map_store.py's EXTRA_DIMMER_FIELDS.
+
+CONFIG_WITH_HAND_WIRED_VMC = """
+web:
+  port: 5000
+
+integrations:
+  - kind: switch
+    type: shelly_light
+    name: "VMC Dimmer"
+    broker_file: "mqtt_broker.json"
+    device_id: "shelly0110dimg3-AAAA"
+"""
+
+
+@pytest.fixture
+def fake_rpc(fake_mqtt, monkeypatch):
+    monkeypatch.setattr("localhome.drivers.mqtt.rpc.get_connection", lambda broker: fake_mqtt)
+    return fake_mqtt
+
+
+def test_get_extra_dimmers_suggests_a_hand_wired_vmc(tmp_path, fake_rpc):
+    body = _app(tmp_path, CONFIG_WITH_HAND_WIRED_VMC).test_client().get("/api/climate-admin/extra-dimmers").get_json()
+
+    assert body["vmc_device_id"] is None
+    assert body["suggested_vmc"] == {"device_id": "shelly0110dimg3-AAAA", "name": "VMC Dimmer"}
+
+
+def test_post_extra_dimmers_takes_over_the_hand_wired_vmc_on_restart(tmp_path, fake_rpc):
+    client = _app(tmp_path, CONFIG_WITH_HAND_WIRED_VMC).test_client()
+
+    res = client.post("/api/climate-admin/extra-dimmers", json={"vmc_device_id": "shelly0110dimg3-AAAA"})
+
+    assert res.status_code == 200
+    assert client.get("/api/climate-admin/extra-dimmers").get_json()["restart_pending"] is True
+    manager = _app(tmp_path, CONFIG_WITH_HAND_WIRED_VMC).config["MANAGER"]
+    assert "VMC" in manager.switches and "VMC Speed" in manager.numbers
+    assert manager.paired_switch["VMC Speed"] == "VMC"
+    assert "VMC Dimmer" not in manager.switches  # not polled twice under two names
+
+
+def test_post_extra_dimmers_rejects_a_duplicate_device_id_with_a_zone(tmp_path, fake_rpc):
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
+    client = _app(tmp_path, CONFIG_NO_THERMOSTAT).test_client()
+
+    res = client.post("/api/climate-admin/extra-dimmers", json={"vmc_device_id": VALID_ZONES[0]["valve_device_id"]})
+
+    assert res.status_code == 400
+    assert "duplicate id" in res.get_json()["error"]
+
+
+def test_clearing_an_unloaded_extra_device_is_not_a_pending_restart(tmp_path, fake_rpc):
+    client = _app(tmp_path, CONFIG_NO_THERMOSTAT).test_client()
+
+    client.post("/api/climate-admin/extra-dimmers", json={"vmc_device_id": "shelly0110dimg3-AAAA"})
+    client.post("/api/climate-admin/extra-dimmers", json={"vmc_device_id": None})
+    client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_device_id": None})
+
+    assert client.get("/api/climate-admin/extra-dimmers").get_json()["restart_pending"] is False
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False

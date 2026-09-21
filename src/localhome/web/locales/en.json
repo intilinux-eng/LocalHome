@@ -267,6 +267,16 @@
     "system_skipped_heading": "Optional drivers not installed",
     "system_skipped_note": "Expected if you don't use those devices. If you did configure one, it's also listed under problems, and installs with the command shown.",
     "system_skipped_line": "package {package} is missing, install it with",
-    "system_config_path": "Configuration: {path}"
+    "system_config_path": "Configuration: {path}",
+    "vmc_heading": "Ventilation (VMC)",
+    "vmc_note": "The mechanical ventilation, driven by a Shelly 0/1-10V Dimmer Gen3: one device id builds its on/off switch and speed slider, shown on the dashboard. Leave blank if not wired yet.",
+    "vmc_label": "VMC dimmer device id",
+    "vmc_suggestion": "Found in config.yaml (\"{name}\"). Save to manage it from here: after the restart the config.yaml entry for this device is ignored and the VMC shows up as \"VMC\".",
+    "vmc_reachable": "Reachable",
+    "vmc_offline": "Not responding",
+    "vmc_offline_hint": "mains-powered device: check the id, that it's powered and connected to the MQTT broker.",
+    "vmc_on": "On",
+    "vmc_off": "Off",
+    "vmc_speed": "speed {value}%"
   }
 }

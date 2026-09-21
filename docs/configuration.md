@@ -347,6 +347,19 @@ config.yaml entry already covers this is its own `dashboard_tab`/name
 if you want to keep both around, since this panel always builds it as
 "Outdoor Sensor".
 
+The VMC (mechanical ventilation) has its own section too: one device id
+of the Shelly 0/1-10V Dimmer Gen3 driving its speed builds both an on/off
+switch named "VMC" and its speed as "VMC Speed", paired into one
+dashboard card with a slider. If config.yaml already has a `shelly_light`
+entry for a dimmer, the section offers its device id pre-filled.
+
+A device id the panel manages replaces any config.yaml integration for
+the same device (matched by its `device_id` or its MQTT topic prefix):
+that entry is skipped with a warning in the log, instead of the same
+hardware being polled and commanded twice under two names. Removing the
+old entry from config.yaml silences the warning. History recorded under
+the old name stays under the old name.
+
 The page's live status section reflects whichever mapping is *actually
 running* (since the last restart) - joined against the saved mapping to
 show a mode/source pill (e.g. `SIMULATED`) next to each zone. A

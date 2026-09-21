@@ -21,6 +21,7 @@ from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.core.registry import skipped_driver_modules
 from localhome.services.climate_map_store import (
+    EXTRA_DIMMER_FIELDS,
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
     ClimateMapStore,
@@ -84,6 +85,7 @@ def create_app(config_path: str | None = None) -> Flask:
     panel_zones = climate_map.get_zones()
     extra_switches = climate_map.get_extra_switches()
     extra_sensors = climate_map.get_extra_sensors()
+    extra_dimmers = climate_map.get_extra_dimmers()
     thermostat_cfg = apply_to_config(config)
 
     manager = DeviceManager(config)
@@ -208,9 +210,17 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["ACTIVE_CLIMATE_ZONES"] = panel_zones
     app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
     app.config["ACTIVE_EXTRA_SENSORS"] = extra_sensors
+    app.config["ACTIVE_EXTRA_DIMMERS"] = extra_dimmers
 
     _register_routes(app)
     return app
+
+
+def _set_roles(roles: dict) -> dict:
+    """Only the roles that have a device id - a saved `{"x": null}` and
+    nothing saved at all build the same drivers, so a cleared field isn't
+    a pending change."""
+    return {key: value for key, value in (roles or {}).items() if value}
 
 
 def _register_routes(app: Flask) -> None:
@@ -747,7 +757,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_admin_get_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         saved = climate_map.get_extra_switches()
-        restart_pending = saved != app.config["ACTIVE_EXTRA_SWITCHES"]
+        restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_SWITCHES"])
         return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
 
     @app.route("/api/climate-admin/extra-switches", methods=["POST"])
@@ -765,7 +775,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_admin_get_extra_sensors():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         saved = climate_map.get_extra_sensors()
-        restart_pending = saved != app.config["ACTIVE_EXTRA_SENSORS"]
+        restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_SENSORS"])
         return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SENSOR_FIELDS})
 
     @app.route("/api/climate-admin/extra-sensors", methods=["POST"])
@@ -775,6 +785,37 @@ def _register_routes(app: Flask) -> None:
         extra_sensors = {key: data.get(key) for key in EXTRA_SENSOR_FIELDS}
         try:
             climate_map.set_extra_sensors(extra_sensors)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/extra-dimmers")
+    def api_climate_admin_get_extra_dimmers():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        saved = climate_map.get_extra_dimmers()
+        restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_DIMMERS"])
+        # Until the panel manages the VMC, offer the id of a dimmer already
+        # hand-wired in config.yaml, so adopting it is one click, not
+        # re-typing an id that's already known.
+        suggested = None
+        if not saved.get("vmc_device_id"):
+            for entry in config.raw.get("integrations") or []:
+                if entry.get("type") == "shelly_light" and entry.get("kind") == "switch" and entry.get("device_id"):
+                    suggested = {"device_id": entry["device_id"], "name": entry.get("name")}
+                    break
+        return jsonify(
+            ok=True, restart_pending=restart_pending, suggested_vmc=suggested,
+            **{key: saved.get(key) for key in EXTRA_DIMMER_FIELDS},
+        )
+
+    @app.route("/api/climate-admin/extra-dimmers", methods=["POST"])
+    def api_climate_admin_set_extra_dimmers():
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        data = request.get_json(silent=True) or {}
+        extra_dimmers = {key: data.get(key) for key in EXTRA_DIMMER_FIELDS}
+        try:
+            climate_map.set_extra_dimmers(extra_dimmers)
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)

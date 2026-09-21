@@ -64,6 +64,17 @@ build_extra_sensor_integrations() below - reuses the exact same
 thermostat decision riding on this reading, so there's nothing to
 exercise before the hardware exists; it's either wired (a device id is
 set) or it isn't (blank, not built at all).
+
+And `extra_dimmers` - the VMC (mechanical ventilation), driven by a
+Shelly 0/1-10V Dimmer Gen3 whose output sets the fan speed. Same fixed-
+role, device-id-only shape again; one device id builds two integrations,
+an on/off switch and its speed as a number paired into the switch's card
+(see EXTRA_DIMMER_FIELDS/build_extra_dimmer_integrations() below).
+
+A config.yaml integration pointing at a device id the panel now manages
+is dropped in favour of the panel's (see apply_to_config()) - otherwise
+adopting a hand-wired device here would leave two drivers polling and
+commanding the same hardware under two names.
 """
 from __future__ import annotations
 
@@ -188,29 +199,47 @@ def _extra_sensor_device_ids(extra_sensors: dict) -> list[str]:
     ]
 
 
+def _extra_dimmer_device_ids(extra_dimmers: dict) -> list[str]:
+    return [
+        extra_dimmers[key].strip()
+        for key in EXTRA_DIMMER_FIELDS
+        if (extra_dimmers or {}).get(key)
+    ]
+
+
+def _validate_role_ids(section: dict, fields: dict, other_ids: list[str], section_name: str) -> None:
+    """The shared rule for every fixed-role section: each role optional,
+    a given id non-empty, and no id reused by any other role anywhere."""
+    if not isinstance(section, dict):
+        raise ValueError(f"{section_name} must be an object")
+    device_ids = list(other_ids)
+    for key in fields:
+        device_id = section.get(key)
+        if device_id is not None:
+            if not isinstance(device_id, str) or not device_id.strip():
+                raise ValueError(f"{key}: device id must be a non-empty string or null")
+            device_ids.append(device_id.strip())
+    _check_no_duplicates(
+        device_ids,
+        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    )
+
+
 def validate_extra_switches(
     extra_switches: dict, zones: list[dict] | None = None, extra_sensors: dict | None = None,
+    extra_dimmers: dict | None = None,
 ) -> None:
     """Each of the two fixed roles is independently optional - a fresh
     apartment might not have either wired yet - but if given, must be a
     non-empty device id, and no device id may double up with a zone's
     own sensor/valve (validate_zones() enforces the equivalent rule
-    within the zones themselves) or the extra sensor below."""
-    if not isinstance(extra_switches, dict):
-        raise ValueError("extra_switches must be an object")
-
-    device_ids: list[str] = list(_zone_device_ids(zones or [])) + _extra_sensor_device_ids(extra_sensors or {})
-    for key in EXTRA_SWITCH_FIELDS:
-        device_id = extra_switches.get(key)
-        if device_id is not None:
-            if not isinstance(device_id, str) or not device_id.strip():
-                raise ValueError(f"{key}: device id must be a non-empty string or null")
-            device_ids.append(device_id.strip())
-
-    _check_no_duplicates(
-        device_ids,
-        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    within the zones themselves) or the other extra devices below."""
+    other_ids = (
+        _zone_device_ids(zones or [])
+        + _extra_sensor_device_ids(extra_sensors or {})
+        + _extra_dimmer_device_ids(extra_dimmers or {})
     )
+    _validate_role_ids(extra_switches, EXTRA_SWITCH_FIELDS, other_ids, "extra_switches")
 
 
 # Fixed role, not a user-typed name - an outdoor reading isn't part of
@@ -227,24 +256,37 @@ EXTRA_SENSOR_FIELDS = {
 
 def validate_extra_sensors(
     extra_sensors: dict, zones: list[dict] | None = None, extra_switches: dict | None = None,
+    extra_dimmers: dict | None = None,
 ) -> None:
     """Same shape as validate_extra_switches() above, mirrored for the
     one fixed sensor role instead of the two fixed switch roles."""
-    if not isinstance(extra_sensors, dict):
-        raise ValueError("extra_sensors must be an object")
-
-    device_ids: list[str] = list(_zone_device_ids(zones or [])) + _extra_switch_device_ids(extra_switches or {})
-    for key in EXTRA_SENSOR_FIELDS:
-        device_id = extra_sensors.get(key)
-        if device_id is not None:
-            if not isinstance(device_id, str) or not device_id.strip():
-                raise ValueError(f"{key}: device id must be a non-empty string or null")
-            device_ids.append(device_id.strip())
-
-    _check_no_duplicates(
-        device_ids,
-        "duplicate id '{value}' - each Shelly device id may only be used for one role",
+    other_ids = (
+        _zone_device_ids(zones or [])
+        + _extra_switch_device_ids(extra_switches or {})
+        + _extra_dimmer_device_ids(extra_dimmers or {})
     )
+    _validate_role_ids(extra_sensors, EXTRA_SENSOR_FIELDS, other_ids, "extra_sensors")
+
+
+# Fixed role again: the VMC, on a Shelly 0/1-10V Dimmer Gen3 (its analog
+# output sets the fan speed - see drivers/mqtt/shelly_light.py). The value
+# is the on/off switch's name; its speed is DIMMER_SPEED_SUFFIX appended.
+EXTRA_DIMMER_FIELDS = {
+    "vmc_device_id": "VMC",
+}
+DIMMER_SPEED_SUFFIX = " Speed"
+
+
+def validate_extra_dimmers(
+    extra_dimmers: dict, zones: list[dict] | None = None, extra_switches: dict | None = None,
+    extra_sensors: dict | None = None,
+) -> None:
+    other_ids = (
+        _zone_device_ids(zones or [])
+        + _extra_switch_device_ids(extra_switches or {})
+        + _extra_sensor_device_ids(extra_sensors or {})
+    )
+    _validate_role_ids(extra_dimmers, EXTRA_DIMMER_FIELDS, other_ids, "extra_dimmers")
 
 
 def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> dict:
@@ -396,6 +438,31 @@ def build_extra_sensor_integrations(extra_sensors: dict, broker_file: str) -> li
     return integrations
 
 
+def build_extra_dimmer_integrations(extra_dimmers: dict, broker_file: str) -> list[Integration]:
+    """One device id -> two integrations over the same Shelly RPC
+    connection: the on/off switch, and its speed as a number paired into
+    that switch's dashboard card. Not built at all while the id is blank."""
+    integrations: list[Integration] = []
+    for key, display_name in EXTRA_DIMMER_FIELDS.items():
+        device_id = (extra_dimmers or {}).get(key)
+        if device_id:
+            base = {"broker_file": broker_file, "device_id": device_id.strip()}
+            integrations.append(Integration("switch", "shelly_light", {**base, "name": display_name}))
+            integrations.append(Integration("number", "shelly_light", {
+                **base, "name": display_name + DIMMER_SPEED_SUFFIX, "paired_switch": display_name,
+            }))
+    return integrations
+
+
+def integration_device_id(integration: Integration) -> str | None:
+    """The Shelly device an integration talks to: an explicit `device_id`
+    (RPC drivers) or the first segment of its MQTT topics."""
+    options = integration.options
+    if options.get("device_id"):
+        return str(options["device_id"]).strip()
+    return _device_id_from_topic(options.get("state_topic") or options.get("command_topic"))
+
+
 def _blank_zone() -> dict:
     return {
         "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
@@ -501,13 +568,31 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
     panel_zones = climate_map.get_zones()
     extra_switches = climate_map.get_extra_switches()
     extra_sensors = climate_map.get_extra_sensors()
+    extra_dimmers = climate_map.get_extra_dimmers()
 
     new_integrations: list[Integration] = []
     if panel_zones is not None:
         new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
     new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
     new_integrations += build_extra_sensor_integrations(extra_sensors, broker_file)
+    new_integrations += build_extra_dimmer_integrations(extra_dimmers, broker_file)
     if new_integrations:
+        # A hand-written entry for a device the panel now manages would
+        # poll and command the same hardware a second time, under its old
+        # name - the panel's version replaces it.
+        panel_devices = {integration_device_id(i) for i in new_integrations} - {None}
+        kept = []
+        for integration in config.integrations:
+            if integration_device_id(integration) in panel_devices:
+                logger.warning(
+                    "config.yaml integration %r uses device %s, now managed by the climate admin "
+                    "panel - using the panel's version instead. Remove it from config.yaml to "
+                    "silence this.",
+                    integration.options.get("name"), integration_device_id(integration),
+                )
+            else:
+                kept.append(integration)
+        config.integrations = kept
         existing_names = {i.options.get("name") for i in config.integrations}
         for integration in new_integrations:
             name = integration.options.get("name")
@@ -557,8 +642,10 @@ class ClimateMapStore:
         with self._lock:
             data = self._load()
             extra_switches, extra_sensors = data.get("extra_switches") or {}, data.get("extra_sensors") or {}
-            validate_extra_switches(extra_switches, zones, extra_sensors)
-            validate_extra_sensors(extra_sensors, zones, extra_switches)
+            extra_dimmers = data.get("extra_dimmers") or {}
+            validate_extra_switches(extra_switches, zones, extra_sensors, extra_dimmers)
+            validate_extra_sensors(extra_sensors, zones, extra_switches, extra_dimmers)
+            validate_extra_dimmers(extra_dimmers, zones, extra_switches, extra_sensors)
             data["zones"] = zones
             save_json_atomic(self.path, data)
 
@@ -574,7 +661,9 @@ class ClimateMapStore:
     def set_extra_switches(self, extra_switches: dict) -> None:
         with self._lock:
             data = self._load()
-            validate_extra_switches(extra_switches, data.get("zones"), data.get("extra_sensors") or {})
+            validate_extra_switches(
+                extra_switches, data.get("zones"), data.get("extra_sensors") or {}, data.get("extra_dimmers") or {},
+            )
             data["extra_switches"] = extra_switches
             save_json_atomic(self.path, data)
 
@@ -587,6 +676,21 @@ class ClimateMapStore:
     def set_extra_sensors(self, extra_sensors: dict) -> None:
         with self._lock:
             data = self._load()
-            validate_extra_sensors(extra_sensors, data.get("zones"), data.get("extra_switches") or {})
+            validate_extra_sensors(
+                extra_sensors, data.get("zones"), data.get("extra_switches") or {}, data.get("extra_dimmers") or {},
+            )
             data["extra_sensors"] = extra_sensors
+            save_json_atomic(self.path, data)
+
+    def get_extra_dimmers(self) -> dict:
+        # Same independence as get_extra_switches() above.
+        return self._load().get("extra_dimmers") or {}
+
+    def set_extra_dimmers(self, extra_dimmers: dict) -> None:
+        with self._lock:
+            data = self._load()
+            validate_extra_dimmers(
+                extra_dimmers, data.get("zones"), data.get("extra_switches") or {}, data.get("extra_sensors") or {},
+            )
+            data["extra_dimmers"] = extra_dimmers
             save_json_atomic(self.path, data)
