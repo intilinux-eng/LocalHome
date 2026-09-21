@@ -210,7 +210,10 @@ each step reversible (it prints how):
    anyway; these only download package and firmware lists every day.
    Update by hand when you choose - `sudo apt update && sudo apt upgrade`
    every few months - and check the dashboard afterwards.
-3. **No graphical desktop** (`lightdm` off, boot to text mode): nothing
+3. **MQTT broker log into the journal**: mosquitto ships logging every
+   device connection to a file on the eMMC; it goes to the journal
+   instead - `journalctl -u mosquitto` - so into RAM like the rest.
+4. **No graphical desktop** (`lightdm` off, boot to text mode): nothing
    is attached to a monitor, and it's ~80 MB of RAM plus a steady stream
    of log lines.
 
@@ -284,7 +287,7 @@ reconnects by name.
 - **Check it worked** from the board itself - each device shows up by
   its id as it connects:
   ```bash
-  sudo grep "New client connected" /var/log/mosquitto/mosquitto.log | tail
+  journalctl -u mosquitto | grep "New client connected" | tail
   ```
   or in `/climate-admin`, where the device's status turns to reporting.
 - Confirmed on a real install: a Shelly 0/1-10V Dimmer Gen3 resolves the

@@ -43,6 +43,8 @@ date rather than by tag.
   broker stay) followed by a restart. Each destructive action needs
   `RESET` typed in and first saves a full backup on the board, in
   `config/backups/` (gitignored).
+- `deploy/tune-board.sh` also moves mosquitto's log from a file on the
+  eMMC into the journal (RAM) - the last log still written to flash.
 - `deploy/tune-board.sh` and a deployment-guide section, "Tune the board
   for long unattended running" (quick start step 7): system log in RAM,
   no background update downloads, no graphical desktop. On a real UNO Q

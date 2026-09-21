@@ -41,7 +41,20 @@ for timer in apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer; do
 done
 echo "   undo: systemctl enable --now apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer"
 
-echo "== 3. No graphical desktop (no monitor attached)"
+echo "== 3. MQTT broker log into the journal (RAM)"
+# mosquitto ships logging every connection to a file on the eMMC - the
+# last log still written there once step 1 is done. Into syslog instead,
+# i.e. the journal: same content (journalctl -u mosquitto), no flash writes.
+MOSQ=/etc/mosquitto/mosquitto.conf
+if [ -f "$MOSQ" ] && grep -q '^log_dest file' "$MOSQ"; then
+    sed -i 's|^log_dest file .*|log_dest syslog|' "$MOSQ"
+    systemctl restart mosquitto   # devices reconnect by themselves within seconds
+    echo "   undo: set 'log_dest file /var/log/mosquitto/mosquitto.log' in $MOSQ and restart mosquitto"
+else
+    echo "   already done, or no mosquitto here"
+fi
+
+echo "== 4. No graphical desktop (no monitor attached)"
 if systemctl list-unit-files lightdm.service >/dev/null 2>&1; then
     systemctl set-default multi-user.target
     systemctl disable --now lightdm 2>/dev/null || true
