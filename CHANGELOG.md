@@ -7,6 +7,20 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- A **Settings** section in `/climate-admin`: hysteresis, thermostat
+  check interval, safety-close hours, history days and size cap, page
+  language - changed there instead of in config.yaml, within safe
+  ranges, each showing where its current value comes from. Saved in
+  `config/panel_settings.json`, applied after a restart; "Restore
+  defaults" goes back to config.yaml's.
+- The admin panel opens with a four-step "How to use this page" guide
+  and links to every section (a link or bookmark opens a collapsed
+  section), and "How it works" became a full summary: seasons and
+  valves, bathrooms/bypass/dehumidifier, VMC, battery sensors, missing
+  devices, data and limits, diagnostics.
+- `deploy/tune-board.sh --lean` also turns off Arduino App Lab and its
+  Docker runtime and the firmware updater, removes App Lab's unused
+  Docker images and empties the package cache (~270 MB RAM, ~2.3 GB disk).
 - `history.max_db_mb` (default 300): a hard ceiling on the history
   database on top of `retention_days` - checked hourly, the oldest days
   go first, the last day is always kept. A sensor that's off never adds
@@ -155,6 +169,8 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- Automatic backups keep one history copy (was two), and skip it when it
+  would leave less than 500 MB free on the disk.
 - A device that stays unreachable is logged in full once, then with one
   line every 10 minutes while it keeps failing, and once more when it
   works again - with the MQTT broker down, the control loops used to log
@@ -190,6 +206,8 @@ date rather than by tag.
   off instead of leaving it as it was.
 
 ### Fixed
+- In the admin panel, the automatic-backup list and (new) settings only
+  loaded after saving the VMC, not when the page opened.
 - After the admin panel's "Restart LocalHome", the page could reload too
   early - on the old process, just before it turned over. It now waits
   2.5s before checking for the restarted server.

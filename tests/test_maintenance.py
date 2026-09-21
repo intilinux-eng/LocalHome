@@ -180,3 +180,26 @@ def test_backup_download_is_a_zip(client):
     assert "config.yaml" in _names(res.data)
     info = c.get("/api/climate-admin/maintenance").get_json()
     assert info["ok"] is True and info["has_thermostat"] is True
+
+
+def test_history_backup_is_skipped_when_the_disk_is_nearly_full(setup, monkeypatch):
+    cfg, maintenance, store, _ = setup
+
+    class Usage:
+        free = 100 * 1024 * 1024
+
+    monkeypatch.setattr("localhome.services.maintenance.shutil.disk_usage", lambda p: Usage)
+
+    result = maintenance.clear_history()
+
+    assert result["backup"] is None
+    assert store.stats()["rows"] == 0  # the action itself still ran
+
+
+def test_only_one_history_backup_is_kept(setup, monkeypatch):
+    cfg, maintenance, _, _ = setup
+    names = iter(["history-1.db", "history-2.db"])
+    monkeypatch.setattr("localhome.services.maintenance.time.strftime", lambda fmt: next(names).split("-")[1].split(".")[0])
+    maintenance.save_history_backup()
+    maintenance.save_history_backup()
+    assert sorted(n for n in os.listdir(cfg / "backups") if n.startswith("history-")) == ["history-2.db"]

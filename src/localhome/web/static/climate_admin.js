@@ -493,7 +493,6 @@ async function saveVmc(button) {
     resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadVmc();
-loadMaintenance();
     refreshVmcStatus();
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
@@ -1284,6 +1283,81 @@ async function confirmSeason(button) {
   }
 }
 
+// ------------------------------------------------------------- settings ----
+// Thermostat tuning, history limits, language - see services/panel_settings.py.
+// Each field shows where its current value comes from (set here,
+// config.yaml, or the built-in default); a blank field falls back.
+
+async function loadSettings() {
+  try {
+    const res = await fetch("/api/climate-admin/settings");
+    const data = await res.json();
+    if (!data.ok) return;
+    document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
+    document.getElementById("settings-status").innerHTML = data.restart_pending
+      ? `<span class="admin-status neutral">${tr("climate_admin.settings_restart_pending")}</span>` : "";
+  } catch (e) {
+    // Keep the form as it was.
+  }
+}
+
+function settingFieldHtml(s) {
+  const label = tr(`climate_admin.setting_${s.key}`);
+  const help = tr(`climate_admin.setting_${s.key}_help`);
+  const source = tr(`climate_admin.settings_source_${s.source}`);
+  const value = s.source === "panel" ? s.value : "";
+  const placeholder = s.source === "config" ? s.config_value : s.default;
+  const input = s.type === "choice"
+    ? `<select data-setting="${s.key}"><option value="">${escapeHtml(tr("climate_admin.settings_inherit", { value: placeholder }))}</option>`
+      + s.choices.map(c => `<option value="${c}"${value === c ? " selected" : ""}>${c}</option>`).join("") + `</select>`
+    : `<input type="number" data-setting="${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${value}" placeholder="${placeholder}">`;
+  return `
+    <div class="admin-field">
+      <label>${escapeHtml(label)} <span class="setting-range">${s.type === "choice" ? "" : `${s.min}–${s.max}`}</span></label>
+      ${input}
+      <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
+    </div>`;
+}
+
+async function postSettings(values, button) {
+  const result = document.getElementById("settings-result");
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate-admin/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + data.error;
+      result.className = "hint-text admin-error";
+      return;
+    }
+    result.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
+    result.className = "hint-text admin-success";
+    loadSettings();
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function saveSettings(button) {
+  const values = {};
+  document.querySelectorAll("#settings-form [data-setting]").forEach(el => {
+    values[el.dataset.setting] = el.value === "" ? null : el.value;
+  });
+  postSettings(values, button);
+}
+
+function resetSettings(button) {
+  if (!confirm(tr("climate_admin.settings_defaults_confirm"))) return;
+  postSettings({}, button);
+}
+
 // --------------------------------------------------------- maintenance ----
 // Clear the history, clear every schedule, reset to a fresh installation,
 // download a backup. Each destructive action needs "RESET" typed in and
@@ -1353,7 +1427,7 @@ async function runMaintenance(action, button) {
     result.className = "hint-text admin-error";
     return;
   }
-  const backup = data.backup || data.history_backup || "";
+  const backup = data.backup || data.history_backup || tr("climate_admin.maint_no_backup");
   result.className = "hint-text admin-success";
   if (action === "factory-reset") {
     result.textContent = data.restarting
@@ -1399,6 +1473,16 @@ loadBroker();
 loadExtraSwitches();
 loadExtraSensor();
 loadVmc();
+loadMaintenance();
+loadSettings();
+
+// A link to a collapsed section (the guide's, or a bookmark) opens it.
+function openLinkedSection() {
+  const target = location.hash && document.getElementById(location.hash.slice(1));
+  if (target && target.tagName === "DETAILS") target.open = true;
+}
+window.addEventListener("hashchange", openLinkedSection);
+openLinkedSection();
 loadClimateSwitchNames();
 refreshSystemStatus(true);
 startPolling();

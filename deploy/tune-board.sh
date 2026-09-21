@@ -5,10 +5,20 @@
 # ~7.5 GB/day before, ~0.6 GB/day after) and stops what the board doesn't
 # need. Safe to run again; every step prints how to undo it.
 #
-#   sudo sh deploy/tune-board.sh
+#   sudo sh deploy/tune-board.sh           # the essentials, for every board
+#   sudo sh deploy/tune-board.sh --lean    # also remove what LocalHome doesn't use
 #
-# See docs/deployment.md#tune-the-board-for-long-unattended-running.
+# --lean additionally turns off Arduino App Lab and its Docker runtime,
+# the firmware updater (fwupd), removes App Lab's unused Docker images and
+# empties the package cache: ~270 MB of RAM and ~2.3 GB of disk back,
+# which matters most on the 2 GB / 16 GB UNO Q. App Lab can't be used on
+# the board until they're turned back on (the undo line is printed). The
+# USB rescue access (adbd) and the Linux-MCU bridge (arduino-router) stay.
+#
+# See docs/arduino-uno-q.md and docs/deployment.md#tune-the-board-for-long-unattended-running.
 set -e
+LEAN=0
+[ "$1" = "--lean" ] && LEAN=1
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run it with sudo: sudo sh deploy/tune-board.sh" >&2
@@ -61,6 +71,21 @@ if systemctl list-unit-files lightdm.service >/dev/null 2>&1; then
     echo "   undo: systemctl set-default graphical.target && systemctl enable --now lightdm"
 else
     echo "   no lightdm here - nothing to do"
+fi
+
+if [ "$LEAN" = 1 ]; then
+    echo "== 5. Lean: remove what LocalHome doesn't use"
+    if command -v docker >/dev/null 2>&1; then
+        docker image prune -a -f >/dev/null 2>&1 || true   # App Lab's images, unused by LocalHome
+    fi
+    for unit in arduino-app-cli.service arduino-cloud-connector.service docker.service docker.socket                 containerd.service fwupd.service; do
+        if systemctl list-unit-files "$unit" >/dev/null 2>&1; then
+            systemctl disable --now "$unit" >/dev/null 2>&1 || true
+        fi
+    done
+    systemctl mask fwupd.service >/dev/null 2>&1 || true   # otherwise D-Bus starts it again on demand
+    apt-get clean
+    echo "   undo: systemctl unmask fwupd && systemctl enable --now arduino-app-cli arduino-cloud-connector docker containerd"
 fi
 
 echo "== Result"

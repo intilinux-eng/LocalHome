@@ -14,6 +14,7 @@ import sys
 from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.core.registry import skipped_driver_modules
+from localhome.services import panel_settings
 from localhome.services.climate_map_store import apply_to_config
 from localhome.services.thermostat import ScheduleStore
 
@@ -151,6 +152,9 @@ def main(argv: list[str] | None = None) -> None:
     # see the climate admin panel's saved zones/extra switches too, not
     # just config.yaml's own literal (possibly absent) thermostat block.
     thermostat_cfg = apply_to_config(config)
+    thermostat_cfg = panel_settings.apply(
+        config, panel_settings.PanelSettingsStore(config.resolve("panel_settings.json")).get(), thermostat_cfg,
+    )
     manager = DeviceManager(config)
 
     if args.command == "doctor":

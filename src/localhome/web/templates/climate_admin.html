@@ -21,6 +21,30 @@
 
   <p class="hint-text">{{ t.climate_admin.intro }}</p>
 
+  <!-- How to use this page, in four steps, and a way to jump to any
+       section - collapsed sections open when their link is used (see
+       climate_admin.js's openLinkedSection()). -->
+  <section class="admin-guide" id="guide">
+    <h2>{{ t.climate_admin.guide_heading }}</h2>
+    <ol class="guide-steps">
+      <li><strong>{{ t.climate_admin.guide_step1_title }}</strong> {{ t.climate_admin.guide_step1 }}</li>
+      <li><strong>{{ t.climate_admin.guide_step2_title }}</strong> {{ t.climate_admin.guide_step2 }}</li>
+      <li><strong>{{ t.climate_admin.guide_step3_title }}</strong> {{ t.climate_admin.guide_step3 }}</li>
+      <li><strong>{{ t.climate_admin.guide_step4_title }}</strong> {{ t.climate_admin.guide_step4 }}</li>
+    </ol>
+    <nav class="guide-nav">
+      <a href="#season">{{ t.climate_admin.season_heading }}</a>
+      <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
+      <a href="#extra-switches">{{ t.climate_admin.extra_switches_heading }}</a>
+      <a href="#extra-sensor">{{ t.climate_admin.extra_sensor_heading }}</a>
+      <a href="#vmc">{{ t.climate_admin.vmc_heading }}</a>
+      <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
+      <a href="#maintenance">{{ t.climate_admin.maint_heading }}</a>
+      <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
+      <a href="#how-it-works">{{ t.climate_admin.guide_how_link }}</a>
+    </nav>
+  </section>
+
   <!-- The one thing that decides which formula every valve below
        follows - see climate_admin.css's .admin-mode-banner. First
        thing on the page on purpose, not buried under the status
@@ -54,10 +78,22 @@
        so it's found before the technician starts guessing. -->
   <details class="admin-details" id="how-it-works">
     <summary>{{ t.climate_admin.how_it_works_heading }}</summary>
+    <h3 class="how-h">{{ t.climate_admin.how_seasons_title }}</h3>
+    <p class="hint-text">{{ t.climate_admin.how_seasons }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_bathrooms_title }}</h3>
+    <p class="hint-text">{{ t.climate_admin.how_bathrooms }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_vmc_title }}</h3>
+    <p class="hint-text">{{ t.climate_admin.how_vmc }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_sensors_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
     <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
     <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_safety_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_missing }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_data_title }}</h3>
+    <p class="hint-text">{{ t.climate_admin.how_data }}</p>
+    <h3 class="how-h">{{ t.climate_admin.how_diagnostic_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
   </details>
 
@@ -79,7 +115,7 @@
   <p class="admin-mode-exclusion" id="diagnostic-mode-banner" hidden>{{ t.climate_admin.diagnostic_active_banner }}</p>
   <div id="diagnostic-valves"></div>
 
-  <div class="section-head">
+  <div class="section-head" id="zones">
     <h2>{{ t.climate_admin.zones_heading }}</h2>
     <div class="toolbar">
       <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
@@ -137,7 +173,7 @@
     </div>
   </details>
 
-  <details class="admin-details">
+  <details class="admin-details" id="extra-switches">
     <summary>{{ t.climate_admin.extra_switches_heading }}</summary>
     <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
     <div class="admin-zone-card" id="extra-switch-form">
@@ -154,7 +190,7 @@
     <p class="hint-text" id="save-extra-result"></p>
   </details>
 
-  <details class="admin-details">
+  <details class="admin-details" id="extra-sensor">
     <summary>{{ t.climate_admin.extra_sensor_heading }}</summary>
     <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
     <div class="admin-zone-card" id="extra-sensor-form">
@@ -168,7 +204,7 @@
     <div class="admin-zone-status" id="extra-sensor-status"></div>
   </details>
 
-  <details class="admin-details">
+  <details class="admin-details" id="vmc">
     <summary>{{ t.climate_admin.vmc_heading }}</summary>
     <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
     <div class="admin-zone-card" id="vmc-form">
@@ -186,6 +222,19 @@
   <!-- Clear / reset / backup - see static/climate_admin.js's maintenance
        section and services/maintenance.py. Collapsed: rarely needed, and
        every action behind it is destructive. -->
+  <!-- Thermostat tuning, history limits and language - changed here
+       instead of in config.yaml; see services/panel_settings.py. -->
+  <details class="admin-details" id="settings">
+    <summary>{{ t.climate_admin.settings_heading }} <span id="settings-status" class="admin-broker-status"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.settings_note }}</p>
+    <div class="admin-zone-card settings-grid" id="settings-form"></div>
+    <div class="toolbar">
+      <button class="tbtn open" onclick="saveSettings(this)">{{ t.climate_admin.settings_save }}</button>
+      <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
+    </div>
+    <p class="hint-text" id="settings-result"></p>
+  </details>
+
   <details class="admin-details admin-danger" id="maintenance">
     <summary>{{ t.climate_admin.maint_heading }}</summary>
     <p class="hint-text">{{ t.climate_admin.maint_note }}</p>

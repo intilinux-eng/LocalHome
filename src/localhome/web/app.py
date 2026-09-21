@@ -32,6 +32,7 @@ from localhome.services.climate_map_store import (
 )
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
+from localhome.services import panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
@@ -131,6 +132,11 @@ def create_app(config_path: str | None = None) -> Flask:
     extra_sensors = climate_map.get_extra_sensors()
     extra_dimmers = climate_map.get_extra_dimmers()
     thermostat_cfg = apply_to_config(config)
+    # Settings changed from the admin panel (thermostat tuning, history
+    # limits, language) override config.yaml's - see services/panel_settings.py.
+    settings_store = panel_settings.PanelSettingsStore(config.resolve("panel_settings.json"))
+    active_settings = settings_store.get()
+    thermostat_cfg = panel_settings.apply(config, active_settings, thermostat_cfg)
 
     manager = DeviceManager(config)
 
@@ -273,12 +279,15 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
     app.config["ACTIVE_EXTRA_SENSORS"] = extra_sensors
     app.config["ACTIVE_EXTRA_DIMMERS"] = extra_dimmers
+    app.config["PANEL_SETTINGS"] = settings_store
+    app.config["ACTIVE_PANEL_SETTINGS"] = active_settings
     # What a factory reset removes: everything LocalHome itself wrote at
     # runtime - never config.yaml, credentials or the broker settings.
     runtime_files = [
         config.resolve("climate_map.json"),
         manual_override_path,
         config.resolve("mqtt_state_cache.json"),
+        config.resolve("panel_settings.json"),
         positions_path,
     ]
     if thermostat is not None:
@@ -965,6 +974,29 @@ def _register_routes(app: Flask) -> None:
             ), 501
         schedule_restart()
         return jsonify(ok=True)
+
+    # ---------------------------------------------------- settings ----
+
+    @app.route("/api/climate-admin/settings")
+    def api_panel_settings_get():
+        store: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        saved = store.get()
+        return jsonify(
+            ok=True,
+            settings=panel_settings.effective(config, saved),
+            restart_pending=saved != app.config["ACTIVE_PANEL_SETTINGS"],
+        )
+
+    @app.route("/api/climate-admin/settings", methods=["POST"])
+    def api_panel_settings_set():
+        store: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
+        data = request.get_json(silent=True) or {}
+        try:
+            saved = store.set(data.get("values") or {})
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        return jsonify(ok=True, saved=saved, restart_required=True)
 
     # ------------------------------------------------- maintenance ----
     # Destructive: each needs {"confirm": "RESET"} in the body, and saves a

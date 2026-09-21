@@ -18,6 +18,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import time
 import zipfile
 
@@ -25,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 # Automatic backups kept on the board before the oldest is removed.
 KEEP_CONFIG_BACKUPS = 10
-KEEP_HISTORY_BACKUPS = 2
+KEEP_HISTORY_BACKUPS = 1
+# A history copy is skipped (the action still runs) unless the disk keeps
+# at least this much free after it: a backup must never fill the disk.
+MIN_FREE_AFTER_BACKUP = 500 * 1024 * 1024
 
 # Files that hold credentials: kept in the on-board backups (they never
 # leave the board), left out of the downloadable one.
@@ -93,8 +97,20 @@ class Maintenance:
         self._prune("backup-", ".zip", KEEP_CONFIG_BACKUPS)
         return name
 
-    def save_history_backup(self) -> str:
+    def save_history_backup(self) -> str | None:
+        """A copy of the history database, or None when the disk is too
+        full to hold one safely (the caller carries on without it)."""
         os.makedirs(self.backup_dir, exist_ok=True)
+        # Only the newest copy is kept: drop the old one before making room.
+        self._prune("history-", ".db", 0)
+        try:
+            size = os.path.getsize(self.history_store.db_path)
+            free = shutil.disk_usage(self.backup_dir).free
+        except OSError:
+            size, free = 0, 0
+        if free - size < MIN_FREE_AFTER_BACKUP:
+            logger.warning("Not enough disk space for a history backup (%d MB free) - skipped", free // 1_000_000)
+            return None
         name = f"history-{time.strftime('%Y%m%d-%H%M%S')}.db"
         self.history_store.backup_to(os.path.join(self.backup_dir, name))
         self._prune("history-", ".db", KEEP_HISTORY_BACKUPS)
