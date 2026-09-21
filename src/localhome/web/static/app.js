@@ -16,7 +16,7 @@
 function tr(path, vars) {
   const value = path.split(".").reduce((node, key) => (node == null ? undefined : node[key]), window.I18N);
   let str = value != null ? value : path;
-  if (vars) for (const k in vars) str = str.replace(`{${k}}`, vars[k]);
+  if (vars) for (const k in vars) str = str.split(`{${k}}`).join(vars[k]);
   return str;
 }
 
@@ -1299,17 +1299,48 @@ const TEMP_COLOR_STOPS = {
     { v: 22, h: 28, s: 80, l: 50 },
     { v: 24, h: 4, s: 70, l: 52 },
   ],
+  // Blues for comfort - the deeper, the cooler the target - and a muted
+  // green for economy (26 and up), so no summer setpoint reads as "hot".
   cool: [
-    { v: 20, h: 228, s: 65, l: 52 },
-    { v: 21, h: 208, s: 70, l: 48 },
-    { v: 22, h: 190, s: 68, l: 42 },
-    { v: 23, h: 168, s: 55, l: 40 },
-    { v: 24, h: 140, s: 55, l: 42 },
-    { v: 25, h: 48, s: 75, l: 48 },
-    { v: 26, h: 28, s: 80, l: 50 },
-    { v: 27, h: 4, s: 70, l: 52 },
+    { v: 20, h: 224, s: 75, l: 44 },
+    { v: 21, h: 216, s: 72, l: 47 },
+    { v: 22, h: 208, s: 70, l: 48 },
+    { v: 23, h: 200, s: 66, l: 47 },
+    { v: 24, h: 194, s: 60, l: 45 },
+    { v: 25, h: 188, s: 55, l: 42 },
+    { v: 26, h: 150, s: 32, l: 40 },
+    { v: 27, h: 140, s: 26, l: 36 },
   ],
 };
+// Cooling targets from this value up are "economy" (less cooling, lower
+// consumption), below it "comfort" - shown above the palette and next to
+// the zone's current target, so the choice is explained, not just coloured.
+const ECONOMY_FROM = { cool: 26 };
+
+function targetTier(value) {
+  const from = ECONOMY_FROM[climateMode];
+  if (from == null || value == null) return null;
+  return value >= from ? "economy" : "comfort";
+}
+
+function swatchHtml(v) {
+  return `<button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
+                  style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : v}</button>`;
+}
+
+function paletteHtml() {
+  const values = schedulePresets();
+  if (ECONOMY_FROM[climateMode] == null) return values.map(swatchHtml).join("");
+  const off = values.filter(v => v == null);
+  const tier = name => values.filter(v => v != null && targetTier(v) === name);
+  const group = name => `
+    <div class="sched-tier sched-tier-${name}">
+      <span class="sched-tier-label">${tr(`climate.tier_${name}`)}</span>
+      <div class="sched-tier-swatches">${tier(name).map(swatchHtml).join("")}</div>
+    </div>`;
+  return `${off.map(swatchHtml).join("")}${group("comfort")}${group("economy")}`;
+}
+
 function tempColor(value) {
   const stops = TEMP_COLOR_STOPS[climateMode] || TEMP_COLOR_STOPS.heat;
   if (value <= stops[0].v) return `hsl(${stops[0].h}, ${stops[0].s}%, ${stops[0].l}%)`;
@@ -1453,12 +1484,7 @@ function buildZoneCard(zone) {
       <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
 
       <div class="sched-season-label">${tr(`climate.schedule_heading_${climateMode}`)}</div>
-      <div class="sched-palette">
-        ${schedulePresets().map(v => `
-          <button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
-                  style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : v}</button>
-        `).join("")}
-      </div>
+      <div class="sched-palette">${paletteHtml()}</div>
       <p class="hint-text">${tr("climate.schedule_hint")}</p>
       <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
 
@@ -1522,7 +1548,7 @@ function renderClimateZones() {
   const excludedCount = climateZones.length - visibleZones.length;
 
   container.innerHTML =
-    (excludedCount > 0 ? `<p class="hint-text">${tr("climate.cooling_excluded_note", { count: excludedCount })}</p>` : "") +
+    (excludedCount > 0 ? `<div class="excluded-zones" id="cool-excluded">${excludedZonesHtml(climateZones)}</div>` : "") +
     visibleZones.map(buildZoneCard).join("");
   updateAwayBanner();
 
@@ -1704,10 +1730,46 @@ function zoneStatusClass(zone) {
   return zone.valve_on ? "active" : "reached";
 }
 
+// While cooling, a zone excluded from it (condensation risk) has no card -
+// but whether its valve is really closed is exactly what matters then, so
+// it gets this panel instead: the valve's real state and why. The backend
+// holds such a valve closed unless an interlock (e.g. a dehumidifier fed
+// through it) is driving it - see ThermostatController._tick().
+function excludedValveHtml(zone) {
+  const driver = zone.valve_driver;
+  let cls, text;
+  if (!zone.valve_ok) {
+    cls = "bad";
+    text = tr("climate.excluded_valve_unknown", { zone: zone.name, error: zone.valve_error || "?" });
+  } else if (!zone.valve_on) {
+    cls = "ok";
+    text = tr("climate.excluded_valve_closed", { zone: zone.name });
+  } else if (driver && driver.on) {
+    cls = "info";
+    text = tr("climate.excluded_valve_feeding", { zone: zone.name, driver: driver.name });
+  } else {
+    cls = "warn";
+    text = tr("climate.excluded_valve_closing", { zone: zone.name });
+  }
+  const driverNote = driver ? `<div class="excluded-note">${tr("climate.excluded_driver_note", { driver: driver.name })}</div>` : "";
+  return `
+    <div class="excluded-zone">
+      <div class="excluded-title">${tr("climate.excluded_title", { zone: zone.name })}</div>
+      <div class="excluded-valve ${cls}">${text}</div>
+      ${driverNote}
+    </div>`;
+}
+
+function excludedZonesHtml(zones) {
+  if (climateMode !== "cool") return "";
+  return zones.filter(z => z.cool_enabled === false).map(excludedValveHtml).join("");
+}
+
 function zoneStatusText(zone) {
   if (climateAwayUntil) return tr("climate.status_away");
   if (zone.target_c == null) return tr("climate.no_target");
-  const target = zone.target_c.toFixed(0) + "°C";
+  const tier = targetTier(zone.target_c);
+  const target = zone.target_c.toFixed(0) + "°C" + (tier ? ` (${tr(`climate.tier_${tier}`).toLowerCase()})` : "");
   return zone.valve_on ? tr("climate.status_active", { target }) : tr("climate.status_reached", { target });
 }
 
@@ -1747,6 +1809,8 @@ async function refreshClimateZonesLive() {
     // else keyed off zone.sensor/zone.valve) doesn't keep polling a name
     // that stopped existing the moment the process restarted.
     climateZones = data.zones;
+    const excluded = document.getElementById("cool-excluded");
+    if (excluded) excluded.innerHTML = excludedZonesHtml(data.zones);
     updateSeasonHeading();
     updateAwayBadge();
     updateAwayBanner();

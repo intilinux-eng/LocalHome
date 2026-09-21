@@ -122,6 +122,7 @@ def create_app(config_path: str | None = None) -> Flask:
     thermostat = None
     interlock = None
     interlock_followers: dict[str, str] = {}
+    interlock_links: list[Interlock] = []
     mode_switch_names: set[str] = set()
     # thermostat_cfg (from apply_to_config() above) already has the
     # panel's saved zones whole-block-replacing config.yaml's own, if
@@ -176,6 +177,8 @@ def create_app(config_path: str | None = None) -> Flask:
                 poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             )
             interlock_followers = {link.leader: link.follower for link in interlocks}
+        thermostat.interlock_owned_valves = {link.follower: link.active_in_mode for link in interlocks}
+        interlock_links = interlocks
 
     manager.start()
     recorder.start()
@@ -196,6 +199,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
+    app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
@@ -214,6 +218,13 @@ def create_app(config_path: str | None = None) -> Flask:
 
     _register_routes(app)
     return app
+
+
+def _valve_driver(manager: DeviceManager, link) -> dict | None:
+    if link is None:
+        return None
+    reading = manager.sensor_reading(link.leader)
+    return {"name": link.leader, "ok": bool(reading.get("ok")), "on": bool(reading.get("ok") and reading.get("is_on"))}
 
 
 def _set_roles(roles: dict) -> dict:
@@ -471,6 +482,12 @@ def _register_routes(app: Flask) -> None:
             return jsonify(ok=True, mode=None, zones=[])
         manager: DeviceManager = app.config["MANAGER"]
         now = datetime.now()
+        mode = thermostat.schedule_store.get_mode()
+        # follower valve -> the interlock driving it in the current mode
+        valve_drivers = {
+            link.follower: link for link in app.config["INTERLOCK_LINKS"]
+            if link.active_in_mode in (None, mode)
+        }
         zones = []
         for zone in thermostat.zones:
             sensor_reading = manager.sensor_reading(zone.sensor)
@@ -509,6 +526,11 @@ def _register_routes(app: Flask) -> None:
                 "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
                 "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
                 "sensor_failsafe_hours": thermostat.sensor_failsafe_hours,
+                # Set when an interlock drives this zone's valve right now
+                # (e.g. a dehumidifier fed through a bathroom valve that's
+                # excluded from cooling) - the dashboard's "why is it open"
+                # for a valve the thermostat itself leaves alone.
+                "valve_driver": _valve_driver(manager, valve_drivers.get(zone.valve)),
             })
         away_until = thermostat.schedule_store.get_away_until()
         return jsonify(

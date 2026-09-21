@@ -7,6 +7,16 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- Cooling palette in blues - the deeper the blue, the cooler the target -
+  split into **Comfort** (20-25°C) and **Economy** (26°C and up, a muted
+  green), labelled above the swatches and next to each zone's current
+  target. Previously the higher cooling setpoints came out orange and
+  red, reading as "hot".
+- While cooling, a zone excluded from it (the bathrooms) shows a panel
+  with its valve's real state instead of just being hidden: "closed ✓",
+  "open: feeding <dehumidifier>", "still open: closing" or "state
+  unknown". `GET /api/climate/zones` reports which interlock drives a
+  valve (`valve_driver`).
 - VMC speed modes: the VMC card has no on/off toggle anymore
   (mechanical ventilation runs continuously) and offers three one-tap
   modes - Night 20%, Day 50%, Boost 100% - above the slider, with the
@@ -95,7 +105,18 @@ date rather than by tag.
   dashboard's palette and grid within one refresh, instead of leaving
   the previous season's palette in place until a reload.
 
+### Changed
+- A zone excluded from cooling (`cool_enabled: false`) now has its valve
+  **held closed** in cool mode, checked against its real state every
+  tick - it used to be left untouched, so a valve left open from the
+  heating season (or opened by hand) stayed open all summer. A valve an
+  interlock owns in cool mode is still left to that interlock.
+- An interlock whose leader stops answering now switches its follower
+  off instead of leaving it as it was.
+
 ### Fixed
+- Translated texts with the same placeholder twice (e.g. `{driver}`)
+  only filled in the first one.
 - The VMC speed set from the dashboard was never applied: LocalHome
   sent the brightness as `30.0`, which the Shelly 0/1-10V Dimmer Gen3
   silently ignores, while the dashboard showed the new value as if it

@@ -118,7 +118,6 @@
     "days": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
     "dehumidifier": "Deumidificatore",
     "no_zones": "Nessuna zona climatica configurata - vedi docs/configuration.md#thermostat-heatingcooling-zones",
-    "cooling_excluded_note": "{count} zona/e nascosta/e qui in raffrescamento - i loro pannelli radianti non possono essere raffreddati in sicurezza (rischio condensa). Restano attive in riscaldamento.",
     "linked_valve_on": "Ha aperto anche {valve} in questo momento",
     "linked_valve_off": "{valve} chiusa",
     "save_failed": "Salvataggio della programmazione non riuscito",
@@ -140,7 +139,15 @@
     "valve_opened_marker": "Apertura valvola",
     "valve_lane": "Valvola",
     "no_target_in_range": "Nessun target attivo in questo intervallo",
-    "readout_latest": "Ultimo dato {time}"
+    "readout_latest": "Ultimo dato {time}",
+    "tier_comfort": "Comfort",
+    "tier_economy": "Economy",
+    "excluded_title": "{zone}: esclusa dal raffrescamento per evitare condensa",
+    "excluded_valve_closed": "Valvola {zone} chiusa ✓",
+    "excluded_valve_feeding": "Valvola {zone} aperta: alimenta {driver} (acceso)",
+    "excluded_valve_closing": "Valvola {zone} ancora aperta: in chiusura",
+    "excluded_valve_unknown": "Valvola {zone}: stato sconosciuto - {error}",
+    "excluded_driver_note": "Si apre solo mentre {driver} è acceso, poi si richiude. Se {driver} non risponde, resta chiusa."
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",

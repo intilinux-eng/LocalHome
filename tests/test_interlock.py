@@ -104,14 +104,16 @@ def test_scoped_to_a_mode_acts_when_mode_matches():
     assert follower.calls == ["on"]
 
 
-def test_unknown_leader_reading_is_skipped_gracefully():
+def test_unreachable_leader_closes_its_follower():
+    # A dehumidifier that stopped answering can't be confirmed running, so
+    # the bathroom valve feeding it closes instead of staying open.
     follower = FakeSwitch()
-    manager = FakeManager(readings={}, switches={"Bathrooms Valve": follower})
+    manager = FakeManager(readings={"Bathrooms Valve": {"ok": True, "is_on": True}}, switches={"Bathrooms Valve": follower})
     controller = InterlockController(manager, [Interlock(leader="Missing Leader", follower="Bathrooms Valve")])
 
     controller.tick()  # must not raise
 
-    assert follower.calls == []
+    assert follower.calls == ["off"]
 
 
 # ----------------------------------------------------------- ModeSwitch ----

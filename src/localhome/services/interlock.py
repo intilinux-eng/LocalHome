@@ -95,9 +95,11 @@ class InterlockController:
             if link.active_in_mode is not None and link.active_in_mode != current_mode:
                 continue
             leader_reading = self.manager.sensor_reading(link.leader)
-            if not leader_reading.get("ok"):
-                continue
-            self._apply(link.follower, bool(leader_reading.get("is_on")))
+            # A leader that isn't answering can't be confirmed running, so
+            # its follower closes: e.g. a dehumidifier gone offline mustn't
+            # leave the bathroom valve feeding it open indefinitely.
+            leader_on = bool(leader_reading.get("ok") and leader_reading.get("is_on"))
+            self._apply(link.follower, leader_on)
         for mode_switch in self.mode_switches:
             self._apply(mode_switch.switch, current_mode == mode_switch.active_in_mode)
 

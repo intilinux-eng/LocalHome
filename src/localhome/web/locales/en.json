@@ -118,7 +118,6 @@
     "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     "dehumidifier": "Dehumidifier",
     "no_zones": "No climate zones configured - see docs/configuration.md#thermostat-heatingcooling-zones",
-    "cooling_excluded_note": "{count} zone(s) hidden here while cooling - their radiant panels can't be cooled safely (condensation risk). Still active in heating mode.",
     "linked_valve_on": "Also has {valve} open right now",
     "linked_valve_off": "{valve} closed",
     "save_failed": "Couldn't save the schedule",
@@ -140,7 +139,15 @@
     "valve_opened_marker": "Valve opened",
     "valve_lane": "Valve",
     "no_target_in_range": "No target active in this range",
-    "readout_latest": "Latest {time}"
+    "readout_latest": "Latest {time}",
+    "tier_comfort": "Comfort",
+    "tier_economy": "Economy",
+    "excluded_title": "{zone}: excluded from cooling to avoid condensation",
+    "excluded_valve_closed": "{zone} valve closed ✓",
+    "excluded_valve_feeding": "{zone} valve open: feeding {driver} (on)",
+    "excluded_valve_closing": "{zone} valve still open: closing",
+    "excluded_valve_unknown": "{zone} valve: state unknown - {error}",
+    "excluded_driver_note": "It opens only while {driver} runs, then closes again. If {driver} stops answering, it stays closed."
   },
   "climate_admin": {
     "link_title": "Climate admin panel",

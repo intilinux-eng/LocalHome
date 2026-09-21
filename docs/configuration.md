@@ -240,13 +240,19 @@ cold ceiling panel regardless of the room's own temperature - gets
       cool_enabled: false   # default: true
 ```
 
-While `thermostat.mode` is `"cool"`, the control loop never touches this
-zone's valve for temperature reasons at all - not even a forced "closed"
-command, it's simply skipped (see the next section for why that
-distinction matters). It behaves completely normally in `"heat"` mode.
-The dashboard hides a `cool_enabled: false` zone's card entirely while
-cooling (nothing to schedule - the thermostat won't act on it), and
-shows it again in heat mode.
+While `thermostat.mode` is `"cool"`, this zone's valve is **held
+closed**: never opened for the zone's temperature, and checked against
+its real state on every tick - a valve left open from the heating
+season, or opened by hand, closes again at the next tick. The one
+exception is a valve an [interlock](#interlocks-one-switch-forced-to-follow-another)
+owns in cool mode: that interlock decides instead (see the next
+section). It behaves completely normally in `"heat"` mode.
+
+While cooling, the dashboard replaces this zone's card with a panel
+showing its valve's real state and why: "excluded from cooling to avoid
+condensation - valve closed ✓", "open: feeding <dehumidifier> (on)"
+when an interlock opened it, "still open: closing", or "state unknown"
+if the valve isn't answering. The card comes back in heat mode.
 
 ### `interlocks`: one switch forced to follow another
 
@@ -277,6 +283,14 @@ shows this relationship on the leader's own switch card ("Also has
 Bathrooms Valve open right now") whenever it's actually in effect, since
 otherwise a valve opening for a reason unrelated to its own zone's
 temperature would be confusing to see.
+
+A leader that isn't answering can't be confirmed running, so its
+follower is switched **off** - a dehumidifier gone offline doesn't leave
+the valve feeding it open indefinitely.
+
+Leave this interlock out if that zone's valve must stay closed in cool
+mode no matter what: without it, a `cool_enabled: false` zone's valve is
+simply held closed all summer (see above).
 
 Nothing about `interlocks` is dehumidifier-specific - any "switch A on
 requires switch B on too" relationship fits.

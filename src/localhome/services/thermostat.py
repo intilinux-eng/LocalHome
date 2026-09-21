@@ -267,6 +267,12 @@ class ThermostatController:
         # the admin panel's system status flags a control loop that has
         # stopped completing, which nothing else on the dashboard would show.
         self.last_tick_ok_ts: float | None = None
+        # valve name -> the mode an interlock owns it in (None = every
+        # mode), set by create_app() once interlocks are parsed. A zone
+        # excluded from cooling leaves such a valve to its interlock (e.g.
+        # a water-based dehumidifier fed through it); any other excluded
+        # valve is held closed in cool mode - see _tick().
+        self.interlock_owned_valves: dict[str, str | None] = {}
 
     def start(self) -> None:
         if self._started:
@@ -297,6 +303,12 @@ class ThermostatController:
         finally:
             self._applied_targets = applied
 
+    def valve_owned_by_interlock(self, valve: str, mode: str) -> bool:
+        if valve not in self.interlock_owned_valves:
+            return False
+        owned_in = self.interlock_owned_valves[valve]
+        return owned_in is None or owned_in == mode
+
     def applied_target(self, zone_name: str) -> float | None:
         """The target the last tick actually drove this zone's valve
         against, or None if no target was in control - see tick()."""
@@ -326,12 +338,21 @@ class ThermostatController:
                 self._apply(zone, False)
                 continue
             if mode == "cool" and not zone.cool_enabled:
-                # Hands off entirely - not even a forced "closed" command.
-                # Something else (e.g. services/interlock.py, for a
-                # dehumidifier sharing this valve's water circuit) may
-                # legitimately need to open this valve for a reason that
-                # has nothing to do with this zone's own temperature;
-                # the thermostat has no business fighting it over that.
+                # Excluded from cooling (condensation risk): never opened
+                # for this zone's own temperature. If an interlock owns the
+                # valve in this mode (a dehumidifier sharing its water
+                # circuit), that interlock decides - it opens it only while
+                # its leader runs, and closes it otherwise. Anything else
+                # is held closed, so a valve left open from the heating
+                # season can't keep feeding chilled water to these panels.
+                if self.valve_owned_by_interlock(zone.valve, mode):
+                    continue
+                # Checked against the valve's real state every tick, not
+                # just the last command sent: opened by hand (or by anything
+                # else) it closes again at the next tick.
+                if self.manager.sensor_reading(zone.valve).get("is_on"):
+                    self._valve_open.pop(zone.name, None)
+                self._apply(zone, False)
                 continue
             reading = self.manager.sensor_reading(zone.sensor)
             if not reading.get("ok") or "temperature_c" not in reading:

@@ -6,7 +6,7 @@
 function tr(path, vars) {
   const value = path.split(".").reduce((node, key) => (node == null ? undefined : node[key]), window.I18N);
   let str = value != null ? value : path;
-  if (vars) for (const k in vars) str = str.replace(`{${k}}`, vars[k]);
+  if (vars) for (const k in vars) str = str.split(`{${k}}`).join(vars[k]);
   return str;
 }
 

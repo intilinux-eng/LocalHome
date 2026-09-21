@@ -832,6 +832,67 @@ input[type="range"]:disabled {
 .sched-swatch.active {
   border-color: white;
 }
+/* Cooling palette split into Comfort / Economy - see paletteHtml(). */
+.sched-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sched-tier-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sched-tier-economy .sched-tier-label {
+  color: hsl(150, 40%, 60%);
+}
+.sched-tier-swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sched-palette:has(.sched-tier) {
+  align-items: flex-end;
+  column-gap: 12px;
+}
+
+/* A zone excluded from cooling: its valve's real state, in place of its
+   card - see excludedZonesHtml(). */
+.excluded-zones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.excluded-zone {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.85rem;
+}
+.excluded-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.excluded-valve {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.excluded-valve.ok { background: rgba(48, 209, 88, 0.18); color: #30d158; }
+.excluded-valve.info { background: rgba(57, 135, 229, 0.2); color: #6fa8ef; }
+.excluded-valve.warn { background: rgba(255, 159, 10, 0.18); color: #ff9f0a; }
+.excluded-valve.bad { background: rgba(255, 69, 58, 0.18); color: #ff453a; }
+.excluded-note {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
 
 .sched-hour-axis-wrap {
   /* No padding here - the axis grid inside must stay exactly as wide as

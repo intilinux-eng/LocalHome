@@ -197,25 +197,46 @@ def test_tick_does_not_recommand_an_already_correct_valve_state(tmp_path):
     assert switch.calls == ["on"]
 
 
-def test_cool_disabled_zone_is_never_touched_while_cooling(tmp_path):
-    # A bathroom's radiant panel would condense regardless of its own
-    # temperature - cool_enabled=False means "hands off entirely" in cool
-    # mode, not even a forced "closed" command (see services/interlock.py
-    # for why something else may legitimately need to open that valve).
+def _cool_excluded_bathroom(tmp_path):
     zones = [Zone(name="Bathrooms", sensor="Bath Temp", valve="Bath Valve", cool_enabled=False)]
     switch = FakeSwitch()
     manager = FakeManager(readings={"Bath Temp": {"ok": True, "temperature_c": 30.0}}, switches={"Bath Valve": switch})
     store = ScheduleStore(str(tmp_path / "schedules.json"))
     store.set_mode("cool")
-    week = ScheduleStore.empty_week()
-    for day in week:
-        week[day] = [22.0] * 24  # 30C vs target 22C in cool mode would normally open it
-    store.set_week("Bathrooms", week)
+    store.set_week("Bathrooms", _flat_week(22.0))  # 30C vs 22C would normally open it
+    return ThermostatController(manager, store, zones, hysteresis_c=0.3), switch
 
-    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+def test_cool_disabled_zone_is_held_closed_while_cooling(tmp_path):
+    # A bathroom's radiant panel would condense regardless of its own
+    # temperature: never opened for it in cool mode, and actively closed -
+    # a valve left open from the heating season must not stay open.
+    controller, switch = _cool_excluded_bathroom(tmp_path)
+
+    controller.tick(now=datetime(2026, 9, 14, 14, 0))
+
+    assert switch.calls == ["off"]
+
+
+def test_cool_disabled_valve_owned_by_an_interlock_is_left_to_it(tmp_path):
+    # A water-based dehumidifier fed through this valve: the interlock opens
+    # it while the dehumidifier runs and closes it otherwise - the thermostat
+    # mustn't fight it.
+    controller, switch = _cool_excluded_bathroom(tmp_path)
+    controller.interlock_owned_valves = {"Bath Valve": "cool"}
+
     controller.tick(now=datetime(2026, 9, 14, 14, 0))
 
     assert switch.calls == []
+
+
+def test_interlock_owning_the_valve_only_in_heat_does_not_exempt_it_in_cool(tmp_path):
+    controller, switch = _cool_excluded_bathroom(tmp_path)
+    controller.interlock_owned_valves = {"Bath Valve": "heat"}
+
+    controller.tick(now=datetime(2026, 9, 14, 14, 0))
+
+    assert switch.calls == ["off"]
 
 
 def test_cool_disabled_zone_behaves_normally_in_heat_mode(tmp_path):
@@ -674,3 +695,16 @@ def test_no_applied_target_in_an_off_hour(tmp_path):
     store.set_week("Rooms", week, mode="heat")
     controller.tick(now=datetime(2026, 9, 21, 8, 0))  # a Monday, 08:00 is "off"
     assert controller.applied_target("Rooms") is None
+
+
+def test_cool_disabled_valve_opened_by_hand_is_closed_again(tmp_path):
+    controller, switch = _cool_excluded_bathroom(tmp_path)
+    controller.tick(now=datetime(2026, 9, 14, 14, 0))
+    assert switch.calls == ["off"]
+
+    # Someone opens it (manual toggle, another app): the next tick sees the
+    # real state, not just the command it sent last time, and closes it.
+    controller.manager._readings["Bath Valve"] = {"ok": True, "is_on": True}
+    controller.tick(now=datetime(2026, 9, 14, 14, 1))
+
+    assert switch.calls == ["off", "off"]

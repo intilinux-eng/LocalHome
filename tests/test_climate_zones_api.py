@@ -224,3 +224,45 @@ def test_schedule_api_rejects_an_unknown_season(tmp_path):
 
     assert client.get("/api/climate/zones/Rooms/schedule?mode=spring").status_code == 400
     assert client.post("/api/climate/zones/Rooms/schedule", json={"week": _week(20), "mode": "spring"}).status_code == 400
+
+
+def test_zones_api_names_the_interlock_driving_an_excluded_valve(tmp_path):
+    # Cool mode: the bathroom valve is excluded from cooling but fed to a
+    # dehumidifier by an interlock - the dashboard needs to know why it
+    # might be open.
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+web:
+  port: 5000
+integrations:
+  - kind: climate
+    type: simulated
+    name: "Bath Sensor"
+  - kind: switch
+    type: simulated
+    name: "Bath Valve"
+  - kind: switch
+    type: simulated
+    name: "Dehumidifier"
+thermostat:
+  mode: cool
+  zones:
+    - name: "Bathrooms"
+      sensor: "Bath Sensor"
+      valve: "Bath Valve"
+      cool_enabled: false
+  interlocks:
+    - leader: "Dehumidifier"
+      follower: "Bath Valve"
+      active_in_mode: "cool"
+""",
+        encoding="utf-8",
+    )
+    app = create_app(str(config_path))
+
+    (zone,) = app.test_client().get("/api/climate/zones").get_json()["zones"]
+
+    assert zone["valve_driver"]["name"] == "Dehumidifier"
+    assert zone["valve_driver"]["on"] is False
+    assert app.config["THERMOSTAT"].interlock_owned_valves == {"Bath Valve": "cool"}
