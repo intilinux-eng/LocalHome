@@ -923,15 +923,29 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True)
 
 
+# Worker threads for the web server. One dashboard tab fires ~20 requests
+# at once on load (every card, chart and stat) - 8 serves that without
+# queueing, with room for a second device.
+WEB_THREADS = 8
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    # One INFO line per HTTP request was ~98% of everything this process
-    # logged - ~33k lines a day with a dashboard open, all rewritten to the
-    # board's eMMC by journald. Errors (a bad request, a 500) still show.
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = create_app()
     config = app.config["LOCALHOME_CONFIG"]
-    app.run(host=config.web_host, port=config.web_port, debug=False)
+    # Waitress, not Flask's own app.run(): that one is werkzeug's
+    # development server, which Flask itself says not to use in
+    # production. Waitress is a production WSGI server that's still a
+    # single multi-threaded process - which matters here: create_app()
+    # starts the thermostat, pollers and history recorder inside this
+    # process, and a multi-process server (gunicorn's workers) would start
+    # one copy of each per worker, all commanding the same valves.
+    # Pure Python, so it installs the same on the board and a dev PC.
+    # It logs no per-request lines (those were ~98% of werkzeug's log
+    # volume, all written to the board's eMMC by journald).
+    from waitress import serve
+
+    serve(app, host=config.web_host, port=config.web_port, threads=WEB_THREADS, ident="LocalHome")
 
 
 if __name__ == "__main__":

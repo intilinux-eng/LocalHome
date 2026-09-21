@@ -117,6 +117,13 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- The dashboard/API now runs on **Waitress**, a production WSGI server,
+  instead of Flask's own development server (werkzeug's `app.run()`,
+  which Flask itself says not to use in production). Still one
+  multi-threaded process, so the thermostat and pollers run exactly
+  once; pure Python, so it installs the same on the board and a PC. New
+  dependency: `waitress` (ZPL-2.1). Reinstall after updating:
+  `.venv/bin/pip install -e .`
 - New `thermostat.mode_limited_switches`: a switch controlled by hand but
   usable in one mode only, forced off in any other - a dehumidifier used
   only while cooling no longer stays on, hidden, after switching to

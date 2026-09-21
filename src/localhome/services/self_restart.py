@@ -6,13 +6,13 @@ can offer a "Restart LocalHome" button instead of every saved change
 to SSH in and restart the process by hand before it takes effect.
 
 On Linux (the deployment target) this is a real execve() syscall. Python
-sockets are normally non-inheritable across exec (PEP 446), but
-werkzeug's run_simple() - the server Flask's app.run() uses - marks its
-listening socket inheritable on purpose (for its own reloader) and
-records it in WERKZEUG_SERVER_FD. Left like that, the new process
-inherited port 5000 still bound, failed with "Address already in use"
-and only came back because systemd restarts it on failure (seen on the
-real board). _release_server_socket() undoes that just before the exec.
+sockets are non-inheritable across exec by default (PEP 446), so the
+listening socket closes with the old image. The exception was werkzeug's
+development server (Flask's app.run(), used before Waitress): it marks
+its socket inheritable on purpose and records it in WERKZEUG_SERVER_FD,
+so the relaunched process found port 5000 still bound ("Address already
+in use", seen on the real board). _release_server_socket() still undoes
+that, for anyone running the app under that server.
 
 On Windows this is considerably worse than "a small window that might
 race" - confirmed empirically, not just in theory: the C runtime's

@@ -12,6 +12,7 @@ license = { text = "MIT" }
 
 dependencies = [
     "flask>=3.0",
+    "waitress>=3.0",
     "tinytuya>=1.13",
     "aiohttp>=3.9",
     "meross-iot>=0.4",

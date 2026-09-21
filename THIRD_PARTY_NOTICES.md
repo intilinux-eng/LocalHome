@@ -9,6 +9,7 @@ copyleft/share-alike obligations on this project - one exception,
 |---------------|-----------------|----------|
 | [tinytuya](https://github.com/jasonacox/tinytuya)   | MIT             | Local LAN control of Tuya-based devices (covers, air-quality sensor) |
 | [Flask](https://github.com/pallets/flask)           | BSD-3-Clause    | The web dashboard/API |
+| [Waitress](https://github.com/Pylons/waitress)      | ZPL-2.1         | The production web server the dashboard/API runs on |
 | [aiohttp](https://github.com/aio-libs/aiohttp)       | Apache-2.0 / MIT | eWeLink cloud HTTP/WebSocket client |
 | [meross-iot](https://github.com/albertogeniola/MerossIot) | MIT       | Meross smartplug cloud/MQTT client |
 | [requests](https://github.com/psf/requests)          | Apache-2.0      | Telegram notifications |
