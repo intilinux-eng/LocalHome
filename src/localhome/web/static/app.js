@@ -950,23 +950,25 @@ async function cancelAway() {
 // a zone - see boot()), plus a weekly per-hour setpoint schedule this tab
 // edits directly. See services/thermostat.py for the control-loop side.
 
-// A live clock, and re-highlighting whichever schedule cell "now" points
-// at, so it's always obvious which hour of which day is currently driving
-// each zone's target - without this, the target number in the header was
-// the only clue, disconnected from the grid that actually produced it.
-function updateClimateClock() {
-  const el = document.getElementById("climate-clock");
-  if (el) {
-    el.textContent = new Date().toLocaleString(LOCALE, {
-      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-    });
-  }
+// Which day/hour cell "now" is - by the *server's* clock, because that's
+// the one the thermostat picks each target with (services/thermostat.py).
+// Highlighting by this browser's own clock instead is what hid a board
+// left on UTC: the grid lit up 08:00 while 06:00 was actually being
+// applied. Falls back to the browser only until the first sync lands.
+function scheduleNow() {
+  const server = window.ServerClock && window.ServerClock.now();
+  if (server) return { dayKey: DAY_KEYS[(server.getUTCDay() + 6) % 7], hour: server.getUTCHours() };
+  const local = new Date();
+  return { dayKey: currentDayKey(local), hour: local.getHours() };
 }
 
+// Re-highlighting whichever schedule cell "now" points at, so it's always
+// obvious which hour of which day is currently driving each zone's target -
+// without this, the target number in the header was the only clue,
+// disconnected from the grid that actually produced it. The clock itself
+// lives in the page header (static/server_clock.js).
 function updateNowHighlight() {
-  const now = new Date();
-  const dayKey = currentDayKey(now);
-  const hour = now.getHours();
+  const { dayKey, hour } = scheduleNow();
   document.querySelectorAll(".sched-cell.now, .sched-day-label.now, .sched-hour-axis span.now").forEach(c => c.classList.remove("now"));
   document.querySelectorAll(`.sched-day-label`).forEach((label, i) => {
     if (DAY_KEYS[i % 7] === dayKey) label.classList.add("now");
@@ -1242,9 +1244,7 @@ function buildScheduleGrid(zoneId, week) {
   if (!grid) return;
   grid.innerHTML = "";
   const dayLabels = tr("climate.days");
-  const now = new Date();
-  const nowDayKey = currentDayKey(now);
-  const nowHour = now.getHours();
+  const { dayKey: nowDayKey, hour: nowHour } = scheduleNow();
 
   DAY_KEYS.forEach((dayKey, d) => {
     const label = document.createElement("span");
@@ -1504,9 +1504,6 @@ async function boot() {
   setInterval(() => pollableSensors.forEach(refreshSensor), 5000);
   setInterval(() => pollableSensors.forEach(loadChart), 60000);
 
-  updateClimateClock();
-  setInterval(updateClimateClock, 30000);
-
   if (climateData.ok) {
     climateMode = climateData.mode || "heat";
     climateAwayUntil = climateData.away_until || null;
@@ -1524,6 +1521,10 @@ async function boot() {
     setInterval(refreshClimateZonesLive, 5000);
     setInterval(() => climateZones.forEach(z => refreshOnHours(z.name)), 30000);
     setInterval(() => climateZones.forEach(z => loadChart({ name: z.sensor, kind: "climate", valve: z.valve })), 60000);
+    // On the server clock's own minute boundary, so the highlight moves to
+    // the next hour's cell exactly when the thermostat does - plus a slow
+    // fallback in case the clock never syncs at all.
+    document.addEventListener("serverclock:minute", updateNowHighlight);
     setInterval(updateNowHighlight, 30000);
   }
   applyClimateModeVisibility();

@@ -1,5 +1,12 @@
 {
   "locale": "en-US",
+  "clock": {
+    "tooltip": "LocalHome system time - zone {zone} ({offset}). This is the clock the thermostat uses to pick each hour's slot.",
+    "hours": "{n} h",
+    "minutes": "{n} min",
+    "warning_timezone": "<strong>The system's timezone differs from this device's.</strong> The system uses {server}, this device {device}. The hourly schedule follows the system clock, so every slot is applied {shift} off. If the system isn't set to the home's timezone, fix it on the board with <code>sudo timedatectl set-timezone {zone}</code> and restart LocalHome.",
+    "warning_skew": "<strong>The system clock is {minutes} min off</strong> compared to this device. Check that NTP sync is active on the board (<code>timedatectl</code>)."
+  },
   "app": {
     "title": "LocalHome"
   },

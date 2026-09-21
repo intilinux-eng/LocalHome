@@ -6,6 +6,31 @@ date rather than by tag.
 
 ## Unreleased
 
+### Added
+- A clock in the header of both the dashboard and `/climate-admin`
+  showing the **server's** date and time - not the browser's - plus a
+  prominent warning when the server's timezone or clock disagrees with
+  the device viewing it. The thermostat picks each hour's target from
+  the server's clock, so a board left on its factory UTC default runs
+  every schedule slot hours off, while a browser-side clock keeps
+  showing the right time and hides it. That was live on the first real
+  deployment (an Arduino UNO Q): 08:00 in the house, the 06:00 slot
+  being applied. The warning names both zones, the resulting shift, and
+  the exact `timedatectl` command to fix it. The schedule grid's "now"
+  highlight follows the server clock too, so the lit-up cell is always
+  the one actually being applied. New `GET /api/server-time`; see
+  `services/system_clock.py`. The deployment guide now sets the
+  timezone as part of the first-time setup.
+
+### Fixed
+- The TP-Link LED strip drivers opened a python-kasa connection on
+  every read and command and never closed it, leaking an aiohttp
+  session, its socket and about one OS thread per call - with four
+  drivers polling every 20s, ~17k a day, taking the process past 4.5GB
+  of RAM in nine hours. Every connection now closes in a `finally`,
+  including on a failed read. On the target Arduino UNO Q the process
+  now holds steady at ~90MB (peak 91MB over 12h), 19 threads, 0.6% CPU.
+
 ### Changed
 - `/climate-admin`'s "Reporting" status now shows a battery sensor's
   reading age too, not just the value - and past 30 minutes, frames it

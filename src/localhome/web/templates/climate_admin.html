@@ -11,11 +11,13 @@
   <header>
     <h1>{{ t.climate_admin.page_title }}</h1>
     <div class="header-right">
+      {% with clock_zone_full = true %}{% include "_server_clock.html" %}{% endwith %}
       <a class="icon-btn-sm" href="/" title="{{ t.climate_admin.back_to_dashboard }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
       </a>
     </div>
   </header>
+  <div class="server-clock-warning" id="server-clock-warning" hidden></div>
 
   <p class="hint-text">{{ t.climate_admin.intro }}</p>
 
@@ -150,6 +152,7 @@
   <script>
     window.I18N = {{ t | tojson }};
   </script>
+  <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
   <script src="{{ url_for('static', filename='climate_admin.js') }}"></script>
 </body>
 </html>

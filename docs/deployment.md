@@ -32,6 +32,15 @@ sudo apt install -y git mosquitto python3-venv || sudo apt install -y git mosqui
 # (the exact venv package name varies by distro version - if the first
 #  one 404s, apt's own error names the right one; see below)
 
+#    Set the home's timezone. Fresh images - the Arduino UNO Q's
+#    included - default to UTC, and the thermostat picks each hour's
+#    target from the system clock, so a UTC board runs every schedule
+#    slot 1-2h off (confirmed on a real UNO Q). The dashboard's header
+#    clock shows the system's time and warns when it disagrees with
+#    your phone/PC, so a missed step here is visible, not silent:
+sudo timedatectl set-timezone Europe/Rome   # your own zone - `timedatectl list-timezones`
+timedatectl                                  # -> "Time zone: Europe/Rome", "synchronized: yes"
+
 # 2. Get the code and its dependencies - a normal user account is fine,
 #    no dedicated system user needed for a single-purpose device:
 git clone <this-repo> ~/localhome

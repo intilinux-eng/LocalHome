@@ -10,6 +10,7 @@
   <header>
     <h1>{{ t.app.title }}</h1>
     <div class="header-right">
+      {% include "_server_clock.html" %}
       <a class="icon-btn-sm" href="/climate-admin" title="{{ t.climate_admin.link_title }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
       </a>
@@ -18,6 +19,7 @@
       </button>
     </div>
   </header>
+  <div class="server-clock-warning" id="server-clock-warning" hidden></div>
 
   <div id="settings-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeSettings()">
     <div class="modal-panel">
@@ -111,7 +113,6 @@
         <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>
       </div>
     </div>
-    <p class="hint-text" id="climate-clock"></p>
     <div id="climate-zones"></div>
     <div id="climate-extra" class="dashboard-grid"></div>
   </div>
@@ -120,6 +121,7 @@
     window.COVER_NAMES = {{ cover_names | tojson }};
     window.I18N = {{ t | tojson }};
   </script>
+  <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

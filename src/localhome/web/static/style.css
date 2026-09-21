@@ -921,3 +921,95 @@ input[type="range"]:disabled {
   font-size: 0.88rem;
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------- server clock --
+   The server's date and time (static/server_clock.js), on both pages -
+   deliberately prominent, because it's the clock the thermostat schedules
+   against and a board with a wrong timezone should be obvious at a glance. */
+.server-clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.server-clock.is-warning {
+  border-color: rgba(255, 159, 10, 0.6);
+  background: rgba(255, 159, 10, 0.1);
+}
+.server-clock-time {
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  /* Fixed-width digits, so the clock doesn't shift sideways every minute. */
+  font-variant-numeric: tabular-nums;
+}
+.server-clock-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+.server-clock-date,
+.server-clock-date-short {
+  display: block;
+  color: var(--text);
+  opacity: 0.85;
+}
+.server-clock-date::first-letter,
+.server-clock-date-short::first-letter {
+  text-transform: uppercase;
+}
+.server-clock-date-short {
+  display: none;
+}
+.server-clock-zone {
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+@media (max-width: 560px) {
+  .server-clock {
+    padding: 5px 9px;
+    gap: 8px;
+  }
+  .server-clock-time {
+    font-size: 1.1rem;
+  }
+  .server-clock-date {
+    display: none;
+  }
+  .server-clock-date-short {
+    display: block;
+  }
+}
+
+.server-clock-warning {
+  margin: -6px 0 20px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 159, 10, 0.45);
+  border-left: 4px solid var(--accent-stop);
+  background: rgba(255, 159, 10, 0.1);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.server-clock-warning p {
+  margin: 0;
+}
+.server-clock-warning p + p {
+  margin-top: 8px;
+}
+.server-clock-warning strong {
+  color: var(--accent-stop);
+}
+.server-clock-warning code {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+}

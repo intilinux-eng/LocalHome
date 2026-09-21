@@ -32,6 +32,7 @@ from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
 from localhome.services.self_restart import is_supported, schedule_restart
+from localhome.services.system_clock import server_time
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -210,6 +211,13 @@ def _register_routes(app: Flask) -> None:
             t=app.config["TRANSLATIONS"],
             lang=config.web_language,
         )
+
+    @app.route("/api/server-time")
+    def api_server_time():
+        # The clock both pages show - the server's, not the browser's, so
+        # a wrongly-set board timezone is visible instead of silently
+        # shifting every schedule slot. See services/system_clock.py.
+        return jsonify(ok=True, **server_time())
 
     @app.route("/api/devices")
     def api_devices():
