@@ -320,7 +320,20 @@
     "maint_done_clear_history": "Storico cancellato ({rows} righe). Copia salvata sulla scheda: {backup}.",
     "maint_done_clear_schedules": "Programmazioni cancellate. Backup salvato sulla scheda: {backup}.",
     "maint_reset_done_restarting": "Reset eseguito, backup {backup} sulla scheda. Riavvio di LocalHome in corso…",
-    "maint_reset_done_manual": "Reset eseguito, backup {backup} sulla scheda. Riavvia LocalHome a mano per completarlo."
+    "maint_reset_done_manual": "Reset eseguito, backup {backup} sulla scheda. Riavvia LocalHome a mano per completarlo.",
+    "system_group_network": "Rete",
+    "system_wifi_network": "Rete Wi-Fi",
+    "system_wifi_signal": "Segnale",
+    "system_wifi_band": "Banda",
+    "system_wifi_channel": "canale {channel}",
+    "system_wifi_excellent": "ottimo",
+    "system_wifi_good": "buono",
+    "system_wifi_fair": "debole",
+    "system_wifi_poor": "scarso",
+    "system_wifi_none": "nessuna (o non rilevabile)",
+    "system_ip": "Indirizzo IP",
+    "system_name": "Nome sulla rete",
+    "system_problem_wifi_weak": "Segnale Wi-Fi debole su {subject}: avvicina la scheda al router o usa un ripetitore"
   },
   "vmc_presets": {
     "night": "Notte",

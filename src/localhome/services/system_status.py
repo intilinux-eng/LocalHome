@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import socket
+import subprocess
 import sys
 import threading
 import time
@@ -174,6 +176,72 @@ def host_stats() -> dict:
     }
 
 
+def _nmcli_fields(line: str) -> list[str]:
+    """Splits one `nmcli -t` line: fields are ':'-separated, and a ':' or
+    '\\' inside a value (an SSID, a MAC address) is escaped with '\\'."""
+    fields, current, escaped = [], [], False
+    for ch in line:
+        if escaped:
+            current.append(ch)
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif ch == ":":
+            fields.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    fields.append("".join(current))
+    return fields
+
+
+def _nmcli(*args: str) -> list[list[str]] | None:
+    try:
+        out = subprocess.run(["nmcli", "-t", *args], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None  # no NetworkManager here (a PC, a container)
+    if out.returncode != 0:
+        return None
+    return [_nmcli_fields(line) for line in out.stdout.splitlines() if line]
+
+
+def network_status(run=_nmcli) -> dict:
+    """The Wi-Fi network the board is on, as NetworkManager reports it
+    (read-only - nothing here changes the connection), plus the names it
+    answers to. `wifi` is None when there's no NetworkManager or no Wi-Fi
+    in use (a wired board, a PC)."""
+    hostname = socket.gethostname()
+    status = {"hostname": hostname, "mdns_name": f"{hostname}.local", "wifi": None}
+    devices = run("-f", "DEVICE,TYPE,STATE", "device") or []
+    wifi_device = next((d[0] for d in devices if len(d) >= 3 and d[1] == "wifi" and d[2] == "connected"), None)
+    if wifi_device is None:
+        return status
+    active = next((row for row in (run("-f", "ACTIVE,SSID,SIGNAL,FREQ,CHAN,SECURITY", "device", "wifi", "list",
+                                        "ifname", wifi_device, "--rescan", "no") or [])
+                   if row and row[0] == "yes"), None)
+    details = {}
+    for row in run("-f", "IP4.ADDRESS,IP4.GATEWAY,GENERAL.HWADDR", "device", "show", wifi_device) or []:
+        if len(row) >= 2:
+            details[row[0].split("[")[0]] = ":".join(row[1:])
+    wifi = {"device": wifi_device, "ip": (details.get("IP4.ADDRESS") or "").split("/")[0] or None,
+            "gateway": details.get("IP4.GATEWAY") or None, "mac": details.get("GENERAL.HWADDR") or None}
+    if active and len(active) >= 6:
+        freq = re.match(r"(\d+)", active[3] or "")
+        wifi.update(
+            ssid=active[1] or None,
+            signal_percent=int(active[2]) if active[2].isdigit() else None,
+            band="5 GHz" if freq and int(freq.group(1)) >= 4900 else "2.4 GHz" if freq else None,
+            channel=int(active[4]) if active[4].isdigit() else None,
+            security=active[5] or None,
+        )
+    status["wifi"] = wifi
+    return status
+
+
+# Weak enough that dropped MQTT messages and slow pages become likely.
+WIFI_WEAK_PERCENT = 30
+
+
 def _read(path: str) -> str | None:
     try:
         with open(path, encoding="ascii") as fh:
@@ -275,7 +343,7 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
 
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
-    cpu_temp_c: float | None = None,
+    cpu_temp_c: float | None = None, network: dict | None = None,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -293,6 +361,9 @@ def problems(
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
     if disk.get("low"):
         found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
+    wifi = (network or {}).get("wifi") or {}
+    if wifi.get("signal_percent") is not None and wifi["signal_percent"] < WIFI_WEAK_PERCENT:
+        found.append({"code": "wifi_weak", "subject": wifi.get("ssid") or "Wi-Fi", "detail": f"{wifi['signal_percent']}%"})
     if cpu_temp_c is not None and cpu_temp_c >= CPU_HOT_C:
         found.append({"code": "cpu_hot", "subject": f"{cpu_temp_c:.0f}°C", "detail": None})
     if storage and (storage["pre_eol"] in ("warning", "urgent") or (storage["wear_percent_max"] or 0) >= 80):

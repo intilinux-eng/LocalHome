@@ -320,7 +320,20 @@
     "maint_done_clear_history": "History cleared ({rows} rows). Copy saved on the board: {backup}.",
     "maint_done_clear_schedules": "Schedules cleared. Backup saved on the board: {backup}.",
     "maint_reset_done_restarting": "Reset done, backup {backup} on the board. Restarting LocalHome…",
-    "maint_reset_done_manual": "Reset done, backup {backup} on the board. Restart LocalHome by hand to finish it."
+    "maint_reset_done_manual": "Reset done, backup {backup} on the board. Restart LocalHome by hand to finish it.",
+    "system_group_network": "Network",
+    "system_wifi_network": "Wi-Fi network",
+    "system_wifi_signal": "Signal",
+    "system_wifi_band": "Band",
+    "system_wifi_channel": "channel {channel}",
+    "system_wifi_excellent": "excellent",
+    "system_wifi_good": "good",
+    "system_wifi_fair": "weak",
+    "system_wifi_poor": "poor",
+    "system_wifi_none": "none (or can't tell)",
+    "system_ip": "IP address",
+    "system_name": "Name on the network",
+    "system_problem_wifi_weak": "Weak Wi-Fi signal on {subject}: move the board closer to the router or use an extender"
   },
   "vmc_presets": {
     "night": "Night",

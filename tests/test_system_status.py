@@ -269,3 +269,43 @@ def test_a_hot_cpu_is_a_problem():
     problems = system_status.problems([], [], {"low": False}, [], None, 83.4)
     assert [(p["code"], p["subject"]) for p in problems] == [("cpu_hot", "83°C")]
     assert system_status.problems([], [], {"low": False}, [], None, 45.0) == []
+
+
+def test_nmcli_fields_keep_escaped_colons():
+    assert system_status._nmcli_fields(r"GENERAL.HWADDR:14\:B5\:CD\:EF\:1F\:A9") == ["GENERAL.HWADDR", "14:B5:CD:EF:1F:A9"]
+    assert system_status._nmcli_fields(r"yes:Casa\:Ospiti:72") == ["yes", "Casa:Ospiti", "72"]
+
+
+def _fake_nmcli(outputs):
+    def run(*args):
+        for key, rows in outputs.items():
+            if key in args:
+                return [system_status._nmcli_fields(line) for line in rows]
+        return None
+    return run
+
+
+def test_network_status_reads_the_active_wifi():
+    # Shaped like the real UNO Q's nmcli output.
+    run = _fake_nmcli({
+        "DEVICE,TYPE,STATE": ["wlan0:wifi:connected", "docker0:bridge:connected (externally)", "lo:loopback:connected"],
+        "ACTIVE,SSID,SIGNAL,FREQ,CHAN,SECURITY": ["no:Neighbour:40:2437 MHz:6:WPA2", "yes:Casa-WiFi:89:5500 MHz:100:WPA2"],
+        "IP4.ADDRESS,IP4.GATEWAY,GENERAL.HWADDR": ["IP4.ADDRESS[1]:192.168.1.28/24", "IP4.GATEWAY:192.168.1.1",
+                                                  r"GENERAL.HWADDR:14\:B5\:CD\:EF\:1F\:A9"],
+    })
+
+    wifi = system_status.network_status(run)["wifi"]
+
+    assert wifi == {"device": "wlan0", "ip": "192.168.1.28", "gateway": "192.168.1.1", "mac": "14:B5:CD:EF:1F:A9",
+                    "ssid": "Casa-WiFi", "signal_percent": 89, "band": "5 GHz", "channel": 100, "security": "WPA2"}
+
+
+def test_network_status_without_networkmanager():
+    status = system_status.network_status(lambda *args: None)
+    assert status["wifi"] is None and status["mdns_name"].endswith(".local")
+
+
+def test_a_weak_wifi_signal_is_a_problem():
+    network = {"wifi": {"ssid": "Casa", "signal_percent": 22}}
+    problems = system_status.problems([], [], {"low": False}, [], None, None, network)
+    assert [(p["code"], p["subject"]) for p in problems] == [("wifi_weak", "Casa")]

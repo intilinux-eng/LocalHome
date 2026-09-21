@@ -7,6 +7,9 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- The system status shows the board's network: Wi-Fi name, signal (with
+  a problem raised below 30%), band and channel, IP address and its
+  `.local` name - read from NetworkManager, never changed.
 - A **Maintenance** section in `/climate-admin`: download a
   configuration backup (credentials left out), clear the history, clear
   every schedule, or factory-reset to a fresh installation (only what

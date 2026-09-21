@@ -1007,6 +1007,33 @@ function problemHtml(problem) {
   return `<li>${escapeHtml(title)}${detail}</li>`;
 }
 
+function wifiSignalLabel(percent) {
+  if (percent >= 70) return tr("climate_admin.system_wifi_excellent");
+  if (percent >= 50) return tr("climate_admin.system_wifi_good");
+  if (percent >= 30) return tr("climate_admin.system_wifi_fair");
+  return tr("climate_admin.system_wifi_poor");
+}
+
+function networkRows(network) {
+  if (!network) return "";
+  const rows = [];
+  const wifi = network.wifi;
+  if (wifi) {
+    rows.push(statRowHtml(tr("climate_admin.system_wifi_network"), wifi.ssid || "--"));
+    if (typeof wifi.signal_percent === "number") {
+      rows.push(statRowHtml(tr("climate_admin.system_wifi_signal"),
+        `${wifi.signal_percent}% (${wifiSignalLabel(wifi.signal_percent)})`, wifi.signal_percent < 30));
+    }
+    const band = [wifi.band, wifi.channel ? tr("climate_admin.system_wifi_channel", { channel: wifi.channel }) : null].filter(Boolean).join(", ");
+    if (band) rows.push(statRowHtml(tr("climate_admin.system_wifi_band"), band));
+    rows.push(statRowHtml(tr("climate_admin.system_ip"), wifi.ip || "--"));
+  } else {
+    rows.push(statRowHtml(tr("climate_admin.system_wifi_network"), tr("climate_admin.system_wifi_none")));
+  }
+  rows.push(statRowHtml(tr("climate_admin.system_name"), network.mdns_name));
+  return rows.join("");
+}
+
 function systemStatusHtml(data) {
   const p = data.process || {};
   const h = data.host || {};
@@ -1054,6 +1081,7 @@ function systemStatusHtml(data) {
           data.storage.written_per_day_bytes == null ? "--" : tr("climate_admin.system_emmc_per_day", { amount: formatBytes(data.storage.written_per_day_bytes) })),
       ] : []),
     ].join("")],
+    [tr("climate_admin.system_group_network"), networkRows(data.network)],
     [tr("climate_admin.system_group_history"), [
       statRowHtml(tr("climate_admin.system_db_size"), formatBytes(db.file_bytes)),
       statRowHtml(tr("climate_admin.system_db_rows_24h"), count(db.rows_24h)),
