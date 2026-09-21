@@ -20,6 +20,12 @@ nothing to do with the thermostat's own temperature-driven logic:
   owns it (typically the thermostat) isn't fought over, a `ModeSwitch`
   has no other owner at all, so leaving its mode actively closes it
   rather than leaving it in whatever state it was.
+
+- `ModeLimitedSwitch` is a switch someone controls by hand, but only
+  while the thermostat is in one mode; in any other mode it's forced off.
+  The motivating case: a dehumidifier, usable only while cooling - switch
+  to heating and it's turned off (and its card hidden, via
+  `visible_in_mode`), instead of staying on unseen.
 """
 from __future__ import annotations
 
@@ -50,6 +56,12 @@ class ModeSwitch:
     active_in_mode: str
 
 
+@dataclass
+class ModeLimitedSwitch:
+    switch: str
+    only_in_mode: str
+
+
 class InterlockController:
     def __init__(
         self,
@@ -57,12 +69,14 @@ class InterlockController:
         interlocks: list[Interlock],
         mode_switches: list[ModeSwitch] = (),
         mode_provider=None,
+        mode_limited: list[ModeLimitedSwitch] = (),
         diagnostic_mode_provider=None,
         poll_interval_seconds: float = 20,
     ):
         self.manager = manager
         self.interlocks = interlocks
         self.mode_switches = list(mode_switches)
+        self.mode_limited = list(mode_limited)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
         self.poll_interval_seconds = poll_interval_seconds
@@ -102,6 +116,10 @@ class InterlockController:
             self._apply(link.follower, leader_on)
         for mode_switch in self.mode_switches:
             self._apply(mode_switch.switch, current_mode == mode_switch.active_in_mode)
+        for limited in self.mode_limited:
+            # Left to the user inside its mode; only ever forced off.
+            if current_mode != limited.only_in_mode:
+                self._apply(limited.switch, False)
 
     def _apply(self, follower_name: str, desired_on: bool) -> None:
         switch = self.manager.switches.get(follower_name)

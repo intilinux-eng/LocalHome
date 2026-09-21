@@ -295,6 +295,21 @@ simply held closed all summer (see above).
 Nothing about `interlocks` is dehumidifier-specific - any "switch A on
 requires switch B on too" relationship fits.
 
+### `mode_limited_switches`: a switch usable in one mode only
+
+For a switch you control by hand, but that only makes sense in one mode -
+a dehumidifier, used only while cooling. Outside that mode it's forced
+off; inside it, it's left entirely to you. Pair it with the integration's
+`visible_in_mode` so its card is hidden when it can't be used:
+
+```yaml
+thermostat:
+  ...
+  mode_limited_switches:
+    - switch: "Dehumidifier"      # a `switch` integration's name
+      only_in_mode: "cool"
+```
+
 ### `mode_switches`: one switch forced to follow the thermostat's mode
 
 For a switch that has no owner of its own at all - nothing schedules it,

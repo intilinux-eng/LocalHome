@@ -34,7 +34,7 @@ from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.services.position_control import PositionStore
-from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
+from localhome.services.interlock import Interlock, InterlockController, ModeLimitedSwitch, ModeSwitch
 from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
@@ -167,12 +167,17 @@ def create_app(config_path: str | None = None) -> Flask:
             for item in thermostat_cfg.get("mode_switches", [])
         ]
         mode_switch_names = {ms.switch for ms in mode_switches}
-        if interlocks or mode_switches:
+        mode_limited = [
+            ModeLimitedSwitch(switch=item["switch"], only_in_mode=item["only_in_mode"])
+            for item in thermostat_cfg.get("mode_limited_switches", [])
+        ]
+        if interlocks or mode_switches or mode_limited:
             interlock = InterlockController(
                 manager,
                 interlocks,
                 mode_switches,
                 mode_provider=schedule_store.get_mode,
+                mode_limited=mode_limited,
                 diagnostic_mode_provider=schedule_store.get_diagnostic_mode,
                 poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             )

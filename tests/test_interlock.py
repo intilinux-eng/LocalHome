@@ -1,4 +1,4 @@
-from localhome.services.interlock import Interlock, InterlockController, ModeSwitch
+from localhome.services.interlock import Interlock, InterlockController, ModeLimitedSwitch, ModeSwitch
 
 
 class FakeSwitch:
@@ -209,3 +209,29 @@ def test_diagnostic_mode_stops_every_interlock_and_mode_switch():
     # mode leaves every switch exactly as the installer set it manually.
     assert follower.calls == []
     assert bypass.calls == []
+
+
+# ---------------------------------------------------- ModeLimitedSwitch ----
+# A dehumidifier: switched by hand, but only while cooling.
+
+def _limited(mode, is_on):
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Dehumidifier": {"ok": True, "is_on": is_on}}, switches={"Dehumidifier": switch})
+    controller = InterlockController(
+        manager, [], mode_provider=lambda: mode,
+        mode_limited=[ModeLimitedSwitch(switch="Dehumidifier", only_in_mode="cool")],
+    )
+    return controller, switch
+
+
+def test_mode_limited_switch_is_forced_off_outside_its_mode():
+    controller, switch = _limited("heat", is_on=True)
+    controller.tick()
+    assert switch.calls == ["off"]
+
+
+def test_mode_limited_switch_is_left_to_the_user_in_its_mode():
+    for is_on in (True, False):
+        controller, switch = _limited("cool", is_on=is_on)
+        controller.tick()
+        assert switch.calls == []

@@ -266,3 +266,26 @@ thermostat:
     assert zone["valve_driver"]["name"] == "Dehumidifier"
     assert zone["valve_driver"]["on"] is False
     assert app.config["THERMOSTAT"].interlock_owned_valves == {"Bath Valve": "cool"}
+
+
+def test_mode_limited_switches_are_read_from_config(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+web:
+  port: 5000
+integrations:
+  - kind: switch
+    type: simulated
+    name: "Dehumidifier"
+thermostat:
+  zones: []
+  mode_limited_switches:
+    - switch: "Dehumidifier"
+      only_in_mode: "cool"
+""",
+        encoding="utf-8",
+    )
+    interlock = create_app(str(config_path)).config["INTERLOCK"]
+
+    assert [(m.switch, m.only_in_mode) for m in interlock.mode_limited] == [("Dehumidifier", "cool")]

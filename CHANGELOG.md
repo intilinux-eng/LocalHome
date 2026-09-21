@@ -106,6 +106,10 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- New `thermostat.mode_limited_switches`: a switch controlled by hand but
+  usable in one mode only, forced off in any other - a dehumidifier used
+  only while cooling no longer stays on, hidden, after switching to
+  heating.
 - A zone excluded from cooling (`cool_enabled: false`) now has its valve
   **held closed** in cool mode, checked against its real state every
   tick - it used to be left untouched, so a valve left open from the
