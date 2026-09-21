@@ -1,3 +1,4 @@
 # Shell scripts run on the Linux board: keep LF even in a Windows checkout,
-# or a repo copied over from Windows fails with ": command not found".
+# or a repo copied over from Windows fails with "
+: command not found".
 *.sh text eol=lf
