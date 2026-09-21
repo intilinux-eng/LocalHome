@@ -81,6 +81,29 @@ class HistoryStore:
             self._lock.release()
             raise
 
+    def clear(self) -> int:
+        """Removes every sample and gives the space back to the disk."""
+        conn = self._connect()
+        try:
+            removed = conn.execute("DELETE FROM readings").rowcount
+            conn.commit()
+            conn.execute("VACUUM")
+            return removed
+        finally:
+            conn.close()
+
+    def backup_to(self, path: str) -> None:
+        """A consistent copy of the database, taken while it stays in use."""
+        conn = self._connect()
+        try:
+            target = sqlite3.connect(path)
+            try:
+                conn.backup(target)
+            finally:
+                target.close()
+        finally:
+            conn.close()
+
     def close(self) -> None:
         with self._lock:
             if self._conn is not None:

@@ -337,3 +337,65 @@
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* Maintenance - destructive actions, see climate_admin.js. */
+.admin-danger {
+  border-color: rgba(255, 69, 58, 0.45);
+}
+.admin-danger summary {
+  color: #ff6b61;
+}
+.maint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--card-border);
+}
+.maint-row:last-of-type {
+  border-bottom: none;
+}
+.maint-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.maint-text .hint-text {
+  margin: 0;
+}
+.maint-download {
+  text-decoration: none;
+  text-align: center;
+}
+.maint-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 69, 58, 0.1);
+  border: 1px dashed rgba(255, 69, 58, 0.5);
+  font-size: 0.82rem;
+}
+.maint-confirm[hidden] {
+  display: none;
+}
+.maint-confirm input {
+  width: 110px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  letter-spacing: 0.08em;
+}
+.maint-confirm button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

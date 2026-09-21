@@ -84,6 +84,9 @@ async function restartLocalHome(button) {
 // own connection-error page - indistinguishable from a restart that's
 // genuinely stuck (the exact confusion this replaces).
 async function waitForServerAndReload(container) {
+  // The server only turns over ~1s after answering (services/self_restart.py):
+  // polling right away could reach the old process and reload too early.
+  await new Promise(r => setTimeout(r, 2500));
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 1000));
@@ -490,6 +493,7 @@ async function saveVmc(button) {
     resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadVmc();
+loadMaintenance();
     refreshVmcStatus();
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
@@ -1116,6 +1120,91 @@ async function refreshSystemStatus(force) {
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
+}
+
+// --------------------------------------------------------- maintenance ----
+// Clear the history, clear every schedule, reset to a fresh installation,
+// download a backup. Each destructive action needs "RESET" typed in and
+// saves a backup on the board first - see services/maintenance.py.
+
+const MAINTENANCE_ACTIONS = ["clear-history", "clear-schedules", "factory-reset"];
+
+async function loadMaintenance() {
+  try {
+    const res = await fetch("/api/climate-admin/maintenance");
+    const data = await res.json();
+    if (!data.ok) return;
+    const el = document.getElementById("maintenance-backups");
+    const backups = data.backups || [];
+    if (!backups.length) {
+      el.textContent = tr("climate_admin.maint_backups_none");
+    } else {
+      const latest = new Date(backups[0].mtime * 1000).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" });
+      el.textContent = tr("climate_admin.maint_backups_some", { count: backups.length, latest });
+    }
+    const schedules = document.getElementById("maint-row-clear-schedules");
+    if (schedules) schedules.hidden = !data.has_thermostat;
+  } catch (e) {
+    // Leave the previous text.
+  }
+}
+
+function askMaintenance(action) {
+  MAINTENANCE_ACTIONS.forEach(a => {
+    const box = document.getElementById(`maint-confirm-${a}`);
+    if (box) box.hidden = a !== action;
+  });
+  const input = document.getElementById(`maint-input-${action}`);
+  input.value = "";
+  document.getElementById(`maint-go-${action}`).disabled = true;
+  input.focus();
+}
+
+function onMaintenanceInput(action, input) {
+  document.getElementById(`maint-go-${action}`).disabled = input.value.trim() !== "RESET";
+}
+
+function cancelMaintenance(action) {
+  document.getElementById(`maint-confirm-${action}`).hidden = true;
+}
+
+async function runMaintenance(action, button) {
+  const result = document.getElementById("maintenance-result");
+  button.disabled = true;
+  let data;
+  try {
+    const res = await fetch(`/api/climate-admin/maintenance/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "RESET" }),
+    });
+    data = await res.json();
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+    button.disabled = false;
+    return;
+  }
+  cancelMaintenance(action);
+  if (!data.ok) {
+    result.textContent = tr("sensors.error_prefix") + data.error;
+    result.className = "hint-text admin-error";
+    return;
+  }
+  const backup = data.backup || data.history_backup || "";
+  result.className = "hint-text admin-success";
+  if (action === "factory-reset") {
+    result.textContent = data.restarting
+      ? tr("climate_admin.maint_reset_done_restarting", { backup })
+      : tr("climate_admin.maint_reset_done_manual", { backup });
+    if (data.restarting) await waitForServerAndReload(result);
+    return;
+  }
+  result.textContent = tr(`climate_admin.maint_done_${action.replace("-", "_")}`, {
+    backup, rows: data.rows_removed != null ? data.rows_removed.toLocaleString(LOCALE) : "",
+  });
+  loadMaintenance();
+  if (action === "clear-schedules") refreshStatus();
 }
 
 // -------------------------------------------------------------- polling ----

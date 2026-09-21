@@ -95,6 +95,13 @@ class ScheduleStore:
     def get_mode(self) -> str:
         return self._load().get("mode", self.default_mode)
 
+    def clear_schedules(self) -> None:
+        """Empties every zone's grid in both seasons and cancels away and
+        diagnostic mode; the current season stays as it is."""
+        with self._lock:
+            mode = self._load().get("mode", self.default_mode)
+            self._save({"mode": mode})
+
     def set_mode(self, mode: str) -> None:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")

@@ -533,6 +533,34 @@ actually re-asserted on that first tick back, not silently skipped
 because the controller's own bookkeeping of "what I last commanded"
 still happens to agree with the newly-computed state.
 
+### Maintenance: backup, clear, factory reset
+
+A collapsed **Maintenance** section at the bottom of `/climate-admin`:
+
+- **Download backup** - config.yaml, the panel's zones and devices,
+  schedules and manual values as a `.zip`. Credentials are left out
+  (`secrets_*.json`, `devices.json`, `tuya_cloud.json`, and the MQTT
+  broker's password is blanked) - they never leave the board.
+- **Clear history** - empties the charts and valve-hours statistics.
+- **Clear schedules** - empties every zone's grid for both seasons and
+  cancels away and diagnostic mode; the season stays. Valves close until
+  a new schedule is painted.
+- **Factory reset** - removes everything LocalHome created at runtime
+  (the panel's zones/VMC/extra devices, schedules, manual values, cached
+  readings, shutter positions, history), then restarts. config.yaml,
+  credential files and the MQTT broker settings stay, so the board comes
+  back as a fresh installation on the same network, ready to be mapped
+  again from the panel.
+
+Each destructive action asks for `RESET` to be typed, and first saves a
+full backup on the board in `config/backups/` - the last 10
+configuration backups (credentials included) and the last 2 history
+databases. To undo, stop LocalHome and copy the files back from the zip
+into `config/`. `config/backups/` is gitignored.
+
+Anyone who can open the admin panel can use these: turn on
+[web auth](#web-auth-optional) if others share your network.
+
 ## Language
 
 The dashboard's UI text (labels, buttons, alerts) comes from a JSON file

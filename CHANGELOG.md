@@ -7,6 +7,13 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- A **Maintenance** section in `/climate-admin`: download a
+  configuration backup (credentials left out), clear the history, clear
+  every schedule, or factory-reset to a fresh installation (only what
+  LocalHome created at runtime; config.yaml, credentials and the MQTT
+  broker stay) followed by a restart. Each destructive action needs
+  `RESET` typed in and first saves a full backup on the board, in
+  `config/backups/` (gitignored).
 - `deploy/tune-board.sh` and a deployment-guide section, "Tune the board
   for long unattended running" (quick start step 7): system log in RAM,
   no background update downloads, no graphical desktop. On a real UNO Q
@@ -137,6 +144,9 @@ date rather than by tag.
   off instead of leaving it as it was.
 
 ### Fixed
+- After the admin panel's "Restart LocalHome", the page could reload too
+  early - on the old process, just before it turned over. It now waits
+  2.5s before checking for the restarted server.
 - The history database opened a new connection for every write and
   every chart read; the last one closing folded the whole WAL back into
   the database and deleted the -wal/-shm files, recreated on the next

@@ -170,6 +170,65 @@
     <div class="admin-zone-status" id="vmc-status"></div>
   </details>
 
+  <!-- Clear / reset / backup - see static/climate_admin.js's maintenance
+       section and services/maintenance.py. Collapsed: rarely needed, and
+       every action behind it is destructive. -->
+  <details class="admin-details admin-danger" id="maintenance">
+    <summary>{{ t.climate_admin.maint_heading }}</summary>
+    <p class="hint-text">{{ t.climate_admin.maint_note }}</p>
+    <div class="maint-row">
+      <div class="maint-text">
+        <strong>{{ t.climate_admin.maint_backup_title }}</strong>
+        <span class="hint-text">{{ t.climate_admin.maint_backup_note }}</span>
+        <span class="hint-text" id="maintenance-backups"></span>
+      </div>
+      <a class="tbtn open maint-download" href="/api/climate-admin/maintenance/backup.zip" download>{{ t.climate_admin.maint_backup_button }}</a>
+    </div>
+      <div class="maint-row" id="maint-row-clear-history">
+        <div class="maint-text">
+          <strong>{{ t.climate_admin.maint_history_title }}</strong>
+          <span class="hint-text">{{ t.climate_admin.maint_history_note }}</span>
+        </div>
+        <button class="tbtn close" onclick="askMaintenance('clear-history')">{{ t.climate_admin.maint_history_button }}</button>
+        <div class="maint-confirm" id="maint-confirm-clear-history" hidden>
+          <label>{{ t.climate_admin.maint_type_reset }}</label>
+          <input type="text" id="maint-input-clear-history" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                 placeholder="RESET" oninput="onMaintenanceInput('clear-history', this)">
+          <button class="tbtn close" id="maint-go-clear-history" disabled onclick="runMaintenance('clear-history', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+          <button class="range-btn" onclick="cancelMaintenance('clear-history')">{{ t.climate_admin.maint_cancel_button }}</button>
+        </div>
+      </div>
+      <div class="maint-row" id="maint-row-clear-schedules">
+        <div class="maint-text">
+          <strong>{{ t.climate_admin.maint_schedules_title }}</strong>
+          <span class="hint-text">{{ t.climate_admin.maint_schedules_note }}</span>
+        </div>
+        <button class="tbtn close" onclick="askMaintenance('clear-schedules')">{{ t.climate_admin.maint_schedules_button }}</button>
+        <div class="maint-confirm" id="maint-confirm-clear-schedules" hidden>
+          <label>{{ t.climate_admin.maint_type_reset }}</label>
+          <input type="text" id="maint-input-clear-schedules" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                 placeholder="RESET" oninput="onMaintenanceInput('clear-schedules', this)">
+          <button class="tbtn close" id="maint-go-clear-schedules" disabled onclick="runMaintenance('clear-schedules', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+          <button class="range-btn" onclick="cancelMaintenance('clear-schedules')">{{ t.climate_admin.maint_cancel_button }}</button>
+        </div>
+      </div>
+      <div class="maint-row" id="maint-row-factory-reset">
+        <div class="maint-text">
+          <strong>{{ t.climate_admin.maint_reset_title }}</strong>
+          <span class="hint-text">{{ t.climate_admin.maint_reset_note }}</span>
+        </div>
+        <button class="tbtn close" onclick="askMaintenance('factory-reset')">{{ t.climate_admin.maint_reset_button }}</button>
+        <div class="maint-confirm" id="maint-confirm-factory-reset" hidden>
+          <label>{{ t.climate_admin.maint_type_reset }}</label>
+          <input type="text" id="maint-input-factory-reset" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                 placeholder="RESET" oninput="onMaintenanceInput('factory-reset', this)">
+          <button class="tbtn close" id="maint-go-factory-reset" disabled onclick="runMaintenance('factory-reset', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+          <button class="range-btn" onclick="cancelMaintenance('factory-reset')">{{ t.climate_admin.maint_cancel_button }}</button>
+        </div>
+      </div>
+    <p class="hint-text" id="maintenance-result"></p>
+  </details>
+
   <!-- Open by default: this is what someone diagnosing the board came
        for. Not one-time setup like the collapsed sections above it. -->
   <details class="admin-details" id="system-status" open>

@@ -7,6 +7,9 @@ config/*.json
 config/*.yaml
 !config/*.example.json
 !config/config.example.yaml
+# Automatic backups (they include credentials) and hand-made copies.
+config/backups/
+config/*.bak-*
 
 # tinytuya wizard/scan artifacts and the old flat layout's runtime files,
 # in case they get generated/left at the repo root instead of config/.

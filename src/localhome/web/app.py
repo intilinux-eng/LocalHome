@@ -9,12 +9,13 @@ docs/adding-a-driver.md.
 """
 from __future__ import annotations
 
+import io
 import logging
 import os
 import time
 from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
 
 from localhome.config import LocalHomeConfig, load_config
@@ -30,6 +31,7 @@ from localhome.services.climate_map_store import (
 )
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
+from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
@@ -220,6 +222,22 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
     app.config["ACTIVE_EXTRA_SENSORS"] = extra_sensors
     app.config["ACTIVE_EXTRA_DIMMERS"] = extra_dimmers
+    # What a factory reset removes: everything LocalHome itself wrote at
+    # runtime - never config.yaml, credentials or the broker settings.
+    runtime_files = [
+        config.resolve("climate_map.json"),
+        manual_override_path,
+        config.resolve("mqtt_state_cache.json"),
+        positions_path,
+    ]
+    if thermostat is not None:
+        runtime_files.append(thermostat.schedule_store.path)
+    app.config["MAINTENANCE"] = Maintenance(
+        str(config.path.parent),
+        store,
+        thermostat.schedule_store if thermostat is not None else None,
+        [str(p) for p in runtime_files],
+    )
 
     _register_routes(app)
     return app
@@ -871,6 +889,57 @@ def _register_routes(app: Flask) -> None:
             ), 501
         schedule_restart()
         return jsonify(ok=True)
+
+    # ------------------------------------------------- maintenance ----
+    # Destructive: each needs {"confirm": "RESET"} in the body, and saves a
+    # backup on the board first - see services/maintenance.py.
+
+    def _confirmed() -> bool:
+        return (request.get_json(silent=True) or {}).get("confirm") == "RESET"
+
+    @app.route("/api/climate-admin/maintenance")
+    def api_maintenance_info():
+        maintenance: Maintenance = app.config["MAINTENANCE"]
+        return jsonify(ok=True, backups=maintenance.list_backups(),
+                       has_thermostat=maintenance.schedule_store is not None,
+                       restart_supported=is_supported())
+
+    @app.route("/api/climate-admin/maintenance/backup.zip")
+    def api_maintenance_backup_download():
+        maintenance: Maintenance = app.config["MAINTENANCE"]
+        data = maintenance.backup_zip(include_credentials=False)
+        name = f"localhome-backup-{datetime.now():%Y%m%d-%H%M}.zip"
+        return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True, download_name=name)
+
+    @app.route("/api/climate-admin/maintenance/clear-history", methods=["POST"])
+    def api_maintenance_clear_history():
+        if not _confirmed():
+            return jsonify(ok=False, error='type RESET to confirm'), 400
+        return jsonify(ok=True, **app.config["MAINTENANCE"].clear_history())
+
+    @app.route("/api/climate-admin/maintenance/clear-schedules", methods=["POST"])
+    def api_maintenance_clear_schedules():
+        if not _confirmed():
+            return jsonify(ok=False, error='type RESET to confirm'), 400
+        try:
+            result = app.config["MAINTENANCE"].clear_schedules()
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 409
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is not None:
+            thermostat.tick()  # no schedule left: close the valves now, not in a minute
+        return jsonify(ok=True, **result)
+
+    @app.route("/api/climate-admin/maintenance/factory-reset", methods=["POST"])
+    def api_maintenance_factory_reset():
+        if not _confirmed():
+            return jsonify(ok=False, error='type RESET to confirm'), 400
+        result = app.config["MAINTENANCE"].factory_reset()
+        # The running process still holds the old mapping in memory.
+        restarting = is_supported()
+        if restarting:
+            schedule_restart()
+        return jsonify(ok=True, restarting=restarting, **result)
 
     @app.route("/api/climate-admin/zones/<name>/manual-value", methods=["POST"])
     def api_climate_admin_set_manual_value(name):
