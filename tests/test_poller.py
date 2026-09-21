@@ -166,3 +166,41 @@ def test_async_poller_reports_freshness_from_the_drivers_own_timestamp(monkeypat
     now["t"] += 10
 
     assert poller.get()["seconds_since_update"] == 510
+
+
+
+class _FlakyDriver:
+    poll_interval_seconds = 20
+    offline_backoff_max_seconds = 120
+
+    def __init__(self):
+        self.ok = False
+
+    def read(self):
+        if not self.ok:
+            raise RuntimeError("no RPC reply - device is probably offline")
+        return {"ok": True}
+
+
+def test_a_device_that_stays_offline_is_asked_less_and_less_often():
+    driver = _FlakyDriver()
+    poller = SyncPoller(driver)
+
+    delays = []
+    for _ in range(6):
+        poller.poll_once()
+        delays.append(poller.next_delay())
+
+    assert delays == [40, 80, 120, 120, 120, 120]
+    driver.ok = True
+    poller.poll_once()
+    assert poller.next_delay() == 20  # back to normal as soon as it answers
+
+
+def test_drivers_without_the_option_keep_their_interval():
+    driver = _FlakyDriver()
+    driver.offline_backoff_max_seconds = None
+    poller = SyncPoller(driver)
+    for _ in range(5):
+        poller.poll_once()
+    assert poller.next_delay() == 20

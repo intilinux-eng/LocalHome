@@ -60,6 +60,7 @@ class SyncPoller:
         self.driver = driver
         self.cache = cache or ReadingCache()
         self._started = False
+        self._failures = 0  # consecutive failed reads - see next_delay()
 
     def start(self) -> None:
         if self._started:
@@ -70,7 +71,19 @@ class SyncPoller:
     def _loop(self) -> None:
         while True:
             self.poll_once()
-            time.sleep(self.driver.poll_interval_seconds)
+            time.sleep(self.next_delay())
+
+    def next_delay(self) -> float:
+        """The driver's own interval - or, for a driver that asks the device
+        over the network on every read (`offline_backoff_max_seconds` set)
+        and has been failing, that interval doubled per consecutive failure
+        up to the maximum: a device that's switched off isn't asked every
+        20s forever. Back to normal on the first successful read."""
+        interval = self.driver.poll_interval_seconds
+        cap = getattr(self.driver, "offline_backoff_max_seconds", None)
+        if not cap or not self._failures:
+            return interval
+        return min(cap, interval * 2 ** self._failures)
 
     def poll_once(self) -> None:
         """One read -> cache cycle, split out of _loop() so a test can
@@ -82,8 +95,10 @@ class SyncPoller:
             if callable(last_ts):
                 last_ts = last_ts()
             self.cache.set(reading, last_update_ts=last_ts)
+            self._failures = 0 if reading.get("ok") else self._failures + 1
         except Exception as exc:
             self.cache.set({"ok": False, "error": str(exc)})
+            self._failures += 1
 
     def get(self) -> dict[str, Any]:
         return self.cache.get()

@@ -7,6 +7,13 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- `history.max_db_mb` (default 300): a hard ceiling on the history
+  database on top of `retention_days` - checked hourly, the oldest days
+  go first, the last day is always kept. A sensor that's off never adds
+  rows (confirmed: 0 rows from 9 offline devices in a 16-minute test).
+- A device queried over the network on every read (the Shelly dimmer
+  via RPC) is asked less and less often while it doesn't answer - 20s,
+  40s, 80s, then every 2 minutes - and back to normal on its first reply.
 - `config/config.climate.example.yaml`: a climate-only, Shelly-only
   starting point for a new apartment - no devices in the file at all,
   every one added from the admin panel - and a deployment-guide section,

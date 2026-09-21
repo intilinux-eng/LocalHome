@@ -59,6 +59,7 @@ history:
   db_file: "data/history.db"        # default shown
   poll_interval_seconds: 30          # default shown
   retention_days: 30                 # default shown - rows older than this are pruned once a day
+  max_db_mb: 300                     # default shown - hard ceiling: over it, the oldest days go first
 ```
 
 ## `integrations`

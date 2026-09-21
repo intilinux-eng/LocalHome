@@ -49,7 +49,14 @@ from localhome.drivers.mqtt.client import load_broker_config
 from localhome.drivers.mqtt.rpc import ShellyRpcClient
 
 
+# Every read is an RPC round trip to the device: while it's switched off,
+# ask every 20s, 40s, 80s... but never less than every 2 minutes - see
+# core/poller.py's SyncPoller.next_delay().
+OFFLINE_BACKOFF_MAX_SECONDS = 120
+
+
 class ShellyLightSwitchDriver(SwitchDriver):
+    offline_backoff_max_seconds = OFFLINE_BACKOFF_MAX_SECONDS
     def __init__(
         self,
         name: str,
@@ -76,6 +83,7 @@ class ShellyLightSwitchDriver(SwitchDriver):
 
 
 class ShellyLightNumberDriver(NumberDriver):
+    offline_backoff_max_seconds = OFFLINE_BACKOFF_MAX_SECONDS
     def __init__(
         self,
         name: str,

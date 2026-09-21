@@ -277,3 +277,35 @@ def test_one_connection_is_safe_across_threads(tmp_path):
         assert store.stats(now)["rows"] == 200
     finally:
         store.close()
+
+
+
+def test_the_database_is_held_under_its_size_cap(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        for day in range(10, 0, -1):  # ten days, ~60 sensors a sample
+            samples = {f"Sensor {i}": {"temperature_c": 20.0 + i, "humidity_pct": 50.0} for i in range(60)}
+            for minute in range(0, 1440, 30):
+                store.record_many(now - day * 86400 + minute * 60, samples)
+        before = store.used_bytes()
+        cap = before // 2
+
+        removed = store.prune_to_size(cap)
+
+        assert removed > 0 and store.used_bytes() <= cap
+        oldest = store.stats(now)["oldest_ts"]
+        assert oldest >= now - 10 * 86400 + 86400  # the oldest day went first
+    finally:
+        store.close()
+
+
+def test_the_last_day_is_never_removed_to_fit_the_cap(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        store.record_many(now - 60, {"Rooms Sensor": {"temperature_c": 21.0}})
+        store.prune_to_size(1)  # impossibly small
+        assert store.stats(now)["rows"] == 1
+    finally:
+        store.close()

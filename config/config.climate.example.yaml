@@ -48,3 +48,6 @@ history:
   db_file: "data/history.db"
   poll_interval_seconds: 30
   retention_days: 30
+  # Hard ceiling on the history database, on top of retention_days: over
+  # it, the oldest days go first. A sensor that's off adds nothing.
+  max_db_mb: 300

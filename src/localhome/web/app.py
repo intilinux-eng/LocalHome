@@ -161,6 +161,7 @@ def create_app(config_path: str | None = None) -> Flask:
         power_budget=power_budget,
         power_sensor=power_sensor,
         retention_days=history_cfg.get("retention_days", 30),
+        max_db_bytes=int(history_cfg.get("max_db_mb", 300) * 1_000_000),
     )
 
     thermostat = None
@@ -356,6 +357,7 @@ def _register_routes(app: Flask) -> None:
             **db_stats_cache["value"],
             "path": str(store.db_path),
             "retention_days": recorder.retention_days,
+            "max_bytes": recorder.max_db_bytes,
             "stats_age_seconds": round(now - db_stats_cache["ts"]),
         }
 

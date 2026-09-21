@@ -81,6 +81,37 @@ class HistoryStore:
             self._lock.release()
             raise
 
+    def used_bytes(self) -> int:
+        """Space the data takes inside the file - not counting pages freed
+        by earlier deletes, which SQLite reuses before growing the file."""
+        conn = self._connect()
+        try:
+            page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+            pages = conn.execute("PRAGMA page_count").fetchone()[0]
+            free = conn.execute("PRAGMA freelist_count").fetchone()[0]
+        finally:
+            conn.close()
+        return (pages - free) * page_size
+
+    def prune_to_size(self, max_bytes: int, keep_seconds: int = 86400) -> int:
+        """Removes the oldest day of samples at a time until the data fits
+        in `max_bytes` - but never the last `keep_seconds`. Returns the
+        rows removed. The file stops growing rather than shrinking: freed
+        pages are reused."""
+        removed = 0
+        while self.used_bytes() > max_bytes:
+            conn = self._connect()
+            try:
+                oldest, newest = conn.execute("SELECT MIN(ts), MAX(ts) FROM readings").fetchone()
+                if oldest is None or oldest >= newest - keep_seconds:
+                    break
+                cutoff = min(oldest + 86400, newest - keep_seconds)
+                removed += conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff,)).rowcount
+                conn.commit()
+            finally:
+                conn.close()
+        return removed
+
     def clear(self) -> int:
         """Removes every sample and gives the space back to the disk."""
         conn = self._connect()
@@ -299,6 +330,7 @@ class HistoryRecorder:
         power_sensor: str | None = None,
         alert_cooldown_seconds: float = 600,
         retention_days: float = 30,
+        max_db_bytes: int | None = None,
     ):
         self.manager = manager
         self.store = store
@@ -307,6 +339,10 @@ class HistoryRecorder:
         self.power_sensor = power_sensor
         self.alert_cooldown_seconds = alert_cooldown_seconds
         self.retention_days = retention_days
+        # A hard ceiling on top of retention_days: more devices online than
+        # planned can't make the history outgrow the board's storage.
+        self.max_db_bytes = max_db_bytes
+        self._last_size_check_ts = 0.0
         self._alert_active = False
         self._last_alert_ts = 0.0
         self._last_prune_ts = 0.0
@@ -369,6 +405,15 @@ class HistoryRecorder:
         self._maybe_prune(now)
 
     def _maybe_prune(self, now: int) -> None:
+        if self.max_db_bytes and now - self._last_size_check_ts >= 3600:  # cheap: three PRAGMAs
+            self._last_size_check_ts = now
+            try:
+                removed = self.store.prune_to_size(self.max_db_bytes)
+                if removed:
+                    logger.warning("History over its %d MB cap - removed its %d oldest rows",
+                                   self.max_db_bytes // 1_000_000, removed)
+            except Exception:
+                logger.exception("Failed to enforce the history size cap")
         if now - self._last_prune_ts < 86400:  # once a day is plenty for a DELETE scan
             return
         self._last_prune_ts = now
