@@ -119,16 +119,16 @@ def test_poll_once_raises_on_a_failing_write_but_leaves_no_broken_state_behind(t
     # failed cycle doesn't leave poll_once() itself broken for next time -
     # catching the exception from outside is only safe if that's true.
     store = HistoryStore(str(tmp_path / "history.db"))
-    real_record = store.record
+    real_record_many = store.record_many
     calls = {"n": 0}
 
-    def flaky_record(sensor, ts, fields):
+    def flaky_record_many(ts, samples):
         calls["n"] += 1
         if calls["n"] == 2:
             raise RuntimeError("simulated db error")
-        real_record(sensor, ts, fields)
+        real_record_many(ts, samples)
 
-    store.record = flaky_record
+    store.record_many = flaky_record_many
     manager = FakeManager({"sensor": FakePoller(("temperature_c",), {"temperature_c": 21.0})})
     recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
 
@@ -157,3 +157,80 @@ def test_prune_removes_only_rows_older_than_the_cutoff(tmp_path):
     assert removed == 1
     points = store.query("sensor", "temperature_c", "7d")
     assert [p["value"] for p in points] == [20.0]
+
+
+# ------------------------------------------------ eMMC-friendly writes -----
+# The real deployment runs on flash storage for years. Recording sensor by
+# sensor used to mean one connection and one commit per sensor per cycle
+# (~40k commits a day); now it's one transaction per cycle, in WAL mode.
+
+def test_database_runs_in_wal_mode(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    conn = store._connect()
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+    finally:
+        conn.close()
+
+
+def test_a_whole_cycle_is_one_transaction(tmp_path, monkeypatch):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    manager = FakeManager({
+        "a": FakePoller(("temperature_c",), {"temperature_c": 21.0}),
+        "b": FakePoller(("temperature_c", "humidity_pct"), {"temperature_c": 22.0, "humidity_pct": 50.0}),
+        "c": FakePoller(("power_w",), {"power_w": 300.0}),
+    })
+    connects = {"n": 0}
+    real_connect = store._connect
+
+    def counting_connect():
+        connects["n"] += 1
+        return real_connect()
+
+    monkeypatch.setattr(store, "_connect", counting_connect)
+    recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
+    recorder._last_prune_ts = time.time()  # the once-a-day prune is its own, separate connection
+    recorder.poll_once()
+
+    assert connects["n"] == 1  # three sensors, one connection/commit
+    conn = real_connect()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 4
+    finally:
+        conn.close()
+
+
+def test_extra_samples_are_recorded_alongside_driver_readings(tmp_path):
+    # How the thermostat's applied target reaches the chart: merged into the
+    # zone sensor's own row set for the same cycle.
+    store = HistoryStore(str(tmp_path / "history.db"))
+    manager = FakeManager({"Rooms Sensor": FakePoller(("temperature_c",), {"temperature_c": 21.0})})
+    recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
+    recorder.extra_samples = lambda: {"Rooms Sensor": {"target_c": 20.0}}
+
+    recorder.poll_once()
+
+    conn = store._connect()
+    try:
+        rows = dict(conn.execute("SELECT field, value FROM readings WHERE sensor = 'Rooms Sensor'").fetchall())
+    finally:
+        conn.close()
+    assert rows == {"temperature_c": 21.0, "target_c": 20.0}
+
+
+def test_a_failing_extra_samples_provider_does_not_lose_the_cycle(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    manager = FakeManager({"a": FakePoller(("temperature_c",), {"temperature_c": 21.0})})
+    recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
+
+    def broken():
+        raise RuntimeError("thermostat not ready")
+
+    recorder.extra_samples = broken
+    recorder.poll_once()
+
+    conn = store._connect()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 1
+    finally:
+        conn.close()

@@ -39,7 +39,16 @@ class HistoryStore:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        # timeout: the web server reads while the recorder writes - wait for
+        # the lock briefly instead of failing the request/cycle outright.
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        # With WAL (set once in _init_schema), NORMAL only fsyncs at
+        # checkpoints instead of on every commit. A power cut can lose the
+        # last few seconds of samples, never corrupt the file - the right
+        # trade for a board meant to run for years on eMMC/SD, where every
+        # fsync is flash wear.
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
 
     def _init_schema(self) -> None:
         import os
@@ -47,6 +56,9 @@ class HistoryStore:
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
         conn = self._connect()
         try:
+            # Persistent in the file itself. Also lets the dashboard's chart
+            # queries read while a recording cycle is mid-write.
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS readings (
@@ -63,14 +75,23 @@ class HistoryStore:
             conn.close()
 
     def record(self, sensor: str, ts: int, fields: dict[str, float]) -> None:
-        if not fields:
+        self.record_many(ts, {sensor: fields})
+
+    def record_many(self, ts: int, samples: dict[str, dict[str, float]]) -> None:
+        """Every sensor's fields for one cycle, in a single transaction.
+        Recording sensor by sensor used to cost one connection and one
+        commit each - ~40k commits a day on the real deployment, for rows
+        that all share one timestamp anyway."""
+        rows = [
+            (ts, sensor, field, value)
+            for sensor, fields in samples.items()
+            for field, value in fields.items()
+        ]
+        if not rows:
             return
         conn = self._connect()
         try:
-            conn.executemany(
-                "INSERT INTO readings (ts, sensor, field, value) VALUES (?, ?, ?, ?)",
-                [(ts, sensor, field, value) for field, value in fields.items()],
-            )
+            conn.executemany("INSERT INTO readings (ts, sensor, field, value) VALUES (?, ?, ?, ?)", rows)
             conn.commit()
         finally:
             conn.close()
@@ -208,6 +229,11 @@ class HistoryRecorder:
         self._last_alert_ts = 0.0
         self._last_prune_ts = 0.0
         self._started = False
+        # Optional callable -> {sensor_name: {field: value}} for values that
+        # don't come from any driver's own reading - the thermostat's
+        # applied per-zone target, set by create_app() once the thermostat
+        # exists (it's built after this recorder).
+        self.extra_samples = None
 
     def start(self) -> None:
         if self._started:
@@ -234,6 +260,7 @@ class HistoryRecorder:
         test can drive several cycles directly instead of starting a real
         thread and sleeping through real poll intervals to observe them."""
         now = int(time.time())
+        batch: dict[str, dict[str, float]] = {}
         for name, poller in self.manager.pollers.items():
             fields = getattr(poller.driver, "history_fields", ())
             if not fields:
@@ -242,9 +269,17 @@ class HistoryRecorder:
             if not reading.get("ok"):
                 continue
             values = {f: reading[f] for f in fields if isinstance(reading.get(f), (int, float))}
-            self.store.record(name, now, values)
+            if values:
+                batch[name] = values
             if name == self.power_sensor and "power_w" in values:
                 self._check_power_budget(values["power_w"])
+        if self.extra_samples is not None:
+            try:
+                for name, values in self.extra_samples().items():
+                    batch.setdefault(name, {}).update(values)
+            except Exception:
+                logger.exception("Failed to collect extra history samples - recording the rest")
+        self.store.record_many(now, batch)
         self._maybe_prune(now)
 
     def _maybe_prune(self, now: int) -> None:
