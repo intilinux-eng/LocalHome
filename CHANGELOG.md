@@ -7,6 +7,10 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- `deploy/tune-board.sh` and a deployment-guide section, "Tune the board
+  for long unattended running" (quick start step 7): system log in RAM,
+  no background update downloads, no graphical desktop. On a real UNO Q
+  it took eMMC writes from ~7.5 to ~0.6 GB/day.
 - The admin panel's system status shows the board's eMMC wear (as the
   chip reports it, in 10% steps) and its writes per day, and flags worn
   storage as a problem.

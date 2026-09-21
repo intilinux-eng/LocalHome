@@ -106,6 +106,11 @@ sudo systemctl enable --now localhome
 sudo systemctl status localhome
 # -> dashboard at http://localhome.local:5000 (the name from step 1)
 #    logs: sudo journalctl -u localhome -f
+
+# 7. Tune the board for years of unattended running on its eMMC -
+#    system log in RAM, no background update downloads, no desktop.
+#    Don't skip it on an Arduino UNO Q: see "Tune the board" below.
+sudo sh deploy/tune-board.sh
 ```
 
 If step 1's `python3-venv` package isn't found, or step 2's `python3 -m
@@ -121,6 +126,43 @@ Map your zones onto this home's actual Shelly device ids from
 [docs/configuration.md#the-shelly-climate-admin-panel](configuration.md#the-shelly-climate-admin-panel).
 Remember it needs a restart (`sudo systemctl restart localhome`) after
 every save before a change actually takes effect.
+
+## Tune the board for long unattended running
+
+**Do this on every new board** (quick start step 7). An Arduino UNO Q
+stores everything on a soldered-in 32 GB eMMC - flash that wears out with
+writes and can't be swapped like an SD card. Measured on a real UNO Q
+with LocalHome running:
+
+| | eMMC writes |
+|---|---|
+| stock image | ~7.5 GB/day |
+| after `deploy/tune-board.sh` | ~0.6 GB/day |
+
+Almost all of it wasn't data at all but write amplification: journald
+dirties several 4 KB pages for every log line. What the script does,
+each step reversible (it prints how):
+
+1. **System log in RAM** (`Storage=volatile`, 30 MB): no flash writes
+   from logging. The log is lost at reboot - the admin panel's system
+   status (`/climate-admin`) keeps working regardless.
+2. **No background update downloads** (`apt-daily`, `apt-daily-upgrade`,
+   `fwupd-refresh` timers off). A stock image installs nothing by itself
+   anyway; these only download package and firmware lists every day.
+   Update by hand when you choose - `sudo apt update && sudo apt upgrade`
+   every few months - and check the dashboard afterwards.
+3. **No graphical desktop** (`lightdm` off, boot to text mode): nothing
+   is attached to a monitor, and it's ~80 MB of RAM plus a steady stream
+   of log lines.
+
+Left as they are, on purpose: Arduino App Lab and its services
+(`arduino-app-cli`, `arduino-router`, Docker) - turn them off only if
+you'll never use App Lab on that board.
+
+The admin panel's system status shows the eMMC's own wear estimate (in
+10% steps, as the chip reports it) and its writes per day, and raises a
+problem when the chip nears the end of its life. At ~0.6 GB/day a 32 GB
+eMMC lasts well over a decade.
 
 ## Addressing: names, not IP addresses
 
