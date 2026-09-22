@@ -907,12 +907,17 @@ function redrawClimateChart(id) {
 }
 
 const chartResizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(entries => {
+  const ids = [];
   for (const entry of entries) {
     const svg = entry.target;
     const width = Math.round(entry.contentRect.width);
     const drawnAt = Number((svg.getAttribute("viewBox") || "").split(" ")[2]);
-    if (width && width !== drawnAt) redrawClimateChart(svg.id.replace(/^chart-/, ""));
+    if (svg.isConnected && width && width !== drawnAt) ids.push(svg.id.replace(/^chart-/, ""));
   }
+  // On the next frame, not inside the callback: redrawing changes the
+  // chart's height, and resizing an observed element from its own
+  // observer is what the browser reports as a "ResizeObserver loop".
+  if (ids.length) requestAnimationFrame(() => ids.forEach(redrawClimateChart));
 });
 
 // Helpers bound to one SVG: add elements, write axis text (scaled back up
@@ -956,7 +961,7 @@ function onRuns(valves, bucket) {
     if (p.value < 0.5) continue;
     if (run && p.ts - run.last <= maxStep) { run.last = p.ts; continue; }
     if (run) runs.push(run);
-    run = p.value >= 0.5 ? { start: p.ts, last: p.ts } : null;
+    run = { start: p.ts, last: p.ts };
   }
   if (run) runs.push(run);
   const latest = valves.length ? valves[valves.length - 1].ts : null;
@@ -1790,7 +1795,14 @@ function zoneTileHtml(zone) {
 
 function renderZoneOverview() {
   const el = document.getElementById("zone-overview");
-  if (el) el.innerHTML = climateZones.map(zoneTileHtml).join("");
+  if (!el) return;
+  // Only when something on them changed: rebuilt on every 5s refresh, a
+  // tap landing at that moment could be lost.
+  const html = climateZones.map(zoneTileHtml).join("");
+  if (el.dataset.html !== html) {
+    el.innerHTML = html;
+    el.dataset.html = html;
+  }
 }
 
 // The sensor's own details, one line under the zone's status.
@@ -2090,6 +2102,12 @@ function zoneState(zone) {
   }
   if (zone.sensor_failsafe_active) {
     return { cls: "warn", label: off, short: tr("climate.tile_failsafe"), detail: tr("climate.detail_failsafe") };
+  }
+  // No reading at all (not even a last known one): whatever the valve is
+  // doing, "target reached" would be a guess.
+  if (!zone.sensor_ok && !zoneHasLastKnownValue(zone)) {
+    const label = zone.valve_on ? tr("climate.system_on") : off;
+    return { cls: "warn", label, short: tr("climate.tile_no_sensor"), detail: tr("climate.detail_no_sensor") };
   }
   if (zone.target_c == null) {
     return { cls: "off", label: off, short: tr("climate.tile_off"), detail: tr("climate.detail_no_target") };

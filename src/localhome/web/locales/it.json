@@ -190,7 +190,9 @@
     "device_auto_heat": "Automatico: acceso in inverno, spento in estate",
     "device_only_cool": "Si può accendere solo in estate",
     "device_only_heat": "Si può accendere solo in inverno",
-    "sensor_updated": "Sensore aggiornato {ago}"
+    "sensor_updated": "Sensore aggiornato {ago}",
+    "tile_no_sensor": "Sensore non raggiungibile",
+    "detail_no_sensor": "Il sensore non risponde: nessuna lettura della temperatura"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",

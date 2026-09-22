@@ -53,6 +53,9 @@ h1 {
   margin-bottom: 0;
 }
 
+.section-head[hidden] {
+  display: none;
+}
 .section-head {
   display: flex;
   align-items: center;
@@ -775,7 +778,9 @@ input[type="range"]:disabled {
   text-decoration: none;
 }
 .season-link {
-  border: 1px solid color-mix(in srgb, var(--season) 45%, transparent);
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  border-color: color-mix(in srgb, var(--season) 45%, transparent);
   background: color-mix(in srgb, var(--season) 16%, transparent);
 }
 .season-link svg {
@@ -927,6 +932,7 @@ button.zone-tile:hover {
 }
 .zone-tile.selected {
   border-color: var(--season);
+  background: rgba(255, 255, 255, 0.08);
   background: color-mix(in srgb, var(--season) 13%, rgba(255, 255, 255, 0.03));
   box-shadow: 0 0 0 1px var(--season) inset;
 }
@@ -1025,6 +1031,7 @@ button.zone-tile:hover {
   padding: 18px;
   border: 1px solid var(--card-border);
   border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
   background: linear-gradient(160deg, color-mix(in srgb, var(--season) 11%, transparent), rgba(255, 255, 255, 0.03) 40%);
 }
 .zone-head {

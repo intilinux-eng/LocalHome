@@ -190,7 +190,9 @@
     "device_auto_heat": "Automatic: on in winter, off in summer",
     "device_only_cool": "Can only be switched on in summer",
     "device_only_heat": "Can only be switched on in winter",
-    "sensor_updated": "Sensor updated {ago}"
+    "sensor_updated": "Sensor updated {ago}",
+    "tile_no_sensor": "Sensor not reachable",
+    "detail_no_sensor": "The sensor isn't answering: no temperature reading"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
