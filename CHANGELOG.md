@@ -178,6 +178,29 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- The Climate tab, redesigned for everyday use:
+  - At the top, the season ("Summer · Cooling", a link to where it's
+    changed) and the outdoor temperature, next to "Away".
+  - A tile per zone - temperature, humidity and what it's doing ("On ·
+    heading for 25°", "Off · 27° reached"). A zone left out of cooling
+    is a tile too, with its valve's real state ("Valve closed ✓") - it
+    replaces the separate panel.
+  - The zone picked there in detail: "System on/off" and why, the next
+    scheduled change ("Next change at 17:00: 25° Comfort"), the sensor's
+    freshness, battery, Wi-Fi and dew point on one line; then two panes,
+    **Schedule** and **Statistics**, instead of one very long card. The
+    zone and the pane are remembered.
+  - The palette labels "Off" like Comfort and Economy, and fits on one
+    row on a phone; copying Monday reads "Copy Monday to: Mon-Fri /
+    Whole week".
+  - "Other devices": switches first, cards as tall as their content, the
+    admin panel's English device names translated, and a line under the
+    devices the season drives ("Automatic: on in summer, off in winter",
+    "Can only be switched on in summer").
+  - Charts are drawn in real pixels and redrawn whenever their width
+    changes, so they stay sharp and readable at any size - on a phone,
+    full width on a desktop, or when a card grows.
+
 - A zone's valve statistics became **run statistics**, worded for anyone
   ("system on/off" instead of "valve open/closed", on the whole
   dashboard): today/week/month tiles give the time on as "3h 05m" and

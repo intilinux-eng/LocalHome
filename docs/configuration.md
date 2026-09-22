@@ -252,11 +252,12 @@ exception is a valve an [interlock](#interlocks-one-switch-forced-to-follow-anot
 owns in cool mode: that interlock decides instead (see the next
 section). It behaves completely normally in `"heat"` mode.
 
-While cooling, the dashboard replaces this zone's card with a panel
-showing its valve's real state and why: "excluded from cooling to avoid
-condensation - valve closed ✓", "open: feeding <dehumidifier> (on)"
-when an interlock opened it, "still open: closing", or "state unknown"
-if the valve isn't answering. The card comes back in heat mode.
+While cooling, this zone has no detail card on the dashboard: its tile
+at the top of the Climate tab shows its temperature and its valve's real
+state - "Valve closed ✓" (left out of cooling to avoid condensation),
+"Valve open for <dehumidifier>" when an interlock opened it, "Valve
+closing", or "Valve: state unknown" if the valve isn't answering. The
+card comes back in heat mode.
 
 ### `interlocks`: one switch forced to follow another
 
@@ -304,7 +305,8 @@ requires switch B on too" relationship fits.
 For a switch you control by hand, but that only makes sense in one mode -
 a dehumidifier, used only while cooling. Outside that mode it's forced
 off; inside it, it's left entirely to you. Pair it with the integration's
-`visible_in_mode` so its card is hidden when it can't be used:
+`visible_in_mode` so its card is hidden when it can't be used (the card
+also says "Can only be switched on in summer"):
 
 ```yaml
 thermostat:
@@ -337,7 +339,8 @@ different rule: since nothing else owns this switch, there's no "leave
 it alone" case to protect - outside `active_in_mode` it's actively
 forced *off*, not left in whatever state it was. If you need a switch
 that's sometimes owned by something else and sometimes forced to follow
-another switch, that's `interlocks`, not this.
+another switch, that's `interlocks`, not this. On the dashboard its card
+says so: "Automatic: on in summer, off in winter".
 
 ### Away mode
 

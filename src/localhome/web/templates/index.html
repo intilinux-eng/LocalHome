@@ -80,21 +80,21 @@
   </div>
 
   <div id="tab-climate" class="tab-panel" hidden>
-    <div class="section-head">
-      <h2>
-        <!-- The season is seasonal, not a daily control: it's changed from
-             the admin panel (with a confirmation), shown here read-only. -->
-        <a class="season-link" href="/climate-admin#season" title="{{ t.climate.season_change_hint }}">
-          <span id="climate-season-icon"></span>
-          <span id="climate-season-label">{{ t.climate.season_winter }}</span>
-        </a>
-      </h2>
-      <div class="toolbar">
-        <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>
-      </div>
+    <div class="climate-top">
+      <!-- The season is seasonal, not a daily control: it's changed from
+           the admin panel (with a confirmation), shown here read-only. -->
+      <a class="season-link" href="/climate-admin#season" title="{{ t.climate.season_change_hint }}">
+        <span id="climate-season-icon"></span>
+        <span id="climate-season-label">{{ t.climate.season_winter }}</span>
+      </a>
+      <button class="outdoor-chip" id="climate-outdoor" onclick="scrollToOutdoorCard()" hidden></button>
+      <button class="mode-badge away-badge" id="climate-away-badge" onclick="openAway()"></button>
     </div>
     <div id="climate-zones"></div>
-    <div id="climate-extra" class="dashboard-grid"></div>
+    <div class="section-head" id="climate-extra-head" hidden>
+      <h2>{{ t.climate.other_devices }}</h2>
+    </div>
+    <div id="climate-extra" class="dashboard-grid climate-extra"></div>
   </div>
 
   <script>

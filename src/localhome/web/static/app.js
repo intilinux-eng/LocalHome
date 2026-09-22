@@ -302,6 +302,18 @@ function humidityChartHtml(id) {
     </div>`;
 }
 
+// The fixed English names the admin panel gives its extra devices (see
+// services/climate_map_store.py), shown in the page's language.
+const DISPLAY_NAMES = {
+  "Outdoor Sensor": "climate.outdoor_name",
+  "Bathroom Bypass Valve": "climate.bypass_name",
+  "Dehumidifier": "climate.dehumidifier",
+};
+
+function displayName(name) {
+  return DISPLAY_NAMES[name] ? tr(DISPLAY_NAMES[name]) : name;
+}
+
 function buildSensorCard(sensor) {
   const id = slug(sensor.name);
   const hasChart = sensor.kind === "power_meter" || sensor.kind === "climate";
@@ -324,7 +336,7 @@ function buildSensorCard(sensor) {
   return `
     <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}" data-visible-in-mode="${sensor.visible_in_mode || ""}">
       <div class="sensor-top">
-        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${sensor.name}</span></span>
+        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${displayName(sensor.name)}</span></span>
         <span class="state" id="updated-${id}"></span>
       </div>
       <div id="metrics-${id}"></div>
@@ -445,6 +457,7 @@ const HAS_LAST_KNOWN_VALUE_FIELDS = ["temperature_c", "humidity_pct", "power_w"]
 
 function updateSensorCard(sensor, reading, linkedReading) {
   const id = slug(sensor.name);
+  if (sensor.name === outdoorSensorName) updateOutdoorChip(reading);
   const dot = document.getElementById(`dot-${id}`);
   const updated = document.getElementById(`updated-${id}`);
   const metrics = document.getElementById(`metrics-${id}`);
@@ -663,8 +676,8 @@ function zoneColor(w, availableW, tripRiskW) {
   return SERIES_COLOR;
 }
 
-function drawEmpty(svg, height = CHART_H) {
-  svg.innerHTML = `<foreignObject x="0" y="0" width="${CHART_W}" height="${height}">
+function drawEmpty(svg, height = CHART_H, width = CHART_W) {
+  svg.innerHTML = `<foreignObject x="0" y="0" width="${width}" height="${height}">
     <div xmlns="http://www.w3.org/1999/xhtml" class="chart-empty">${tr("sensors.not_enough_data")}</div>
   </foreignObject>`;
 }
@@ -841,9 +854,12 @@ function nearestPoint(points, ts) {
 // For a zone, the stretches the system was on shade both charts, and the
 // list below them (renderRuns) says what each one did. Hovering (or
 // touching) either chart moves a marker on both and fills the readout
-// line above them. Everything is in viewBox units (CHART_W wide).
-const TEMP_CHART = { padL: 34, padR: 8, top: 8, plotH: 110, gap: 9, laneH: 14, axisH: 14 };
-const HUM_CHART = { top: 8, plotH: 52, axisH: 14 };
+// line above them. Drawn in real pixels - one viewBox unit per CSS pixel -
+// so text and lines look the same on a phone and on a wide desktop card;
+// the plots get a little taller as the card gets wider.
+const TEMP_CHART = { padL: 40, padR: 8, top: 8, gap: 9, laneH: 14, axisH: 14 };
+const HUM_CHART = { top: 8, axisH: 14 };
+const CHART_TEXT_SCALE = 1.15;
 
 // Round local-time ticks for the time axis, as many as fit (`maxLabels`):
 // every 1, 2, 3, 4, 6 or 12 hours, or every midnight once the data spans
@@ -880,6 +896,24 @@ function formatTick(ts, daily) {
 // Latest reading / reading under the pointer, drawn with every chart
 // state the pointer or the refresh leaves behind.
 const climateChartState = {};
+// Each chart's last data, to draw it again at a new width without
+// fetching it again: whenever its width changes - a window resize, a
+// hidden tab, zone or pane shown, a card that grows because the one next
+// to it was hidden - the observer below redraws it.
+const climateChartArgs = {};
+
+function redrawClimateChart(id) {
+  if (climateChartArgs[id]) drawClimateChart(id, ...climateChartArgs[id]);
+}
+
+const chartResizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const svg = entry.target;
+    const width = Math.round(entry.contentRect.width);
+    const drawnAt = Number((svg.getAttribute("viewBox") || "").split(" ")[2]);
+    if (width && width !== drawnAt) redrawClimateChart(svg.id.replace(/^chart-/, ""));
+  }
+});
 
 // Helpers bound to one SVG: add elements, write axis text (scaled back up
 // on a phone, where the whole SVG is drawn smaller), draw the time grid.
@@ -934,23 +968,30 @@ function formatDuration(seconds) {
 function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetPoints) {
   const svg = document.getElementById(`chart-${id}`);
   if (!svg) return;
+  climateChartArgs[id] = [tempPoints, humPoints, range, valvePoints, targetPoints];
+  if (chartResizeObserver) chartResizeObserver.observe(svg);
+  // A chart in a hidden tab, zone or pane has no width yet: the observer
+  // draws it once it's shown.
+  const W = Math.round(svg.getBoundingClientRect().width);
+  if (!W) return;
   const humSvg = document.getElementById(`chart-${id}-hum`);
   const humWrap = document.getElementById(`humchart-${id}`);
   const hasValve = valvePoints != null;
-  const renderedWidth = svg.getBoundingClientRect().width || CHART_W;
-  const textScale = Math.min(1.6, Math.max(1, CHART_W / renderedWidth));
+  const textScale = CHART_TEXT_SCALE;
   const L = TEMP_CHART;
-  const plotL = Math.round(L.padL * textScale), plotR = CHART_W - L.padR, plotW = plotR - plotL;
-  const tempBottom = L.top + L.plotH;
+  const plotH = Math.round(Math.min(180, Math.max(110, W * 0.2)));
+  const humPlotH = Math.round(Math.min(90, Math.max(52, W * 0.09)));
+  const plotL = Math.round(L.padL * textScale), plotR = W - L.padR, plotW = plotR - plotL;
+  const tempBottom = L.top + plotH;
   const laneTop = tempBottom + L.gap;
   const tempAxisAt = hasValve ? laneTop + L.laneH : tempBottom;
   const tempHeight = tempAxisAt + Math.round(L.axisH * textScale);
-  const humBottom = HUM_CHART.top + HUM_CHART.plotH;
+  const humBottom = HUM_CHART.top + humPlotH;
   const humHeight = humBottom + Math.round(HUM_CHART.axisH * textScale);
-  svg.setAttribute("viewBox", `0 0 ${CHART_W} ${tempHeight}`);
+  svg.setAttribute("viewBox", `0 0 ${W} ${tempHeight}`);
   svg.innerHTML = "";
   if (humSvg) {
-    humSvg.setAttribute("viewBox", `0 0 ${CHART_W} ${humHeight}`);
+    humSvg.setAttribute("viewBox", `0 0 ${W} ${humHeight}`);
     humSvg.innerHTML = "";
   }
 
@@ -960,7 +1001,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
     delete climateChartState[id];
     renderClimateReadout(id, null);
     renderRuns(id, null);
-    return drawEmpty(svg, tempHeight);
+    return drawEmpty(svg, tempHeight, W);
   }
 
   const bucket = CHART_BUCKET_SECONDS[range] || 300;
@@ -992,11 +1033,11 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   // room's reading would be clipped off.
   let [tMin, tMax] = niceBounds(temps.map(p => p.value).concat(targets.flatMap(p => [p.value - hyst, p.value + hyst])), 0.4, 1);
   if ((tMax - tMin) % 2) tMax += 1;
-  const yT = v => tempBottom - ((v - tMin) / (tMax - tMin)) * L.plotH;
+  const yT = v => tempBottom - ((v - tMin) / (tMax - tMin)) * plotH;
 
   // When the system was on, behind everything: the temperature line
   // crossing these stretches is the effect it had.
-  runRects(t, L.top, L.plotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
+  runRects(t, L.top, plotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
   drawTimeAxis(t, axis, xOf, L.top, tempAxisAt, plotL, plotR, textScale);
   // A gridline per degree (per two on a wide span), to read a reading
   // off the axis without hovering.
@@ -1062,11 +1103,11 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   if (humSvg && hums.length >= 2) {
     h = chartCanvas(humSvg, textScale);
     const [hMin, hMax] = niceBounds(hums.map(p => p.value), 2, 10);
-    yH = v => humBottom - ((v - hMin) / Math.max(1, hMax - hMin)) * HUM_CHART.plotH;
-    runRects(h, HUM_CHART.top, HUM_CHART.plotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
+    yH = v => humBottom - ((v - hMin) / Math.max(1, hMax - hMin)) * humPlotH;
+    runRects(h, HUM_CHART.top, humPlotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
     drawTimeAxis(h, axis, xOf, HUM_CHART.top, humBottom, plotL, plotR, textScale);
     [0, 0.5, 1].forEach(frac => {
-      const y = humBottom - HUM_CHART.plotH * frac;
+      const y = humBottom - humPlotH * frac;
       h.add("line", { x1: plotL, x2: plotR, y1: y, y2: y, stroke: GRID_COLOR, "stroke-width": 1 });
       h.text(plotL - 6, y + 3 * textScale, `${Math.round(hMin + (hMax - hMin) * frac)}%`, { "text-anchor": "end", fill: HUM_COLOR });
     });
@@ -1082,7 +1123,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   const humCross = h && h.add("line", { y1: HUM_CHART.top, y2: humBottom, stroke: "#ffffff", "stroke-width": 1, opacity: 0.45, visibility: "hidden" });
   const humDot = h && h.add("circle", { r: 3.5, fill: HUM_COLOR, stroke: "#141414", "stroke-width": 1.2, visibility: "hidden" });
   const humPick = hasValve && h && h.add("rect", {
-    y: HUM_CHART.top, height: HUM_CHART.plotH, fill: "none", stroke: "#ffffff", "stroke-width": 1.2, opacity: 0.8, visibility: "hidden",
+    y: HUM_CHART.top, height: humPlotH, fill: "none", stroke: "#ffffff", "stroke-width": 1.2, opacity: 0.8, visibility: "hidden",
   });
 
   const show = (el, attrs) => { for (const k in attrs) el.setAttribute(k, attrs[k]); };
@@ -1102,7 +1143,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   const hide = () => [cross, dot, humCross, humDot].forEach(el => el && el.setAttribute("visibility", "hidden"));
   const onMove = (e, target) => {
     const rect = target.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (CHART_W / rect.width);
+    const x = (e.clientX - rect.left) * (W / rect.width);
     const reading = readingAt(state, minTs + ((x - plotL) / plotW) * (maxTs - minTs));
     if (!reading) return;
     const cx = xOf(reading.ts);
@@ -1280,7 +1321,16 @@ function updateSeasonHeading() {
   if (!icon || !label) return;
   const isSummer = climateMode === "cool";
   icon.innerHTML = isSummer ? SEASON_ICON_SUMMER : SEASON_ICON_WINTER;
-  label.textContent = isSummer ? tr("climate.season_summer") : tr("climate.season_winter");
+  label.textContent = isSummer
+    ? `${tr("climate.season_summer")} · ${tr("climate.mode_cool")}`
+    : `${tr("climate.season_winter")} · ${tr("climate.mode_heat")}`;
+  // The tab's accent follows the season: blue while cooling, orange while
+  // heating (see .season-cool / .season-heat in style.css).
+  const tab = document.getElementById("tab-climate");
+  if (tab) {
+    tab.classList.toggle("season-cool", isSummer);
+    tab.classList.toggle("season-heat", !isSummer);
+  }
 }
 
 // "Away" is a temporary hold on top of the weekly schedule - see
@@ -1416,6 +1466,7 @@ function updateNowHighlight() {
   });
   document.querySelectorAll(`.sched-cell[data-day="${dayKey}"][data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
   document.querySelectorAll(`.sched-hour-axis span[data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
+  climateZones.forEach(updateZoneNext);
 }
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -1493,6 +1544,7 @@ const TIER_ICONS = {
   heat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
   cool: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M3.34 7 20.66 17"/><path d="M20.66 7 3.34 17"/></svg>`,
   economy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`,
+  off: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>`,
 };
 
 function targetTier(value) {
@@ -1509,17 +1561,18 @@ function swatchHtml(v) {
 function paletteHtml() {
   const values = schedulePresets();
   if (!TIER_OF[climateMode]) return values.map(swatchHtml).join("");
-  const off = values.filter(v => v == null);
   const temps = values.filter(v => v != null);
   // Boxes in the palette's own order: economy first when heating (lower
-  // targets), comfort first when cooling.
+  // targets), comfort first when cooling. "Off" gets a box of its own, so
+  // the ✕ is labelled like the rest.
   const order = [...new Set(temps.map(targetTier))];
-  const box = name => `
+  const box = (name, swatches) => `
     <div class="sched-tier sched-tier-${name} sched-tier-${climateMode}">
-      <span class="sched-tier-label">${TIER_ICONS[name === "economy" ? "economy" : climateMode]}${tr(`climate.tier_${name}`)}</span>
-      <div class="sched-tier-swatches">${temps.filter(v => targetTier(v) === name).map(swatchHtml).join("")}</div>
+      <span class="sched-tier-label">${TIER_ICONS[name === "comfort" ? climateMode : name]}${tr(`climate.tier_${name}`)}</span>
+      <div class="sched-tier-swatches">${swatches.map(swatchHtml).join("")}</div>
     </div>`;
-  return `${off.map(swatchHtml).join("")}${order.map(box).join("")}`;
+  const offBox = values.includes(null) ? box("off", [null]) : "";
+  return offBox + order.map(name => box(name, temps.filter(v => targetTier(v) === name))).join("");
 }
 
 function tempColor(value) {
@@ -1644,75 +1697,192 @@ function closeLowBattery() {
   document.getElementById("low-battery-modal").hidden = true;
 }
 
+// The Climate tab reads top to bottom: a tile per zone - temperature,
+// humidity and what it's doing, all zones at a glance - then the zone
+// picked there in detail, with its weekly schedule and its statistics as
+// two panes instead of one very long card. Which zone and which pane are
+// remembered in this browser, like the tab.
+let selectedZoneId = null;
+let selectedPane = "schedule";
+try {
+  if (localStorage.getItem("localhome-zone-pane") === "history") selectedPane = "history";
+} catch (e) { /* private browsing etc - start on the schedule */ }
+
+// A zone the thermostat leaves out this season (a bathroom while cooling):
+// a tile with its valve's real state, no detail card.
+function zoneExcluded(zone) {
+  return climateMode === "cool" && zone.cool_enabled === false;
+}
+
+function ensureSelectedZone() {
+  const ids = climateZones.filter(z => !zoneExcluded(z)).map(z => slug(z.name));
+  if (ids.includes(selectedZoneId)) return;
+  let saved = null;
+  try { saved = localStorage.getItem("localhome-zone"); } catch (e) { /* no memory: the first zone */ }
+  selectedZoneId = ids.includes(saved) ? saved : ids[0] || null;
+}
+
+function selectZone(id) {
+  selectedZoneId = id;
+  try { localStorage.setItem("localhome-zone", id); } catch (e) { /* just not remembered */ }
+  document.querySelectorAll("#zone-overview .zone-tile").forEach(t => t.classList.toggle("selected", t.dataset.zone === id));
+  document.querySelectorAll("#climate-zones .zone-card").forEach(c => { c.hidden = c.dataset.zone !== id; });
+}
+
+function selectPane(pane) {
+  selectedPane = pane;
+  try { localStorage.setItem("localhome-zone-pane", pane); } catch (e) { /* just not remembered */ }
+  applyPane();
+}
+
+function applyPane() {
+  document.querySelectorAll("#climate-zones .zone-card").forEach(card => {
+    card.querySelectorAll(".pane-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.pane === selectedPane);
+      b.setAttribute("aria-selected", String(b.dataset.pane === selectedPane));
+    });
+    card.querySelectorAll(".zone-pane").forEach(pane => { pane.hidden = pane.dataset.pane !== selectedPane; });
+  });
+}
+
+function escapeAttr(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function zoneReadingParts(zone) {
+  const known = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null;
+  return {
+    temp: known ? `${zone.temperature_c.toFixed(1)}°` : "--",
+    hum: known && zone.humidity_pct != null ? `${zone.humidity_pct.toFixed(0)}%` : "",
+  };
+}
+
+function zoneTileHtml(zone) {
+  const id = slug(zone.name);
+  const { temp, hum } = zoneReadingParts(zone);
+  const values = `<span class="zt-values"><span class="zt-temp${zone.sensor_ok ? "" : " stale"}">${temp}</span><span class="zt-hum">${hum}</span></span>`;
+  if (zoneExcluded(zone)) {
+    const valve = excludedValveState(zone);
+    return `
+      <div class="zone-tile excluded" data-zone="${id}" title="${escapeAttr(valve.title)}">
+        <span class="zt-name">${zone.name}</span>
+        ${values}
+        <span class="zt-status valve-${valve.cls}"><span class="zt-dot"></span>${valve.text}</span>
+        <span class="zt-note">${tr("climate.excluded_note")}</span>
+      </div>`;
+  }
+  const state = zoneState(zone);
+  return `
+    <button class="zone-tile state-${state.cls}${id === selectedZoneId ? " selected" : ""}" data-zone="${id}" onclick="selectZone('${id}')">
+      <span class="zt-name">${zone.name}</span>
+      ${values}
+      <span class="zt-status"><span class="zt-dot"></span>${state.short}</span>
+    </button>`;
+}
+
+function renderZoneOverview() {
+  const el = document.getElementById("zone-overview");
+  if (el) el.innerHTML = climateZones.map(zoneTileHtml).join("");
+}
+
+// The sensor's own details, one line under the zone's status.
+function zoneMetaHtml(zone) {
+  const fresh = zone.sensor_ok ? tr("climate.sensor_updated", { ago: zoneFreshnessText(zone) }) : zoneFreshnessText(zone);
+  const items = [`<span class="zone-updated" title="${escapeAttr(zone.sensor_error || "")}">${fresh}</span>`];
+  if (zone.battery_pct != null) items.push(`<span class="zone-battery${zone.battery_pct <= LOW_BATTERY_PCT ? " low" : ""}">${batteryLabel(zone.battery_pct)}</span>`);
+  if (zone.wifi_rssi_dbm != null) items.push(`<span class="zone-wifi ${wifiQuality(zone.wifi_rssi_dbm)}">${wifiLabel(zone)}</span>`);
+  if (dewPointVisible(zone)) items.push(`<span class="zone-dewpoint">${dewPointLabel(zone)}</span>`);
+  return items.join("");
+}
+
 function buildZoneCard(zone) {
   const id = slug(zone.name);
   const chartId = slug(zone.sensor);
-  const currentText = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null
-    ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
-    : tr("climate.unreachable");
+  const state = zoneState(zone);
+  const paneAttrs = name => `data-pane="${name}"${selectedPane === name ? "" : " hidden"}`;
+  const paneBtn = (name, label) => `
+          <button class="pane-btn${selectedPane === name ? " active" : ""}" role="tab" aria-selected="${selectedPane === name}"
+                  data-pane="${name}" onclick="selectPane('${name}')">${label}</button>`;
   return `
-    <div class="zone-card" id="zone-${id}">
+    <section class="zone-card" id="zone-${id}" data-zone="${id}"${id === selectedZoneId ? "" : " hidden"}>
       <div class="zone-head">
-        <div class="sensor-title"><span class="dot ${zone.valve_on ? "on" : ""}"></span><span class="zone-name">${zone.name}</span></div>
-        <div>
-          <div class="zone-current">${currentText}</div>
-          <div class="zone-updated" id="zone-updated-${id}" title="${zone.sensor_error || ""}">${zoneFreshnessText(zone)}</div>
-          <div class="zone-battery${zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT ? " low" : ""}" id="zone-battery-${id}"${zone.battery_pct == null ? " hidden" : ""}>${batteryLabel(zone.battery_pct)}</div>
-          <div class="zone-wifi ${zone.wifi_rssi_dbm != null ? wifiQuality(zone.wifi_rssi_dbm) : ""}" id="zone-wifi-${id}"${zone.wifi_rssi_dbm == null ? " hidden" : ""}>${wifiLabel(zone)}</div>
-          <div class="zone-dewpoint" id="zone-dewpoint-${id}"${dewPointVisible(zone) ? "" : " hidden"}>${dewPointLabel(zone)}</div>
+        <div class="zone-head-row">
+          <h3 class="zone-title">${zone.name}</h3>
+          <span class="zone-state state-${state.cls}" id="zone-state-${id}"><span class="zs-dot"></span><span class="zs-label">${state.label}</span></span>
+        </div>
+        <div class="zone-detail" id="zone-detail-${id}">${state.detail}</div>
+        <div class="zone-next" id="zone-next-${id}" hidden></div>
+        <div class="zone-meta" id="zone-meta-${id}">${zoneMetaHtml(zone)}</div>
+      </div>
+
+      <div class="pane-nav" role="tablist">${paneBtn("schedule", tr("climate.pane_schedule"))}${paneBtn("history", tr("climate.pane_history"))}
+      </div>
+
+      <div class="zone-pane" ${paneAttrs("schedule")}>
+        <div class="sched-season-label">${tr(`climate.schedule_heading_${climateMode}`)}</div>
+        <div class="sched-palette">${paletteHtml()}</div>
+        <p class="hint-text">${tr("climate.schedule_hint")}</p>
+        <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
+
+        <div class="sched-hour-axis-wrap">
+          <div class="sched-hour-axis">${hourAxisHtml()}</div>
+          <span class="sched-hour-axis-end">24h</span>
+        </div>
+        <div class="sched-grid" id="sched-${id}"></div>
+
+        <div class="zone-actions">
+          <span class="copy-label">${tr("climate.copy_label")}</span>
+          <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', true)">${tr("climate.copy_weekdays")}</button>
+          <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', false)">${tr("climate.copy_monday")}</button>
         </div>
       </div>
-      <div class="zone-sub state-${zoneStatusClass(zone)}">${zoneStatusText(zone)}</div>
 
-      <div class="sched-season-label">${tr(`climate.schedule_heading_${climateMode}`)}</div>
-      <div class="sched-palette">${paletteHtml()}</div>
-      <p class="hint-text">${tr("climate.schedule_hint")}</p>
-      <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
+      <div class="zone-pane" ${paneAttrs("history")}>
+        <p class="hint-text">${tr("climate.runs_intro")}</p>
+        <div class="run-tiles" id="on-hours-${id}">
+          ${["today", "week", "month"].map(key => `
+            <div class="run-tile">
+              <div class="run-tile-label">${tr(`climate.on_hours_${key}`)}</div>
+              <div class="run-tile-value">--</div>
+              <div class="run-tile-sub"></div>
+            </div>`).join("")}
+        </div>
 
-      <div class="sched-hour-axis-wrap">
-        <div class="sched-hour-axis">${hourAxisHtml()}</div>
-        <span class="sched-hour-axis-end">24h</span>
+        <div class="chart-filters">
+          <button class="range-btn" data-sensor="${chartId}" data-range="6h">6h</button>
+          <button class="range-btn active" data-sensor="${chartId}" data-range="24h">24h</button>
+          <button class="range-btn" data-sensor="${chartId}" data-range="7d">7d</button>
+        </div>
+        <div class="chart-readout" id="readout-${chartId}"></div>
+        <div class="chart-title">${tr("fields.temperature_c")}</div>
+        <div class="chart-wrap">
+          <svg id="chart-${chartId}" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="chart-legend">
+          <span><span class="legend-dot" style="background:#ff9f0a"></span>${tr("fields.temperature_c")}</span>
+          <span><span class="legend-target"></span>${tr("climate.target_line")}</span>
+          <span><span class="legend-band legend-valve"></span>${tr("climate.system_on")}</span>
+          <span><span class="legend-open-dot"></span>${tr("climate.system_started_marker")}</span>
+        </div>
+        ${humidityChartHtml(chartId)}
+        <div class="runs" id="runs-${chartId}"></div>
       </div>
-      <div class="sched-grid" id="sched-${id}"></div>
-
-      <div class="zone-actions">
-        <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', true)">${tr("climate.copy_weekdays")}</button>
-        <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', false)">${tr("climate.copy_monday")}</button>
-      </div>
-
-      <div class="section-head" style="margin:18px 0 6px">
-        <h2 style="font-size:0.85rem">${tr("climate.runs_heading")}</h2>
-      </div>
-      <p class="hint-text">${tr("climate.runs_intro")}</p>
-      <div class="run-tiles" id="on-hours-${id}">
-        ${["today", "week", "month"].map(key => `
-          <div class="run-tile">
-            <div class="run-tile-label">${tr(`climate.on_hours_${key}`)}</div>
-            <div class="run-tile-value">--</div>
-            <div class="run-tile-sub"></div>
-          </div>`).join("")}
-      </div>
-
-      <div class="chart-filters">
-        <button class="range-btn" data-sensor="${chartId}" data-range="6h">6h</button>
-        <button class="range-btn active" data-sensor="${chartId}" data-range="24h">24h</button>
-        <button class="range-btn" data-sensor="${chartId}" data-range="7d">7d</button>
-      </div>
-      <div class="chart-readout" id="readout-${chartId}"></div>
-      <div class="chart-title">${tr("fields.temperature_c")}</div>
-      <div class="chart-wrap">
-        <svg id="chart-${chartId}" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
-      </div>
-      <div class="chart-legend">
-        <span><span class="legend-dot" style="background:#ff9f0a"></span>${tr("fields.temperature_c")}</span>
-        <span><span class="legend-target"></span>${tr("climate.target_line")}</span>
-        <span><span class="legend-band legend-valve"></span>${tr("climate.system_on")}</span>
-        <span><span class="legend-open-dot"></span>${tr("climate.system_started_marker")}</span>
-      </div>
-      ${humidityChartHtml(chartId)}
-      <div class="runs" id="runs-${chartId}"></div>
-    </div>
+    </section>
   `;
+}
+
+// Refreshed every 5s from /api/climate/zones - the same helpers as the
+// first render, so the two never disagree.
+function updateZoneCard(zone) {
+  const id = slug(zone.name);
+  const pill = document.getElementById(`zone-state-${id}`);
+  if (!pill) return;
+  const state = zoneState(zone);
+  pill.className = `zone-state state-${state.cls}`;
+  pill.querySelector(".zs-label").textContent = state.label;
+  document.getElementById(`zone-detail-${id}`).textContent = state.detail;
+  document.getElementById(`zone-meta-${id}`).innerHTML = zoneMetaHtml(zone);
+  updateZoneNext(zone);
 }
 
 function renderClimateZones() {
@@ -1726,24 +1896,18 @@ function renderClimateZones() {
   }
   if (toggleLabel) toggleLabel.style.display = "";
 
-  // A zone with cool_enabled:false (e.g. a bathroom a radiant-ceiling
-  // system can't safely cool - see docs/configuration.md) has nothing to
-  // show or schedule while cooling: the thermostat never acts on it in
-  // that mode, so its card would just be a schedule editor with no
-  // effect. Still shown normally in heat mode.
-  const visibleZones = climateZones.filter(z => z.cool_enabled !== false || climateMode !== "cool");
-  const excludedCount = climateZones.length - visibleZones.length;
-
-  container.innerHTML =
-    (excludedCount > 0 ? `<div class="excluded-zones" id="cool-excluded">${excludedZonesHtml(climateZones)}</div>` : "") +
-    visibleZones.map(buildZoneCard).join("");
+  ensureSelectedZone();
+  const detailZones = climateZones.filter(z => !zoneExcluded(z));
+  container.innerHTML = `
+    <div class="zone-overview" id="zone-overview">${climateZones.map(zoneTileHtml).join("")}</div>
+    ${detailZones.map(buildZoneCard).join("")}`;
   updateAwayBanner();
 
   // Each zone's temperature/humidity trend reuses the exact same chart
   // code as a regular `climate` sensor card (loadChart/drawClimateChart) -
   // just pointed at the zone's underlying sensor name instead of a card
   // built by buildSensorCard(), via this small stand-in object.
-  container.querySelectorAll(".range-btn").forEach(btn => {
+  container.querySelectorAll(".range-btn[data-sensor]").forEach(btn => {
     btn.addEventListener("click", () => {
       const chartId = btn.dataset.sensor;
       container.querySelectorAll(`.range-btn[data-sensor="${chartId}"]`).forEach(b => b.classList.remove("active"));
@@ -1754,7 +1918,7 @@ function renderClimateZones() {
     });
   });
 
-  visibleZones.forEach(zone => {
+  detailZones.forEach(zone => {
     chartRanges[slug(zone.sensor)] = "24h";
     loadChart({ name: zone.sensor, kind: "climate", valve: zone.valve });
   });
@@ -1844,6 +2008,8 @@ function updateEmptyScheduleHint(zoneName) {
 
 function scheduleSave(zoneName) {
   updateEmptyScheduleHint(zoneName);
+  const zone = climateZones.find(z => z.name === zoneName);
+  if (zone) updateZoneNext(zone);
   clearTimeout(saveTimers[zoneName]);
   saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), 600);
 }
@@ -1880,6 +2046,8 @@ async function loadZoneSchedule(zoneName) {
     scheduleWeekModes[zoneName] = data.mode || climateMode;
     buildScheduleGrid(slug(zoneName), data.week);
     updateEmptyScheduleHint(zoneName);
+    const zone = climateZones.find(z => z.name === zoneName);
+    if (zone) updateZoneNext(zone);
   } catch (e) { /* grid stays empty; next tab visit retries */ }
 }
 
@@ -1897,78 +2065,147 @@ async function refreshOnHours(zoneName) {
   } catch (e) { /* leave dashes */ }
 }
 
-// One place computing the zone status line, so the initial render
-// (buildZoneCard) and the 5s live refresh (refreshClimateZonesLive) can
-// never drift out of sync with each other.
-//
-// Deliberately mode-agnostic: there is one valve, with one state (open/
-// closed) - the heat/cool mode toggle at the top of the tab is what
-// changes *when* it opens (see services/thermostat.py), not the valve
-// itself. Wording this as "heating active"/"cooling active" per zone was
-// tried and reverted - it made one physical valve look like two different
-// subsystems, which isn't the mental model this is supposed to match.
-// Three distinct states, not two - "valve closed" alone doesn't say
-// whether that's because there's no target this hour (off) or because
-// the target was reached and it's satisfied. Conflating those was
-// exactly the ambiguity asked to be fixed here.
-function zoneStatusClass(zone) {
-  if (climateAwayUntil) return "off";
-  if (zone.target_c == null) return "off";
-  return zone.valve_on ? "active" : "reached";
+// What a zone is doing, in words - one place, so its tile, its detail
+// header and the 5s refresh never disagree. There is one valve per zone:
+// "on" means it's open and the system is working toward the target;
+// "idle" the target is reached; "off" no target this hour; "away" and
+// "warn" held off (away mode, or a sensor silent past its safety limit).
+function formatTarget(value, withTier) {
+  const tier = withTier ? targetTier(value) : null;
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}°${tier ? ` ${tr(`climate.tier_${tier}`)}` : ""}`;
 }
 
-// While cooling, a zone excluded from it (condensation risk) has no card -
-// but whether its valve is really closed is exactly what matters then, so
-// it gets this panel instead: the valve's real state and why. The backend
-// holds such a valve closed unless an interlock (e.g. a dehumidifier fed
-// through it) is driving it - see ThermostatController._tick().
-function excludedValveHtml(zone) {
-  const driver = zone.valve_driver;
-  let cls, text;
-  if (!zone.valve_ok) {
-    cls = "bad";
-    text = tr("climate.excluded_valve_unknown", { zone: zone.name, error: zone.valve_error || "?" });
-  } else if (!zone.valve_on) {
-    cls = "ok";
-    text = tr("climate.excluded_valve_closed", { zone: zone.name });
-  } else if (driver && driver.on) {
-    cls = "info";
-    text = tr("climate.excluded_valve_feeding", { zone: zone.name, driver: driver.name });
-  } else {
-    cls = "warn";
-    text = tr("climate.excluded_valve_closing", { zone: zone.name });
+function zoneState(zone) {
+  const off = tr("climate.system_off");
+  if (climateAwayUntil) {
+    return { cls: "away", label: off, short: tr("climate.tile_away"), detail: tr("climate.detail_away", { until: formatAwayUntil(climateAwayUntil) }) };
   }
-  const driverNote = driver ? `<div class="excluded-note">${tr("climate.excluded_driver_note", { driver: driver.name })}</div>` : "";
-  return `
-    <div class="excluded-zone">
-      <div class="excluded-title">${tr("climate.excluded_title", { zone: zone.name })}</div>
-      <div class="excluded-valve ${cls}">${text}</div>
-      ${driverNote}
-    </div>`;
+  if (zone.sensor_failsafe_active) {
+    return { cls: "warn", label: off, short: tr("climate.tile_failsafe"), detail: tr("climate.detail_failsafe") };
+  }
+  if (zone.target_c == null) {
+    return { cls: "off", label: off, short: tr("climate.tile_off"), detail: tr("climate.detail_no_target") };
+  }
+  if (zone.valve_on) {
+    return {
+      cls: "on", label: tr("climate.system_on"),
+      short: tr("climate.tile_on", { target: formatTarget(zone.target_c) }),
+      detail: tr("climate.detail_on", { target: formatTarget(zone.target_c, true) }),
+    };
+  }
+  return {
+    cls: "idle", label: off,
+    short: tr("climate.tile_reached", { target: formatTarget(zone.target_c) }),
+    detail: tr("climate.detail_reached", { target: formatTarget(zone.target_c, true) }),
+  };
 }
 
-function excludedZonesHtml(zones) {
-  if (climateMode !== "cool") return "";
-  return zones.filter(z => z.cool_enabled === false).map(excludedValveHtml).join("");
+// While cooling, whether an excluded zone's valve is really closed is what
+// matters - its real state, and why if it isn't. The backend holds it
+// closed unless an interlock (e.g. a dehumidifier fed through it) drives
+// it - see ThermostatController._tick().
+function excludedValveState(zone) {
+  const driver = zone.valve_driver;
+  const note = driver ? tr("climate.excluded_driver_note", { driver: driver.name }) : "";
+  if (!zone.valve_ok) {
+    return { cls: "bad", text: tr("climate.excluded_short_unknown"), title: tr("climate.excluded_valve_unknown", { zone: zone.name, error: zone.valve_error || "?" }) };
+  }
+  if (!zone.valve_on) return { cls: "ok", text: tr("climate.excluded_short_closed"), title: note };
+  if (driver && driver.on) return { cls: "info", text: tr("climate.excluded_short_feeding", { driver: driver.name }), title: note };
+  return { cls: "warn", text: tr("climate.excluded_short_closing"), title: note };
 }
 
-function zoneStatusText(zone) {
-  if (climateAwayUntil) return tr("climate.status_away");
-  if (zone.target_c == null) return tr("climate.no_target");
-  const tier = targetTier(zone.target_c);
-  const target = zone.target_c.toFixed(0) + "°C" + (tier ? ` (${tr(`climate.tier_${tier}`).toLowerCase()})` : "");
-  return zone.valve_on ? tr("climate.status_active", { target }) : tr("climate.status_reached", { target });
+// The next hour, up to a week ahead, whose scheduled target differs from
+// this hour's: "what happens next" without reading the grid.
+function nextScheduleChange(zoneName) {
+  const week = scheduleWeeks[zoneName];
+  if (!week) return null;
+  const { dayKey, hour } = scheduleNow();
+  const today = DAY_KEYS.indexOf(dayKey);
+  const current = week[dayKey][hour];
+  for (let step = 1; step < 7 * 24; step++) {
+    const days = Math.floor((hour + step) / 24);
+    const dayIndex = (today + days) % 7;
+    const value = week[DAY_KEYS[dayIndex]][(hour + step) % 24];
+    if (value !== current) return { days, dayIndex, hour: (hour + step) % 24, value };
+  }
+  return null;
+}
+
+function updateZoneNext(zone) {
+  const el = document.getElementById(`zone-next-${slug(zone.name)}`);
+  if (!el) return;
+  const next = climateAwayUntil || zone.sensor_failsafe_active ? null : nextScheduleChange(zone.name);
+  el.hidden = !next;
+  if (!next) return;
+  const time = `${String(next.hour).padStart(2, "0")}:00`;
+  const when = next.days === 0 ? tr("climate.when_today", { time })
+    : next.days === 1 ? tr("climate.when_tomorrow", { time })
+    : tr("climate.when_day", { day: tr("climate.days")[next.dayIndex], time });
+  el.textContent = next.value == null
+    ? tr("climate.next_off", { when })
+    : tr("climate.next_change", { when, target: formatTarget(next.value, true) });
 }
 
 // A device tagged `visible_in_mode: "heat"/"cool"` in config.yaml (e.g. a
 // dehumidifier that only makes sense while cooling) hides its card outside
 // that mode. Re-run whenever climateMode changes - on boot, after toggling
-// it, and on every live refresh in case it changed from elsewhere.
+// it, and on every live refresh in case it changed from elsewhere. The
+// "Other devices" heading goes with the last visible card.
 function applyClimateModeVisibility() {
+  let anyVisible = false;
   document.querySelectorAll("#climate-extra .sensor-card").forEach(card => {
     const requiredMode = card.dataset.visibleInMode;
     card.hidden = !!requiredMode && requiredMode !== climateMode;
+    anyVisible = anyVisible || !card.hidden;
   });
+  const head = document.getElementById("climate-extra-head");
+  if (head) head.hidden = !anyVisible;
+}
+
+// The season's own effects on the Climate tab's other devices, from
+// /api/climate/zones: a switch it turns on and off by itself (a bathroom
+// bypass valve) and one only usable in one season (a dehumidifier).
+let climateSeasonEffects = null;
+
+// One line under each such device - otherwise "why is it on?" or "why
+// can't I switch it on?" has no answer on the page.
+function annotateSeasonDevices() {
+  const effects = climateSeasonEffects || {};
+  const notes = {};
+  (effects.mode_switches || []).forEach(m => { notes[m.switch] = tr(`climate.device_auto_${m.active_in_mode}`); });
+  (effects.mode_limited || []).forEach(m => { notes[m.switch] = tr(`climate.device_only_${m.only_in_mode}`); });
+  for (const [name, text] of Object.entries(notes)) {
+    const top = document.querySelector(`#climate-extra #sensor-${slug(name)} .sensor-top`);
+    if (!top) continue;
+    let note = top.parentElement.querySelector(".season-note");
+    if (!note) {
+      note = document.createElement("div");
+      note.className = "season-note";
+      top.after(note);
+    }
+    note.textContent = text;
+  }
+}
+
+// The Climate tab's outdoor sensor - the first climate sensor among its
+// other devices - also shown as a chip next to the season.
+let outdoorSensorName = null;
+const ICON_THERMOMETER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>`;
+
+function updateOutdoorChip(reading) {
+  const chip = document.getElementById("climate-outdoor");
+  if (!chip) return;
+  const known = reading && reading.temperature_c != null;
+  chip.hidden = !known;
+  if (!known) return;
+  chip.innerHTML = `${ICON_THERMOMETER}<span>${tr("climate.outdoor_label")}</span><b>${fmt(reading.temperature_c, 1)}°</b>`
+    + (reading.humidity_pct != null ? `<span class="oc-hum">${fmt(reading.humidity_pct, 0)}%</span>` : "");
+}
+
+function scrollToOutdoorCard() {
+  const card = outdoorSensorName && document.getElementById(`sensor-${slug(outdoorSensorName)}`);
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function refreshClimateZonesLive() {
@@ -1996,45 +2233,16 @@ async function refreshClimateZonesLive() {
     // else keyed off zone.sensor/zone.valve) doesn't keep polling a name
     // that stopped existing the moment the process restarted.
     climateZones = data.zones;
-    const excluded = document.getElementById("cool-excluded");
-    if (excluded) excluded.innerHTML = excludedZonesHtml(data.zones);
+    climateSeasonEffects = data.season_effects || null;
     updateSeasonHeading();
     updateAwayBadge();
     updateAwayBanner();
+    renderZoneOverview();
     data.zones.forEach(zone => {
       checkLowBatteryPopup(zone);
-      const card = document.getElementById(`zone-${slug(zone.name)}`);
-      if (!card) return;
-      card.querySelector(".dot").classList.toggle("on", zone.valve_on);
-      card.querySelector(".zone-current").textContent = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null
-        ? `${zone.temperature_c.toFixed(1)}°C${zone.humidity_pct != null ? " · " + zone.humidity_pct.toFixed(0) + "%" : ""}`
-        : tr("climate.unreachable");
-      const updated = card.querySelector(".zone-updated");
-      if (updated) {
-        updated.textContent = zoneFreshnessText(zone);
-        updated.title = zone.sensor_error || "";
-      }
-      const battery = card.querySelector(".zone-battery");
-      if (battery) {
-        battery.hidden = zone.battery_pct == null;
-        battery.textContent = batteryLabel(zone.battery_pct);
-        battery.classList.toggle("low", zone.battery_pct != null && zone.battery_pct <= LOW_BATTERY_PCT);
-      }
-      const wifi = card.querySelector(".zone-wifi");
-      if (wifi) {
-        wifi.hidden = zone.wifi_rssi_dbm == null;
-        wifi.textContent = wifiLabel(zone);
-        wifi.className = `zone-wifi ${zone.wifi_rssi_dbm != null ? wifiQuality(zone.wifi_rssi_dbm) : ""}`;
-      }
-      const dewpoint = card.querySelector(".zone-dewpoint");
-      if (dewpoint) {
-        dewpoint.hidden = !dewPointVisible(zone);
-        dewpoint.textContent = dewPointLabel(zone);
-      }
-      const sub = card.querySelector(".zone-sub");
-      sub.textContent = zoneStatusText(zone);
-      sub.className = `zone-sub state-${zoneStatusClass(zone)}`;
+      updateZoneCard(zone);
     });
+    annotateSeasonDevices();
     applyClimateModeVisibility();
   } catch (e) { /* keep last render */ }
 }
@@ -2083,8 +2291,13 @@ async function boot() {
 
   attachPairings(devicesData.sensors);
   const homeSensors = devicesData.sensors.filter(s => s.tab !== "climate" && !zoneMemberNames.has(s.name));
-  const climateExtraSensors = devicesData.sensors.filter(s => s.tab === "climate" && !zoneMemberNames.has(s.name));
+  // Switches before sensors: on the Climate tab the other devices are
+  // mostly things to switch, and a sensor's charts make a tall card.
+  const climateExtraSensors = devicesData.sensors
+    .filter(s => s.tab === "climate" && !zoneMemberNames.has(s.name))
+    .sort((a, b) => (a.kind === "climate") - (b.kind === "climate"));
 
+  outdoorSensorName = (climateExtraSensors.find(s => s.kind === "climate") || {}).name || null;
   renderSensors(homeSensors, "sensor-cards");
   renderSensors(climateExtraSensors, "climate-extra");
   const pollableSensors = homeSensors.concat(climateExtraSensors);
@@ -2095,10 +2308,13 @@ async function boot() {
     climateMode = climateData.mode || "heat";
     if (climateData.hysteresis_c != null) climateHysteresis = climateData.hysteresis_c;
     climateAwayUntil = climateData.away_until || null;
+    climateSeasonEffects = climateData.season_effects || null;
     updateSeasonHeading();
     updateAwayBadge();
     climateZones = climateData.zones;
     renderClimateZones();
+    annotateSeasonDevices();
+    applyClimateModeVisibility();
     for (const zone of climateZones) {
       await loadZoneSchedule(zone.name);
       refreshOnHours(zone.name);

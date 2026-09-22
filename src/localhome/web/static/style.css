@@ -741,19 +741,73 @@ input[type="range"]:disabled {
   font: inherit;
   cursor: pointer;
 }
-/* The dashboard's season heading: read-only here, a link to where it's
-   changed (the admin panel's Season section). */
-.season-link {
-  color: inherit;
-  text-decoration: none;
+/* The Climate tab's accent follows the season: orange while heating, blue
+   while cooling - set by updateSeasonHeading() in app.js. */
+#tab-climate {
+  --season: #ff9f0a;
+}
+#tab-climate.season-cool {
+  --season: #3987e5;
+}
+.climate-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+.climate-top .away-badge {
+  margin-left: auto;
+}
+/* The season: read-only here, a link to where it's changed (the admin
+   panel's Season section). Next to it, the outdoor sensor. */
+.season-link,
+.outdoor-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+.season-link {
+  border: 1px solid color-mix(in srgb, var(--season) 45%, transparent);
+  background: color-mix(in srgb, var(--season) 16%, transparent);
+}
+.season-link svg {
+  width: 16px;
+  height: 16px;
+  color: var(--season);
 }
 .season-link::after {
   content: "›";
   color: var(--text-dim);
   font-weight: 400;
+}
+.outdoor-chip {
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text-dim);
+  font-weight: 500;
+  cursor: pointer;
+}
+.outdoor-chip[hidden] {
+  display: none;
+}
+.outdoor-chip svg {
+  width: 15px;
+  height: 15px;
+}
+.outdoor-chip b {
+  color: var(--text);
+}
+.outdoor-chip .oc-hum {
+  color: #6fa8ef;
+  font-weight: 600;
 }
 /* Each chart's own title - temperature and humidity are separate charts. */
 .chart-title {
@@ -837,86 +891,242 @@ input[type="range"]:disabled {
 
 /* ---------------------------------------------------------------- zones -- */
 
-#climate-zones {
+/* A tile per zone - see zoneTileHtml() in app.js. Tapping one shows that
+   zone's card below. */
+.zone-overview {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
 }
-.zone-card {
-  background: linear-gradient(135deg, rgba(255, 159, 10, 0.1), rgba(255, 255, 255, 0.04));
+@media (min-width: 720px) {
+  .zone-overview {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  }
+}
+.zone-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
   border: 1px solid var(--card-border);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 18px;
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
 }
-.zone-head {
+button.zone-tile {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+button.zone-tile:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.zone-tile.selected {
+  border-color: var(--season);
+  background: color-mix(in srgb, var(--season) 13%, rgba(255, 255, 255, 0.03));
+  box-shadow: 0 0 0 1px var(--season) inset;
+}
+.zone-tile.excluded {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.025);
+}
+.zt-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.zone-tile.selected .zt-name {
+  color: var(--text);
+}
+.zt-values {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 4px;
+  gap: 8px;
 }
-.zone-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-.zone-current {
-  font-size: 1.6rem;
+.zt-temp {
+  font-size: 1.75rem;
   font-weight: 700;
+  line-height: 1.1;
   letter-spacing: -0.02em;
-  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
-.zone-updated {
-  font-size: 0.72rem;
+.zt-temp.stale {
+  opacity: 0.55;
+}
+.zt-hum {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #6fa8ef;
+}
+.zt-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
   color: var(--text-dim);
-  text-align: right;
 }
-.zone-battery {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-align: right;
+.zt-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5b6070;
 }
-.zone-battery.low {
-  color: var(--accent-close);
+.zone-tile.state-on .zt-status,
+.zt-status.valve-ok {
+  color: var(--accent-open);
   font-weight: 600;
 }
-.zone-wifi {
+.zone-tile.state-on .zt-dot {
+  background: var(--accent-open);
+  box-shadow: 0 0 6px var(--accent-open);
+}
+.zone-tile.state-idle .zt-dot {
+  background: #aab2c5;
+}
+.zone-tile.state-away .zt-status,
+.zone-tile.state-warn .zt-status,
+.zt-status.valve-warn {
+  color: var(--accent-stop);
+}
+.zone-tile.state-away .zt-dot,
+.zone-tile.state-warn .zt-dot,
+.zt-status.valve-warn .zt-dot {
+  background: var(--accent-stop);
+}
+.zt-status.valve-ok .zt-dot {
+  background: var(--accent-open);
+}
+.zt-status.valve-info {
+  color: #6fa8ef;
+}
+.zt-status.valve-info .zt-dot {
+  background: #6fa8ef;
+}
+.zt-status.valve-bad {
+  color: var(--accent-close);
+}
+.zt-status.valve-bad .zt-dot {
+  background: var(--accent-close);
+}
+.zt-note {
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+/* The zone picked above, in detail - see buildZoneCard(). */
+.zone-card {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--season) 11%, transparent), rgba(255, 255, 255, 0.03) 40%);
+}
+.zone-head {
+  margin-bottom: 16px;
+}
+.zone-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.zone-title {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+/* Sistema acceso / spento - see zoneState(). */
+.zone-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.zs-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.zone-state.state-on {
+  background: rgba(48, 209, 88, 0.18);
+  color: var(--accent-open);
+}
+.zone-state.state-on .zs-dot {
+  box-shadow: 0 0 6px var(--accent-open);
+}
+.zone-state.state-idle {
+  color: var(--text);
+}
+.zone-state.state-away,
+.zone-state.state-warn {
+  background: rgba(255, 159, 10, 0.16);
+  color: var(--accent-stop);
+}
+.zone-detail {
+  margin-top: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.zone-next {
+  margin-top: 3px;
+  font-size: 0.84rem;
+  color: var(--text-dim);
+}
+.zone-meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 8px;
   font-size: 0.72rem;
   color: var(--text-dim);
-  text-align: right;
 }
+.zone-meta > span + span::before {
+  content: "·";
+  margin: 0 7px;
+}
+.zone-battery.low,
 .zone-wifi.poor {
   color: var(--accent-close);
   font-weight: 600;
 }
-.zone-dewpoint {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-align: right;
+
+/* Schedule | Statistics - see selectPane(). */
+.pane-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
 }
-.zone-sub {
-  display: inline-block;
-  font-size: 0.74rem;
+.pane-btn {
+  padding: 9px 8px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.88rem;
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 14px;
+  cursor: pointer;
 }
-/* Three states, not just "open"/"closed" - see zoneStatusClass() in
-   app.js: "off" (no target this hour), "active" (valve open, working
-   toward the target) and "reached" (target met, valve closed) read very
-   differently even though the last two both mean "valve is closed". */
-.zone-sub.state-off {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-dim);
-}
-.zone-sub.state-active {
-  background: rgba(48, 209, 88, 0.18);
-  color: var(--accent-open);
-}
-.zone-sub.state-reached {
-  background: rgba(57, 135, 229, 0.18);
-  color: #3987e5;
+.pane-btn.active {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .sched-palette {
@@ -953,6 +1163,27 @@ input[type="range"]:disabled {
 }
 .sched-tier-comfort.sched-tier-cool { --tier: #3987e5; }
 .sched-tier-economy { --tier: #34c47c; }
+.sched-tier-off { --tier: #8a90a3; }
+.sched-tier-off .sched-tier-swatches {
+  min-width: 62px;  /* as wide as its label */
+  justify-content: center;
+}
+.sched-tier-off .sched-tier-label {
+  left: 50%;
+  transform: translateX(-50%);
+}
+/* On a phone: Off and the six summer Comfort values on one row. */
+@media (max-width: 560px) {
+  .sched-swatch {
+    width: 30px;
+  }
+  .sched-tier-swatches {
+    gap: 4px;
+  }
+  .sched-palette:has(.sched-tier) {
+    gap: 16px 8px;
+  }
+}
 .sched-tier-label {
   position: absolute;
   top: -9px;
@@ -969,6 +1200,7 @@ input[type="range"]:disabled {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1.3;
+  white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 .sched-tier-label svg {
@@ -985,42 +1217,6 @@ input[type="range"]:disabled {
   gap: 16px 10px;
   margin-top: 12px;
   margin-bottom: 8px;
-}
-
-/* A zone excluded from cooling: its valve's real state, in place of its
-   card - see excludedZonesHtml(). */
-.excluded-zones {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.excluded-zone {
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.85rem;
-}
-.excluded-title {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.excluded-valve {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-weight: 700;
-  font-size: 0.8rem;
-}
-.excluded-valve.ok { background: rgba(48, 209, 88, 0.18); color: #30d158; }
-.excluded-valve.info { background: rgba(57, 135, 229, 0.2); color: #6fa8ef; }
-.excluded-valve.warn { background: rgba(255, 159, 10, 0.18); color: #ff9f0a; }
-.excluded-valve.bad { background: rgba(255, 69, 58, 0.18); color: #ff453a; }
-.excluded-note {
-  margin-top: 6px;
-  color: var(--text-dim);
-  font-size: 0.78rem;
 }
 
 .sched-hour-axis-wrap {
@@ -1110,9 +1306,30 @@ input[type="range"]:disabled {
 
 .zone-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 4px;
+}
+.copy-label {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+@media (min-width: 720px) {
+  .sched-cell {
+    height: 24px;
+  }
+}
+
+/* The Climate tab's other devices: cards as tall as their content, and a
+   line under the ones the season drives - see annotateSeasonDevices(). */
+.climate-extra {
+  align-items: start;
+}
+.season-note {
+  margin: -8px 0 12px;
+  font-size: 0.74rem;
+  color: var(--text-dim);
 }
 
 /* --------------------------------------------------- settings / modal -- */
