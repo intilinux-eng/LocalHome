@@ -462,6 +462,7 @@
     "how_data_title": "Data and limits",
     "how_data": "The charts' history has a day limit and a size limit (in Settings): past them, the oldest data is deleted. System logs live in RAM (30 MB at most), don't wear the eMMC and are lost at reboot. Before any deletion in Maintenance a backup is saved on the board (the last 10, plus one history copy if there's room).",
     "how_diagnostic_title": "Diagnostics",
+    "vmc_program_save": "Save program",
     "vmc_program_heading": "Day/night program",
     "vmc_program_note": "Two speeds: one for the day and a quieter one for the night. The speed is set when a period begins; a speed you pick by hand on the dashboard stays until the next change. Applied straight away, no restart.",
     "vmc_program_enabled": "Program on",

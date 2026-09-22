@@ -462,6 +462,7 @@
     "how_data_title": "Dati e limiti",
     "how_data": "Lo storico dei grafici ha un limite di giorni e di dimensione (in Impostazioni): oltre, si cancellano i dati più vecchi. I registri di sistema stanno in RAM (massimo 30 MB), non consumano la memoria eMMC e si perdono al riavvio. Prima di ogni cancellazione in Manutenzione viene salvato un backup sulla scheda (ultimi 10, più una copia dello storico se c'è spazio).",
     "how_diagnostic_title": "Diagnosi",
+    "vmc_program_save": "Salva programma",
     "vmc_program_heading": "Programma giorno/notte",
     "vmc_program_note": "Imposta due velocità: una di giorno e una più silenziosa di notte. La velocità viene impostata all'inizio di ogni fascia; se la cambi a mano dalla dashboard resta fino al cambio successivo. Si applica subito, senza riavvio.",
     "vmc_program_enabled": "Programma attivo",
