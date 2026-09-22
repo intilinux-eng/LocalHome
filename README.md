@@ -17,14 +17,17 @@ you've outgrown it - that's a fine outcome for a project this size.
 
 ## Screenshots
 
-All three captured against the `simulated` driver and example device
+All of them captured against the `simulated` driver and example device
 ids - no real hardware needed to see this for yourself.
 
 | Home | Heating & Cooling |
 |---|---|
-| ![Home tab: sensor cards and covers](docs/screenshots/home.png) | ![Heating & Cooling tab: per-zone schedule, on-time history and chart](docs/screenshots/climate.png) |
+| ![Home tab: sensor cards and covers](docs/screenshots/home.png) | ![Heating & Cooling tab: a tile per zone, the zone in detail with its weekly schedule, and the other devices](docs/screenshots/climate.png) |
 
-![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, and live per-zone status](docs/screenshots/climate-admin.png)
+![A zone's statistics: every run in the last 24 hours with what temperature and humidity did meanwhile, then the charts with the stretches the system was on shaded](docs/screenshots/statistics.png)
+*A zone's statistics: when the system ran, and what it did.*
+
+![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, the VMC's day/night program, and live per-zone status](docs/screenshots/climate-admin.png)
 *Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
 
 ## Install on an Arduino UNO Q, step by step
