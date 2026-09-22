@@ -190,7 +190,8 @@
     "range_btn_6h": "6 ore",
     "range_btn_24h": "24 ore",
     "range_btn_7d": "7 giorni",
-    "run_totals": "Questa settimana {week} ({week_starts}) · questo mese {month} ({month_starts})"
+    "run_totals": "Questa settimana {week} ({week_starts}) · questo mese {month} ({month_starts})",
+    "vmc_program_note": "Programma automatico: {period} {value}% fino alle {until}"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
@@ -451,7 +452,20 @@
     "how_missing": "Un dispositivo spento, non installato o irraggiungibile non blocca mai il resto: la sua card lo segnala, Stato sistema lo elenca tra le anomalie, non scrive nulla nello storico e il registro lo annota una volta sola (poi una riga ogni 10 minuti). Un dispositivo che va interrogato attivamente (la VMC) viene interrogato sempre meno spesso finché non risponde.",
     "how_data_title": "Dati e limiti",
     "how_data": "Lo storico dei grafici ha un limite di giorni e di dimensione (in Impostazioni): oltre, si cancellano i dati più vecchi. I registri di sistema stanno in RAM (massimo 30 MB), non consumano la memoria eMMC e si perdono al riavvio. Prima di ogni cancellazione in Manutenzione viene salvato un backup sulla scheda (ultimi 10, più una copia dello storico se c'è spazio).",
-    "how_diagnostic_title": "Diagnosi"
+    "how_diagnostic_title": "Diagnosi",
+    "vmc_program_heading": "Programma giorno/notte",
+    "vmc_program_note": "Imposta due velocità: una di giorno e una più silenziosa di notte. La velocità viene impostata all'inizio di ogni fascia; se la cambi a mano dalla dashboard resta fino al cambio successivo. Si applica subito, senza riavvio.",
+    "vmc_program_enabled": "Programma attivo",
+    "vmc_program_target": "Dispositivo da comandare",
+    "vmc_program_none": "— scegli —",
+    "vmc_period_day": "Giorno",
+    "vmc_period_night": "Notte",
+    "vmc_from": "Dalle",
+    "vmc_speed_label": "Velocità %",
+    "vmc_program_off": "Programma non attivo: la velocità resta quella che imposti a mano.",
+    "vmc_program_running": "Attivo: fascia {period} al {value}% fino alle {until}.",
+    "vmc_same_time": "Giorno e notte devono iniziare a orari diversi.",
+    "vmc_pick_device": "Scegli quale dispositivo comanda il programma."
   },
   "vmc_presets": {
     "night": "Notte",

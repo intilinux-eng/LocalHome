@@ -584,3 +584,51 @@
   margin: 14px 0 2px;
   font-size: 0.9rem;
 }
+
+/* The VMC program's two periods, side by side when there's room. */
+.admin-subheading {
+  margin: 22px 0 4px;
+  font-size: 0.95rem;
+}
+.vmc-periods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.vmc-period {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.vmc-period-name {
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.vmc-period .admin-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.vmc-period .admin-field span {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.vmc-period input {
+  width: 7.5em;
+}
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+.admin-check input {
+  width: 20px;
+  height: 20px;
+}

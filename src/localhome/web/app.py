@@ -43,6 +43,7 @@ from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
+from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -236,12 +237,20 @@ def create_app(config_path: str | None = None) -> Flask:
         thermostat.interlock_owned_valves = {link.follower: link.active_in_mode for link in interlocks}
         interlock_links = interlocks
 
+    # The ventilation unit's own day/night speed program (services/
+    # vmc_schedule.py) - independent of the thermostat, and re-read from
+    # its file every tick so the admin panel can change it without a
+    # restart.
+    vmc_schedule = VmcScheduleStore(config.resolve("vmc_schedule.json"))
+    vmc = VmcScheduleController(manager, vmc_schedule)
+
     manager.start()
     recorder.start()
     if thermostat:
         thermostat.start()
     if interlock:
         interlock.start()
+    vmc.start()
 
     app.config["LOCALHOME_CONFIG"] = config
     app.config["TRANSLATIONS"] = load_translations(config.web_language)
@@ -254,6 +263,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["POWER_SENSOR"] = power_sensor
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
+    app.config["VMC_SCHEDULE"] = vmc
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
@@ -560,6 +570,12 @@ def _register_routes(app: Flask) -> None:
         manager.pollers[name].cache.merge({"value": data["value"]})
         _wake_poller(manager, name)
         return jsonify(ok=True)
+
+    @app.route("/api/vmc-schedule")
+    def api_vmc_schedule_status():
+        """What the dashboard shows next to the speed buttons."""
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        return jsonify(ok=True, **vmc.status())
 
     @app.route("/api/sensors/<name>/history")
     def api_sensor_history(name):
@@ -952,6 +968,33 @@ def _register_routes(app: Flask) -> None:
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/vmc-schedule")
+    def api_vmc_schedule_get():
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        manager: DeviceManager = app.config["MANAGER"]
+        return jsonify(
+            ok=True,
+            schedule=vmc.store.get(),
+            status=vmc.status(),
+            # What the program can drive: every settable number (a VMC's
+            # speed, a dimmer), so an apartment that wired its VMC in
+            # config.yaml can pick it here just as well as one mapped in
+            # this panel.
+            devices=sorted(manager.numbers),
+        )
+
+    @app.route("/api/climate-admin/vmc-schedule", methods=["POST"])
+    def api_vmc_schedule_save():
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        try:
+            schedule = vmc.store.set(request.get_json(silent=True) or {})
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        # Applied straight away, so saving is the whole action - no
+        # restart, and no waiting for the next tick to see it work.
+        vmc.tick()
+        return jsonify(ok=True, schedule=schedule, status=vmc.status())
 
     @app.route("/api/climate-admin/restart", methods=["POST"])
     def api_climate_admin_restart():

@@ -1,6 +1,8 @@
 # Simulated (no hardware required)
 
-Covers `type: simulated`, registered for both `climate` and `switch`. It
+Covers `type: simulated`, registered for `climate`, `switch` and
+`number` (a dimmer or fan speed: `initial_value`, `min`, `max`, `unit`
+- enough to try a VMC and its day/night program with no hardware). It
 fakes a device with nothing real behind it - for trying out the
 dashboard, or a whole feature like the [thermostat](../configuration.md#thermostat-heatingcooling-zones),
 before you own the actual hardware. Also handy for demoing LocalHome to

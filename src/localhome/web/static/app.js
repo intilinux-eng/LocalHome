@@ -267,6 +267,7 @@ function presetRowHtml(sensor) {
   if (!sensor.presets || !sensor.presets.length) return "";
   const unit = (sensor.range || {}).unit || "";
   return `
+    <div class="vmc-program-note" id="program-note-${slug(sensor.name)}" hidden></div>
     <div class="preset-row" id="number-presets-${slug(sensor.name)}">
       ${sensor.presets.map(p => `
         <button class="preset-btn" data-name="${sensor.name}" data-value="${p.value}">
@@ -594,6 +595,27 @@ async function onSwitchToggle(name, el) {
     el.checked = !el.checked;
   }
   el.disabled = false;
+}
+
+// The ventilation unit's day/night program (services/vmc_schedule.py),
+// shown under its speed buttons: without it, a speed that changes by
+// itself at 22:00 looks like the dashboard did something random.
+async function refreshVmcProgram() {
+  if (!document.querySelector(".vmc-program-note")) return;
+  try {
+    const status = await (await fetch("/api/vmc-schedule")).json();
+    document.querySelectorAll(".vmc-program-note").forEach(el => {
+      const mine = status.ok && status.enabled && el.id === `program-note-${slug(status.target)}`;
+      el.hidden = !mine;
+      if (mine) {
+        el.textContent = tr("climate.vmc_program_note", {
+          period: tr(`vmc_presets.${status.period}`).toLowerCase(),
+          value: status.value,
+          until: status.until,
+        });
+      }
+    });
+  } catch (e) { /* leave the note as it is */ }
 }
 
 // --------------------------------------------------------------- charts ----
@@ -2307,6 +2329,8 @@ async function boot() {
   renderSensors(climateExtraSensors, "climate-extra");
   const pollableSensors = homeSensors.concat(climateExtraSensors);
   setInterval(() => pollableSensors.forEach(refreshSensor), 5000);
+  refreshVmcProgram();
+  setInterval(refreshVmcProgram, 60000);
   setInterval(() => pollableSensors.forEach(loadChart), 60000);
 
   if (climateData.ok) {

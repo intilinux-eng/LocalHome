@@ -217,6 +217,14 @@
     <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_button }}</button>
     <p class="hint-text" id="save-vmc-result"></p>
     <div class="admin-zone-status" id="vmc-status"></div>
+
+    <!-- The day/night speed program - services/vmc_schedule.py. Saved
+         here and applied at once: no restart, unlike the device id above. -->
+    <h3 class="admin-subheading">{{ t.climate_admin.vmc_program_heading }}</h3>
+    <p class="hint-text">{{ t.climate_admin.vmc_program_note }}</p>
+    <div class="admin-zone-card" id="vmc-program"></div>
+    <button class="tbtn open" onclick="saveVmcProgram(this)">{{ t.climate_admin.save_button }}</button>
+    <p class="hint-text" id="save-vmc-program-result"></p>
   </details>
 
   <!-- Clear / reset / backup - see static/climate_admin.js's maintenance

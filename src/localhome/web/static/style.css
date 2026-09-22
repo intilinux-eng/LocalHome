@@ -1542,3 +1542,16 @@ button.zone-tile:hover {
   font-size: 0.8rem;
   line-height: 1.45;
 }
+
+/* The VMC's day/night program, under its speed buttons - see
+   refreshVmcProgram() in app.js. */
+.vmc-program-note {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(191, 90, 242, 0.14);
+  font-size: 0.76rem;
+}
+.vmc-program-note[hidden] {
+  display: none;
+}

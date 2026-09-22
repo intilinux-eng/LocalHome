@@ -344,6 +344,29 @@ that's sometimes owned by something else and sometimes forced to follow
 another switch, that's `interlocks`, not this. On the dashboard its card
 says so: "Automatic: on in summer, off in winter".
 
+### The ventilation unit's day/night program
+
+Mechanical ventilation runs all the time; what changes is how fast. The
+admin panel's VMC section has a small program for it: two periods, each
+with a start time and a speed, saved in `config/vmc_schedule.json`:
+
+```json
+{
+  "enabled": true,
+  "target": "VMC Speed",
+  "day": {"at": "07:00", "value": 50},
+  "night": {"at": "22:00", "value": 20}
+}
+```
+
+`target` is any settable `number` - the panel offers every one this
+installation has, so a VMC declared in config.yaml can be driven as well
+as one mapped in the panel. The speed is written **once, when a period
+begins**: a speed picked by hand on the dashboard therefore stays until
+the next period starts, instead of being corrected away a minute later.
+The control loop (`services/vmc_schedule.py`, every 60s) re-reads the
+file, so saving in the panel takes effect without a restart.
+
 ### Away mode
 
 There's no config key for this - it's a runtime toggle, from the
