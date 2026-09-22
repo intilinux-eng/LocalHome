@@ -203,14 +203,18 @@ date rather than by tag.
 
 - A zone's valve statistics became **run statistics**, worded for anyone
   ("system on/off" instead of "valve open/closed", on the whole
-  dashboard): today/week/month tiles give the time on as "3h 05m" and
-  how many times the system switched on; the stretches it was on shade
-  both the temperature and the humidity chart; and a list below them
-  gives each run in the range shown - when, how long, and what
-  temperature and humidity did meanwhile (e.g. 25.9° -> 25.5°, -0.4°).
-  Hovering a run outlines it on both charts. The time axis labels as
-  many round hours as fit, the temperature axis has a line per degree,
-  and the system strip and target band are drawn without hairline gaps.
+  dashboard), and pared down to what reads at a glance. One period
+  (6 hours / 24 hours / 7 days) drives the whole pane: first the list of
+  runs - time on and share of the period, how many times it switched on,
+  then each run: when, how long, and what temperature and humidity did
+  meanwhile (e.g. 25.9° -> 25.5°, -0.4°; one line per run on a wide
+  screen); then the temperature and humidity charts in one box, the
+  stretches the system was on shading both, hovering a run outlining it
+  there; then one line with this week's and this month's totals. Gone:
+  the today/week/month tiles, the separate "system" strip and switch-on
+  dots under the chart, the hysteresis in the readout. The time axis
+  labels as many round hours as fit, the temperature axis has a line per
+  degree, and the target band is drawn without hairline gaps.
   `/api/climate/zones/<name>/on-hours` also returns `starts`
   (`HistoryStore.on_stats`, replacing `sum_on_hours`/`sum_on_hours_range`).
   The days before today are counted once a day (again after a clear or

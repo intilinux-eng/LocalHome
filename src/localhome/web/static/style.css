@@ -436,17 +436,8 @@ input[type="range"]:disabled {
   border-radius: 2px;
 }
 .legend-band.legend-valve {
-  background: rgba(48, 209, 88, 0.85);  /* the chart's valve strip */
-}
-.legend-open-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 3px;
-  background: #30d158;
-  box-shadow: 0 0 0 1.5px #141414;
+  background: rgba(48, 209, 88, 0.35);  /* the charts' "system on" shading */
+  border: 1px solid rgba(48, 209, 88, 0.6);
 }
 .chart-legend {
   display: flex;
@@ -501,46 +492,35 @@ input[type="range"]:disabled {
   color: #30d158;
 }
 
-/* A zone's run statistics: how long the system was on today, this week
-   and this month, and how many times it switched on. */
-.run-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 8px 0 14px;
-}
-.run-tile {
-  padding: 8px 10px;
-  border: 1px solid rgba(48, 209, 88, 0.22);
-  border-radius: 12px;
-  background: rgba(48, 209, 88, 0.07);
-}
-.run-tile-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.run-tile-value {
-  margin-top: 2px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.run-tile-sub {
-  margin-top: 1px;
-  font-size: 0.68rem;
-  color: var(--accent-open);
-}
-
-/* Below the charts: each run in the range shown, and what temperature and
-   humidity did meanwhile - see renderRuns() in app.js. */
+/* Each run in the period shown, and what temperature and humidity did
+   meanwhile - see renderRuns() in app.js. First in the Statistics pane. */
 .runs {
-  margin-top: 10px;
-  padding-top: 4px;
-  border-top: 1px solid var(--card-border);
+  margin-top: 4px;
+}
+/* The charts, grouped in one light box under the runs. */
+.trend-card {
+  margin-top: 14px;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.trend-card .chart-readout {
+  margin-top: 0;
+}
+.trend-card .humidity-chart {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
+}
+.trend-card .chart-legend {
+  margin-top: 8px;
+}
+/* This week's and this month's totals, one line. */
+.run-totals {
+  margin: 12px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-dim);
 }
 .runs:empty {
   display: none;
@@ -579,6 +559,21 @@ input[type="range"]:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 14px;
+}
+/* Wide screens: one line per run, in columns - when, how long, effect. */
+@media (min-width: 720px) {
+  .run-row {
+    grid-template-columns: 250px 1fr;
+    align-items: center;
+    gap: 16px;
+  }
+  .run-when {
+    justify-content: flex-start;
+    gap: 14px;
+  }
+  .run-dur {
+    margin-left: auto;
+  }
 }
 .run-temp {
   color: #ff9f0a;

@@ -219,16 +219,18 @@ works, and the simulated sensor even drifts toward a hotter/colder value
 while its paired simulated valve is on, so the whole thing behaves
 believably before you've bought anything.
 
-**Run statistics** (the dashboard's "today/this week/this month" tiles
-per zone - how long the system was on and how many times it switched
-on) come from the same history database everything else uses: the
+**Run statistics** (the week and month totals under a zone's
+Statistics pane - how long the system was on and how many times it
+switched on) come from the same history database everything else uses: the
 valve switch's `is_on` reading is recorded on
 `history.poll_interval_seconds`, and `HistoryStore.on_stats()` counts
 the samples that were "on" (times that interval) and the off-to-on
 changes. Their accuracy is tied to `history.poll_interval_seconds`, not
 `thermostat.poll_interval_seconds` - the two are independent. The list
-of runs below a zone's charts (when, how long, temperature and humidity
+of runs above a zone's charts (when, how long, temperature and humidity
 at start and end) is worked out in the page from the chart's own data.
+Both count an "off" shorter than 5 minutes (a restart, one odd reading)
+as part of the same run.
 
 ### A zone that can't be cooled: `cool_enabled`
 

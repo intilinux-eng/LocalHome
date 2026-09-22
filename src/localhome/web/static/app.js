@@ -848,16 +848,16 @@ function nearestPoint(points, ts) {
 // range, each with its own title and time axis - one crowded plot mixing
 // degrees and percent was hard to read:
 //   1. temperature, with the target it was held to (a band of +-
-//      hysteresis around a solid line) and, for a zone, a strip showing
-//      when the system (its valve) was on and a dot where it switched on;
+//      hysteresis around a solid line);
 //   2. humidity, below it - context, not what drives the valve.
-// For a zone, the stretches the system was on shade both charts, and the
-// list below them (renderRuns) says what each one did. Hovering (or
+// For a zone, the stretches the system (its valve) was on shade both
+// charts, and the list of runs above them (renderRuns) says what each one
+// did. Hovering (or
 // touching) either chart moves a marker on both and fills the readout
 // line above them. Drawn in real pixels - one viewBox unit per CSS pixel -
 // so text and lines look the same on a phone and on a wide desktop card;
 // the plots get a little taller as the card gets wider.
-const TEMP_CHART = { padL: 40, padR: 8, top: 8, gap: 9, laneH: 14, axisH: 14 };
+const TEMP_CHART = { padL: 40, padR: 8, top: 8, axisH: 14 };
 const HUM_CHART = { top: 8, axisH: 14 };
 const CHART_TEXT_SCALE = 1.15;
 
@@ -996,8 +996,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
   const humPlotH = Math.round(Math.min(90, Math.max(52, W * 0.09)));
   const plotL = Math.round(L.padL * textScale), plotR = W - L.padR, plotW = plotR - plotL;
   const tempBottom = L.top + plotH;
-  const laneTop = tempBottom + L.gap;
-  const tempAxisAt = hasValve ? laneTop + L.laneH : tempBottom;
+  const tempAxisAt = tempBottom;
   const tempHeight = tempAxisAt + Math.round(L.axisH * textScale);
   const humBottom = HUM_CHART.top + humPlotH;
   const humHeight = humBottom + Math.round(HUM_CHART.axisH * textScale);
@@ -1050,7 +1049,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
 
   // When the system was on, behind everything: the temperature line
   // crossing these stretches is the effect it had.
-  runRects(t, L.top, plotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
+  runRects(t, L.top, plotH, { fill: VALVE_BAND_COLOR, opacity: 0.17 });
   drawTimeAxis(t, axis, xOf, L.top, tempAxisAt, plotL, plotR, textScale);
   // A gridline per degree (per two on a wide span), to read a reading
   // off the axis without hovering.
@@ -1092,20 +1091,6 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
     t.add("path", { d, fill: "none", stroke: TEMP_COLOR, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" });
   }
 
-  // Where the system switched on, marked on the temperature line itself:
-  // the reading at that moment against the band is the "why".
-  for (const r of runs) {
-    if (r.start < minTs || r.start > maxTs) continue;
-    const near = nearestPoint(temps, r.start);
-    if (!near || Math.abs(near.ts - r.start) > bucket * 1.5) continue;
-    t.add("circle", { cx: xOf(r.start), cy: yT(near.value), r: 3, fill: VALVE_BAND_COLOR, stroke: "#141414", "stroke-width": 1.2 });
-  }
-
-  if (hasValve) {
-    t.text(plotL - 6, laneTop + L.laneH / 2 + 3 * textScale, tr("climate.system_lane"), { "text-anchor": "end", "font-size": 8.5 });
-    t.add("rect", { x: plotL, y: laneTop, width: plotW, height: L.laneH, rx: 3, fill: "#232322" });
-    runRects(t, laneTop, L.laneH, { fill: VALVE_BAND_COLOR, opacity: 0.9, rx: 2 });
-  }
   // The stretch picked in the list of runs below the charts.
   const tempPick = hasValve && t.add("rect", {
     y: L.top, height: tempAxisAt - L.top, fill: "none", stroke: "#ffffff", "stroke-width": 1.2, opacity: 0.8, visibility: "hidden",
@@ -1117,7 +1102,7 @@ function drawClimateChart(id, tempPoints, humPoints, range, valvePoints, targetP
     h = chartCanvas(humSvg, textScale);
     const [hMin, hMax] = niceBounds(hums.map(p => p.value), 2, 10);
     yH = v => humBottom - ((v - hMin) / Math.max(1, hMax - hMin)) * humPlotH;
-    runRects(h, HUM_CHART.top, humPlotH, { fill: VALVE_BAND_COLOR, opacity: 0.13 });
+    runRects(h, HUM_CHART.top, humPlotH, { fill: VALVE_BAND_COLOR, opacity: 0.17 });
     drawTimeAxis(h, axis, xOf, HUM_CHART.top, humBottom, plotL, plotR, textScale);
     [0, 0.5, 1].forEach(frac => {
       const y = humBottom - humPlotH * frac;
@@ -1214,7 +1199,7 @@ function renderClimateReadout(id, reading, isLatest) {
   ];
   if (reading.hasValve) {
     parts.push(reading.target != null
-      ? `<span class="ro-val ro-target">${tr("climate.target")} ${reading.target.toFixed(1)}°${reading.hyst ? ` <span class="ro-dim">±${reading.hyst}</span>` : ""}</span>`
+      ? `<span class="ro-val ro-target">${tr("climate.target")} ${reading.target.toFixed(1)}°</span>`
       : `<span class="ro-dim">${tr("climate.no_target")}</span>`);
   }
   if (reading.hum != null) parts.push(`<span class="ro-val" style="color:${HUM_COLOR}">${reading.hum.toFixed(0)}%</span>`);
@@ -1858,34 +1843,28 @@ function buildZoneCard(zone) {
       </div>
 
       <div class="zone-pane" ${paneAttrs("history")}>
-        <p class="hint-text">${tr("climate.runs_intro")}</p>
-        <div class="run-tiles" id="on-hours-${id}">
-          ${["today", "week", "month"].map(key => `
-            <div class="run-tile">
-              <div class="run-tile-label">${tr(`climate.on_hours_${key}`)}</div>
-              <div class="run-tile-value">--</div>
-              <div class="run-tile-sub"></div>
-            </div>`).join("")}
+        <div class="chart-filters">
+          ${["6h", "24h", "7d"].map(range => `
+            <button class="range-btn${range === "24h" ? " active" : ""}" data-sensor="${chartId}" data-range="${range}">${tr(`climate.range_btn_${range}`)}</button>`).join("")}
         </div>
 
-        <div class="chart-filters">
-          <button class="range-btn" data-sensor="${chartId}" data-range="6h">6h</button>
-          <button class="range-btn active" data-sensor="${chartId}" data-range="24h">24h</button>
-          <button class="range-btn" data-sensor="${chartId}" data-range="7d">7d</button>
-        </div>
-        <div class="chart-readout" id="readout-${chartId}"></div>
-        <div class="chart-title">${tr("fields.temperature_c")}</div>
-        <div class="chart-wrap">
-          <svg id="chart-${chartId}" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
-        </div>
-        <div class="chart-legend">
-          <span><span class="legend-dot" style="background:#ff9f0a"></span>${tr("fields.temperature_c")}</span>
-          <span><span class="legend-target"></span>${tr("climate.target_line")}</span>
-          <span><span class="legend-band legend-valve"></span>${tr("climate.system_on")}</span>
-          <span><span class="legend-open-dot"></span>${tr("climate.system_started_marker")}</span>
-        </div>
-        ${humidityChartHtml(chartId)}
         <div class="runs" id="runs-${chartId}"></div>
+
+        <div class="trend-card">
+          <div class="chart-readout" id="readout-${chartId}"></div>
+          <div class="chart-title">${tr("fields.temperature_c")}</div>
+          <div class="chart-wrap">
+            <svg id="chart-${chartId}" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+          </div>
+          ${humidityChartHtml(chartId)}
+          <div class="chart-legend">
+            <span><span class="legend-dot" style="background:#ff9f0a"></span>${tr("fields.temperature_c")}</span>
+            <span><span class="legend-target"></span>${tr("climate.target_line")}</span>
+            <span><span class="legend-band legend-valve"></span>${tr("climate.system_on")}</span>
+          </div>
+        </div>
+
+        <p class="run-totals" id="on-hours-${id}"></p>
       </div>
     </section>
   `;
@@ -2077,10 +2056,10 @@ async function refreshOnHours(zoneName) {
     const data = await res.json();
     const el = document.getElementById(`on-hours-${slug(zoneName)}`);
     if (!el || !data.ok) return;
-    const tiles = el.querySelectorAll(".run-tile");
-    ["today", "week", "month"].forEach((key, i) => {
-      tiles[i].querySelector(".run-tile-value").textContent = formatDuration(data[key] * 3600);
-      tiles[i].querySelector(".run-tile-sub").textContent = data.starts ? startsText(data.starts[key]) : "";
+    const starts = data.starts || {};
+    el.textContent = tr("climate.run_totals", {
+      week: formatDuration(data.week * 3600), week_starts: startsText(starts.week),
+      month: formatDuration(data.month * 3600), month_starts: startsText(starts.month),
     });
   } catch (e) { /* leave dashes */ }
 }
