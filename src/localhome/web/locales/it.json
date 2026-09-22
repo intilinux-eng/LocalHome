@@ -10,6 +10,8 @@
     "update_reload": "Ricarica"
   },
   "app": {
+    "cancel": "Annulla",
+    "confirm": "Conferma",
     "title": "LocalHome",
     "description": "LocalHome: dashboard per la casa - riscaldamento, raffrescamento, tapparelle e consumi, in rete locale.",
     "offline": "Scheda non raggiungibile: i dati mostrati sono fermi alle {time}.",
@@ -66,6 +68,7 @@
     "level_6": "Inquinamento grave"
   },
   "sensors": {
+    "switch_off_button": "Spegni",
     "peak_today": "Picco odierno",
     "updated_ago": "{time} fa",
     "stale_value_note": "Ultimo valore noto del {date} - nessun aggiornamento da {time}",

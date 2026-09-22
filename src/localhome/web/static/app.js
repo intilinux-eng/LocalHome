@@ -236,9 +236,9 @@ async function sendCoverAction(name, action) {
   try {
     const res = await fetch(`/api/covers/${encodeURIComponent(name)}/action/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   }
   setTimeout(() => refreshCovers(window.COVER_NAMES), 1000);
 }
@@ -256,7 +256,7 @@ async function movePercent(name, percent) {
     });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       sliderEl.disabled = false;
       refreshCovers(window.COVER_NAMES);
       return;
@@ -266,7 +266,7 @@ async function movePercent(name, percent) {
       refreshCovers(window.COVER_NAMES);
     }, (data.duration || 0) * 1000 + 500);
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
     sliderEl.disabled = false;
   }
 }
@@ -404,9 +404,9 @@ async function setNumberValue(name, value, sensors) {
       body: JSON.stringify({ value: parseFloat(value) }),
     });
     const data = await res.json();
-    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   }
   // Re-read both the number and the switch it's paired into: with
   // on_with_value, setting a speed can also have switched it on.
@@ -617,7 +617,10 @@ function updateSensorCard(sensor, reading, linkedReading) {
 
 async function onSwitchToggle(name, el) {
   if (!el.checked) {
-    const ok = confirm(tr("sensors.confirm_turn_off"));
+    const ok = await confirmAction(tr("sensors.confirm_turn_off"), {
+      confirmLabel: tr("sensors.switch_off_button"),
+      danger: true,
+    });
     if (!ok) {
       el.checked = true;
       return;
@@ -628,11 +631,11 @@ async function onSwitchToggle(name, el) {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${el.checked ? "on" : "off"}`, { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       el.checked = !el.checked;
     }
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
     el.checked = !el.checked;
   }
   el.disabled = false;
@@ -1465,7 +1468,7 @@ async function setAway(hours) {
     });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       return;
     }
     climateAwayUntil = data.away_until;
@@ -1474,7 +1477,7 @@ async function setAway(hours) {
     closeAway();
     await refreshClimateZonesLive();
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   }
 }
 
@@ -1483,7 +1486,7 @@ async function cancelAway() {
     const res = await fetch("/api/climate/away/cancel", { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       return;
     }
     climateAwayUntil = null;
@@ -1491,7 +1494,7 @@ async function cancelAway() {
     updateAwayStatusText();
     await refreshClimateZonesLive();
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   }
 }
 
@@ -2090,9 +2093,9 @@ async function saveSchedule(zoneName) {
       body: JSON.stringify({ week: scheduleWeeks[zoneName], mode: scheduleWeekModes[zoneName] || climateMode }),
     });
     const data = await res.json();
-    if (!data.ok) alert(`${tr("climate.save_failed")}: ${data.error}`);
+    if (!data.ok) notify(`${tr("climate.save_failed")}: ${data.error}`);
   } catch (e) {
-    alert(tr("climate.save_failed"));
+    notify(tr("climate.save_failed"));
   }
 }
 

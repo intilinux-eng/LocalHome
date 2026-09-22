@@ -327,6 +327,7 @@
   <script>
     window.I18N = {{ t | tojson }};
   </script>
+  <script src="{{ url_for('static', filename='toast.js') }}"></script>
   <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
   <script src="{{ url_for('static', filename='climate_admin.js') }}"></script>
 </body>

@@ -57,7 +57,7 @@ function restartButtonHtml() {
 }
 
 async function restartLocalHome(button) {
-  if (!confirm(tr("climate_admin.restart_confirm"))) return;
+  if (!await confirmAction(tr("climate_admin.restart_confirm"), { confirmLabel: tr("climate_admin.restart_button") })) return;
   button.disabled = true;
   const container = button.parentElement;
   let data = { ok: true };
@@ -859,7 +859,7 @@ async function loadClimateSwitchNames() {
 
 async function onDiagnosticModeToggle(checkbox) {
   const enabled = checkbox.checked;
-  if (enabled && !confirm(tr("climate_admin.diagnostic_confirm_on"))) {
+  if (enabled && !await confirmAction(tr("climate_admin.diagnostic_confirm_on"), { danger: true })) {
     checkbox.checked = false;
     return;
   }
@@ -872,12 +872,12 @@ async function onDiagnosticModeToggle(checkbox) {
     });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       checkbox.checked = !enabled;
       return;
     }
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
     checkbox.checked = !enabled;
     return;
   } finally {
@@ -914,10 +914,10 @@ async function diagnosticToggle(name, action, button) {
   try {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
     refreshStatus();
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   } finally {
     button.disabled = false;
   }
@@ -996,10 +996,10 @@ async function testValve(valveName, action, button) {
   try {
     const res = await fetch(`/api/sensors/${encodeURIComponent(valveName)}/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) alert(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
     refreshStatus();
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   } finally {
     button.disabled = false;
   }
@@ -1038,7 +1038,7 @@ async function setManualValue(zoneName, button) {
   const box = button.closest(".admin-manual-box");
   const temperature_c = parseFloat(box.querySelector(".manual-temp-input").value);
   if (Number.isNaN(temperature_c)) {
-    alert(tr("climate_admin.manual_temp_required"));
+    notify(tr("climate_admin.manual_temp_required"));
     return;
   }
   const humidityRaw = box.querySelector(".manual-humidity-input").value;
@@ -1052,12 +1052,12 @@ async function setManualValue(zoneName, button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      alert(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + data.error);
       return;
     }
     refreshStatus();
   } catch (e) {
-    alert(tr("sensors.request_failed"));
+    notify(tr("sensors.request_failed"));
   }
 }
 
@@ -1452,8 +1452,8 @@ function saveSettings(button) {
   postSettings(values, button);
 }
 
-function resetSettings(button) {
-  if (!confirm(tr("climate_admin.settings_defaults_confirm"))) return;
+async function resetSettings(button) {
+  if (!await confirmAction(tr("climate_admin.settings_defaults_confirm"))) return;
   postSettings({}, button);
 }
 
