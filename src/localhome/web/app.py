@@ -768,12 +768,11 @@ def _register_routes(app: Flask) -> None:
         if zone is None:
             return jsonify(ok=False, error=f"unknown zone '{name}'"), 404
         store: HistoryStore = app.config["HISTORY"]
-        interval = app.config["HISTORY_POLL_INTERVAL"]
+        stats = store.on_stats(zone.valve, "is_on", app.config["HISTORY_POLL_INTERVAL"])
         return jsonify(
             ok=True,
-            today=round(store.sum_on_hours_range(zone.valve, "is_on", "today", interval), 2),
-            week=round(store.sum_on_hours_range(zone.valve, "is_on", "week", interval), 2),
-            month=round(store.sum_on_hours_range(zone.valve, "is_on", "month", interval), 2),
+            **{key: round(value["hours"], 2) for key, value in stats.items()},
+            starts={key: value["starts"] for key, value in stats.items()},
         )
 
     # ----------------------------------------------- climate admin panel ----

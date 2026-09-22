@@ -6,6 +6,8 @@ than being silently dropped for a sensor that doesn't report it - and
 that dew_point_c (services/dewpoint.py) gets computed from that same
 zone's own temperature/humidity, not left for the frontend to derive.
 """
+import time
+
 import pytest
 
 from localhome.web.app import create_app
@@ -289,3 +291,20 @@ thermostat:
     interlock = create_app(str(config_path)).config["INTERLOCK"]
 
     assert [(m.switch, m.only_in_mode) for m in interlock.mode_limited] == [("Dehumidifier", "cool")]
+
+
+def test_on_hours_reports_hours_and_starts(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    now = int(time.time())
+    for i, is_on in enumerate([True, False, True]):
+        app.config["HISTORY"].record("Room Valve", now - 2 + i, {"is_on": is_on})
+
+    body = app.test_client().get("/api/climate/zones/Rooms/on-hours").get_json()
+
+    interval = app.config["HISTORY_POLL_INTERVAL"]
+    assert body["ok"] is True
+    assert body["today"] == pytest.approx(round(2 * interval / 3600, 2))
+    assert body["starts"]["today"] == 2
+    assert set(body["starts"]) == {"today", "week", "month"}

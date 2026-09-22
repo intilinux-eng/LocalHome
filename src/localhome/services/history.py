@@ -24,7 +24,7 @@ RANGE_BUCKETS = {
     "7d": (7 * 24 * 3600, 3600),
 }
 
-# Boundaries for the "on-hours" stats (see HistoryStore.sum_on_hours_range) -
+# Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
 _ON_HOURS_RANGE_START = {
     "today": lambda now: datetime(now.year, now.month, now.day),
@@ -53,6 +53,9 @@ class HistoryStore:
         self.db_path = db_path
         self._lock = threading.RLock()
         self._conn: sqlite3.Connection | None = None
+        # on_stats()'s counts before today, per (sensor, field) - dropped
+        # whenever rows are deleted. Read and written under _lock.
+        self._on_stats_cache: dict[tuple[str, str], tuple] = {}
         self._init_schema()
 
     def _connect(self) -> _Borrowed:
@@ -108,6 +111,7 @@ class HistoryStore:
                 cutoff = min(oldest + 86400, newest - keep_seconds)
                 removed += conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff,)).rowcount
                 conn.commit()
+                self._on_stats_cache.clear()
             finally:
                 conn.close()
         return removed
@@ -118,6 +122,7 @@ class HistoryStore:
         try:
             removed = conn.execute("DELETE FROM readings").rowcount
             conn.commit()
+            self._on_stats_cache.clear()
             conn.execute("VACUUM")
             return removed
         finally:
@@ -217,6 +222,8 @@ class HistoryStore:
         try:
             cur = conn.execute("DELETE FROM readings WHERE ts < ?", (older_than_ts,))
             conn.commit()
+            if cur.rowcount:
+                self._on_stats_cache.clear()
             return cur.rowcount
         finally:
             conn.close()
@@ -260,35 +267,68 @@ class HistoryStore:
             return {"value": 0.0, "ts": None}
         return {"value": row[0], "ts": row[1]}
 
-    def sum_on_hours(self, sensor: str, field: str, since_ts: int, until_ts: int, sample_interval_seconds: float) -> float:
-        """Approximate hours `field` (a boolean-as-0/1 recording, e.g. a
-        valve's `is_on`) was "on" between since_ts and until_ts: counts
-        recorded samples at value >= 0.5 and multiplies by how much time
-        each sample represents. Only accurate if `sample_interval_seconds`
-        matches the actual recording cadence (HistoryRecorder's
-        poll_interval_seconds) - a slower/faster recorder would
-        under/overcount, since this has no way to tell a genuine gap in
-        readings from time that was simply never sampled."""
+    def on_stats(self, sensor: str, field: str, sample_interval_seconds: float, now: datetime | None = None) -> dict:
+        """For "today" (since local midnight), "week" (since Monday) and
+        "month" (since the 1st): the hours `field` - a 0/1 recording, e.g.
+        a valve's `is_on` - was on, and how many times it went from off to
+        on. Hours count the samples at >= 0.5, each worth one recording
+        interval: only accurate while `sample_interval_seconds` matches
+        HistoryRecorder's cadence. A gap in the recording longer than a
+        few samples (LocalHome or the board was off) ends a run.
+
+        The dashboard asks every 30s per zone, and a month is ~90k samples
+        per valve: what's before today can't change until midnight, so
+        it's counted once a day (again after a clear or prune) and each
+        call only reads today's samples."""
+        now = now or datetime.now()
+        starts = {key: int(start_of(now).timestamp()) for key, start_of in _ON_HOURS_RANGE_START.items()}
+        today = starts["today"]
+        max_gap = max(600, 3 * sample_interval_seconds)
+        cache_key = (sensor, field, today, starts["week"], starts["month"])
+        with self._lock:  # a clear() can't slip between counting and caching
+            before_today = self._on_stats_cache.get((sensor, field))
+            if before_today is None or before_today[0] != cache_key:
+                counts = self._count_on(sensor, field, {"week": starts["week"], "month": starts["month"]}, today, max_gap)
+                before_today = (cache_key, counts)
+                self._on_stats_cache[(sensor, field)] = before_today
+            today_counts = self._count_on(sensor, field, {"today": today}, int(now.timestamp()) + 1, max_gap)["today"]
+        totals = {
+            "today": today_counts,
+            "week": [a + b for a, b in zip(before_today[1]["week"], today_counts)],
+            "month": [a + b for a, b in zip(before_today[1]["month"], today_counts)],
+        }
+        return {
+            key: {"hours": samples * sample_interval_seconds / 3600.0, "starts": run_starts}
+            for key, (samples, run_starts) in totals.items()
+        }
+
+    def _count_on(self, sensor: str, field: str, since: dict[str, int], until_ts: int, max_gap: float) -> dict:
+        """on_stats() for samples before `until_ts`: for each range in
+        `since` (name -> start), the samples at >= 0.5 and the off-to-on
+        changes. The hour before the earliest start is read too, so a run
+        carried over midnight (or Monday, or the 1st) isn't a new start."""
+        columns = ", ".join(
+            f"COALESCE(SUM(is_on AND ts >= :{key}), 0), COALESCE(SUM(is_on AND ts >= :{key} AND was_on IS NOT 1), 0)"
+            for key in since
+        )
         conn = self._connect()
         try:
             row = conn.execute(
-                "SELECT COUNT(*) FROM readings WHERE sensor = ? AND field = ? AND ts >= ? AND ts < ? AND value >= 0.5",
-                (sensor, field, since_ts, until_ts),
+                f"""
+                SELECT {columns} FROM (
+                    SELECT ts, value >= 0.5 AS is_on,
+                           (LAG(value >= 0.5) OVER w) AND ts - (LAG(ts) OVER w) <= :max_gap AS was_on
+                    FROM readings
+                    WHERE sensor = :sensor AND field = :field AND ts >= :lookback AND ts < :until
+                    WINDOW w AS (ORDER BY ts)
+                )
+                """,
+                {**since, "sensor": sensor, "field": field, "max_gap": max_gap,
+                 "lookback": min(since.values()) - 3600, "until": until_ts},
             ).fetchone()
         finally:
             conn.close()
-        samples_on = row[0] if row else 0
-        return samples_on * sample_interval_seconds / 3600.0
-
-    def sum_on_hours_range(self, sensor: str, field: str, range_key: str, sample_interval_seconds: float) -> float:
-        """Same as sum_on_hours(), for one of the fixed ranges dashboard
-        cards show: "today" (since local midnight), "week" (since Monday
-        midnight) or "month" (since the 1st, midnight)."""
-        start_of = _ON_HOURS_RANGE_START.get(range_key)
-        if start_of is None:
-            raise ValueError(f"range_key must be one of {sorted(_ON_HOURS_RANGE_START)}")
-        since_ts = int(start_of(datetime.now()).timestamp())
-        return self.sum_on_hours(sensor, field, since_ts, int(time.time()) + 1, sample_interval_seconds)
+        return {key: (row[2 * i], row[2 * i + 1]) for i, key in enumerate(since)}
 
 
 @dataclass

@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import pytest
 
@@ -58,36 +59,80 @@ def test_power_budget_zones_scale_off_contract_limit():
     assert round(budget.trip_risk_w) == 4000
 
 
-def test_sum_on_hours_counts_only_samples_at_or_above_half(tmp_path):
-    store = HistoryStore(str(tmp_path / "history.db"))
-    since = 1000
+# Wednesday: "today" starts on the 23rd, "week" on Monday the 21st, "month"
+# on the 1st.
+ON_STATS_NOW = datetime(2026, 9, 23, 12, 0)
 
-    # 4 "on" samples and 2 "off" samples, 30s apart - a valve driver would
-    # record its is_on reading (True/False) exactly like this.
+
+def _at(*args) -> int:
+    return int(datetime(*args).timestamp())
+
+
+def test_on_stats_counts_hours_and_starts(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    since = _at(2026, 9, 23, 8, 0)
+
+    # 30s apart, as the recorder writes a valve's is_on: 4 on, in 3 runs.
     for i, is_on in enumerate([True, True, False, True, False, True]):
         store.record("valve", since + i * 30, {"is_on": is_on})
 
-    hours = store.sum_on_hours("valve", "is_on", since, since + 6 * 30 + 1, sample_interval_seconds=30)
+    today = store.on_stats("valve", "is_on", 30, now=ON_STATS_NOW)["today"]
 
-    assert hours == pytest.approx(4 * 30 / 3600.0)
+    assert today["hours"] == pytest.approx(4 * 30 / 3600.0)
+    assert today["starts"] == 3
 
 
-def test_sum_on_hours_range_scopes_to_today(tmp_path):
+def test_on_stats_scopes_each_range(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
-    now = int(time.time())
+    store.record("valve", _at(2026, 9, 23, 9, 0), {"is_on": True})     # today
+    store.record("valve", _at(2026, 9, 21, 9, 0), {"is_on": True})     # Monday
+    store.record("valve", _at(2026, 9, 5, 9, 0), {"is_on": True})      # earlier this month
+    store.record("valve", _at(2026, 8, 20, 9, 0), {"is_on": True})     # last month
+    store.record("valve", _at(2026, 9, 23, 13, 0), {"is_on": True})    # after "now"
 
-    store.record("valve", now - 10, {"is_on": True})
-    store.record("valve", now - 2 * 86400, {"is_on": True})  # two days ago - outside "today"
+    stats = store.on_stats("valve", "is_on", 3600, now=ON_STATS_NOW)
 
-    today_hours = store.sum_on_hours_range("valve", "is_on", "today", sample_interval_seconds=30)
-
-    assert today_hours == pytest.approx(30 / 3600.0)
+    assert {k: v["hours"] for k, v in stats.items()} == {"today": 1, "week": 2, "month": 3}
+    assert {k: v["starts"] for k, v in stats.items()} == {"today": 1, "week": 2, "month": 3}
 
 
-def test_sum_on_hours_range_rejects_unknown_range(tmp_path):
+def test_a_run_carried_over_midnight_is_not_a_new_start(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
-    with pytest.raises(ValueError):
-        store.sum_on_hours_range("valve", "is_on", "decade", sample_interval_seconds=30)
+    store.record("valve", _at(2026, 9, 22, 23, 59, 30), {"is_on": True})
+    store.record("valve", _at(2026, 9, 23, 0, 0, 0), {"is_on": True})
+    store.record("valve", _at(2026, 9, 23, 0, 0, 30), {"is_on": False})
+
+    stats = store.on_stats("valve", "is_on", 30, now=ON_STATS_NOW)
+
+    assert stats["today"] == {"hours": pytest.approx(30 / 3600.0), "starts": 0}
+    assert stats["week"]["starts"] == 1
+
+
+def test_on_stats_with_no_history(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+
+    stats = store.on_stats("valve", "is_on", 30, now=ON_STATS_NOW)
+
+    assert stats == {key: {"hours": 0, "starts": 0} for key in ("today", "week", "month")}
+
+
+def test_on_stats_reads_days_before_today_once(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    store.record("valve", _at(2026, 9, 21, 9, 0), {"is_on": True})
+    assert store.on_stats("valve", "is_on", 3600, now=ON_STATS_NOW)["week"]["hours"] == 1
+
+    # Today is read on every call; the days before it come from the count
+    # made on the first call of the day...
+    store.record("valve", _at(2026, 9, 23, 9, 0), {"is_on": True})
+    store.record("valve", _at(2026, 9, 22, 9, 0), {"is_on": True})
+    stats = store.on_stats("valve", "is_on", 3600, now=ON_STATS_NOW)
+    assert (stats["today"]["hours"], stats["week"]["hours"]) == (1, 2)
+
+    # ...recounted the next day, or as soon as rows are deleted.
+    tomorrow = store.on_stats("valve", "is_on", 3600, now=datetime(2026, 9, 24, 12, 0))
+    assert tomorrow["week"]["hours"] == 3
+    store.clear()
+    assert store.on_stats("valve", "is_on", 3600, now=ON_STATS_NOW)["week"]["hours"] == 0
 
 
 # --------------------------------------------------------- HistoryRecorder --

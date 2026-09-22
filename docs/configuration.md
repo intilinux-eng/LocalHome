@@ -219,13 +219,16 @@ works, and the simulated sensor even drifts toward a hotter/colder value
 while its paired simulated valve is on, so the whole thing behaves
 believably before you've bought anything.
 
-**Valve on-hours** (the dashboard's "today/this week/this month" stat per
-zone) is derived from the same history database everything else uses:
-the valve switch's `is_on` reading is recorded on `history.poll_interval_seconds`,
-and `HistoryStore.sum_on_hours_range()` counts how many of those samples
-were "on" and multiplies by that interval. This means the on-hours stat's
-accuracy is tied to `history.poll_interval_seconds`, not
-`thermostat.poll_interval_seconds` - the two are independent.
+**Run statistics** (the dashboard's "today/this week/this month" tiles
+per zone - how long the system was on and how many times it switched
+on) come from the same history database everything else uses: the
+valve switch's `is_on` reading is recorded on
+`history.poll_interval_seconds`, and `HistoryStore.on_stats()` counts
+the samples that were "on" (times that interval) and the off-to-on
+changes. Their accuracy is tied to `history.poll_interval_seconds`, not
+`thermostat.poll_interval_seconds` - the two are independent. The list
+of runs below a zone's charts (when, how long, temperature and humidity
+at start and end) is worked out in the page from the chart's own data.
 
 ### A zone that can't be cooled: `cool_enabled`
 
@@ -554,7 +557,7 @@ A collapsed **Maintenance** section at the bottom of `/climate-admin`:
   schedules and manual values as a `.zip`. Credentials are left out
   (`secrets_*.json`, `devices.json`, `tuya_cloud.json`, and the MQTT
   broker's password is blanked) - they never leave the board.
-- **Clear history** - empties the charts and valve-hours statistics.
+- **Clear history** - empties the charts and the run statistics.
 - **Clear schedules** - empties every zone's grid for both seasons and
   cancels away and diagnostic mode; the season stays. Valves close until
   a new schedule is painted.
