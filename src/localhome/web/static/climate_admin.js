@@ -474,104 +474,6 @@ async function loadVmc() {
   }
 }
 
-// The day/night program: which device it drives, when each period
-// starts and at what speed. Saving applies it straight away (the
-// controller re-reads the file every tick), so there's no restart notice
-// here - unlike the device id above.
-async function loadVmcProgram() {
-  const box = document.getElementById("vmc-program");
-  if (!box) return;
-  let data;
-  try {
-    data = await (await fetch("/api/climate-admin/vmc-schedule")).json();
-  } catch (e) {
-    return;
-  }
-  if (!data.ok) return;
-  const schedule = data.schedule;
-  const options = data.devices.map(name =>
-    `<option value="${name}"${name === schedule.target ? " selected" : ""}>${name}</option>`).join("");
-  const period = (key, icon) => `
-    <div class="vmc-period">
-      <div class="vmc-period-name">${icon} ${tr(`climate_admin.vmc_period_${key}`)}</div>
-      <label class="admin-field">
-        <span>${tr("climate_admin.vmc_from")}</span>
-        <input type="time" id="vmc-${key}-at" value="${schedule[key].at}">
-      </label>
-      <label class="admin-field">
-        <span>${tr("climate_admin.vmc_speed_label")}</span>
-        <input type="number" id="vmc-${key}-value" min="0" max="100" step="5" value="${schedule[key].value}">
-      </label>
-    </div>`;
-  box.innerHTML = `
-    <label class="admin-check">
-      <input type="checkbox" id="vmc-program-enabled"${schedule.enabled ? " checked" : ""}>
-      <span>${tr("climate_admin.vmc_program_enabled")}</span>
-    </label>
-    <div class="admin-field">
-      <label for="vmc-program-target">${tr("climate_admin.vmc_program_target")}</label>
-      <select id="vmc-program-target">
-        <option value="">${tr("climate_admin.vmc_program_none")}</option>
-        ${options}
-      </select>
-    </div>
-    <div class="vmc-periods">${period("day", "☀")}${period("night", "☾")}</div>
-    <p class="hint-text" id="vmc-program-status">${vmcProgramStatusText(data.status)}</p>`;
-}
-
-function vmcProgramStatusText(status) {
-  if (!status || !status.enabled) return tr("climate_admin.vmc_program_off");
-  return tr("climate_admin.vmc_program_running", {
-    period: tr(`climate_admin.vmc_period_${status.period}`).toLowerCase(),
-    value: status.value,
-    until: status.until,
-  });
-}
-
-async function saveVmcProgram(button) {
-  const result = document.getElementById("save-vmc-program-result");
-  const body = {
-    enabled: document.getElementById("vmc-program-enabled").checked,
-    target: document.getElementById("vmc-program-target").value || null,
-    day: {
-      at: document.getElementById("vmc-day-at").value,
-      value: Number(document.getElementById("vmc-day-value").value),
-    },
-    night: {
-      at: document.getElementById("vmc-night-at").value,
-      value: Number(document.getElementById("vmc-night-value").value),
-    },
-  };
-  // Checked here too, so the common mistake gets an answer in the page's
-  // own language instead of the backend's English validation text.
-  if (body.day.at === body.night.at) {
-    result.textContent = tr("climate_admin.vmc_same_time");
-    result.className = "hint-text admin-error";
-    return;
-  }
-  if (body.enabled && !body.target) {
-    result.textContent = tr("climate_admin.vmc_pick_device");
-    result.className = "hint-text admin-error";
-    return;
-  }
-  button.disabled = true;
-  try {
-    const res = await fetch("/api/climate-admin/vmc-schedule", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    result.textContent = data.ok ? vmcProgramStatusText(data.status) : tr("sensors.error_prefix") + data.error;
-    result.className = `hint-text ${data.ok ? "admin-success" : "admin-error"}`;
-    if (data.ok) await loadVmcProgram();
-  } catch (e) {
-    result.textContent = tr("sensors.request_failed");
-    result.className = "hint-text admin-error";
-  }
-  button.disabled = false;
-}
-
 async function saveVmc(button) {
   const resultEl = document.getElementById("save-vmc-result");
   const body = { vmc_device_id: document.getElementById("extra-vmc-id").value.trim() || null };
@@ -591,7 +493,6 @@ async function saveVmc(button) {
     resultEl.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
     await loadVmc();
-    await loadVmcProgram();
     refreshVmcStatus();
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
@@ -1585,4 +1486,3 @@ openLinkedSection();
 loadClimateSwitchNames();
 refreshSystemStatus(true);
 startPolling();
-loadVmcProgram();

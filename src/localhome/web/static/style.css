@@ -1551,16 +1551,83 @@ button.zone-tile:hover {
 }
 
 /* The VMC's day/night program, under its speed buttons - see
-   refreshVmcProgram() in app.js. */
-.vmc-program-note {
-  margin-top: 10px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  background: rgba(191, 90, 242, 0.14);
-  font-size: 0.76rem;
+   programPanelHtml() in app.js. */
+.vmc-program {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(191, 90, 242, 0.3);
+  border-radius: 12px;
+  background: rgba(191, 90, 242, 0.1);
 }
-.vmc-program-note[hidden] {
+.vmc-program-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.vmc-program-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vmc-program-toggle input {
+  width: 20px;
+  height: 20px;
+}
+.vmc-program-state {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+.vmc-program-fields {
+  margin-top: 10px;
+}
+.vmc-program-fields[hidden] {
   display: none;
+}
+.vmc-period-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 7px 0;
+  font-size: 0.8rem;
+}
+.vmc-period-row + .vmc-period-row {
+  border-top: 1px solid var(--card-border);
+}
+.vmc-period-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 6.5em;
+  font-weight: 600;
+}
+.vmc-period-name svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-dim);
+}
+.vmc-period-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+.vmc-period-row input {
+  width: 6.5em;
+  padding: 6px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.vmc-period-row input[type="number"] {
+  width: 4.5em;
 }
 
 /* The board stopped answering - see updateConnectionBanner() in app.js.

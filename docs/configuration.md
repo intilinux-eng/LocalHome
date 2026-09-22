@@ -347,8 +347,9 @@ says so: "Automatic: on in summer, off in winter".
 ### The ventilation unit's day/night program
 
 Mechanical ventilation runs all the time; what changes is how fast. The
-admin panel's VMC section has a small program for it: two periods, each
-with a start time and a speed, saved in `config/vmc_schedule.json`:
+VMC's own card on the dashboard has a small program for it, right under
+its speed buttons: two periods, each with a start time and a speed,
+saved in `config/vmc_schedule.json`:
 
 ```json
 {
@@ -359,13 +360,13 @@ with a start time and a speed, saved in `config/vmc_schedule.json`:
 }
 ```
 
-`target` is any settable `number` - the panel offers every one this
-installation has, so a VMC declared in config.yaml can be driven as well
-as one mapped in the panel. The speed is written **once, when a period
-begins**: a speed picked by hand on the dashboard therefore stays until
-the next period starts, instead of being corrected away a minute later.
-The control loop (`services/vmc_schedule.py`, every 60s) re-reads the
-file, so saving in the panel takes effect without a restart.
+`target` is the device whose card the program was switched on from, so
+a VMC declared in config.yaml is driven just as well as one mapped in
+the admin panel. The speed is written **once, when a period begins**: a
+speed picked by hand therefore stays until the next period starts,
+instead of being corrected away a minute later. Every change on the card
+saves by itself, and the control loop (`services/vmc_schedule.py`, every
+60s) re-reads the file, so it takes effect without a restart.
 
 ### Away mode
 

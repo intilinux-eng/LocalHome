@@ -20,8 +20,10 @@ date rather than by tag.
   itself when there are no covers.
 - A **day/night program for the ventilation unit**: two periods, each a
   start time and a speed (day 07:00 at 50%, night 22:00 at 20% to begin
-  with), set in the admin panel's VMC section and applied straight away -
-  no restart, because the control loop re-reads the schedule every tick.
+  with), on the VMC's own card next to its speed buttons - a daily
+  control, not installation config. Every change saves by itself and is
+  applied straight away, with no restart, because the control loop
+  re-reads the schedule every tick.
   The speed is written when a period begins and then left alone, so a
   speed picked by hand on the dashboard stays until the next change; the
   card says which period is running ("Automatic program: day 50% until

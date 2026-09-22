@@ -199,8 +199,15 @@
     "range_btn_24h": "24 hours",
     "range_btn_7d": "7 days",
     "run_totals": "This week {week} ({week_starts}) · this month {month} ({month_starts})",
-    "vmc_program_note": "Automatic program: {period} {value}% until {until}",
-    "no_zones_note": "Heating and cooling zones are set up in the configuration panel: each one needs its temperature sensor and its valve."
+    "no_zones_note": "Heating and cooling zones are set up in the configuration panel: each one needs its temperature sensor and its valve.",
+    "vmc_program_title": "Day/night program",
+    "vmc_period_day": "Day",
+    "vmc_period_night": "Night",
+    "vmc_from": "from",
+    "vmc_speed_label": "speed",
+    "vmc_program_off": "Off: the speed stays whatever you set.",
+    "vmc_program_running": "On: {period} {value}% until {until}.",
+    "vmc_same_time": "Day and night must start at different times."
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
@@ -462,20 +469,8 @@
     "how_data_title": "Data and limits",
     "how_data": "The charts' history has a day limit and a size limit (in Settings): past them, the oldest data is deleted. System logs live in RAM (30 MB at most), don't wear the eMMC and are lost at reboot. Before any deletion in Maintenance a backup is saved on the board (the last 10, plus one history copy if there's room).",
     "how_diagnostic_title": "Diagnostics",
-    "vmc_program_save": "Save program",
-    "vmc_program_heading": "Day/night program",
-    "vmc_program_note": "Two speeds: one for the day and a quieter one for the night. The speed is set when a period begins; a speed you pick by hand on the dashboard stays until the next change. Applied straight away, no restart.",
-    "vmc_program_enabled": "Program on",
-    "vmc_program_target": "Device to drive",
-    "vmc_program_none": "— pick one —",
-    "vmc_period_day": "Day",
-    "vmc_period_night": "Night",
-    "vmc_from": "From",
-    "vmc_speed_label": "Speed %",
-    "vmc_program_off": "Program off: the speed stays whatever you set by hand.",
-    "vmc_program_running": "On: {period} period at {value}% until {until}.",
-    "vmc_same_time": "Day and night must start at different times.",
-    "vmc_pick_device": "Choose which device the program controls."
+    "vmc_pick_device": "Choose which device the program controls.",
+    "vmc_program_moved": "The VMC's day/night program is set on the dashboard, on the VMC's own card next to its speed buttons."
   },
   "vmc_presets": {
     "night": "Night",

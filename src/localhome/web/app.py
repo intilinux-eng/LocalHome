@@ -572,10 +572,24 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True)
 
     @app.route("/api/vmc-schedule")
-    def api_vmc_schedule_status():
-        """What the dashboard shows next to the speed buttons."""
+    def api_vmc_schedule_get():
+        """The ventilation unit's day/night program, read and written from
+        its own card on the dashboard - it's a daily control, not part of
+        the installation the admin panel configures."""
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
-        return jsonify(ok=True, **vmc.status())
+        return jsonify(ok=True, schedule=vmc.store.get(), status=vmc.status())
+
+    @app.route("/api/vmc-schedule", methods=["POST"])
+    def api_vmc_schedule_save():
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        try:
+            schedule = vmc.store.set(request.get_json(silent=True) or {})
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        # Applied straight away, so saving is the whole action - no
+        # restart, and no waiting for the next tick to see it work.
+        vmc.tick()
+        return jsonify(ok=True, schedule=schedule, status=vmc.status())
 
     @app.route("/api/sensors/<name>/history")
     def api_sensor_history(name):
@@ -968,33 +982,6 @@ def _register_routes(app: Flask) -> None:
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True, restart_required=True)
-
-    @app.route("/api/climate-admin/vmc-schedule")
-    def api_vmc_schedule_get():
-        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
-        manager: DeviceManager = app.config["MANAGER"]
-        return jsonify(
-            ok=True,
-            schedule=vmc.store.get(),
-            status=vmc.status(),
-            # What the program can drive: every settable number (a VMC's
-            # speed, a dimmer), so an apartment that wired its VMC in
-            # config.yaml can pick it here just as well as one mapped in
-            # this panel.
-            devices=sorted(manager.numbers),
-        )
-
-    @app.route("/api/climate-admin/vmc-schedule", methods=["POST"])
-    def api_vmc_schedule_save():
-        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
-        try:
-            schedule = vmc.store.set(request.get_json(silent=True) or {})
-        except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
-        # Applied straight away, so saving is the whole action - no
-        # restart, and no waiting for the next tick to see it work.
-        vmc.tick()
-        return jsonify(ok=True, schedule=schedule, status=vmc.status())
 
     @app.route("/api/climate-admin/restart", methods=["POST"])
     def api_climate_admin_restart():

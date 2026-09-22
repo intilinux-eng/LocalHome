@@ -1,5 +1,5 @@
-"""The admin panel's VMC program routes: read, save (applied at once,
-no restart) and the small status the dashboard shows."""
+"""The VMC program's routes, used by its card on the dashboard: read,
+save (applied at once, no restart) and the status shown on the card."""
 import json
 
 import pytest
@@ -38,19 +38,18 @@ def client(tmp_path):
 def test_defaults_before_anything_is_saved(client):
     c, _, _ = client
 
-    body = c.get("/api/climate-admin/vmc-schedule").get_json()
+    body = c.get("/api/vmc-schedule").get_json()
 
     assert body["ok"] is True
     assert body["schedule"]["enabled"] is False
     assert body["schedule"]["day"] == {"at": "07:00", "value": 50}
-    assert body["status"] == {"ok": True, "enabled": False} or body["status"] == {"enabled": False}
-    assert "VMC Speed" in body["devices"]
+    assert body["status"] == {"enabled": False}
 
 
 def test_saving_applies_the_speed_right_away(client):
     c, number, tmp_path = client
 
-    body = c.post("/api/climate-admin/vmc-schedule", json=SCHEDULE).get_json()
+    body = c.post("/api/vmc-schedule", json=SCHEDULE).get_json()
 
     assert body["ok"] is True
     assert number.values, "the current period's speed is set on save, without a restart"
@@ -61,20 +60,21 @@ def test_saving_applies_the_speed_right_away(client):
 def test_a_bad_schedule_is_refused_with_a_reason(client):
     c, number, _ = client
 
-    res = c.post("/api/climate-admin/vmc-schedule", json={**SCHEDULE, "day": {"at": "25:00", "value": 50}})
+    res = c.post("/api/vmc-schedule", json={**SCHEDULE, "day": {"at": "25:00", "value": 50}})
 
     assert res.status_code == 400
     assert "07:00" in res.get_json()["error"]
     assert number.values == []
 
 
-def test_the_dashboard_sees_the_running_program(client):
+def test_the_card_sees_the_running_program(client):
     c, _, _ = client
-    c.post("/api/climate-admin/vmc-schedule", json=SCHEDULE)
+    c.post("/api/vmc-schedule", json=SCHEDULE)
 
     body = c.get("/api/vmc-schedule").get_json()
 
-    assert body["ok"] is True and body["enabled"] is True
-    assert body["period"] in ("day", "night")
-    assert body["value"] in (50, 20)
-    assert body["until"] in ("07:00", "22:00")
+    assert body["ok"] is True and body["status"]["enabled"] is True
+    assert body["status"]["period"] in ("day", "night")
+    assert body["status"]["value"] in (50, 20)
+    assert body["status"]["until"] in ("07:00", "22:00")
+    assert body["schedule"]["target"] == "VMC Speed"

@@ -302,7 +302,6 @@ function presetRowHtml(sensor) {
   if (!sensor.presets || !sensor.presets.length) return "";
   const unit = (sensor.range || {}).unit || "";
   return `
-    <div class="vmc-program-note" id="program-note-${slug(sensor.name)}" hidden></div>
     <div class="preset-row" id="number-presets-${slug(sensor.name)}">
       ${sensor.presets.map(p => `
         <button class="preset-btn" data-name="${sensor.name}" data-value="${p.value}">
@@ -323,8 +322,44 @@ function sliderRowHtml(sensor) {
              class="number-slider" id="number-slider-${id}" data-name="${sensor.name}">
       <span class="pct" id="number-value-${id}">-- ${range.unit}</span>
     </div>
+    ${programPanelHtml(sensor)}
   `;
 }
+
+// The day/night program, on the device it drives - it belongs with the
+// speed buttons, not in the installer's panel. Only offered for a device
+// with speed presets (a VMC): a plain dimmer has no day/night to it.
+// Every change saves by itself, like the zones' schedule grids.
+function programPanelHtml(sensor) {
+  if (!sensor.presets || !sensor.presets.length) return "";
+  const id = slug(sensor.name);
+  const period = (key, icon) => `
+      <div class="vmc-period-row">
+        <span class="vmc-period-name">${icon} ${tr(`climate.vmc_period_${key}`)}</span>
+        <label>${tr("climate.vmc_from")}
+          <input type="time" id="vmc-${key}-at-${id}" data-program="${sensor.name}">
+        </label>
+        <label>${tr("climate.vmc_speed_label")}
+          <input type="number" min="0" max="100" step="5" id="vmc-${key}-value-${id}" data-program="${sensor.name}">
+        </label>
+      </div>`;
+  return `
+    <div class="vmc-program" id="vmc-program-${id}">
+      <div class="vmc-program-head">
+        <label class="vmc-program-toggle">
+          <input type="checkbox" id="vmc-program-on-${id}" data-program="${sensor.name}">
+          <span>${tr("climate.vmc_program_title")}</span>
+        </label>
+        <span class="vmc-program-state" id="vmc-program-state-${id}"></span>
+      </div>
+      <div class="vmc-program-fields" id="vmc-program-fields-${id}" hidden>
+        ${period("day", ICON_DAY)}${period("night", ICON_NIGHT)}
+      </div>
+    </div>`;
+}
+
+const ICON_DAY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const ICON_NIGHT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
 
 // The humidity chart, below the temperature one - hidden by
 // drawClimateChart() for a sensor that reports no humidity.
@@ -447,6 +482,10 @@ function renderSensors(sensors, containerId = "sensor-cards") {
       if (valueEl) valueEl.textContent = `${slider.value} ${unit}`;
     });
     slider.addEventListener("change", () => setNumberValue(name, slider.value, sensors));
+  });
+
+  el.querySelectorAll("[data-program]").forEach(input => {
+    input.addEventListener("change", () => onVmcProgramChange(input));
   });
 
   el.querySelectorAll(".preset-btn").forEach(btn => {
@@ -642,24 +681,90 @@ async function onSwitchToggle(name, el) {
 }
 
 // The ventilation unit's day/night program (services/vmc_schedule.py),
-// shown under its speed buttons: without it, a speed that changes by
-// itself at 22:00 looks like the dashboard did something random.
+// on the card of the device it drives. Without it, a speed that changes
+// by itself at 22:00 looks like the dashboard did something random.
+let vmcSaveTimer = null;
+
 async function refreshVmcProgram() {
-  if (!document.querySelector(".vmc-program-note")) return;
+  if (!document.querySelector(".vmc-program")) return;
   try {
-    const status = await (await fetch("/api/vmc-schedule")).json();
-    document.querySelectorAll(".vmc-program-note").forEach(el => {
-      const mine = status.ok && status.enabled && el.id === `program-note-${slug(status.target)}`;
-      el.hidden = !mine;
-      if (mine) {
-        el.textContent = tr("climate.vmc_program_note", {
+    const data = await (await fetch("/api/vmc-schedule")).json();
+    if (data.ok) fillVmcProgram(data);
+  } catch (e) { /* leave the panel as it is */ }
+}
+
+function fillVmcProgram(data) {
+  const { schedule, status } = data;
+  document.querySelectorAll(".vmc-program").forEach(panel => {
+    const id = panel.id.replace("vmc-program-", "");
+    // The saved program drives one device; another device's card shows
+    // the same controls, but off.
+    const mine = schedule.target && slug(schedule.target) === id;
+    const on = mine && schedule.enabled;
+    const toggle = document.getElementById(`vmc-program-on-${id}`);
+    if (document.activeElement !== toggle) toggle.checked = on;
+    document.getElementById(`vmc-program-fields-${id}`).hidden = !on;
+    for (const key of ["day", "night"]) {
+      const at = document.getElementById(`vmc-${key}-at-${id}`);
+      const value = document.getElementById(`vmc-${key}-value-${id}`);
+      if (document.activeElement !== at) at.value = schedule[key].at;
+      if (document.activeElement !== value) value.value = schedule[key].value;
+    }
+    document.getElementById(`vmc-program-state-${id}`).textContent = on && status.enabled
+      ? tr("climate.vmc_program_running", {
           period: tr(`vmc_presets.${status.period}`).toLowerCase(),
           value: status.value,
           until: status.until,
-        });
-      }
+        })
+      : tr("climate.vmc_program_off");
+  });
+}
+
+// Every change saves, like a zone's schedule grid: no save button to
+// forget, and the speed of the period running now is applied at once.
+function onVmcProgramChange(input) {
+  const name = input.dataset.program;
+  const id = slug(name);
+  document.getElementById(`vmc-program-fields-${id}`).hidden = !document.getElementById(`vmc-program-on-${id}`).checked;
+  clearTimeout(vmcSaveTimer);
+  vmcSaveTimer = setTimeout(() => saveVmcProgram(name), 500);
+}
+
+async function saveVmcProgram(name) {
+  const id = slug(name);
+  const body = {
+    enabled: document.getElementById(`vmc-program-on-${id}`).checked,
+    // Turning it on from this card is what picks the device it drives.
+    target: name,
+    day: {
+      at: document.getElementById(`vmc-day-at-${id}`).value,
+      value: Number(document.getElementById(`vmc-day-value-${id}`).value),
+    },
+    night: {
+      at: document.getElementById(`vmc-night-at-${id}`).value,
+      value: Number(document.getElementById(`vmc-night-value-${id}`).value),
+    },
+  };
+  if (body.day.at === body.night.at) {
+    notify(tr("climate.vmc_same_time"));
+    return refreshVmcProgram();
+  }
+  try {
+    const res = await fetch("/api/vmc-schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
-  } catch (e) { /* leave the note as it is */ }
+    const data = await res.json();
+    if (!data.ok) {
+      notify(tr("sensors.error_prefix") + data.error);
+      return refreshVmcProgram();
+    }
+    fillVmcProgram(data);
+    refreshSensor({ name });  // the speed it just applied
+  } catch (e) {
+    notify(tr("sensors.request_failed"));
+  }
 }
 
 // --------------------------------------------------------------- charts ----
