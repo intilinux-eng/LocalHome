@@ -15,5 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      # The tplink extra too, so the TP-Link driver's tests run here (it's
+      # optional for users - GPL, see THIRD_PARTY_NOTICES.md).
+      - run: pip install -e ".[dev,tplink]"
       - run: pytest

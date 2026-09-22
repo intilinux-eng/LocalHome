@@ -16,7 +16,11 @@ import asyncio
 
 import pytest
 
-from localhome.drivers.tplink import led_strip
+# python-kasa is the optional "tplink" extra (GPL - see
+# THIRD_PARTY_NOTICES.md): an install without it has no driver to test.
+pytest.importorskip("kasa")
+
+from localhome.drivers.tplink import led_strip  # noqa: E402
 
 
 class FakeLight:
