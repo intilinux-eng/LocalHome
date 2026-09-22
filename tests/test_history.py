@@ -72,14 +72,28 @@ def test_on_stats_counts_hours_and_starts(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
     since = _at(2026, 9, 23, 8, 0)
 
-    # 30s apart, as the recorder writes a valve's is_on: 4 on, in 3 runs.
-    for i, is_on in enumerate([True, True, False, True, False, True]):
+    # 30s apart, as the recorder writes a valve's is_on: on, off for 6
+    # minutes, on again - 2 starts, 5 samples on.
+    for i, is_on in enumerate([True] * 3 + [False] * 12 + [True] * 2):
         store.record("valve", since + i * 30, {"is_on": is_on})
 
     today = store.on_stats("valve", "is_on", 30, now=ON_STATS_NOW)["today"]
 
+    assert today["hours"] == pytest.approx(5 * 30 / 3600.0)
+    assert today["starts"] == 2
+
+
+def test_a_short_off_is_not_a_new_start(tmp_path):
+    # A restart's blip: one sample off, then nothing recorded for a minute.
+    store = HistoryStore(str(tmp_path / "history.db"))
+    since = _at(2026, 9, 23, 8, 0)
+    for ts, is_on in [(0, True), (30, True), (60, False), (150, True), (180, True)]:
+        store.record("valve", since + ts, {"is_on": is_on})
+
+    today = store.on_stats("valve", "is_on", 30, now=ON_STATS_NOW)["today"]
+
+    assert today["starts"] == 1
     assert today["hours"] == pytest.approx(4 * 30 / 3600.0)
-    assert today["starts"] == 3
 
 
 def test_on_stats_scopes_each_range(tmp_path):

@@ -24,6 +24,13 @@ RANGE_BUCKETS = {
     "7d": (7 * 24 * 3600, 3600),
 }
 
+# An "off" shorter than this between two "on" samples isn't the system
+# switching off and on again: a LocalHome restart, or one odd reading,
+# leaves a gap of a sample or two, while a real valve cycle lasts far
+# longer. The dashboard's list of runs uses the same rule (MIN_OFF_SECONDS
+# in app.js), so its count agrees with on_stats().
+MIN_OFF_SECONDS = 300
+
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
 _ON_HOURS_RANGE_START = {
@@ -273,8 +280,10 @@ class HistoryStore:
         a valve's `is_on` - was on, and how many times it went from off to
         on. Hours count the samples at >= 0.5, each worth one recording
         interval: only accurate while `sample_interval_seconds` matches
-        HistoryRecorder's cadence. A gap in the recording longer than a
-        few samples (LocalHome or the board was off) ends a run.
+        HistoryRecorder's cadence. A new start is an "on" sample more than
+        MIN_OFF_SECONDS after the previous one - off, or not recorded at
+        all (LocalHome or the board was off) - so a restart's blip isn't
+        one.
 
         The dashboard asks every 30s per zone, and a month is ~90k samples
         per valve: what's before today can't change until midnight, so
@@ -283,15 +292,15 @@ class HistoryStore:
         now = now or datetime.now()
         starts = {key: int(start_of(now).timestamp()) for key, start_of in _ON_HOURS_RANGE_START.items()}
         today = starts["today"]
-        max_gap = max(600, 3 * sample_interval_seconds)
+        min_off = max(MIN_OFF_SECONDS, 3 * sample_interval_seconds)
         cache_key = (sensor, field, today, starts["week"], starts["month"])
         with self._lock:  # a clear() can't slip between counting and caching
             before_today = self._on_stats_cache.get((sensor, field))
             if before_today is None or before_today[0] != cache_key:
-                counts = self._count_on(sensor, field, {"week": starts["week"], "month": starts["month"]}, today, max_gap)
+                counts = self._count_on(sensor, field, {"week": starts["week"], "month": starts["month"]}, today, min_off)
                 before_today = (cache_key, counts)
                 self._on_stats_cache[(sensor, field)] = before_today
-            today_counts = self._count_on(sensor, field, {"today": today}, int(now.timestamp()) + 1, max_gap)["today"]
+            today_counts = self._count_on(sensor, field, {"today": today}, int(now.timestamp()) + 1, min_off)["today"]
         totals = {
             "today": today_counts,
             "week": [a + b for a, b in zip(before_today[1]["week"], today_counts)],
@@ -302,13 +311,14 @@ class HistoryStore:
             for key, (samples, run_starts) in totals.items()
         }
 
-    def _count_on(self, sensor: str, field: str, since: dict[str, int], until_ts: int, max_gap: float) -> dict:
+    def _count_on(self, sensor: str, field: str, since: dict[str, int], until_ts: int, min_off: float) -> dict:
         """on_stats() for samples before `until_ts`: for each range in
-        `since` (name -> start), the samples at >= 0.5 and the off-to-on
-        changes. The hour before the earliest start is read too, so a run
-        carried over midnight (or Monday, or the 1st) isn't a new start."""
+        `since` (name -> start), the samples at >= 0.5 and the starts -
+        only the "on" samples are read. The hour before the earliest start
+        is read too, so a run carried over midnight (or Monday, or the 1st)
+        isn't a new start."""
         columns = ", ".join(
-            f"COALESCE(SUM(is_on AND ts >= :{key}), 0), COALESCE(SUM(is_on AND ts >= :{key} AND was_on IS NOT 1), 0)"
+            f"COALESCE(SUM(ts >= :{key}), 0), COALESCE(SUM(ts >= :{key} AND (after IS NULL OR after > :min_off)), 0)"
             for key in since
         )
         conn = self._connect()
@@ -316,14 +326,12 @@ class HistoryStore:
             row = conn.execute(
                 f"""
                 SELECT {columns} FROM (
-                    SELECT ts, value >= 0.5 AS is_on,
-                           (LAG(value >= 0.5) OVER w) AND ts - (LAG(ts) OVER w) <= :max_gap AS was_on
+                    SELECT ts, ts - LAG(ts) OVER (ORDER BY ts) AS after
                     FROM readings
-                    WHERE sensor = :sensor AND field = :field AND ts >= :lookback AND ts < :until
-                    WINDOW w AS (ORDER BY ts)
+                    WHERE sensor = :sensor AND field = :field AND ts >= :lookback AND ts < :until AND value >= 0.5
                 )
                 """,
-                {**since, "sensor": sensor, "field": field, "max_gap": max_gap,
+                {**since, "sensor": sensor, "field": field, "min_off": min_off,
                  "lookback": min(since.values()) - 3600, "until": until_ts},
             ).fetchone()
         finally:

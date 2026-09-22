@@ -938,15 +938,23 @@ function drawTimeAxis(canvas, axis, xOf, top, bottom, plotL, plotR, textScale) {
   }
 }
 
+// Same rule as services/history.py's MIN_OFF_SECONDS: an "off" shorter
+// than this between two stretches on - a restart, one odd reading - doesn't
+// split them, so the list of runs agrees with the tiles' count.
+const MIN_OFF_SECONDS = 300;
+
 // When the system was on, from the valve's bucketed is_on series: runs of
-// consecutive buckets at >= 0.5 (on for most of the bucket); a gap of more
-// than one bucket (nothing recorded) ends a run. `ongoing`: it reaches the
-// latest bucket, so it's still on now.
+// buckets at >= 0.5 (on for most of the bucket), split by an "off" - or
+// nothing recorded - longer than MIN_OFF_SECONDS (or than half a bucket,
+// on the hourly 7d view). `ongoing`: it reaches the latest bucket, so it's
+// still on now.
 function onRuns(valves, bucket) {
+  const maxStep = Math.max(bucket * 1.5, bucket + MIN_OFF_SECONDS);
   const runs = [];
   let run = null;
   for (const p of valves) {
-    if (p.value >= 0.5 && run && p.ts - run.last <= bucket * 1.5) { run.last = p.ts; continue; }
+    if (p.value < 0.5) continue;
+    if (run && p.ts - run.last <= maxStep) { run.last = p.ts; continue; }
     if (run) runs.push(run);
     run = p.value >= 0.5 ? { start: p.ts, last: p.ts } : null;
   }

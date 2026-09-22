@@ -298,13 +298,13 @@ def test_on_hours_reports_hours_and_starts(tmp_path):
     config_path.write_text(CONFIG, encoding="utf-8")
     app = create_app(str(config_path))
     now = int(time.time())
-    for i, is_on in enumerate([True, False, True]):
-        app.config["HISTORY"].record("Room Valve", now - 2 + i, {"is_on": is_on})
+    for i in range(2):
+        app.config["HISTORY"].record("Room Valve", now - 1 + i, {"is_on": True})
 
     body = app.test_client().get("/api/climate/zones/Rooms/on-hours").get_json()
 
     interval = app.config["HISTORY_POLL_INTERVAL"]
     assert body["ok"] is True
     assert body["today"] == pytest.approx(round(2 * interval / 3600, 2))
-    assert body["starts"]["today"] == 2
+    assert body["starts"]["today"] == 1
     assert set(body["starts"]) == {"today", "week", "month"}
