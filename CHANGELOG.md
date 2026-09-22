@@ -7,6 +7,17 @@ date rather than by tag.
 ## Unreleased
 
 ### Added
+- **"The board isn't answering"**: when the dashboard stops getting
+  replies it says so at the top, with the time of the last update, and
+  dims the values instead of showing stale ones as if they were live. It
+  clears itself the moment the board answers again, and needs two failed
+  refreshes in a row, so a restart after an update doesn't flash it.
+- An **app icon, name and manifest**: added to a phone's home screen,
+  LocalHome now has its own icon and opens without the browser's bars.
+- **First-run screens**: an install with no devices says so and offers a
+  button to the configuration panel, on both tabs, instead of an empty
+  page or a link to a documentation file. The covers section hides
+  itself when there are no covers.
 - A **day/night program for the ventilation unit**: two periods, each a
   start time and a speed (day 07:00 at 50%, night 22:00 at 20% to begin
   with), set in the admin panel's VMC section and applied straight away -
@@ -191,6 +202,10 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- Made for a phone in the hand: nothing overflows at 320px any more,
+  every field is 16px so iOS stops zooming the page when one is tapped,
+  and the buttons that were 28-38px tall (tabs, season chip, away,
+  ranges, palette, panes) are at least 36-44px.
 - The Climate tab, redesigned for everyday use:
   - At the top, the season ("Summer · Cooling", a link to where it's
     changed) and the outdoor temperature, next to "Away".

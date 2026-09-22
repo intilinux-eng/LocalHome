@@ -10,7 +10,12 @@
     "update_reload": "Reload"
   },
   "app": {
-    "title": "LocalHome"
+    "title": "LocalHome",
+    "description": "LocalHome: a house dashboard - heating, cooling, covers and power, on your own network.",
+    "offline": "The board isn't answering: what you see was last updated at {time}.",
+    "empty_home_title": "No devices configured",
+    "empty_home_note": "Sensors, switches and covers will show up here. Add your devices in the configuration panel.",
+    "empty_open_admin": "Open the configuration panel"
   },
   "covers": {
     "heading": "Covers",
@@ -107,7 +112,7 @@
     "copy_weekdays": "Mon–Fri",
     "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     "dehumidifier": "Dehumidifier",
-    "no_zones": "No climate zones configured - see docs/configuration.md#thermostat-heatingcooling-zones",
+    "no_zones": "No zones configured",
     "linked_valve_on": "Also has {valve} open right now",
     "linked_valve_off": "{valve} closed",
     "save_failed": "Couldn't save the schedule",
@@ -191,7 +196,8 @@
     "range_btn_24h": "24 hours",
     "range_btn_7d": "7 days",
     "run_totals": "This week {week} ({week_starts}) · this month {month} ({month_starts})",
-    "vmc_program_note": "Automatic program: {period} {value}% until {until}"
+    "vmc_program_note": "Automatic program: {period} {value}% until {until}",
+    "no_zones_note": "Heating and cooling zones are set up in the configuration panel: each one needs its temperature sensor and its valve."
   },
   "climate_admin": {
     "link_title": "Climate admin panel",

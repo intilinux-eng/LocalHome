@@ -429,6 +429,8 @@
 .season-card-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
   gap: 12px;
 }
 .season-icon {
@@ -631,4 +633,14 @@
 .admin-check input {
   width: 20px;
   height: 20px;
+}
+
+/* 16px keeps iOS from zooming the page when a field is tapped. */
+.admin-field input,
+.admin-field select,
+.admin-manual-box input,
+.maint-confirm input,
+.season-confirm input,
+.vmc-period input {
+  font-size: 16px;
 }

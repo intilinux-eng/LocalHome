@@ -3,6 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ t.app.description }}">
+  <meta name="theme-color" content="#0b0d13">
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LocalHome">
   <title>{{ t.app.title }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -17,6 +26,7 @@
     </div>
   </header>
   <div class="server-clock-warning" id="server-clock-warning" hidden></div>
+  <div class="offline-banner" id="connection-banner" role="status" aria-live="polite" hidden></div>
 
   <div id="away-modal" class="modal-overlay" hidden onclick="if (event.target === this) closeAway()">
     <div class="modal-panel">
@@ -56,9 +66,14 @@
   </nav>
 
   <div id="tab-home" class="tab-panel">
+    <div class="empty-state" id="home-empty" hidden>
+      <h2>{{ t.app.empty_home_title }}</h2>
+      <p>{{ t.app.empty_home_note }}</p>
+      <a class="tbtn open" href="/climate-admin">{{ t.app.empty_open_admin }}</a>
+    </div>
     <div id="sensor-cards" class="dashboard-grid"></div>
 
-    <section>
+    <section id="covers-section">
       <div class="section-head">
         <h2>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="11" x2="21" y2="11"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>

@@ -56,6 +56,41 @@ const ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
 
+// Is the board still answering? Every periodic refresh reports in here.
+// The page keeps its last values when the board goes away - without this
+// banner a frozen dashboard looks live, which is the one thing a
+// dashboard must never do.
+const connection = { lastOk: Date.now(), failures: 0 };
+const OFFLINE_AFTER_MS = 15000;
+
+function markOnline() {
+  connection.lastOk = Date.now();
+  if (connection.failures) {
+    connection.failures = 0;
+    updateConnectionBanner();
+  }
+}
+
+function markOffline() {
+  connection.failures += 1;
+  updateConnectionBanner();
+}
+
+function updateConnectionBanner() {
+  const banner = document.getElementById("connection-banner");
+  if (!banner) return;
+  // Two failures in a row, not one: a single dropped request while the
+  // board reboots after an update shouldn't flash a warning.
+  const offline = connection.failures >= 2 && Date.now() - connection.lastOk > OFFLINE_AFTER_MS;
+  banner.hidden = !offline;
+  document.body.classList.toggle("is-offline", offline);
+  if (offline) {
+    banner.textContent = tr("app.offline", {
+      time: new Date(connection.lastOk).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
+    });
+  }
+}
+
 function slug(name) {
   return name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
 }
@@ -442,8 +477,14 @@ function refreshSensor(sensor) {
     : Promise.resolve(null);
 
   Promise.all([mainFetch, linkedFetch])
-    .then(([reading, linkedReading]) => updateSensorCard(sensor, reading, linkedReading))
-    .catch(() => updateSensorCard(sensor, { ok: false, error: "unreachable" }, null));
+    .then(([reading, linkedReading]) => {
+      markOnline();
+      updateSensorCard(sensor, reading, linkedReading);
+    })
+    .catch(() => {
+      markOffline();
+      updateSensorCard(sensor, { ok: false, error: "unreachable" }, null);
+    });
 }
 
 // A driver that went stale rather than never-connected (see
@@ -1911,7 +1952,12 @@ function renderClimateZones() {
   const container = document.getElementById("climate-zones");
   const toggleLabel = document.querySelector(".season-link");
   if (!climateZones.length) {
-    container.innerHTML = `<p class="hint-text">${tr("climate.no_zones")}</p>`;
+    container.innerHTML = `
+      <div class="empty-state">
+        <h2>${tr("climate.no_zones")}</h2>
+        <p>${tr("climate.no_zones_note")}</p>
+        <a class="tbtn open" href="/climate-admin">${tr("app.empty_open_admin")}</a>
+      </div>`;
     if (toggleLabel) toggleLabel.style.display = "none";
     return;
   }
@@ -2259,6 +2305,7 @@ async function refreshClimateZonesLive() {
     // read once at page load, so the chart refresh below (and anything
     // else keyed off zone.sensor/zone.valve) doesn't keep polling a name
     // that stopped existing the moment the process restarted.
+    markOnline();
     climateZones = data.zones;
     climateSeasonEffects = data.season_effects || null;
     updateSeasonHeading();
@@ -2271,7 +2318,9 @@ async function refreshClimateZonesLive() {
     });
     annotateSeasonDevices();
     applyClimateModeVisibility();
-  } catch (e) { /* keep last render */ }
+  } catch (e) {
+    markOffline();  // keep the last render, but say it's not live
+  }
 }
 
 // Everything that depends on the season, rebuilt together: heading and
@@ -2325,6 +2374,13 @@ async function boot() {
     .sort((a, b) => (a.kind === "climate") - (b.kind === "climate"));
 
   outdoorSensorName = (climateExtraSensors.find(s => s.kind === "climate") || {}).name || null;
+  // A fresh install has no devices yet: say so, and point at the panel
+  // where they're added, instead of leaving an empty page.
+  const coversSection = document.getElementById("covers-section");
+  if (coversSection) coversSection.hidden = !(window.COVER_NAMES || []).length;
+  const homeEmpty = document.getElementById("home-empty");
+  if (homeEmpty) homeEmpty.hidden = !!(homeSensors.length || (window.COVER_NAMES || []).length);
+
   renderSensors(homeSensors, "sensor-cards");
   renderSensors(climateExtraSensors, "climate-extra");
   const pollableSensors = homeSensors.concat(climateExtraSensors);

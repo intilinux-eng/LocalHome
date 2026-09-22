@@ -3,6 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ t.app.description }}">
+  <meta name="theme-color" content="#0b0d13">
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LocalHome">
   <title>{{ t.climate_admin.page_title }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='climate_admin.css') }}">

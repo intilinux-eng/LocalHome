@@ -10,7 +10,12 @@
     "update_reload": "Ricarica"
   },
   "app": {
-    "title": "LocalHome"
+    "title": "LocalHome",
+    "description": "LocalHome: dashboard per la casa - riscaldamento, raffrescamento, tapparelle e consumi, in rete locale.",
+    "offline": "Scheda non raggiungibile: i dati mostrati sono fermi alle {time}.",
+    "empty_home_title": "Nessun dispositivo configurato",
+    "empty_home_note": "Qui compariranno sensori, interruttori e tapparelle. Aggiungi i dispositivi dal pannello di configurazione.",
+    "empty_open_admin": "Apri il pannello di configurazione"
   },
   "covers": {
     "heading": "Tapparelle",
@@ -107,7 +112,7 @@
     "copy_weekdays": "Lun–Ven",
     "days": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
     "dehumidifier": "Deumidificatore",
-    "no_zones": "Nessuna zona climatica configurata - vedi docs/configuration.md#thermostat-heatingcooling-zones",
+    "no_zones": "Nessuna zona configurata",
     "linked_valve_on": "Ha aperto anche {valve} in questo momento",
     "linked_valve_off": "{valve} chiusa",
     "save_failed": "Salvataggio della programmazione non riuscito",
@@ -191,7 +196,8 @@
     "range_btn_24h": "24 ore",
     "range_btn_7d": "7 giorni",
     "run_totals": "Questa settimana {week} ({week_starts}) · questo mese {month} ({month_starts})",
-    "vmc_program_note": "Programma automatico: {period} {value}% fino alle {until}"
+    "vmc_program_note": "Programma automatico: {period} {value}% fino alle {until}",
+    "no_zones_note": "Le zone del riscaldamento e del raffrescamento si impostano dal pannello di configurazione: per ognuna servono il sensore di temperatura e la valvola."
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",

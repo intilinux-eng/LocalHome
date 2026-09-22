@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LocalHome">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c2740"/>
+      <stop offset="100%" stop-color="#0b0d13"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff9f0a"/>
+      <stop offset="100%" stop-color="#30d158"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- A house whose roof is drawn in the same warm-to-cool ramp the
+       dashboard uses for heating and cooling. -->
+  <path d="M96 246 256 118l160 128" fill="none" stroke="url(#mark)" stroke-width="34"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M140 262v128a16 16 0 0 0 16 16h200a16 16 0 0 0 16-16V262" fill="none" stroke="#eef1f8"
+        stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/>
+  <!-- The thermostat dial inside it. -->
+  <circle cx="256" cy="330" r="44" fill="none" stroke="#eef1f8" stroke-width="20" opacity="0.92"/>
+  <path d="M256 330v-26" stroke="#ff9f0a" stroke-width="20" stroke-linecap="round"/>
+</svg>
