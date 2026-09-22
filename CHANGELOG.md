@@ -178,6 +178,21 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- A zone's valve statistics became **run statistics**, worded for anyone
+  ("system on/off" instead of "valve open/closed", on the whole
+  dashboard): today/week/month tiles give the time on as "3h 05m" and
+  how many times the system switched on; the stretches it was on shade
+  both the temperature and the humidity chart; and a list below them
+  gives each run in the range shown - when, how long, and what
+  temperature and humidity did meanwhile (e.g. 25.9° -> 25.5°, -0.4°).
+  Hovering a run outlines it on both charts. The time axis labels as
+  many round hours as fit, the temperature axis has a line per degree,
+  and the system strip and target band are drawn without hairline gaps.
+  `/api/climate/zones/<name>/on-hours` also returns `starts`
+  (`HistoryStore.on_stats`, replacing `sum_on_hours`/`sum_on_hours_range`).
+  The days before today are counted once a day (again after a clear or
+  prune), so the 30s refresh reads only today's samples - ~15 times
+  less work than the three month-long counts it replaces.
 - Temperature and humidity are two separate charts now, each with its
   own title and time axis ("Temperature and valve" above, "Humidity"
   below) - one crowded plot mixing degrees and percent was hard to read.

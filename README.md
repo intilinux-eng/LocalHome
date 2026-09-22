@@ -141,7 +141,7 @@ open/closed.
 The dashboard has two tabs: **Home** (your enabled devices, estimated
 cover position, sqlite-backed history/charts, an optional power-budget
 alert) and **Heating & Cooling** (a multi-zone valve thermostat - a
-click-and-drag weekly schedule, on-hours stats, a one-tap away mode, a
+click-and-drag weekly schedule, run statistics, a one-tap away mode, a
 zone that can opt out of one mode entirely, and switch-follows-switch
 interlocks - see
 [docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones)).
