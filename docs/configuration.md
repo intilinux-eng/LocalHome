@@ -213,6 +213,11 @@ is the heating schedule, and cooling starts empty - every valve stays
 closed while cooling until a summer schedule is painted, and the
 dashboard says so on each zone.
 
+**Two zones run the same way?** A zone's schedule pane offers "Copy the
+whole schedule to: <zone>" whenever another zone can be scheduled in the
+current season - the winter and summer grids stay separate, and only the
+one on screen is copied.
+
 **No real hardware yet?** Use [`type: simulated`](integrations/simulated.md)
 for both `sensor` and `valve` - the exact same schedule/API/dashboard
 works, and the simulated sensor even drifts toward a hotter/colder value

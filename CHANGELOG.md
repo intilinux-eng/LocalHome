@@ -40,6 +40,13 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **Copy a whole weekly schedule onto another zone.** Two zones usually
+  run the same way in winter, and painting 168 cells twice is work the
+  dashboard should take off you: under "Copy Monday to" there's now
+  "Copy the whole schedule to: <zone>". It asks first (it replaces
+  what's there), copies only the season on screen, and shows up only
+  where there is another zone to fill - in cooling a bathroom is out of
+  the season entirely, so it isn't offered.
 - **A Tuya device that changed address finds its own way back.** The IP
   in devices.json is now only a starting point: when a device stops
   answering there, it's looked up by its device id on the LAN and the
