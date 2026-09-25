@@ -111,9 +111,10 @@ open `http://carlucci.local:5000`. How to set a battery H&T's MQTT
 server (it only listens while awake), how to check each device really
 connected, and what to do if one can't resolve `.local`: see
 [deployment.md, "Addressing: names, not IP addresses"](deployment.md#addressing-names-not-ip-addresses).
-The Shelly 0/1-10V Dimmer Gen3 is confirmed to resolve `.local` names by
-itself; check the H&T Gen3 the first time with
-`journalctl -u mosquitto | grep "New client connected"`.
+Confirmed on the first installation: the Shelly H&T Gen3 sensors and
+the 0/1-10V Dimmer Gen3 resolve the board's `.local` name by themselves
+and connect with it. `journalctl -u mosquitto | grep "New client
+connected"` shows each device as it connects.
 
 ## 4. The code
 
@@ -289,9 +290,9 @@ with no intervention.
   The panel's per-zone status then says whether the device is really
   being heard, and tells "not reachable yet" (a battery sensor that
   hasn't woken up) from "was reporting, now unreachable". A zone that
-  turns "reporting" right after the H&T's button press also proves the
-  H&T resolved `carlucci.local` by itself; if it stays "not reachable
-  yet", use the router's DNS name for the board instead (step 3's link).
+  stays "not reachable yet" after the H&T's button press almost always
+  means one of the settings above: the port (1883, not 1833), or
+  "Generic status update over MQTT" left off.
 
 ## 11. The LED matrix
 

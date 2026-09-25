@@ -300,8 +300,9 @@ reconnects by name.
   journalctl -u mosquitto | grep "New client connected" | tail
   ```
   or in `/climate-admin`, where the device's status turns to reporting.
-- Confirmed on a real install: a Shelly 0/1-10V Dimmer Gen3 resolves the
-  board's `.local` name by itself and connects with it.
+- Confirmed on a real install: the Shelly H&T Gen3 sensors and the
+  0/1-10V Dimmer Gen3 resolve the board's `.local` name by themselves and
+  connect with it.
 
 ### If a device can't resolve `.local`
 
