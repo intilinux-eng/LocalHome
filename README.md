@@ -211,6 +211,7 @@ and why they're split this way.
 
 ## Documentation
 
+- [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to an empty, running installation, step by step
 - [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: Arduino UNO Q, Shelly-only climate control, limits, tuning, updating
 - [ARCHITECTURE.md](ARCHITECTURE.md) - the driver/registry/manager design and why it looks like this
 - [docs/configuration.md](docs/configuration.md) - full config.yaml reference, including optional web auth
