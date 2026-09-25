@@ -296,6 +296,143 @@ def test_away_expiry_clears_itself_and_resumes_the_schedule_on_the_next_tick(tmp
     assert store.get_away_until() is None  # and the stale deadline cleaned itself up
 
 
+
+def test_away_leaves_a_valve_an_interlock_owns_to_its_interlock(tmp_path):
+    """The one valve away must not touch: a zone valve that also feeds a
+    dehumidifier. Closing it here would have the two control loops
+    fighting over it every cycle, in the very situation (nobody home)
+    where nobody would notice."""
+    zones = [Zone(name="Bathrooms", sensor="Bath Temp", valve="Bath Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Bath Temp": {"ok": True, "temperature_c": 10.0},
+                                    "Bath Valve": {"ok": True, "is_on": True}},
+                          switches={"Bath Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("cool")
+    store.set_away_until(datetime(2026, 9, 15, 0, 0))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+    controller.interlock_owned_valves = {"Bath Valve": None}   # owned in every mode
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+
+    assert switch.calls == [], "left open: the interlock decides this one"
+
+
+def test_away_still_closes_an_ordinary_valve_owned_by_nobody(tmp_path):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": 10.0},
+                                    "Rooms Valve": {"ok": True, "is_on": True}},
+                          switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    store.set_away_until(datetime(2026, 9, 15, 0, 0))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+    controller.interlock_owned_valves = {"Some Other Valve": None}
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+
+    assert switch.calls == ["off"]
+
+
+def test_an_interlock_owning_the_valve_in_the_other_mode_does_not_exempt_it_from_away(tmp_path):
+    zones = [Zone(name="Bathrooms", sensor="Bath Temp", valve="Bath Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Bath Temp": {"ok": True, "temperature_c": 10.0},
+                                    "Bath Valve": {"ok": True, "is_on": True}},
+                          switches={"Bath Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    store.set_away_until(datetime(2026, 9, 15, 0, 0))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+    controller.interlock_owned_valves = {"Bath Valve": "cool"}   # only while cooling
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+
+    assert switch.calls == ["off"]
+
+
+# ------------------------------------------------------ failing hardware -----
+
+def test_a_valve_command_that_fails_is_tried_again_next_tick(tmp_path):
+    """A relay that refuses one command must not be written off as done:
+    the zone would sit there with the thermostat convinced it acted."""
+    class FlakySwitch(FakeSwitch):
+        def __init__(self):
+            super().__init__()
+            self.fail = True
+
+        def turn_on(self):
+            super().turn_on()
+            if self.fail:
+                raise RuntimeError("Bath Valve: not answering")
+
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FlakySwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": 10.0}},
+                          switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    week = ScheduleStore.empty_week()
+    for day in week:
+        week[day] = [22.0] * 24
+    store.set_week("Rooms", week)
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    controller.tick(now=datetime(2026, 9, 14, 8, 0))
+    assert switch.calls == ["on"]
+
+    switch.fail = False
+    controller.tick(now=datetime(2026, 9, 14, 8, 1))
+
+    assert switch.calls == ["on", "on"], "tried again, and this time it stuck"
+    controller.tick(now=datetime(2026, 9, 14, 8, 2))
+    assert switch.calls == ["on", "on"], "and then left alone"
+
+
+# --------------------------------------------------------- ticks overlap -----
+
+def test_two_ticks_at_once_do_not_interleave(tmp_path):
+    """Every season/schedule/away change ticks from the request thread
+    while the control loop ticks on its own. Two of them running through
+    the same zone at the same time would double-count a silent sensor's
+    clock and race each other's valve commands."""
+    import threading
+
+    class SlowSwitch(FakeSwitch):
+        def __init__(self):
+            super().__init__()
+            self.inside = 0
+            self.overlapped = False
+
+        def turn_on(self):
+            self.inside += 1
+            self.overlapped = self.overlapped or self.inside > 1
+            tm.sleep(0.05)
+            self.inside -= 1
+            super().turn_on()
+
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = SlowSwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": 10.0}},
+                          switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    week = ScheduleStore.empty_week()
+    for day in week:
+        week[day] = [22.0] * 24
+    store.set_week("Rooms", week)
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.3)
+
+    when = datetime(2026, 9, 14, 8, 0)
+    threads = [threading.Thread(target=controller.tick, kwargs={"now": when}) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not switch.overlapped, "two ticks were inside the same valve command at once"
+
 # ------------------------------------------------------- long-run stability --
 
 def test_long_run_simulation_stays_stable_across_many_simulated_days(tmp_path):

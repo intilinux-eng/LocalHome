@@ -85,6 +85,10 @@ class InterlockController:
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
         self.poll_interval_seconds = poll_interval_seconds
         self._started = False
+        # As in ThermostatController: the loop thread and the request
+        # thread (a season change ticks both controllers) must not
+        # interleave commands to the same switch.
+        self._tick_lock = threading.RLock()
 
     def start(self) -> None:
         if self._started:
@@ -101,6 +105,10 @@ class InterlockController:
             time.sleep(self.poll_interval_seconds)
 
     def tick(self) -> None:
+        with self._tick_lock:
+            self._tick()
+
+    def _tick(self) -> None:
         if self.diagnostic_mode_provider and self.diagnostic_mode_provider():
             # Same "hands off everything" stance as
             # ThermostatController.tick() - a leader/follower or

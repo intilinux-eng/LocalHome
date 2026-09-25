@@ -346,6 +346,11 @@ class ThermostatController:
         # a water-based dehumidifier fed through it); any other excluded
         # valve is held closed in cool mode - see _tick().
         self.interlock_owned_valves: dict[str, str | None] = {}
+        # One tick at a time. The control loop has its own thread, and
+        # every mode/season/schedule/away change ticks from the request
+        # thread as well - two of them interleaving would double-count a
+        # silent sensor's clock and race each other's valve commands.
+        self._tick_lock = threading.RLock()
         self._missing_valves: set[str] = set()
         self._failures = FailureLog(logger)
 
@@ -375,14 +380,15 @@ class ThermostatController:
         # What this cycle is worth to a silent sensor's clock (see
         # SilenceLog): the time since the last tick, capped so a gap - a
         # restart, or a board that was off - doesn't count as silence.
-        tick_ts = time.time()
-        elapsed = min(tick_ts - (self._last_tick_ts or tick_ts), self._max_silence_step)
-        self._last_tick_ts = tick_ts
-        try:
-            self._tick(now, applied, elapsed)
-            self.last_tick_ok_ts = time.time()
-        finally:
-            self._applied_targets = applied
+        with self._tick_lock:
+            tick_ts = time.time()
+            elapsed = min(tick_ts - (self._last_tick_ts or tick_ts), self._max_silence_step)
+            self._last_tick_ts = tick_ts
+            try:
+                self._tick(now, applied, elapsed)
+                self.last_tick_ok_ts = time.time()
+            finally:
+                self._applied_targets = applied
 
     def valve_owned_by_interlock(self, valve: str, mode: str) -> bool:
         if valve not in self.interlock_owned_valves:
@@ -416,6 +422,14 @@ class ThermostatController:
         away = away_until is not None
         for zone in self.zones:
             if away:
+                # Same exception as the cooling branch below: a valve an
+                # interlock owns (a dehumidifier's water circuit) is that
+                # interlock's to open and close. Forcing it closed here
+                # would have the two loops fighting over it every cycle
+                # while the dehumidifier runs - and an empty house is
+                # exactly when it runs unattended.
+                if self.valve_owned_by_interlock(zone.valve, mode):
+                    continue
                 self._apply(zone, False)
                 continue
             if mode == "cool" and not zone.cool_enabled:
