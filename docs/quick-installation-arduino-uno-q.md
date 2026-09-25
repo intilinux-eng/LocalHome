@@ -305,18 +305,61 @@ of every picture and what each problem code means.
 The picture is decided by LocalHome; the microcontroller only draws it,
 and shows two things on its own: a dot running along the bottom until
 LocalHome's first frame, and a blinking X if frames stop for 20 seconds.
-Its sketch has to be loaded once, from the board itself:
+Its sketch has to be built and loaded once, from the board itself, with
+`arduino-cli` - three steps, **the first two only if they aren't done
+already**:
+
+**a. The toolchain.** `arduino-cli` and the UNO Q core ship with the
+board's image (both test boards: arduino-cli 1.5.1, core
+`arduino:zephyr` 1.0.0). Check, and install the core only if missing:
+
+```bash
+arduino-cli version
+arduino-cli core list              # must list arduino:zephyr
+arduino-cli core install arduino:zephyr    # only if it doesn't
+```
+
+**b. The libraries - required, and not always there.** The sketch
+talks to Linux through the `Arduino_RouterBridge` library and its
+dependencies. They are present only if Arduino App Lab has already
+installed them (on one test board they were, on the other not at all).
+Check:
+
+```bash
+arduino-cli lib list
+```
+
+The set this sketch is verified to build and run with is:
+`Arduino_RouterBridge` **0.4.3**, `Arduino_RPClite` **0.3.0**,
+`MsgPack` 0.4.2, `ArxContainer` 0.7.0, `ArxTypeTraits` 0.3.2,
+`DebugLog` 0.8.4. If they're missing or `Arduino_RPClite` isn't 0.3.0,
+install exactly these:
+
+```bash
+arduino-cli lib install "Arduino_RouterBridge@0.4.3"
+arduino-cli lib install "Arduino_RPClite@0.3.0"
+arduino-cli lib list               # check the versions above
+```
+
+The second line matters: installing `Arduino_RouterBridge` alone pulls
+in the newest `Arduino_RPClite` (0.3.1), and with that the build failed
+on a test board with `undefined reference to 'arduino::String...'`
+errors at the link step.
+
+**c. Build and load the sketch:**
 
 ```bash
 cd ~/localhome
 arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_matrix
 ```
 
-About two minutes, most of it compiling; no LocalHome restart is needed,
-the matrix lights up within 30 seconds. Loading it replaces whatever
-sketch was on the microcontroller (an Arduino App Lab app included).
-Without it, LocalHome runs exactly the same - the admin panel just says
-the sketch isn't loaded.
+About two minutes, most of it compiling; a successful run ends with
+`Sketch uses ... bytes` and openocd's `shutdown command invoked`. No
+LocalHome restart is needed: the matrix lights up within 30 seconds, and
+the admin panel's LED matrix section turns "active". Loading it
+replaces whatever sketch was on the microcontroller (an Arduino App Lab
+app included). Without it, LocalHome runs exactly the same - the admin
+panel just says the sketch isn't loaded.
 
 It's built to cost nothing that matters: one frame a second over a
 single connection to arduino-router, and its state is read from memory
@@ -372,3 +415,6 @@ Measured on the 2 GB UNO Q right after this install:
 | The clock in the dashboard header is wrong | step 1, or `timedatectl` says "synchronized: no" |
 | A Shelly never connects, a zone says "not reachable yet" forever | the broker still listens on the board only (step 3: `ss -ltn \| grep 1883` must show `0.0.0.0:1883`), or the device's MQTT server / id is wrong |
 | `localhome-cli doctor` lists a skipped driver | the optional TP-Link driver, not installed on purpose - step 5 |
+| Building the LED sketch: `Arduino_RouterBridge.h: No such file or directory` | the libraries aren't installed - step 11b |
+| Building the LED sketch: `undefined reference to 'arduino::String...'` | most likely `Arduino_RPClite` isn't the verified 0.3.0 (0.3.1 failed exactly like this) - step 11b, second command |
+| The admin panel says "sketch not loaded" | step 11 hasn't been done on this board, or the upload failed - rerun 11c and read its last lines |

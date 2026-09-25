@@ -502,7 +502,7 @@
     "led_status_running": "Collegata: la matrice mostra lo stato in tempo reale.",
     "led_status_starting": "Avvio in corso...",
     "led_status_no_router": "Questa scheda non ha il collegamento con il microcontrollore (non è un Arduino UNO Q, o il servizio arduino-router è fermo): la matrice resta spenta. Lo specchio qui sotto mostra comunque cosa disegnerebbe.",
-    "led_status_no_sketch": "Lo sketch di LocalHome non è caricato sul microcontrollore, quindi la matrice non mostra lo stato. Per caricarlo, sulla scheda: arduino-cli compile --upload -b arduino:zephyr:unoq ~/localhome/deploy/led-matrix/localhome_matrix (non serve riavviare LocalHome).",
+    "led_status_no_sketch": "Lo sketch di LocalHome non è caricato sul microcontrollore, quindi la matrice non mostra lo stato. Si carica una volta sola dalla scheda con arduino-cli, dopo aver installato le librerie Arduino_RouterBridge 0.4.3 e Arduino_RPClite 0.3.0 se non ci sono già: tutti i comandi al passo 11 della guida di installazione rapida (docs/quick-installation-arduino-uno-q.md). Non serve riavviare LocalHome.",
     "led_status_error": "Errore nel comunicare con il microcontrollore: {error}. Riprovo da solo ogni 30 secondi.",
     "led_status_off": "Non attiva.",
     "led_status_short_running": "attiva",
