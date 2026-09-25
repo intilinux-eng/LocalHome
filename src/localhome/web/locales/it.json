@@ -485,7 +485,8 @@
     "system_problem_device_not_heard_yet": "{subject}: non ancora sentito da quando la scheda è accesa - i sensori a batteria si fanno vivi ogni paio d'ore",
     "setting_site_name": "Nome della pagina",
     "setting_site_name_help": "Il titolo in alto nella dashboard e il nome sotto l'icona sul telefono. Massimo 24 caratteri, così resta leggibile su uno schermo piccolo. Vuoto = LocalHome. Cambia al ricaricamento della pagina, senza riavvio.",
-    "settings_saved_live": "Salvato. Ricarica la pagina per vedere il nuovo nome."
+    "settings_saved_live": "Salvato. Ricarica la pagina per vedere il nuovo nome.",
+    "zones_fresh_note": "Su un'installazione nuova le due zone partono simulate: puoi salvare, riavviare e vedere subito termostato, programmazione e storico funzionare senza alcun dispositivo collegato. Passa a \"Shelly\" quando il dispositivo è installato e ne hai l'ID."
   },
   "vmc_presets": {
     "night": "Notte",

@@ -480,9 +480,12 @@ def integration_device_id(integration: Integration) -> str | None:
 
 
 def _blank_zone() -> dict:
+    # Simulated, not "shelly": this is a zone that doesn't exist in
+    # config.yaml at all, so there's no real device behind it - and a
+    # "shelly" zone with no device id can't be saved from the panel.
     return {
-        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
-        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
+        "name": "", "sensor_mode": "simulated", "sensor_device_id": None,
+        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True,
     }
 
 

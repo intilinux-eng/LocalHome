@@ -480,9 +480,12 @@ def test_snapshot_pads_up_to_zone_count_with_blank_entries():
     snapshot = snapshot_from_config(zones, [])
 
     assert len(snapshot) == 2
+    # Simulated: there is no second zone in config.yaml, so there is no
+    # real device behind this slot - and a "shelly" slot with no device
+    # id is one the panel would refuse to save.
     assert snapshot[1] == {
-        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
-        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
+        "name": "", "sensor_mode": "simulated", "sensor_device_id": None,
+        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True,
     }
 
 

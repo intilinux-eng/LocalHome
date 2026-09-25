@@ -485,7 +485,8 @@
     "system_problem_device_not_heard_yet": "{subject}: not heard yet since the board came up - battery sensors report every couple of hours",
     "setting_site_name": "Page name",
     "setting_site_name_help": "The heading at the top of the dashboard, and the name under the icon on a phone. At most 24 characters, so it stays readable on a small screen. Blank = LocalHome. Takes effect when the page is reloaded, with no restart.",
-    "settings_saved_live": "Saved. Reload the page to see the new name."
+    "settings_saved_live": "Saved. Reload the page to see the new name.",
+    "zones_fresh_note": "On a fresh installation both zones start simulated: you can save, restart and watch the thermostat, the schedule and the history work with no device connected at all. Switch a zone to \"Shelly\" once the device is installed and you have its id."
   },
   "vmc_presets": {
     "night": "Night",

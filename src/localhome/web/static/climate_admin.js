@@ -118,7 +118,11 @@ const LOW_BATTERY_PCT = 10;
 // ------------------------------------------------------------ config form ----
 
 function zoneFormHtml(zone, index) {
-  const z = zone || { name: "", sensor_mode: "shelly", sensor_device_id: "", valve_mode: "shelly", valve_device_id: "", cool_enabled: true };
+  // A zone that doesn't exist yet starts simulated: on a board with no
+  // hardware installed, "Shelly (real device)" can't even be saved (an
+  // id is required) and every status line would report a device nobody
+  // ever installed. Picking the real thing is one dropdown away.
+  const z = zone || { name: "", sensor_mode: "simulated", sensor_device_id: "", valve_mode: "simulated", valve_device_id: "", cool_enabled: true };
   const sensorOptions = SENSOR_MODES.map(
     m => `<option value="${m}" ${z.sensor_mode === m ? "selected" : ""}>${tr(`climate_admin.mode_${m}`)}</option>`
   ).join("");
@@ -185,6 +189,8 @@ async function loadMap() {
   // services/climate_map_store.py's snapshot_from_config().
   const zones = savedMap.zones || [null, null];
   document.getElementById("zone-forms").innerHTML = zones.map((z, i) => zoneFormHtml(z, i)).join("");
+  const fresh = document.getElementById("zones-fresh-note");
+  if (fresh) fresh.hidden = !!savedMap.configured;
   refreshAll();
 }
 
