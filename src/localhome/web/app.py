@@ -473,6 +473,22 @@ def _register_routes(app: Flask) -> None:
 
         return jsonify(covers=list(manager.covers), sensors=sensors)
 
+    # A cover that fails is asked again after this long, doubling up to
+    # the ceiling: every open page asks every 8s, and a device that isn't
+    # answering costs a full socket timeout each time - five of those had
+    # the board spending most of its time waiting on blinds that had
+    # nothing to say. The failure itself is still returned immediately,
+    # so the page keeps showing it.
+    COVER_RETRY_SECONDS = 30
+    COVER_RETRY_MAX_SECONDS = 300
+
+    def _cover_retry_due(name: str, now: float) -> bool:
+        last = app.config["COVER_READS"].get(name)
+        if not last or last.get("ok") or not last.get("at"):
+            return True
+        wait = min(COVER_RETRY_MAX_SECONDS, COVER_RETRY_SECONDS * 2 ** (last.get("failures", 1) - 1))
+        return now - last["at"] >= wait
+
     @app.route("/api/covers/<name>/status")
     def api_cover_status(name):
         manager: DeviceManager = app.config["MANAGER"]
@@ -480,10 +496,14 @@ def _register_routes(app: Flask) -> None:
         cover = manager.covers.get(name)
         if cover is None:
             return jsonify(ok=False, error=f"unknown cover '{name}'"), 404
+        now = time.time()
+        if not _cover_retry_due(name, now):
+            last = app.config["COVER_READS"][name]
+            return jsonify(ok=False, error=last["error"], code=last.get("code"), waiting=True), 502
         try:
             status = cover.status()
             positions.observe_state(cover, status["state"])
-            app.config["COVER_READS"][name] = {"ok": True, "at": time.time()}
+            app.config["COVER_READS"][name] = {"ok": True, "at": now}
             return jsonify(
                 ok=True,
                 state=status["state"],
@@ -491,7 +511,11 @@ def _register_routes(app: Flask) -> None:
                 calibrated=positions.is_calibrated(cover.id),
             )
         except Exception as exc:
-            app.config["COVER_READS"][name] = {"ok": False, "error": str(exc), "at": time.time()}
+            previous = app.config["COVER_READS"].get(name) or {}
+            app.config["COVER_READS"][name] = {
+                "ok": False, "error": str(exc), "code": getattr(exc, "code", None), "at": now,
+                "failures": (previous.get("failures", 0) if not previous.get("ok") else 0) + 1,
+            }
             return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None)), 502
 
     @app.route("/api/covers/<name>/action/<action>", methods=["POST"])
@@ -517,7 +541,9 @@ def _register_routes(app: Flask) -> None:
             for cover in targets:
                 cover.send(action)
         except Exception as exc:
-            return jsonify(ok=False, error=str(exc)), 502
+            return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None)), 502
+        for cover in targets:
+            app.config["COVER_READS"].pop(cover.name, None)  # it answered: poll it normally again
 
         if action in ("open", "close"):
             for cover in targets:

@@ -22,6 +22,13 @@ date rather than by tag.
   for 53h", and the admin panel's problems list separates "not heard yet
   since the board came up" from "offline" for the first couple of hours -
   a battery sensor's own heartbeat window.
+- **A cover that isn't answering is no longer asked every 8 seconds.**
+  Every open dashboard polls each cover, and a device that has stopped
+  answering costs a socket timeout per poll - with five dead blinds the
+  board spent most of its time waiting on them. A failing cover is
+  retried after 30s, then 60, 120, up to 5 minutes; the failure itself
+  is still shown immediately, and a button press is always sent (and
+  puts it back in the normal rhythm if it works).
 - **A Tuya device that isn't working now says so.** tinytuya reports a
   failure as a payload (`{"Error": "Check device key or version"}`)
   rather than raising, and the cover driver read `dps` straight out of
