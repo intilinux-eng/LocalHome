@@ -323,6 +323,33 @@ single connection to arduino-router, and its state is read from memory
 every 30 seconds - no network probes, no subprocesses. Where there's no
 matrix (a PC, a Raspberry Pi) it does nothing at all.
 
+## 12. A resource log, for boards left in the field
+
+A board handed over for weeks should come back with the answer to "does
+anything slowly grow?". A systemd timer appends one line every 10
+minutes to `~/localhome-resource-log.csv`: LocalHome's memory and peak,
+threads, open files and CPU time, arduino-router's and mosquitto's
+memory, the board's available memory, eMMC writes and the history
+database's size. About 17 KB a day, capped at a year of lines; it runs
+outside LocalHome, so it can't affect it and keeps logging if LocalHome
+stops.
+
+```bash
+cd ~/localhome
+sudo install -m 755 deploy/resource-log/localhome-resource-log.sh /usr/local/bin/
+sudo install -m 644 deploy/resource-log/localhome-resource-log.service deploy/resource-log/localhome-resource-log.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now localhome-resource-log.timer
+```
+
+Reading it: `column -t -s, ~/localhome-resource-log.csv | less`. Memory
+is in kB. What healthy looks like, measured on the test board over its
+first half hour: LocalHome's memory steps up by a few hundred kB the
+first time each page or feature is used, then stays flat (about 73 MB);
+threads and open files don't move; arduino-router stays flat. A steady
+climb over days, rather than steps that stop, is what to look for. To
+stop it: `sudo systemctl disable --now localhome-resource-log.timer`.
+
 ## What it costs on the board
 
 Measured on the 2 GB UNO Q right after this install:
