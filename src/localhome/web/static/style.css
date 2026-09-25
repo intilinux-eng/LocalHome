@@ -102,6 +102,12 @@ h1 {
   width: 14px;
   height: 14px;
 }
+
+/* `display: flex` above wins over the `hidden` attribute on its own,
+   which showed "return now" in the away box with no absence running. */
+.tbtn[hidden] {
+  display: none;
+}
 .tbtn:active {
   transform: scale(0.96);
   opacity: 0.85;

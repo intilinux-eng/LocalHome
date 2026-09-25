@@ -26,6 +26,13 @@
   gap: 4px;
 }
 
+/* `display: flex` above beats the `hidden` attribute on its own, which
+   left the device-id box on screen for a zone set to simulated/manual
+   (zoneFormHtml() in climate_admin.js hides it by setting `hidden`). */
+.admin-field[hidden] {
+  display: none;
+}
+
 .admin-field label {
   font-size: 0.72rem;
   color: var(--text-dim);
