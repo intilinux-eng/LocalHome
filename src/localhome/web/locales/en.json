@@ -39,7 +39,10 @@
     "badge_closed": "Closed",
     "badge_open": "Open",
     "error": "error: {error}",
-    "unreachable": "unreachable"
+    "unreachable": "unreachable",
+    "fault_unreachable": "not answering",
+    "fault_key": "key needs refreshing",
+    "fault_generic": "connection error"
   },
   "fields": {
     "power_w": "Power",

@@ -6,7 +6,25 @@ date rather than by tag.
 
 ## Unreleased
 
+### Fixed
+- **A Tuya device that isn't working now says so.** tinytuya reports a
+  failure as a payload (`{"Error": "Check device key or version"}`)
+  rather than raising, and the cover driver read `dps` straight out of
+  it - so five covers whose local keys had gone stale sat on the
+  dashboard showing "unknown", looking like devices that simply didn't
+  know their position. Their cards now read "key needs refreshing" or
+  "not answering", with the full reason on hover, and covers appear in
+  the admin panel's System status like every other device (nothing polls
+  them in the background, so they were missing from it entirely).
+
 ### Added
+- **A Tuya device that changed address finds its own way back.** The IP
+  in devices.json is now only a starting point: when a device stops
+  answering there, it's looked up by its device id on the LAN and the
+  new address is remembered in `config/tuya_addresses.json`, so a
+  router's DHCP shuffle heals itself instead of needing a re-scan. The
+  lookup is throttled per device, and a wrong-key error never triggers
+  one (the device is answering; scanning would only slow every poll).
 - **"The board isn't answering"**: when the dashboard stops getting
   replies it says so at the top, with the time of the last update, and
   dims the values instead of showing stale ones as if they were live. It

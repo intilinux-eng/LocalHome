@@ -205,6 +205,10 @@ async function refreshCovers(names) {
       const res = await fetch(`/api/covers/${encodeURIComponent(name)}/status`);
       const data = await res.json();
       if (data.ok) {
+        stateEl.className = "state";
+        stateEl.title = "";
+        const card = stateEl.closest(".card");
+        if (card) card.classList.remove("is-faulty");
         stateEl.textContent = (COVER_STATE_LABELS[data.state] || data.state) + (data.calibrated ? "" : tr("covers.not_calibrated"));
         if (document.activeElement !== sliderEl) {
           sliderEl.value = data.percent;
@@ -212,12 +216,26 @@ async function refreshCovers(names) {
           setCoverVisual(name, data.percent);
         }
       } else {
-        stateEl.textContent = tr("covers.error", { error: data.error });
+        showCoverFault(name, data.code, data.error);
       }
     } catch (e) {
-      stateEl.textContent = tr("covers.unreachable");
+      showCoverFault(name, null, tr("covers.unreachable"));
     }
   }
+}
+
+// What a driver's error code means for the person looking at the card:
+// the two a Tuya installation actually hits (drivers/tuya/client.py).
+const COVER_FAULTS = { 905: "covers.fault_unreachable", 914: "covers.fault_key" };
+
+function showCoverFault(name, code, detail) {
+  const id = slug(name);
+  const stateEl = document.getElementById(`cover-state-${id}`);
+  const card = stateEl.closest(".card");
+  stateEl.textContent = tr(COVER_FAULTS[code] || "covers.fault_generic");
+  stateEl.className = "state cover-fault";
+  stateEl.title = detail || "";     // the full reason, for whoever wants it
+  if (card) card.classList.add("is-faulty");
 }
 
 const COVER_ACTION_LABELS = {

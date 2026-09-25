@@ -104,8 +104,16 @@ python -m tinytuya scan
 
 Saves `config/snapshot.json` with device IDs and IPs. If a
 `config/devices.json` entry is missing its `ip` field (both Tuya drivers
-skip devices without one), merge it in from `snapshot.json` by matching
-on the device `id`.
+skip devices without one, and say so in the log), merge it in from
+`snapshot.json` by matching on the device `id`.
+
+**An address that changes later takes care of itself.** A Tuya device is
+reached by IP, and a router's DHCP can hand it a different one. When a
+device stops answering where it was, LocalHome looks it up by its device
+id - Tuya devices announce themselves on the LAN - and remembers the new
+address in `config/tuya_addresses.json`, which it starts from next time.
+The lookup is throttled (once every 5 minutes per device), so a device
+that's simply switched off doesn't cost a scan on every poll.
 
 ## 3. Enable the drivers
 
@@ -162,6 +170,28 @@ selecting text by hand.
 Expected if you don't actually have a project there - it confirms your
 network/IP is being correctly rejected by an unrelated data center, a
 useful sanity check but not the fix.
+
+**"Check device key or version" (error 914) - the device answers but
+nothing works**
+Its `local_key` changed. Tuya issues a new one whenever the device is
+re-paired, reset or re-added in the Smart Life app, and the key in
+`config/devices.json` stops matching - the device is right there on the
+network, but nothing can be decrypted. Re-run the wizard (step 1.5) to
+fetch the current keys:
+
+```bash
+cd config
+python -m tinytuya wizard      # writes fresh local_keys into devices.json
+```
+
+Then restart LocalHome. On the dashboard this state reads "key needs
+refreshing" on the device's card, and the admin panel's System status
+lists it among the problems.
+
+**"Network Error: Device Unreachable" (error 905)**
+Nothing answered at that address: the device is off, off the Wi-Fi, or
+it moved (see the note in step 2 - LocalHome looks it up and heals that
+case by itself). The card reads "not answering".
 
 **A cover/sensor doesn't show up on the dashboard**
 Check it has an `ip` field in `devices.json` (see step 2) and that its

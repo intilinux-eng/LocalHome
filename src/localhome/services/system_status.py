@@ -380,6 +380,25 @@ def device_health(manager) -> list[dict]:
     return devices
 
 
+def cover_health(last_reads: dict, now: float | None = None) -> list[dict]:
+    """Covers are the one kind of device nothing polls in the background:
+    they're read when the dashboard asks. This turns what those reads
+    last said into the same shape device_health() produces, so an
+    unreachable cover shows up in the system status like anything else.
+    A cover nobody has opened the dashboard for yet simply isn't listed."""
+    now = time.time() if now is None else now
+    return [
+        {
+            "name": name,
+            "kind": "cover",
+            "ok": bool(read.get("ok")),
+            "error": None if read.get("ok") else read.get("error"),
+            "seconds_since_update": round(now - read["at"]) if read.get("at") else None,
+        }
+        for name, read in sorted(last_reads.items())
+    ]
+
+
 def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, now: float | None = None) -> dict:
     """Whether a background loop is still completing its cycles. Stalled
     after three missed intervals - but not during the first ones after

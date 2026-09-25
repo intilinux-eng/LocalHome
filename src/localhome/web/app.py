@@ -264,6 +264,9 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
     app.config["VMC_SCHEDULE"] = vmc
+    # What each cover's last read said - covers are read on demand, not
+    # polled, so this is where the system status learns about them.
+    app.config["COVER_READS"] = {}
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
@@ -397,7 +400,7 @@ def _register_routes(app: Flask) -> None:
             loops.append(
                 system_status.loop_health("thermostat", thermostat.last_tick_ok_ts, thermostat.poll_interval_seconds, now)
             )
-        devices = system_status.device_health(manager)
+        devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
         failed = manager.failed_integrations
         skipped = skipped_driver_modules()
         disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
@@ -473,6 +476,7 @@ def _register_routes(app: Flask) -> None:
         try:
             status = cover.status()
             positions.observe_state(cover, status["state"])
+            app.config["COVER_READS"][name] = {"ok": True, "at": time.time()}
             return jsonify(
                 ok=True,
                 state=status["state"],
@@ -480,7 +484,8 @@ def _register_routes(app: Flask) -> None:
                 calibrated=positions.is_calibrated(cover.id),
             )
         except Exception as exc:
-            return jsonify(ok=False, error=str(exc)), 502
+            app.config["COVER_READS"][name] = {"ok": False, "error": str(exc), "at": time.time()}
+            return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None)), 502
 
     @app.route("/api/covers/<name>/action/<action>", methods=["POST"])
     def api_cover_action(name, action):

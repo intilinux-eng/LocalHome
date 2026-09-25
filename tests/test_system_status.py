@@ -351,3 +351,25 @@ def test_problem_details_drop_the_list_of_every_driver():
                                               "error": error}], {"low": False})
     assert problem["detail"].endswith("(needs: pip install -e .[tplink]).")
     assert "Available kind/type" not in problem["detail"]
+
+
+def test_cover_health_reports_what_the_last_read_said():
+    now = 1_000_000
+    devices = system_status.cover_health({
+        "Kitchen Blind": {"ok": True, "at": now - 8},
+        "Bedroom Blind": {"ok": False, "error": "Bedroom Blind: Check device key or version", "at": now - 20},
+    }, now=now)
+
+    assert [d["name"] for d in devices] == ["Bedroom Blind", "Kitchen Blind"]
+    assert devices[0] == {"name": "Bedroom Blind", "kind": "cover", "ok": False,
+                          "error": "Bedroom Blind: Check device key or version", "seconds_since_update": 20}
+    assert devices[1]["ok"] is True and devices[1]["error"] is None
+
+
+def test_an_unreachable_cover_becomes_a_problem():
+    devices = system_status.cover_health({"Kitchen Blind": {"ok": False, "error": "no answer", "at": 1}})
+
+    found = system_status.problems(devices, [], {"low": False, "path": "/"})
+
+    assert [p["code"] for p in found] == ["device_offline"]
+    assert found[0]["subject"] == "Kitchen Blind"

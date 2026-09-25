@@ -9,7 +9,7 @@ from typing import Any
 
 from localhome.core.interfaces import PollingDriver
 from localhome.core.registry import register_driver
-from localhome.drivers.tuya.client import load_devices, make_device
+from localhome.drivers.tuya.client import TuyaConnection, address_book_for, load_devices
 
 CATEGORY = "hjjcy"
 
@@ -30,18 +30,15 @@ FIELDS = {
 class TuyaAirQualityDriver(PollingDriver):
     history_fields = ("temperature_c", "humidity_pct")
 
-    def __init__(self, entry: dict, poll_interval_seconds: float = 30.0):
+    def __init__(self, entry: dict, poll_interval_seconds: float = 30.0, addresses=None):
         self.name = entry["name"]
         self._entry = entry
         self._version = entry.get("version", 3.5)
         self.poll_interval_seconds = poll_interval_seconds
+        self._connection = TuyaConnection(entry, version=self._version, addresses=addresses)
 
     def read(self) -> dict[str, Any]:
-        device = make_device(self._entry, version=self._version)
-        status = device.status()
-        dps = status.get("dps")
-        if not dps:
-            raise RuntimeError(status.get("Error") or f"unexpected response: {status}")
+        dps = self._connection.status()
 
         reading: dict[str, Any] = {"ok": True, "name": self.name}
         for dp_id, (key, transform) in FIELDS.items():
@@ -65,4 +62,5 @@ class TuyaAirQualityDriver(PollingDriver):
 def _create(options: dict) -> list[TuyaAirQualityDriver]:
     poll_interval = options.get("poll_interval_seconds", 30.0)
     entries = load_devices(options["devices_file"], category=CATEGORY)
-    return [TuyaAirQualityDriver(e, poll_interval_seconds=poll_interval) for e in entries]
+    addresses = address_book_for(options["devices_file"])
+    return [TuyaAirQualityDriver(e, poll_interval_seconds=poll_interval, addresses=addresses) for e in entries]

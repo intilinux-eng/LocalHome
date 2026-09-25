@@ -39,7 +39,10 @@
     "badge_closed": "Chiusa",
     "badge_open": "Aperta",
     "error": "errore: {error}",
-    "unreachable": "non raggiungibile"
+    "unreachable": "non raggiungibile",
+    "fault_unreachable": "non risponde",
+    "fault_key": "chiave da aggiornare",
+    "fault_generic": "errore di collegamento"
   },
   "fields": {
     "power_w": "Potenza",

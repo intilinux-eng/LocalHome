@@ -13,33 +13,28 @@ from typing import Any
 
 from localhome.core.interfaces import CoverDriver
 from localhome.core.registry import register_driver
-from localhome.drivers.tuya.client import load_devices, make_device
+from localhome.drivers.tuya.client import TuyaConnection, address_book_for, load_devices
 
 DEFAULT_CATEGORIES = ("clkg", "tdq")
 
 
 class TuyaCoverDriver(CoverDriver):
-    def __init__(self, entry: dict, version: float = 3.4):
+    def __init__(self, entry: dict, version: float = 3.4, addresses=None):
         self.id = entry["id"]
         self.name = entry["name"]
         self._entry = entry
-        self._version = version
-
-    def _device(self):
-        return make_device(self._entry, version=self._version)
+        self._connection = TuyaConnection(entry, version=version, addresses=addresses)
 
     def status(self) -> dict[str, Any]:
-        raw = self._device().status()
-        dps = raw.get("dps", {})
-        return {"state": dps.get("1", "unknown"), "raw": raw}
+        dps = self._connection.status()
+        return {"state": dps.get("1", "unknown"), "raw": {"dps": dps}}
 
     def send(self, action: str) -> None:
-        self._device().set_value(1, action)
+        self._connection.set_value(1, action)
 
     def read_travel_time(self, default: float = 15.0) -> float:
         try:
-            raw = self._device().status()
-            dps = raw.get("dps", {})
+            dps = self._connection.status()
             if "10" in dps:
                 return float(dps["10"])
         except Exception:
@@ -53,4 +48,5 @@ def _create(options: dict) -> list[TuyaCoverDriver]:
     categories = options.get("categories", DEFAULT_CATEGORIES)
     version = options.get("version", 3.4)
     entries = [e for e in load_devices(options["devices_file"]) if e.get("category") in categories]
-    return [TuyaCoverDriver(e, version=version) for e in entries]
+    addresses = address_book_for(options["devices_file"])
+    return [TuyaCoverDriver(e, version=version, addresses=addresses) for e in entries]

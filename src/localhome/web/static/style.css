@@ -1691,3 +1691,16 @@ select,
 textarea {
   font-size: 16px;
 }
+
+/* A cover that isn't answering: its position on screen is meaningless
+   until it does, so the card says why and stops pretending. */
+.cover-fault {
+  color: var(--accent-close);
+  font-weight: 600;
+}
+.card.is-faulty {
+  border-color: rgba(255, 69, 58, 0.45);
+}
+.card.is-faulty .visual {
+  opacity: 0.35;
+}
