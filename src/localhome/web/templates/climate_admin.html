@@ -49,6 +49,7 @@
       <a href="#vmc">{{ t.climate_admin.vmc_heading }}</a>
       <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
       <a href="#maintenance">{{ t.climate_admin.maint_heading }}</a>
+      <a href="#led-matrix">{{ t.climate_admin.led_heading }}</a>
       <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
       <a href="#how-it-works">{{ t.climate_admin.guide_how_link }}</a>
     </nav>
@@ -303,6 +304,27 @@
         </div>
       </div>
     <p class="hint-text" id="maintenance-result"></p>
+  </details>
+
+  <!-- What the UNO Q's LED matrix is showing and what every picture
+       on it means - for whoever will stand in front of the box. The
+       legend is drawn by the server with the same code that drives the
+       LEDs (services/led_matrix.py), so the two can't drift apart. -->
+  <details class="admin-details" id="led-matrix">
+    <summary>{{ t.climate_admin.led_heading }} <span id="led-matrix-summary" class="admin-broker-status"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.led_note }}</p>
+    <p class="hint-text" id="led-matrix-status"></p>
+    <div class="led-live">
+      <div id="led-matrix-mirror"></div>
+      <div>
+        <p class="led-live-label">{{ t.climate_admin.led_live_label }}</p>
+        <p id="led-matrix-now"></p>
+      </div>
+    </div>
+    <h3 class="admin-subheading">{{ t.climate_admin.led_legend_heading }}</h3>
+    <div class="led-legend" id="led-matrix-legend"></div>
+    <h3 class="admin-subheading">{{ t.climate_admin.led_codes_heading }}</h3>
+    <div class="led-codes" id="led-matrix-codes"></div>
   </details>
 
   <!-- Open by default: this is what someone diagnosing the board came

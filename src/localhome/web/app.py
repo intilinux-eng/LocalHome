@@ -32,7 +32,7 @@ from localhome.services.climate_map_store import (
 )
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
-from localhome.services import panel_settings
+from localhome.services import led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
@@ -316,6 +316,12 @@ def create_app(config_path: str | None = None) -> Flask:
     )
 
     _register_routes(app)
+    # The UNO Q's LED matrix: health at a glance for whoever is standing
+    # in front of the box - off by itself on anything that isn't a UNO Q
+    # (no arduino-router socket). See services/led_matrix.py.
+    matrix = led_matrix.LedMatrixService(lambda: _matrix_state(app), ip_provider=_lan_ip)
+    app.config["LED_MATRIX"] = matrix
+    matrix.start()
     return app
 
 
@@ -343,6 +349,73 @@ def _set_roles(roles: dict) -> dict:
     nothing saved at all build the same drivers, so a cleared field isn't
     a pending change."""
     return {key: value for key, value in (roles or {}).items() if value}
+
+
+def _health(app: Flask) -> dict:
+    """What the system status is built from - shared with the LED matrix,
+    which shows the same problems as codes."""
+    manager: DeviceManager = app.config["MANAGER"]
+    store: HistoryStore = app.config["HISTORY"]
+    recorder: HistoryRecorder = app.config["RECORDER"]
+    thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+    now = time.time()
+    loops = [system_status.loop_health("history", recorder.last_write_ok_ts, recorder.poll_interval_seconds, now)]
+    if thermostat is not None:
+        loops.append(
+            system_status.loop_health("thermostat", thermostat.last_tick_ok_ts, thermostat.poll_interval_seconds, now)
+        )
+    devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
+    failed = manager.failed_integrations
+    disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
+    host = system_status.host_stats()
+    storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
+    network = system_status.network_status()
+    return {
+        "devices": devices, "failed": failed, "disk": disk, "loops": loops, "host": host,
+        "storage": storage, "network": network,
+        "problems": system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host),
+    }
+
+
+def _matrix_state(app: Flask) -> led_matrix.MatrixState:
+    """What the LED matrix needs to know: the season, away/diagnostic,
+    each zone's valve, and the problems as codes."""
+    manager: DeviceManager = app.config["MANAGER"]
+    thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+    config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+    zones = thermostat.zones if thermostat else []
+    broker_file = config.resolve("mqtt_broker.json")
+    uses_mqtt = any(i.type.startswith("mqtt") or i.type.startswith("shelly") for i in config.integrations)
+    broker_down = bool(uses_mqtt and os.path.exists(broker_file) and not check_broker(broker_file).get("reachable"))
+    state = led_matrix.MatrixState(
+        thermostat=thermostat is not None,
+        problems=led_matrix.problem_codes(_health(app)["problems"], zones, broker_down),
+    )
+    if thermostat is not None:
+        store = thermostat.schedule_store
+        state.mode = store.get_mode()
+        state.away = store.get_away_until() is not None
+        state.diagnostic = store.get_diagnostic_mode()
+        for zone in zones:
+            reading = manager.sensor_reading(zone.valve)
+            state.zones.append(bool(reading["is_on"]) if reading.get("ok") and "is_on" in reading else None)
+            state.zone_names.append(zone.name)
+    return state
+
+
+def _lan_ip() -> str | None:
+    """The address other machines reach this board at - the one the
+    matrix scrolls at start-up. A UDP "connect" sends nothing; it only
+    asks the kernel which interface would be used."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))
+            ip = probe.getsockname()[0]
+        return None if ip.startswith("127.") else ip
+    except OSError:
+        return None
 
 
 def _register_routes(app: Flask) -> None:
@@ -436,44 +509,40 @@ def _register_routes(app: Flask) -> None:
         # whether the background loops are still cycling, and the
         # process/disk/database numbers that tell a slow leak or a disk
         # filling up apart from normal - see services/system_status.py.
-        manager: DeviceManager = app.config["MANAGER"]
-        store: HistoryStore = app.config["HISTORY"]
-        recorder: HistoryRecorder = app.config["RECORDER"]
-        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
-
-        now = time.time()
-        database = _database_stats()
-
-        loops = [system_status.loop_health("history", recorder.last_write_ok_ts, recorder.poll_interval_seconds, now)]
-        if thermostat is not None:
-            loops.append(
-                system_status.loop_health("thermostat", thermostat.last_tick_ok_ts, thermostat.poll_interval_seconds, now)
-            )
-        devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
-        failed = manager.failed_integrations
-        skipped = skipped_driver_modules()
-        disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
-        host = system_status.host_stats()
-        storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
-        network = system_status.network_status()
+        health = _health(app)
         return jsonify(
             ok=True,
-            problems=system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host),
+            problems=health["problems"],
             boots=system_status.boot_history(),
             software=app.config["SOFTWARE_VERSION"],
-            network=network,
-            storage=storage,
-            failed_integrations=failed,
-            skipped_driver_modules=skipped,
-            devices=devices,
-            loops=loops,
+            network=health["network"],
+            storage=health["storage"],
+            failed_integrations=health["failed"],
+            skipped_driver_modules=skipped_driver_modules(),
+            devices=health["devices"],
+            loops=health["loops"],
             process=system_status.process_stats(),
-            host=host,
-            disk=disk,
-            database=database,
+            host=health["host"],
+            disk=health["disk"],
+            database=_database_stats(),
             config_path=str(config.path),
         )
+
+    @app.route("/api/climate-admin/led-matrix")
+    def api_led_matrix():
+        # The admin panel's "LED matrix" section: whether it's drawing (or
+        # why not), what's on it right now for the live mirror, and every
+        # screen it can show for the legend - drawn by the same code that
+        # drives the LEDs, see services/led_matrix.py.
+        service: led_matrix.LedMatrixService | None = app.config.get("LED_MATRIX")
+        data = service.status() if service else {"status": "off", "error": None, "frames_sent": 0, "screen": None}
+        if request.args.get("legend"):
+            # Once per page load - the mirror itself is polled several
+            # times a second and doesn't need it every time.
+            data["legend"] = led_matrix.legend()
+            data["codes"] = sorted({*led_matrix.PROBLEM_CODES.values(), "S1", "S2", "V1", "V2", "DV", "MQ"})
+        return jsonify(ok=True, **data)
 
     @app.route("/api/devices")
     def api_devices():

@@ -667,3 +667,69 @@
   padding-top: 6px;
   border-top: 1px solid var(--card-border);
 }
+
+/* The LED matrix section - see refreshLedMatrix() in climate_admin.js.
+   Each <i> is one LED; --l is its brightness, 0 to 7, as sent to the
+   board. Off LEDs stay faintly visible so the grid reads as a grid. */
+.led-grid {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 3px;
+  padding: 8px;
+  background: #05070b;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+.led-grid i {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(120, 180, 255, calc(0.08 + var(--l) / 7 * 0.92));
+  box-shadow: 0 0 calc(var(--l) * 1px) rgba(120, 180, 255, calc(var(--l) / 7 * 0.8));
+}
+/* The mirror's box has the width, not the grid: a percentage of a flex
+   child with no width of its own collapses to nothing. */
+#led-matrix-mirror { flex: none; width: min(100%, 300px); }
+.led-grid.large { width: 100%; box-sizing: border-box; }
+.led-grid.small { width: 104px; gap: 1.5px; padding: 5px; border-radius: 7px; flex: none; }
+.led-live {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0 18px;
+}
+.led-live > div:last-child { flex: 1; min-width: 200px; }
+.led-live-label { margin: 0 0 4px; font-size: 0.72rem; color: var(--text-dim); }
+#led-matrix-now { margin: 0; font-weight: 600; }
+.led-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.led-legend-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+}
+.led-legend-item strong { display: block; font-size: 0.85rem; margin-bottom: 2px; }
+.led-legend-item .hint-text { margin: 0; display: block; }
+.led-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px 14px;
+}
+.led-code { display: flex; gap: 10px; align-items: baseline; font-size: 0.82rem; }
+.led-code code {
+  flex: none;
+  min-width: 2.4em;
+  text-align: center;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}

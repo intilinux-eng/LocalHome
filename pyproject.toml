@@ -19,6 +19,9 @@ dependencies = [
     "requests>=2.31",
     "PyYAML>=6.0",
     "paho-mqtt>=2.0",
+    # arduino-router (the UNO Q's Linux-to-MCU bridge) speaks msgpack-RPC -
+    # for the LED matrix, see services/led_matrix.py.
+    "msgpack>=1.0",
 ]
 
 [project.optional-dependencies]

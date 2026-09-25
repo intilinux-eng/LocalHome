@@ -1524,6 +1524,97 @@ async function runMaintenance(action, button) {
   if (action === "clear-schedules") refreshStatus();
 }
 
+// ----------------------------------------------------------- LED matrix ----
+// The UNO Q's 13x8 LEDs - see services/led_matrix.py. The mirror polls
+// every 350 ms, and only while the section is open: nobody is watching
+// it otherwise. Not every second: the heartbeat changes every half
+// second, and a 1 s poll would always catch it in the same phase.
+
+const LED_POLL_MS = 350;
+
+let ledTimer = null;
+let ledLegendDrawn = false;
+
+function ledGridHtml(frame, size) {
+  return `<div class="led-grid ${size}" aria-hidden="true">${
+    frame.map(row => row.map(level => `<i style="--l:${level}"></i>`).join("")).join("")}</div>`;
+}
+
+function ledCodeMeaning(code) {
+  const zone = code.match(/^([SV])([12])$/);
+  if (zone) return tr(`climate_admin.led_code_${zone[1]}`, { zone: zone[2] });
+  return tr(`climate_admin.led_code_${code}`);
+}
+
+// In words, what the matrix is showing right now.
+function ledNowText(screen, state) {
+  if (!screen) return "";
+  if (screen.screen === "boot") return tr("climate_admin.led_now_boot", { ip: screen.ip });
+  if (screen.screen === "problem") {
+    return tr("climate_admin.led_now_problem", { code: screen.code, meaning: ledCodeMeaning(screen.code), subject: screen.subject });
+  }
+  if (!state || !state.thermostat || !(state.zones || []).length) return tr("climate_admin.led_now_idle");
+  const what = state.diagnostic ? tr("climate_admin.led_legend_diagnostic_title")
+    : state.away ? tr("climate_admin.led_legend_away_title")
+    : tr(`climate_admin.led_legend_${state.mode === "cool" ? "cool" : "heat"}_title`);
+  const zones = state.zones.slice(0, 2).map((open, i) => tr(
+    open === true ? "climate_admin.led_now_zone_open" : open === false ? "climate_admin.led_now_zone_closed" : "climate_admin.led_now_zone_unknown",
+    { zone: (state.zone_names || [])[i] || String(i + 1) }));
+  return [what, ...zones].join(" · ");
+}
+
+async function refreshLedMatrix() {
+  let data;
+  try {
+    data = await (await fetch(`/api/climate-admin/led-matrix${ledLegendDrawn ? "" : "?legend=1"}`)).json();
+  } catch (e) {
+    return;
+  }
+  if (!data.ok) return;
+  const running = data.status === "running";
+  document.getElementById("led-matrix-summary").innerHTML =
+    `<span class="admin-status ${running ? "ok" : data.status === "no_router" || data.status === "off" ? "neutral" : "bad"}">${
+      escapeHtml(tr(`climate_admin.led_status_short_${data.status}`))}</span>`;
+  const status = document.getElementById("led-matrix-status");
+  status.textContent = tr(`climate_admin.led_status_${data.status}`, { error: data.error || "" });
+  // Red only for what someone should fix: a board with no matrix at all
+  // (a PC, a Raspberry Pi) isn't a fault.
+  status.className = `hint-text ${data.status === "no_sketch" || data.status === "error" ? "admin-error" : ""}`;
+  if (data.screen) {
+    document.getElementById("led-matrix-mirror").innerHTML = ledGridHtml(data.screen.frame, "large");
+    document.getElementById("led-matrix-now").textContent = ledNowText(data.screen, data.state);
+  }
+  if (!ledLegendDrawn && data.legend) {
+    ledLegendDrawn = true;
+    document.getElementById("led-matrix-legend").innerHTML = data.legend.map(entry => `
+      <div class="led-legend-item">
+        ${ledGridHtml(entry.frame, "small")}
+        <div>
+          <strong>${escapeHtml(tr(`climate_admin.led_legend_${entry.key}_title`))}</strong>
+          <span class="hint-text">${escapeHtml(tr(`climate_admin.led_legend_${entry.key}`))}</span>
+        </div>
+      </div>`).join("");
+    document.getElementById("led-matrix-codes").innerHTML = data.codes.map(code => `
+      <div class="led-code"><code>${escapeHtml(code)}</code><span>${escapeHtml(ledCodeMeaning(code))}</span></div>`).join("");
+  }
+}
+
+function watchLedMatrix() {
+  const section = document.getElementById("led-matrix");
+  if (!section) return;
+  const sync = () => {
+    if (ledTimer) clearInterval(ledTimer);
+    ledTimer = null;
+    if (section.open && !document.hidden) {
+      refreshLedMatrix();
+      ledTimer = setInterval(refreshLedMatrix, LED_POLL_MS);
+    }
+  };
+  section.addEventListener("toggle", sync);
+  document.addEventListener("visibilitychange", sync);
+  refreshLedMatrix();   // the header's status, even while it's collapsed
+}
+
 // -------------------------------------------------------------- polling ----
 // Fast enough to watch live during install verification, but paused
 // while the tab isn't focused so a session left open all day doesn't
@@ -1556,6 +1647,7 @@ loadExtraSensor();
 loadVmc();
 loadMaintenance();
 loadSettings();
+watchLedMatrix();
 
 // A link to a collapsed section (the guide's, or a bookmark) opens it.
 function openLinkedSection() {
