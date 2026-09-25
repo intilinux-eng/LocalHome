@@ -157,30 +157,36 @@ def test_what_needs_a_subprocess_stays_off_the_matrix():
 # ------------------------------------------------------------ the bridge --
 
 class FakeRouter:
-    """Answers one msgpack-RPC request on the other end of a socketpair."""
+    """Answers msgpack-RPC requests on the other end of a socketpair, for
+    as long as the connection stays open."""
 
     def __init__(self, answer):
         self.answer = answer
         self.requests = []
+        self.connections = 0
+        self.sockets = []
 
     def connect(self):
         ours, theirs = socket.socketpair()
+        self.connections += 1
+        self.sockets.append(theirs)
         threading.Thread(target=self._serve, args=(theirs,), daemon=True).start()
         return ours
 
     def _serve(self, sock):
         unpacker = msgpack.Unpacker(raw=False)
         while True:
-            chunk = sock.recv(4096)
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                return
             if not chunk:
-                break
+                return
             unpacker.feed(chunk)
             for request in unpacker:
                 self.requests.append(request)
                 error, result = self.answer(request)
                 sock.sendall(msgpack.packb([1, request[1], error, result]))
-                sock.close()
-                return
 
 
 def test_the_client_speaks_msgpack_rpc():
@@ -190,6 +196,30 @@ def test_the_client_speaks_msgpack_rpc():
     assert client.call("lh_frame", "0" * 104) is True
     kind, _, method, params = router.requests[0]
     assert (kind, method, params) == (0, "lh_frame", ["0" * 104])
+
+
+def test_one_connection_serves_every_frame():
+    """86,400 frames a day must not be 86,400 connections for the router."""
+    router = FakeRouter(lambda req: (None, True))
+    client = lm.RouterClient(connect=router.connect)
+
+    for _ in range(50):
+        assert client.call("lh_frame", "0" * 104) is True
+
+    assert router.connections == 1 and len(router.requests) == 50
+
+
+def test_a_dropped_connection_is_opened_again_on_the_next_call():
+    router = FakeRouter(lambda req: (None, True))
+    client = lm.RouterClient(connect=router.connect)
+    client.call("lh_frame", "0" * 104)
+
+    router.sockets[0].close()          # the router restarts
+    with pytest.raises(OSError):
+        client.call("lh_frame", "0" * 104)
+    assert client.call("lh_frame", "0" * 104) is True
+
+    assert router.connections == 2
 
 
 def test_a_method_nobody_provides_is_an_error_not_a_result():
@@ -260,6 +290,22 @@ def test_a_missing_sketch_is_reported_and_retried_later_not_every_frame():
     clock.now += wait
     service.step()
     assert service.status()["status"] == "running", "the sketch loaded later is picked up with no restart"
+
+
+def test_one_hiccup_is_retried_at_once_a_repeated_failure_backs_off():
+    """A single lost connection must not leave the matrix dark for long
+    enough (20 s) that the sketch says LocalHome has stopped."""
+    client, clock = FakeClient(), Clock()
+    service = lm.LedMatrixService(lambda: lm.MatrixState(), client=client, clock=clock)
+    service.step()                                   # running
+
+    client.error = ConnectionError("arduino-router closed the connection")
+    assert service.step() == lm.LedMatrixService.QUICK_RETRY_SECONDS
+    assert service.step() == lm.LedMatrixService.RETRY_SECONDS
+
+    client.error = None
+    service.step()
+    assert service.status()["status"] == "running"
 
 
 def test_where_there_is_no_matrix_it_does_no_work_at_all():

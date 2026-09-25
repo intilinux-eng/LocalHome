@@ -356,14 +356,21 @@ class RouterError(Exception):
 
 class RouterClient:
     """msgpack-RPC to arduino-router: [0, id, method, params] out,
-    [1, id, error, result] back. One short connection per call - at two
-    frames a second that's nothing, and nothing stale to recover from."""
+    [1, id, error, result] back.
+
+    One connection, kept open and reused - a frame a second over a fresh
+    connection each time would be 86,400 connections a day for the router
+    to set up and tear down, forever. Any error drops it; the next call
+    opens a new one (the router restarting is the usual reason)."""
 
     def __init__(self, path: str = ROUTER_SOCKET, timeout: float = 2.0, connect=None):
         self.path = path
         self.timeout = timeout
         self._connect = connect or self._unix_connect
         self._id = 0
+        self._sock = None
+        self._unpacker = None
+        self.connections = 0   # how many times it had to (re)connect - for the tests and the curious
 
     def _unix_connect(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -374,28 +381,44 @@ class RouterClient:
     def available(self) -> bool:
         return os.path.exists(self.path)
 
+    def close(self) -> None:
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+        self._sock = None
+        self._unpacker = None
+
     def call(self, method: str, *params):
         import msgpack
 
+        if self._sock is None:
+            self._sock = self._connect()
+            self._unpacker = msgpack.Unpacker(raw=False)
+            self.connections += 1
         self._id = (self._id + 1) % 1_000_000
         msg_id = self._id
-        sock = self._connect()
         try:
-            sock.sendall(msgpack.packb([0, msg_id, method, list(params)]))
-            unpacker = msgpack.Unpacker(raw=False)
+            self._sock.sendall(msgpack.packb([0, msg_id, method, list(params)]))
             while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    raise ConnectionError("arduino-router closed the connection")
-                unpacker.feed(chunk)
-                for message in unpacker:
+                # A late answer to an earlier call that timed out is
+                # skipped: only this call's id is ours.
+                for message in self._unpacker:
                     if isinstance(message, list) and len(message) == 4 and message[0] == 1 and message[1] == msg_id:
                         if message[2] is not None:
                             error = message[2]
                             raise RouterError(error[1] if isinstance(error, list) and len(error) > 1 else str(error))
                         return message[3]
-        finally:
-            sock.close()
+                chunk = self._sock.recv(4096)
+                if not chunk:
+                    raise ConnectionError("arduino-router closed the connection")
+                self._unpacker.feed(chunk)
+        except RouterError:
+            raise   # an answer, not a broken connection
+        except Exception:
+            self.close()
+            raise
 
 
 # ------------------------------------------------------------ the service --
@@ -410,6 +433,7 @@ class LedMatrixService:
     LocalHome restart."""
 
     RETRY_SECONDS = 30.0
+    QUICK_RETRY_SECONDS = 2.0
 
     def __init__(self, state_provider, client: RouterClient | None = None, ip_provider=None, clock=time.monotonic):
         self.state_provider = state_provider
@@ -482,8 +506,13 @@ class LedMatrixService:
             self._set_status("no_sketch" if "not available" in str(exc) else "error", str(exc))
             return self.RETRY_SECONDS
         except OSError as exc:
+            # One hiccup while all was well (the router restarting, a lost
+            # connection) is retried at once on a fresh connection: waiting
+            # 30 s would let the sketch show its "LocalHome stopped" X for
+            # nothing. Only a failure that repeats backs off.
+            quick = self._status == "running"
             self._set_status("error", str(exc))
-            return self.RETRY_SECONDS
+            return self.QUICK_RETRY_SECONDS if quick else self.RETRY_SECONDS
         self._frames_sent += 1
         self._set_status("running", None)
         return SCROLL_STEP_SECONDS if screen["screen"] == "boot" else FRAME_SECONDS
