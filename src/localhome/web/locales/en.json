@@ -212,7 +212,13 @@
     "vmc_program_off": "Off: the speed stays whatever you set.",
     "vmc_program_running": "On: {period} {value}% until {until}.",
     "vmc_same_time": "Day and night must start at different times.",
-    "tile_stale": "reading is {age} old"
+    "tile_stale": "reading is {age} old",
+    "copy_zone_label": "Copy the whole schedule to:",
+    "copy_zone_confirm": "Copy {from}'s {season} schedule onto {to}? {to}'s current {season} schedule is replaced.",
+    "copy_zone_button": "Copy",
+    "copy_zone_done": "Schedule copied to {to}.",
+    "season_name_heat": "winter",
+    "season_name_cool": "summer"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",

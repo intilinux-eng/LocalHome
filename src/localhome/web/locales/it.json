@@ -212,7 +212,13 @@
     "vmc_program_off": "Non attivo: la velocità resta quella che imposti tu.",
     "vmc_program_running": "Attivo: {period} {value}% fino alle {until}.",
     "vmc_same_time": "Giorno e notte devono iniziare a orari diversi.",
-    "tile_stale": "dato di {age} fa"
+    "tile_stale": "dato di {age} fa",
+    "copy_zone_label": "Copia tutta la programmazione su:",
+    "copy_zone_confirm": "Copiare la programmazione {season} di {from} su {to}? La programmazione {season} attuale di {to} viene sostituita.",
+    "copy_zone_button": "Copia",
+    "copy_zone_done": "Programmazione copiata su {to}.",
+    "season_name_heat": "invernale",
+    "season_name_cool": "estiva"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",

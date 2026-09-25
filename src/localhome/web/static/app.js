@@ -2055,6 +2055,7 @@ function buildZoneCard(zone) {
           <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', true)">${tr("climate.copy_weekdays")}</button>
           <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', false)">${tr("climate.copy_monday")}</button>
         </div>
+        ${copyToZoneHtml(zone)}
       </div>
 
       <div class="zone-pane" ${paneAttrs("history")}>
@@ -2200,6 +2201,48 @@ function paintCell(zoneId, cell) {
 function selectPaintValue(btn) {
   paintValue = btn.dataset.value === "" ? null : Number(btn.dataset.value);
   document.querySelectorAll(".sched-swatch").forEach(b => b.classList.toggle("active", b.dataset.value === btn.dataset.value));
+}
+
+// The other zones this season's schedule can be copied onto. In cooling
+// a bathroom is left out of the season entirely (zoneExcluded), so it
+// isn't offered there - the button only shows up when there's really
+// another grid to fill.
+function copyTargets(zone) {
+  return climateZones.filter(other => other.name !== zone.name && !zoneExcluded(other));
+}
+
+function copyToZoneHtml(zone) {
+  const targets = copyTargets(zone);
+  if (!targets.length) return "";
+  return `
+        <div class="zone-actions">
+          <span class="copy-label">${tr("climate.copy_zone_label")}</span>
+          ${targets.map(target => `
+            <button class="range-btn" onclick="copyScheduleToZone('${zone.name}', '${target.name}')">${target.name}</button>`).join("")}
+        </div>`;
+}
+
+// The whole week, for the season on screen only - heating and cooling
+// keep their own grids, and copying one over the other is never what
+// someone means here.
+async function copyScheduleToZone(fromName, toName) {
+  const week = scheduleWeeks[fromName];
+  if (!week) return;
+  const season = tr(`climate.season_name_${scheduleWeekModes[fromName] || climateMode}`);
+  const ok = await confirmAction(tr("climate.copy_zone_confirm", { from: fromName, to: toName, season }),
+                                 { confirmLabel: tr("climate.copy_zone_button") });
+  if (!ok) return;
+  const copy = {};
+  for (const day of DAY_KEYS) copy[day] = week[day].slice();
+  scheduleWeeks[toName] = copy;
+  scheduleWeekModes[toName] = scheduleWeekModes[fromName] || climateMode;
+  buildScheduleGrid(slug(toName), copy);
+  updateEmptyScheduleHint(toName);
+  const zone = climateZones.find(z => z.name === toName);
+  if (zone) updateZoneNext(zone);
+  await saveSchedule(toName);
+  updateNowHighlight();
+  notify(tr("climate.copy_zone_done", { to: toName }), "ok");
 }
 
 function copyMondayToWeek(zoneName, zoneId, weekdaysOnly) {
