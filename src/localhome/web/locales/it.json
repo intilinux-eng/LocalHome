@@ -88,7 +88,8 @@
     "running": "In funzione",
     "stopped": "Ferma",
     "stopped_pick_preset": "Scegli una modalità per riavviarla.",
-    "waiting_since_boot": "in attesa del primo dato (scheda accesa da {age})"
+    "waiting_since_boot": "in attesa del primo dato (scheda accesa da {age})",
+    "simulated_tag": "simulato"
   },
   "tabs": {
     "home": "Casa",
@@ -167,7 +168,7 @@
     "runs_note": "Un impianto radiante reagisce lentamente: la temperatura continua a cambiare per un po' anche dopo lo spegnimento.",
     "other_devices": "Altri dispositivi",
     "outdoor_label": "Esterno",
-    "outdoor_name": "Sensore esterno",
+    "outdoor_name": "Sensore temperatura esterna",
     "bypass_name": "Valvola bypass bagni",
     "pane_schedule": "Programmazione",
     "pane_history": "Statistiche",
@@ -293,9 +294,9 @@
     "extra_switches_note": "Altri due interruttori on/off Shelly Plus 1 fissi, non legati a una zona e senza sensore - lascia vuoto quello non ancora collegato. Se thermostat.interlocks/mode_switches in config.yaml controllano già uno di questi con un nome diverso, aggiorna quella voce di config.yaml a \"Bathroom Bypass Valve\"/\"Dehumidifier\" - questo pannello usa sempre esattamente quei nomi.",
     "extra_bypass_valve_label": "ID dispositivo valvola bypass bagni",
     "extra_dehumidifier_label": "ID dispositivo deumidificatore",
-    "extra_sensor_heading": "Sensore esterno",
-    "extra_sensor_note": "Un altro sensore Shelly H&T Gen3 fisso, indipendente, non legato a nessuna zona - temperatura/umidità esterna. Sempre un dispositivo reale (nessuna modalità simulata/manuale, a differenza del sensore di una zona) - lascia vuoto se non ancora collegato.",
-    "extra_outdoor_sensor_label": "ID dispositivo sensore esterno",
+    "extra_sensor_heading": "Sensore temperatura esterna",
+    "extra_sensor_note": "Un sensore Shelly H&T Gen3 fisso, non legato a nessuna zona: temperatura e umidità esterne, nel chip in alto e nel grafico del clima. Finché il sensore non è installato lascialo Simulato: temperatura e grafico si vedono comunque, segnati come simulati. Con Nessuno non compare.",
+    "extra_outdoor_sensor_label": "ID dispositivo sensore temperatura esterna",
     "how_it_works_heading": "Come funziona - tutto in breve",
     "how_it_works_threshold": "Un sensore a batteria (Shelly H&T Gen3) invia una nuova lettura solo quando la temperatura si sposta di almeno 0,5°C o l'umidità di almeno il 5% - oppure ogni 2 ore comunque, anche se non è cambiato nulla. Quindi una zona che resta a una temperatura perfettamente stabile per ore, con l'età della lettura che sale verso le 2h, è del tutto normale, non un guasto - è proprio l'heartbeat delle 2h che la mantiene \"In funzione\" invece di farla sembrare non aggiornata solo perché stabile (confermato osservando due sensori reali per un'intera notte: ogni heartbeat è arrivato entro circa un minuto dalle 2h esatte). Solo una lettura la cui età supera stale_after_seconds (4h - poco meno del doppio dell'heartbeat, così un solo heartbeat perso da solo non basta a farla scattare, ma due di fila sì) viene considerata davvero irraggiungibile.",
     "how_it_works_wifi": "Il valore del segnale WiFi mostrato nella card di una zona (accanto alla lettura, quando riportato) sotto \"discreto\" significa che il sensore sta spendendo più batteria per ritentare la connessione, non solo che riporta più lentamente - avvicinarlo al punto d'accesso del broker, o aggiungere un ripetitore, risolve un consumo di batteria che nessun aggiornamento firmware o modifica qui può risolvere.",
@@ -348,7 +349,7 @@
     "system_skipped_line": "manca il pacchetto {package}, si installa con",
     "system_config_path": "Configurazione: {path}",
     "vmc_heading": "VMC",
-    "vmc_note": "La ventilazione meccanica, comandata da uno Shelly 0/1-10V Dimmer Gen3: un solo ID crea l'interruttore acceso/spento e il cursore della velocità, visibili nella dashboard. Lascia vuoto se non ancora collegata.",
+    "vmc_note": "La ventilazione meccanica, comandata da uno Shelly 0/1-10V Dimmer Gen3: un solo ID crea l'interruttore e la velocità, con i pulsanti notte/giorno/boost e il programma giorno/notte sulla dashboard. Finché la VMC non è collegata lasciala Simulata: la gestione si vede e si prova lo stesso, segnata come simulata. Con Nessuna non compare.",
     "vmc_label": "ID dispositivo dimmer VMC",
     "vmc_suggestion": "Trovato in config.yaml (\"{name}\"). Salva per gestirlo da qui: dopo il riavvio la voce di config.yaml per questo dispositivo viene ignorata e la VMC appare come \"VMC\".",
     "vmc_reachable": "Raggiungibile",
@@ -540,7 +541,9 @@
     "led_code_MQ": "il broker MQTT non è raggiungibile: nessun dispositivo Shelly può comunicare",
     "led_code_CF": "un dispositivo configurato non si è caricato (errore di configurazione)",
     "led_code_LP": "un ciclo di controllo si è fermato (termostato o storico)",
-    "led_code_DK": "disco quasi pieno"
+    "led_code_DK": "disco quasi pieno",
+    "extra_role_mode_label": "Fonte",
+    "mode_none": "Nessuno (non installato)"
   },
   "vmc_presets": {
     "night": "Notte",

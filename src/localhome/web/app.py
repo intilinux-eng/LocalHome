@@ -26,8 +26,11 @@ from localhome.services.climate_map_store import (
     EXTRA_DIMMER_FIELDS,
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
+    OUTDOOR_MODE_KEY,
+    VMC_MODE_KEY,
     ClimateMapStore,
     apply_to_config,
+    extra_roles,
     snapshot_from_config,
 )
 from localhome.services.dewpoint import dew_point_c
@@ -133,6 +136,9 @@ def create_app(config_path: str | None = None) -> Flask:
     extra_switches = climate_map.get_extra_switches()
     extra_sensors = climate_map.get_extra_sensors()
     extra_dimmers = climate_map.get_extra_dimmers()
+    # What the outdoor sensor and the VMC run as in this process - compared
+    # with a fresh read to tell the panel whether a save needs a restart.
+    active_extra_roles = extra_roles(config, climate_map)
     thermostat_cfg = apply_to_config(config)
     # Settings changed from the admin panel (thermostat tuning, history
     # limits, language) override config.yaml's - see services/panel_settings.py.
@@ -296,6 +302,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["ACTIVE_EXTRA_SWITCHES"] = extra_switches
     app.config["ACTIVE_EXTRA_SENSORS"] = extra_sensors
     app.config["ACTIVE_EXTRA_DIMMERS"] = extra_dimmers
+    app.config["ACTIVE_EXTRA_ROLES"] = active_extra_roles
     app.config["PANEL_SETTINGS"] = settings_store
     app.config["ACTIVE_PANEL_SETTINGS"] = active_settings
     # What a factory reset removes: everything LocalHome itself wrote at
@@ -579,6 +586,9 @@ def _register_routes(app: Flask) -> None:
                 "controllable": (name in manager.switches or name in manager.numbers) and name not in mode_switch_names,
                 "tab": manager.dashboard_tab.get(name, "home"),
                 "visible_in_mode": manager.visible_in_mode.get(name),
+                # Simulated readings are marked on the dashboard, so a demo
+                # or a test bench never passes for the real apartment.
+                "simulated": manager.driver_types.get(name) == "simulated",
             }
             if name in interlock_followers:
                 entry["linked_valve"] = interlock_followers[name]
@@ -809,6 +819,8 @@ def _register_routes(app: Flask) -> None:
                 "battery_pct": sensor_reading.get("battery_pct"),
                 "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
+                # Tagged on the tile - see simulatedTagHtml() in app.js.
+                "sensor_simulated": manager.driver_types.get(zone.sensor) == "simulated",
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),
                 # Set only for the "every MQTT topic went stale, but at
@@ -1102,15 +1114,20 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/extra-sensors")
     def api_climate_admin_get_extra_sensors():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_extra_sensors()
-        restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_SENSORS"])
-        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SENSOR_FIELDS})
+        role = extra_roles(config, climate_map)["outdoor"]
+        restart_pending = role != app.config["ACTIVE_EXTRA_ROLES"]["outdoor"]
+        return jsonify(ok=True, restart_pending=restart_pending, outdoor_sensor_mode=role["mode"],
+                       **{key: saved.get(key) for key in EXTRA_SENSOR_FIELDS})
 
     @app.route("/api/climate-admin/extra-sensors", methods=["POST"])
     def api_climate_admin_set_extra_sensors():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         data = request.get_json(silent=True) or {}
         extra_sensors = {key: data.get(key) for key in EXTRA_SENSOR_FIELDS}
+        if data.get(OUTDOOR_MODE_KEY) is not None:
+            extra_sensors[OUTDOOR_MODE_KEY] = data[OUTDOOR_MODE_KEY]
         try:
             climate_map.set_extra_sensors(extra_sensors)
         except ValueError as exc:
@@ -1122,7 +1139,8 @@ def _register_routes(app: Flask) -> None:
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_extra_dimmers()
-        restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_DIMMERS"])
+        role = extra_roles(config, climate_map)["vmc"]
+        restart_pending = role != app.config["ACTIVE_EXTRA_ROLES"]["vmc"]
         # Until the panel manages the VMC, offer the id of a dimmer already
         # hand-wired in config.yaml, so adopting it is one click, not
         # re-typing an id that's already known.
@@ -1133,7 +1151,7 @@ def _register_routes(app: Flask) -> None:
                     suggested = {"device_id": entry["device_id"], "name": entry.get("name")}
                     break
         return jsonify(
-            ok=True, restart_pending=restart_pending, suggested_vmc=suggested,
+            ok=True, restart_pending=restart_pending, suggested_vmc=suggested, vmc_mode=role["mode"],
             **{key: saved.get(key) for key in EXTRA_DIMMER_FIELDS},
         )
 
@@ -1142,6 +1160,8 @@ def _register_routes(app: Flask) -> None:
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         data = request.get_json(silent=True) or {}
         extra_dimmers = {key: data.get(key) for key in EXTRA_DIMMER_FIELDS}
+        if data.get(VMC_MODE_KEY) is not None:
+            extra_dimmers[VMC_MODE_KEY] = data[VMC_MODE_KEY]
         try:
             climate_map.set_extra_dimmers(extra_dimmers)
         except ValueError as exc:

@@ -1729,3 +1729,21 @@ textarea {
   padding-top: 8px;
   border-top: 1px solid var(--card-border);
 }
+
+/* "simulated", next to anything whose readings aren't real - see
+   simulatedTagHtml() in app.js. Small and quiet, but always there. */
+.sim-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px dashed var(--text-dim);
+  color: var(--text-dim);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1.5;
+  white-space: nowrap;
+}

@@ -192,6 +192,9 @@ def _extra_switch_device_ids(extra_switches: dict) -> list[str]:
 
 
 def _extra_sensor_device_ids(extra_sensors: dict) -> list[str]:
+    # An id kept while the role is simulated or switched off isn't in use.
+    if (extra_sensors or {}).get(OUTDOOR_MODE_KEY) in ("simulated", "none"):
+        return []
     return [
         extra_sensors[key].strip()
         for key in EXTRA_SENSOR_FIELDS
@@ -200,11 +203,51 @@ def _extra_sensor_device_ids(extra_sensors: dict) -> list[str]:
 
 
 def _extra_dimmer_device_ids(extra_dimmers: dict) -> list[str]:
+    if (extra_dimmers or {}).get(VMC_MODE_KEY) in ("simulated", "none"):
+        return []
     return [
         extra_dimmers[key].strip()
         for key in EXTRA_DIMMER_FIELDS
         if (extra_dimmers or {}).get(key)
     ]
+
+
+# The outdoor sensor and the VMC each have a source, like a zone's sensor:
+# a real Shelly (its id required), simulated, or none at all.
+EXTRA_ROLE_MODES = ("shelly", "simulated", "none")
+OUTDOOR_MODE_KEY = "outdoor_sensor_mode"
+VMC_MODE_KEY = "vmc_mode"
+OUTDOOR_SENSOR_NAME = "Outdoor Sensor"
+VMC_NAME = "VMC"
+# The simulated outdoor sensor: a mild Mediterranean year (monthly means,
+# January first) and a 5 degree swing either side over the day - enough
+# for the outdoor chart to look like weather, next to the rooms'.
+SIMULATED_OUTDOOR_MONTHLY_C = [8, 9, 11, 14, 18, 23, 26, 26, 22, 18, 13, 9]
+SIMULATED_OUTDOOR_SWING_C = 5.0
+
+
+def effective_extra_mode(section: dict | None, id_key: str, mode_key: str, simulated_by_default: bool) -> str:
+    """What a fixed role actually runs as. `section` None means the panel
+    has never saved that section: a new installation, where the role
+    starts simulated (unless a real one is already wired by hand - see
+    extra_roles()). A section saved before modes existed keeps meaning
+    what it meant: an id is a real device, no id is none."""
+    if section is None:
+        return "simulated" if simulated_by_default else "none"
+    mode = section.get(mode_key)
+    if mode in EXTRA_ROLE_MODES:
+        return mode
+    return "shelly" if section.get(id_key) else "none"
+
+
+def _validate_role_mode(section: dict, id_key: str, mode_key: str) -> None:
+    mode = section.get(mode_key)
+    if mode is None:
+        return
+    if mode not in EXTRA_ROLE_MODES:
+        raise ValueError(f"{mode_key} must be one of {list(EXTRA_ROLE_MODES)}")
+    if mode == "shelly" and not (isinstance(section.get(id_key), str) and section[id_key].strip()):
+        raise ValueError(f"{id_key} is required when {mode_key} is 'shelly'")
 
 
 def _validate_role_ids(section: dict, fields: dict, other_ids: list[str], section_name: str) -> None:
@@ -265,6 +308,10 @@ def validate_extra_sensors(
         + _extra_switch_device_ids(extra_switches or {})
         + _extra_dimmer_device_ids(extra_dimmers or {})
     )
+    if isinstance(extra_sensors, dict):
+        _validate_role_mode(extra_sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY)
+    if isinstance(extra_sensors, dict) and extra_sensors.get(OUTDOOR_MODE_KEY) in ("simulated", "none"):
+        return   # the id isn't used, so it can't collide
     _validate_role_ids(extra_sensors, EXTRA_SENSOR_FIELDS, other_ids, "extra_sensors")
 
 
@@ -295,6 +342,10 @@ def validate_extra_dimmers(
         + _extra_switch_device_ids(extra_switches or {})
         + _extra_sensor_device_ids(extra_sensors or {})
     )
+    if isinstance(extra_dimmers, dict):
+        _validate_role_mode(extra_dimmers, "vmc_device_id", VMC_MODE_KEY)
+    if isinstance(extra_dimmers, dict) and extra_dimmers.get(VMC_MODE_KEY) in ("simulated", "none"):
+        return
     _validate_role_ids(extra_dimmers, EXTRA_DIMMER_FIELDS, other_ids, "extra_dimmers")
 
 
@@ -437,13 +488,24 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
     return integrations
 
 
-def build_extra_sensor_integrations(extra_sensors: dict, broker_file: str) -> list[Integration]:
-    """The one fixed sensor role (EXTRA_SENSOR_FIELDS) becomes a real
-    climate integration only if its device id is set - same "not wired
-    yet means not built at all" rule as build_extra_switch_integrations()
-    above. Reuses the exact same Shelly H&T Gen3 shape a zone's own
-    "shelly" sensor mode already uses (_shelly_sensor_options()), just
-    keyed by the fixed field name instead of "sensor_device_id"."""
+def build_extra_sensor_integrations(extra_sensors: dict, broker_file: str, mode: str | None = None) -> list[Integration]:
+    """The outdoor sensor, by its mode (see effective_extra_mode()):
+    "shelly" is the same Shelly H&T Gen3 shape a zone's own sensor uses
+    (_shelly_sensor_options()), "simulated" a sensor that follows the
+    month and the time of day, "none" nothing at all. Without a mode (the
+    older call), an id means a real device and no id means none."""
+    if mode == "none":
+        return []
+    if mode == "simulated":
+        return [Integration("climate", "simulated", {
+            "name": OUTDOOR_SENSOR_NAME,
+            "dashboard_tab": "climate",
+            "monthly_base_c": SIMULATED_OUTDOOR_MONTHLY_C,
+            "daily_swing_c": SIMULATED_OUTDOOR_SWING_C,
+            "base_humidity_pct": 65.0,
+            "drift_rate_c_per_min": 0.05,
+            "poll_interval_seconds": 60.0,
+        })]
     integrations: list[Integration] = []
     for key, display_name in EXTRA_SENSOR_FIELDS.items():
         device_id = (extra_sensors or {}).get(key)
@@ -453,10 +515,22 @@ def build_extra_sensor_integrations(extra_sensors: dict, broker_file: str) -> li
     return integrations
 
 
-def build_extra_dimmer_integrations(extra_dimmers: dict, broker_file: str) -> list[Integration]:
+def build_extra_dimmer_integrations(extra_dimmers: dict, broker_file: str, mode: str | None = None) -> list[Integration]:
     """One device id -> two integrations over the same Shelly RPC
     connection: the on/off switch, and its speed as a number paired into
-    that switch's dashboard card. Not built at all while the id is blank."""
+    that switch's dashboard card. "simulated" builds the same pair with
+    no hardware behind it - the same card, speeds and day/night program -
+    and "none" nothing. Without a mode, a blank id means none."""
+    if mode == "none":
+        return []
+    if mode == "simulated":
+        return [
+            Integration("switch", "simulated", {"name": VMC_NAME, "initial_on": True, "hide_toggle": True}),
+            Integration("number", "simulated", {
+                "name": VMC_NAME + DIMMER_SPEED_SUFFIX, "paired_switch": VMC_NAME,
+                "presets": VMC_PRESETS, "initial_value": 50, "min": 0, "max": 100, "unit": "%",
+            }),
+        ]
     integrations: list[Integration] = []
     for key, display_name in EXTRA_DIMMER_FIELDS.items():
         device_id = (extra_dimmers or {}).get(key)
@@ -588,13 +662,14 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
     extra_switches = climate_map.get_extra_switches()
     extra_sensors = climate_map.get_extra_sensors()
     extra_dimmers = climate_map.get_extra_dimmers()
+    roles = extra_roles(config, climate_map)
 
     new_integrations: list[Integration] = []
     if panel_zones is not None:
         new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
     new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
-    new_integrations += build_extra_sensor_integrations(extra_sensors, broker_file)
-    new_integrations += build_extra_dimmer_integrations(extra_dimmers, broker_file)
+    new_integrations += build_extra_sensor_integrations(extra_sensors, broker_file, roles["outdoor"]["mode"])
+    new_integrations += build_extra_dimmer_integrations(extra_dimmers, broker_file, roles["vmc"]["mode"])
     if new_integrations:
         # A hand-written entry for a device the panel now manages would
         # poll and command the same hardware a second time, under its old
@@ -628,6 +703,32 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
     thermostat_cfg = dict(config.raw.get("thermostat") or {})
     thermostat_cfg["zones"] = build_zone_configs(panel_zones)
     return thermostat_cfg
+
+
+def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
+    """The outdoor sensor's and the VMC's effective source and id. On a
+    climate installation (the panel manages the zones), a role the panel
+    has never saved starts simulated - unless config.yaml already wires a
+    real one by hand (its fixed name, or for the VMC any Shelly dimmer):
+    a simulated stand-in would replace or duplicate it. Anywhere else -
+    LocalHome running covers or plugs only - nothing appears by itself."""
+    hand_wired = config.raw.get("integrations") or []
+    names = {entry.get("name") for entry in hand_wired if isinstance(entry, dict)}
+    has_dimmer = any(isinstance(e, dict) and e.get("type") == "shelly_light" for e in hand_wired)
+    climate_panel = climate_map.get_zones() is not None
+    sensors = climate_map.get_extra_sensors() if climate_map.has_section("extra_sensors") else None
+    dimmers = climate_map.get_extra_dimmers() if climate_map.has_section("extra_dimmers") else None
+    outdoor = effective_extra_mode(sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY,
+                                   simulated_by_default=climate_panel and OUTDOOR_SENSOR_NAME not in names)
+    vmc = effective_extra_mode(dimmers, "vmc_device_id", VMC_MODE_KEY,
+                               simulated_by_default=climate_panel and VMC_NAME not in names and not has_dimmer)
+    # The id only counts for a real device - one typed in ahead while the
+    # role is still simulated changes nothing that runs.
+    return {
+        "outdoor": {"mode": outdoor,
+                    "device_id": (sensors or {}).get("outdoor_sensor_device_id") if outdoor == "shelly" else None},
+        "vmc": {"mode": vmc, "device_id": (dimmers or {}).get("vmc_device_id") if vmc == "shelly" else None},
+    }
 
 
 class ClimateMapStore:
@@ -685,6 +786,11 @@ class ClimateMapStore:
             )
             data["extra_switches"] = extra_switches
             save_json_atomic(self.path, data)
+
+    def has_section(self, key: str) -> bool:
+        """Whether the panel has ever saved this section - "never saved"
+        and "saved empty" mean different things (see extra_roles())."""
+        return key in self._load()
 
     def get_extra_sensors(self) -> dict:
         # Same independence from zones/extra_switches as get_extra_switches()

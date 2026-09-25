@@ -371,27 +371,38 @@ async function saveExtraSwitches(button) {
 }
 
 // --------------------------------------------------------- extra sensor ----
-// One more fixed, standalone Shelly H&T Gen3 sensor (outdoor
-// temperature/humidity) - no valve, no schedule, not tied to a zone,
-// and unlike a zone's own sensor there's no simulated/manual mode: it's
-// either a real device id or nothing, so the only fields are the id
-// itself and this section's own live status. Fixed name, same
-// convention as the extra switches above - see
-// services/climate_map_store.py's EXTRA_SENSOR_FIELDS.
+// The outdoor temperature sensor: a standalone Shelly H&T Gen3 - no
+// valve, no schedule, not tied to a zone. Like a zone's sensor it has a
+// source: the real device (its id), simulated (a believable day/night
+// curve, so the outdoor chart exists before the hardware does) or none.
+// Fixed name, see services/climate_map_store.py's EXTRA_SENSOR_FIELDS.
 const EXTRA_SENSOR_NAME = "Outdoor Sensor";
 let extraSensorRestartPending = false;
+
+// The device id is only asked for when the source is a real Shelly.
+function syncExtraRoleFields() {
+  const pairs = [["extra-outdoor-sensor-mode", "extra-outdoor-sensor-id-field"], ["extra-vmc-mode", "extra-vmc-id-field"]];
+  for (const [selectId, fieldId] of pairs) {
+    const select = document.getElementById(selectId);
+    const field = document.getElementById(fieldId);
+    if (select && field) field.hidden = select.value !== "shelly";
+  }
+}
 
 async function loadExtraSensor() {
   const res = await fetch("/api/climate-admin/extra-sensors");
   const data = await res.json();
   document.getElementById("extra-outdoor-sensor-id").value = data.outdoor_sensor_device_id || "";
+  document.getElementById("extra-outdoor-sensor-mode").value = data.outdoor_sensor_mode || "none";
   extraSensorRestartPending = !!data.restart_pending;
+  syncExtraRoleFields();
 }
 
 async function saveExtraSensor(button) {
   const resultEl = document.getElementById("save-extra-sensor-result");
   const body = {
     outdoor_sensor_device_id: document.getElementById("extra-outdoor-sensor-id").value.trim() || null,
+    outdoor_sensor_mode: document.getElementById("extra-outdoor-sensor-mode").value,
   };
   button.disabled = true;
   try {
@@ -427,7 +438,8 @@ async function saveExtraSensor(button) {
 async function refreshExtraSensorStatus() {
   const slot = document.getElementById("extra-sensor-status");
   if (!slot) return;
-  if (!document.getElementById("extra-outdoor-sensor-id").value.trim()) {
+  const mode = document.getElementById("extra-outdoor-sensor-mode").value;
+  if (mode === "none" || (mode === "shelly" && !document.getElementById("extra-outdoor-sensor-id").value.trim())) {
     slot.innerHTML = "";
     return;
   }
@@ -447,7 +459,7 @@ async function refreshExtraSensorStatus() {
       wifi_rssi_dbm: reading.wifi_rssi_dbm,
       sensor_last_value_age_seconds: reading.last_value_age_seconds,
     };
-    slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, "shelly")}</div>`;
+    slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, mode)}</div>`;
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -467,22 +479,29 @@ async function loadVmc() {
   const data = await res.json();
   const input = document.getElementById("extra-vmc-id");
   const hint = document.getElementById("vmc-suggestion");
+  const mode = document.getElementById("extra-vmc-mode");
   input.value = data.vmc_device_id || "";
+  mode.value = data.vmc_mode || "none";
   vmcRestartPending = !!data.restart_pending;
   // Not managed here yet, but config.yaml already has one: pre-fill it,
   // and say that saving takes it over.
   if (!data.vmc_device_id && data.suggested_vmc) {
     input.value = data.suggested_vmc.device_id;
+    mode.value = "shelly";
     hint.textContent = tr("climate_admin.vmc_suggestion", { name: data.suggested_vmc.name || "?" });
     hint.hidden = false;
   } else {
     hint.hidden = true;
   }
+  syncExtraRoleFields();
 }
 
 async function saveVmc(button) {
   const resultEl = document.getElementById("save-vmc-result");
-  const body = { vmc_device_id: document.getElementById("extra-vmc-id").value.trim() || null };
+  const body = {
+    vmc_device_id: document.getElementById("extra-vmc-id").value.trim() || null,
+    vmc_mode: document.getElementById("extra-vmc-mode").value,
+  };
   button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/extra-dimmers", {
@@ -511,7 +530,9 @@ async function saveVmc(button) {
 async function refreshVmcStatus() {
   const slot = document.getElementById("vmc-status");
   if (!slot) return;
-  if (!document.getElementById("extra-vmc-id").value.trim() || !document.getElementById("vmc-suggestion").hidden) {
+  const vmcMode = document.getElementById("extra-vmc-mode").value;
+  if (vmcMode === "none" || (vmcMode === "shelly"
+      && (!document.getElementById("extra-vmc-id").value.trim() || !document.getElementById("vmc-suggestion").hidden))) {
     slot.innerHTML = "";
     return;
   }
@@ -534,7 +555,10 @@ async function refreshVmcStatus() {
     const state = sw.is_on ? tr("climate_admin.vmc_on") : tr("climate_admin.vmc_off");
     const speedText = speed.ok && typeof speed.value === "number"
       ? ` · ${tr("climate_admin.vmc_speed", { value: Math.round(speed.value) })}` : "";
-    slot.innerHTML = `<div><span class="admin-status ok">${tr("climate_admin.vmc_reachable")}</span> ${state}${speedText}</div>`;
+    const badge = vmcMode === "simulated"
+      ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>`
+      : `<span class="admin-status ok">${tr("climate_admin.vmc_reachable")}</span>`;
+    slot.innerHTML = `<div>${badge} ${state}${speedText}</div>`;
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }

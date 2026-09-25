@@ -88,7 +88,8 @@
     "running": "Running",
     "stopped": "Stopped",
     "stopped_pick_preset": "Pick a mode to start it again.",
-    "waiting_since_boot": "waiting for its first reading (board up {age})"
+    "waiting_since_boot": "waiting for its first reading (board up {age})",
+    "simulated_tag": "simulated"
   },
   "tabs": {
     "home": "Home",
@@ -167,7 +168,7 @@
     "runs_note": "Radiant systems react slowly: the temperature keeps changing for a while after the system switches off.",
     "other_devices": "Other devices",
     "outdoor_label": "Outside",
-    "outdoor_name": "Outdoor sensor",
+    "outdoor_name": "Outdoor temperature sensor",
     "bypass_name": "Bathroom bypass valve",
     "pane_schedule": "Schedule",
     "pane_history": "Statistics",
@@ -293,9 +294,9 @@
     "extra_switches_note": "Two more fixed, standalone Shelly Plus 1 on/off switches, not tied to a zone and with no sensor - leave either blank if not wired yet. If config.yaml's thermostat.interlocks/mode_switches already control one of these by a different name, update that config.yaml entry to say \"Bathroom Bypass Valve\"/\"Dehumidifier\" instead - this panel always uses those exact names.",
     "extra_bypass_valve_label": "Bathroom bypass valve device id",
     "extra_dehumidifier_label": "Dehumidifier device id",
-    "extra_sensor_heading": "Outdoor sensor",
-    "extra_sensor_note": "One more fixed, standalone Shelly H&T Gen3 sensor - outdoor temperature/humidity, not tied to any zone. Always a real device (no simulated/manual mode, unlike a zone's own sensor) - leave blank if not wired yet.",
-    "extra_outdoor_sensor_label": "Outdoor sensor device id",
+    "extra_sensor_heading": "Outdoor temperature sensor",
+    "extra_sensor_note": "A fixed Shelly H&T Gen3 sensor, not part of any zone: the outdoor temperature and humidity, in the chip at the top and the climate chart. Until the sensor is installed leave it Simulated: the temperature and the chart still show, marked as simulated. With None it doesn't appear.",
+    "extra_outdoor_sensor_label": "Outdoor temperature sensor device id",
     "how_it_works_heading": "How it works - everything in brief",
     "how_it_works_threshold": "A battery sensor (Shelly H&T Gen3) only sends a new reading when its temperature moves by at least 0.5°C or its humidity by at least 5% - or every 2 hours regardless, even if nothing changed at all. So a zone that sits at a rock-stable temperature for hours, with its reading's age creeping up toward 2h, is completely normal, not a fault - the 2h heartbeat is what keeps it \"Reporting\" instead of ever needing to be treated as stale just from being stable (confirmed with an overnight watch of two real sensors: every heartbeat landed within about a minute of exactly 2h). Only a reading whose age passes stale_after_seconds (4h - just under double the heartbeat, so one missed heartbeat alone never trips it, but two in a row does) is treated as actually unreachable.",
     "how_it_works_wifi": "A zone card's WiFi signal figure (shown next to its reading, when reported) below \"fair\" means the sensor is spending more of its battery retrying its connection, not just reporting slower - moving it closer to the broker's access point, or adding a repeater, fixes battery drain that a firmware update or a config change here cannot.",
@@ -348,7 +349,7 @@
     "system_skipped_line": "package {package} is missing, install it with",
     "system_config_path": "Configuration: {path}",
     "vmc_heading": "Ventilation (VMC)",
-    "vmc_note": "The mechanical ventilation, driven by a Shelly 0/1-10V Dimmer Gen3: one device id builds its on/off switch and speed slider, shown on the dashboard. Leave blank if not wired yet.",
+    "vmc_note": "Mechanical ventilation driven by a Shelly 0/1-10V Dimmer Gen3: one id creates the switch and the speed, with the night/day/boost buttons and the day/night program on the dashboard. Until the VMC is wired leave it Simulated: the controls still show and work, marked as simulated. With None it doesn't appear.",
     "vmc_label": "VMC dimmer device id",
     "vmc_suggestion": "Found in config.yaml (\"{name}\"). Save to manage it from here: after the restart the config.yaml entry for this device is ignored and the VMC shows up as \"VMC\".",
     "vmc_reachable": "Reachable",
@@ -540,7 +541,9 @@
     "led_code_MQ": "the MQTT broker can't be reached: no Shelly device can talk to LocalHome",
     "led_code_CF": "a configured device didn't load (a configuration error)",
     "led_code_LP": "a control loop has stopped (thermostat or history)",
-    "led_code_DK": "disk nearly full"
+    "led_code_DK": "disk nearly full",
+    "extra_role_mode_label": "Source",
+    "mode_none": "None (not installed)"
   },
   "vmc_presets": {
     "night": "Night",

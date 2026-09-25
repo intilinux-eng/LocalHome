@@ -1,0 +1,219 @@
+"""The outdoor temperature sensor and the VMC can be simulated - and start
+simulated on a climate installation that has no real ones yet - so the
+outdoor chart and the VMC's controls exist before the hardware does.
+
+What must never happen: a simulated stand-in replacing or duplicating a
+real device, or appearing on a LocalHome that isn't doing climate at all.
+"""
+from datetime import datetime
+
+import pytest
+
+from localhome.config import load_config
+from localhome.drivers.simulated.climate import SimulatedClimateDriver
+from localhome.services.climate_map_store import (
+    ClimateMapStore,
+    apply_to_config,
+    build_extra_dimmer_integrations,
+    build_extra_sensor_integrations,
+    effective_extra_mode,
+    extra_roles,
+    validate_extra_dimmers,
+    validate_extra_sensors,
+)
+from localhome.web.app import create_app
+
+ZONES = [
+    {"name": "Stanze", "sensor_mode": "simulated", "sensor_device_id": None,
+     "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True},
+    {"name": "Bagni", "sensor_mode": "simulated", "sensor_device_id": None,
+     "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": False},
+]
+
+
+def _setup(tmp_path, config_text="web:\n  port: 5000\nintegrations: []\n", zones=True):
+    (tmp_path / "config.yaml").write_text(config_text, encoding="utf-8")
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    if zones:
+        store.set_zones(ZONES)
+    return store
+
+
+# ------------------------------------------------------ what runs, when ----
+
+@pytest.mark.parametrize("section, default, expected", [
+    (None, True, "simulated"),                                   # never saved, climate installation
+    (None, False, "none"),                                       # never saved, a real one exists / no climate
+    ({"outdoor_sensor_device_id": "shellyht-A"}, True, "shelly"),  # saved before modes existed
+    ({"outdoor_sensor_device_id": None}, True, "none"),          # saved blank before modes: meant "not installed"
+    ({"outdoor_sensor_mode": "simulated"}, False, "simulated"),
+    ({"outdoor_sensor_mode": "none", "outdoor_sensor_device_id": "shellyht-A"}, True, "none"),
+])
+def test_the_effective_source(section, default, expected):
+    assert effective_extra_mode(section, "outdoor_sensor_device_id", "outdoor_sensor_mode", default) == expected
+
+
+def test_a_new_climate_installation_starts_with_both_simulated(tmp_path):
+    store = _setup(tmp_path)
+    config = load_config(tmp_path / "config.yaml")
+
+    roles = extra_roles(config, store)
+
+    assert roles["outdoor"] == {"mode": "simulated", "device_id": None}
+    assert roles["vmc"] == {"mode": "simulated", "device_id": None}
+
+
+def test_localhome_without_climate_gets_nothing_by_itself(tmp_path):
+    store = _setup(tmp_path, zones=False)
+    config = load_config(tmp_path / "config.yaml")
+
+    apply_to_config(config)
+
+    assert extra_roles(config, store)["outdoor"]["mode"] == "none"
+    assert [i.options["name"] for i in config.integrations] == []
+
+
+def test_a_hand_wired_outdoor_sensor_is_never_replaced_by_a_simulated_one(tmp_path):
+    store = _setup(tmp_path, config_text="""
+integrations:
+  - kind: climate
+    type: mqtt_json
+    name: "Outdoor Sensor"
+    broker_file: "mqtt_broker.json"
+    state_topic: "shellyht-OUT/status/temperature:0"
+""")
+    config = load_config(tmp_path / "config.yaml")
+
+    apply_to_config(config)
+
+    assert extra_roles(config, store)["outdoor"]["mode"] == "none"
+    outdoor = [i for i in config.integrations if i.options.get("name") == "Outdoor Sensor"]
+    assert [i.type for i in outdoor] == ["mqtt_json"], "the real one, alone"
+
+
+def test_a_hand_wired_dimmer_means_no_simulated_vmc(tmp_path):
+    store = _setup(tmp_path, config_text="""
+integrations:
+  - kind: switch
+    type: shelly_light
+    name: "VMC Dimmer"
+    broker_file: "mqtt_broker.json"
+    device_id: "shelly0110dimg3-AAAA"
+""")
+    config = load_config(tmp_path / "config.yaml")
+
+    assert extra_roles(config, store)["vmc"]["mode"] == "none"
+
+
+def test_an_id_typed_ahead_while_simulated_changes_nothing_that_runs(tmp_path):
+    store = _setup(tmp_path)
+    store.set_extra_sensors({"outdoor_sensor_device_id": "shellyht-LATER", "outdoor_sensor_mode": "simulated"})
+    config = load_config(tmp_path / "config.yaml")
+
+    assert extra_roles(config, store)["outdoor"] == {"mode": "simulated", "device_id": None}
+
+
+# ------------------------------------------------------------ what's built --
+
+def test_the_simulated_outdoor_sensor_is_a_climate_tab_sensor():
+    (integration,) = build_extra_sensor_integrations({}, "broker.json", "simulated")
+
+    assert (integration.kind, integration.type) == ("climate", "simulated")
+    assert integration.options["name"] == "Outdoor Sensor"
+    assert integration.options["dashboard_tab"] == "climate"
+    assert len(integration.options["monthly_base_c"]) == 12
+
+
+def test_the_simulated_vmc_has_the_real_ones_card():
+    switch, speed = build_extra_dimmer_integrations({}, "broker.json", "simulated")
+
+    assert (switch.kind, switch.type, switch.options["name"]) == ("switch", "simulated", "VMC")
+    assert switch.options["hide_toggle"] is True and switch.options["initial_on"] is True
+    assert (speed.kind, speed.type, speed.options["name"]) == ("number", "simulated", "VMC Speed")
+    assert speed.options["paired_switch"] == "VMC"
+    assert [p["key"] for p in speed.options["presets"]] == ["night", "day", "boost"]
+
+
+def test_none_builds_nothing():
+    assert build_extra_sensor_integrations({"outdoor_sensor_device_id": "shellyht-A"}, "b.json", "none") == []
+    assert build_extra_dimmer_integrations({"vmc_device_id": "shelly0110dimg3-A"}, "b.json", "none") == []
+
+
+# --------------------------------------------------------------- checks ----
+
+def test_a_real_device_needs_its_id():
+    with pytest.raises(ValueError, match="required"):
+        validate_extra_sensors({"outdoor_sensor_mode": "shelly", "outdoor_sensor_device_id": None})
+    with pytest.raises(ValueError, match="required"):
+        validate_extra_dimmers({"vmc_mode": "shelly", "vmc_device_id": "  "})
+
+
+def test_an_unknown_source_is_refused():
+    with pytest.raises(ValueError, match="must be one of"):
+        validate_extra_sensors({"outdoor_sensor_mode": "fake"})
+
+
+def test_an_unused_id_cannot_collide():
+    zones = [{**ZONES[0], "sensor_mode": "shelly", "sensor_device_id": "shellyht-SAME"}, ZONES[1]]
+    validate_extra_sensors({"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": "shellyht-SAME"}, zones)
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_extra_sensors({"outdoor_sensor_mode": "shelly", "outdoor_sensor_device_id": "shellyht-SAME"}, zones)
+
+
+# --------------------------------------------------- the whole app, and API --
+
+@pytest.fixture
+def app(tmp_path):
+    _setup(tmp_path)
+    app = create_app(str(tmp_path / "config.yaml"))
+    yield app
+    app.config["HISTORY"].close()
+
+
+def test_a_new_climate_board_shows_both_and_says_they_are_simulated(app):
+    devices = {s["name"]: s for s in app.test_client().get("/api/devices").get_json()["sensors"]}
+
+    for name in ("Outdoor Sensor", "VMC", "VMC Speed"):
+        assert devices[name]["simulated"] is True, name
+    assert devices["Outdoor Sensor"]["tab"] == "climate"
+    zones = app.test_client().get("/api/climate/zones").get_json()["zones"]
+    assert all(z["sensor_simulated"] for z in zones)
+
+
+def test_the_panel_reads_and_saves_the_source(app):
+    client = app.test_client()
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["outdoor_sensor_mode"] == "simulated"
+    assert client.get("/api/climate-admin/extra-dimmers").get_json()["vmc_mode"] == "simulated"
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
+
+    res = client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "none"})
+    assert res.status_code == 200
+    data = client.get("/api/climate-admin/extra-sensors").get_json()
+    assert data["outdoor_sensor_mode"] == "none" and data["restart_pending"] is True
+
+    res = client.post("/api/climate-admin/extra-dimmers", json={"vmc_mode": "shelly", "vmc_device_id": None})
+    assert res.status_code == 400 and "required" in res.get_json()["error"]
+
+
+def test_saving_the_same_source_again_is_not_a_pending_restart(app):
+    client = app.test_client()
+    client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "simulated",
+                                                          "outdoor_sensor_device_id": "shellyht-LATER"})
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
+
+
+# ------------------------------------------------ a believable outdoors -----
+
+def test_the_simulated_outdoors_follows_the_month_and_the_hour():
+    sensor = SimulatedClimateDriver("Outdoor Sensor", monthly_base_c=[8, 9, 11, 14, 18, 23, 26, 26, 22, 18, 13, 9],
+                                    daily_swing_c=5.0)
+    january_3pm = sensor._resting(datetime(2026, 1, 15, 15, 0))
+    january_3am = sensor._resting(datetime(2026, 1, 15, 3, 0))
+    july_3pm = sensor._resting(datetime(2026, 7, 15, 15, 0))
+
+    assert (january_3pm, january_3am, july_3pm) == pytest.approx((13.0, 3.0, 31.0))
+
+
+def test_a_plain_simulated_sensor_is_unchanged():
+    sensor = SimulatedClimateDriver("Rooms Sensor", base_temperature_c=20.0)
+    assert sensor._resting(datetime(2026, 1, 15, 3, 0)) == 20.0

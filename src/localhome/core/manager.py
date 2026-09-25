@@ -55,6 +55,10 @@ class DeviceManager:
         # speeds) and `hide_toggle` (a switch that should stay on, so the
         # card shows its state but offers no on/off control).
         self.ui_options: dict[str, dict] = {}
+        # name -> the integration type it was built from ("simulated",
+        # "mqtt_json", ...) - so the dashboard can say which readings are
+        # simulated rather than let them pass for real ones.
+        self.driver_types: dict[str, str] = {}
         self.notifier: Notifier | None = None
         # Integration entries whose driver couldn't be built, with the
         # reason - skipped so the rest still starts, but listed here so the
@@ -74,6 +78,7 @@ class DeviceManager:
                 continue
             for driver in drivers:
                 self._register(entry.kind, driver)
+                self.driver_types[driver.name] = entry.type
                 if entry.kind == "number" and options.get("paired_switch"):
                     self.paired_switch[driver.name] = options["paired_switch"]
                 if options.get("dashboard_tab"):

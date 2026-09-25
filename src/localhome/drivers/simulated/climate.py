@@ -7,8 +7,10 @@ sitting at a static fake number. See docs/integrations/simulated.md.
 """
 from __future__ import annotations
 
+import math
 import random
 import time
+from datetime import datetime
 from typing import Any
 
 from localhome.core.interfaces import PollingDriver
@@ -28,8 +30,17 @@ class SimulatedClimateDriver(PollingDriver):
         influence_target_c: float = 26.0,
         drift_rate_c_per_min: float = 0.15,
         poll_interval_seconds: float = 10.0,
+        monthly_base_c: list | None = None,
+        daily_swing_c: float = 0.0,
     ):
         self.name = name
+        # Outdoors: the resting temperature follows the month's average
+        # (12 values, January first) and swings `daily_swing_c` above and
+        # below it over the day - warmest at 15:00, coldest at 03:00.
+        self._monthly_base = list(monthly_base_c) if monthly_base_c and len(monthly_base_c) == 12 else None
+        self._daily_swing = float(daily_swing_c or 0.0)
+        if self._monthly_base:
+            base_temperature_c = self._resting(datetime.now())
         self.poll_interval_seconds = poll_interval_seconds
         self._temperature = base_temperature_c
         self._humidity = base_humidity_pct
@@ -45,7 +56,7 @@ class SimulatedClimateDriver(PollingDriver):
         self._last_tick = now
 
         valve_on = bool(self._influenced_by) and world.get_switch(self._influenced_by)
-        target = self._influence_target if valve_on else self._base_temperature
+        target = self._influence_target if valve_on else self._resting(datetime.now())
 
         step = self._drift_rate * elapsed_min
         if self._temperature < target:
@@ -62,6 +73,12 @@ class SimulatedClimateDriver(PollingDriver):
             "humidity_pct": round(self._humidity, 1),
         }
 
+    def _resting(self, when: datetime) -> float:
+        if not self._monthly_base:
+            return self._base_temperature
+        hour = when.hour + when.minute / 60
+        return self._monthly_base[when.month - 1] + self._daily_swing * math.cos(2 * math.pi * (hour - 15) / 24)
+
 
 @register_driver("climate", "simulated")
 def _create(options: dict) -> SimulatedClimateDriver:
@@ -73,4 +90,6 @@ def _create(options: dict) -> SimulatedClimateDriver:
         influence_target_c=options.get("influence_target_c", 26.0),
         drift_rate_c_per_min=options.get("drift_rate_c_per_min", 0.15),
         poll_interval_seconds=options.get("poll_interval_seconds", 10.0),
+        monthly_base_c=options.get("monthly_base_c"),
+        daily_swing_c=options.get("daily_swing_c", 0.0),
     )

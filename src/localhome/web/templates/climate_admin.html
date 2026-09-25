@@ -206,6 +206,14 @@
     <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
     <div class="admin-zone-card" id="extra-sensor-form">
       <div class="admin-field">
+        <label>{{ t.climate_admin.extra_role_mode_label }}</label>
+        <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
+          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+          <option value="none">{{ t.climate_admin.mode_none }}</option>
+        </select>
+      </div>
+      <div class="admin-field" id="extra-outdoor-sensor-id-field">
         <label>{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
         <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
       </div>
@@ -220,6 +228,14 @@
     <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
     <div class="admin-zone-card" id="vmc-form">
       <div class="admin-field">
+        <label>{{ t.climate_admin.extra_role_mode_label }}</label>
+        <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
+          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+          <option value="none">{{ t.climate_admin.mode_none }}</option>
+        </select>
+      </div>
+      <div class="admin-field" id="extra-vmc-id-field">
         <label>{{ t.climate_admin.vmc_label }}</label>
         <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
       </div>

@@ -421,6 +421,12 @@ function displayName(name) {
   return DISPLAY_NAMES[name] ? tr(DISPLAY_NAMES[name]) : name;
 }
 
+// Simulated readings say so wherever they're shown: a demo or a test
+// bench must never pass for the real apartment's temperatures.
+function simulatedTagHtml(simulated) {
+  return simulated ? ` <span class="sim-tag">${tr("sensors.simulated_tag")}</span>` : "";
+}
+
 function buildSensorCard(sensor) {
   const id = slug(sensor.name);
   const hasChart = sensor.kind === "power_meter" || sensor.kind === "climate";
@@ -443,7 +449,7 @@ function buildSensorCard(sensor) {
   return `
     <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}" data-visible-in-mode="${sensor.visible_in_mode || ""}">
       <div class="sensor-top">
-        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${displayName(sensor.name)}</span></span>
+        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${displayName(sensor.name)}</span>${simulatedTagHtml(sensor.simulated)}</span>
         <span class="state" id="updated-${id}"></span>
       </div>
       <div id="metrics-${id}"></div>
@@ -1978,7 +1984,7 @@ function zoneTileHtml(zone) {
     const valve = excludedValveState(zone);
     return `
       <div class="zone-tile excluded" data-zone="${id}" title="${escapeAttr(valve.title)}">
-        <span class="zt-name">${zone.name}</span>
+        <span class="zt-name">${zone.name}${simulatedTagHtml(zone.sensor_simulated)}</span>
         ${values}${stale}
         <span class="zt-status valve-${valve.cls}"><span class="zt-dot"></span>${valve.text}</span>
         <span class="zt-note">${tr("climate.excluded_note")}</span>
@@ -1987,7 +1993,7 @@ function zoneTileHtml(zone) {
   const state = zoneState(zone);
   return `
     <button class="zone-tile state-${state.cls}${id === selectedZoneId ? " selected" : ""}" data-zone="${id}" onclick="selectZone('${id}')">
-      <span class="zt-name">${zone.name}</span>
+      <span class="zt-name">${zone.name}${simulatedTagHtml(zone.sensor_simulated)}</span>
       ${values}${stale}
       <span class="zt-status"><span class="zt-dot"></span>${state.short}</span>
     </button>`;
@@ -2459,6 +2465,7 @@ function annotateSeasonDevices() {
 // The Climate tab's outdoor sensor - the first climate sensor among its
 // other devices - also shown as a chip next to the season.
 let outdoorSensorName = null;
+let outdoorSensorSimulated = false;
 const ICON_THERMOMETER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>`;
 
 function updateOutdoorChip(reading) {
@@ -2468,7 +2475,8 @@ function updateOutdoorChip(reading) {
   chip.hidden = !known;
   if (!known) return;
   chip.innerHTML = `${ICON_THERMOMETER}<span>${tr("climate.outdoor_label")}</span><b>${fmt(reading.temperature_c, 1)}°</b>`
-    + (reading.humidity_pct != null ? `<span class="oc-hum">${fmt(reading.humidity_pct, 0)}%</span>` : "");
+    + (reading.humidity_pct != null ? `<span class="oc-hum">${fmt(reading.humidity_pct, 0)}%</span>` : "")
+    + simulatedTagHtml(outdoorSensorSimulated);
 }
 
 function scrollToOutdoorCard() {
@@ -2568,7 +2576,9 @@ async function boot() {
     .filter(s => s.tab === "climate" && !zoneMemberNames.has(s.name))
     .sort((a, b) => (a.kind === "climate") - (b.kind === "climate"));
 
-  outdoorSensorName = (climateExtraSensors.find(s => s.kind === "climate") || {}).name || null;
+  const outdoorSensor = climateExtraSensors.find(s => s.kind === "climate") || {};
+  outdoorSensorName = outdoorSensor.name || null;
+  outdoorSensorSimulated = !!outdoorSensor.simulated;
   // A fresh install has no devices yet: say so, and point at the panel
   // where they're added, instead of leaving an empty page.
   const coversSection = document.getElementById("covers-section");
