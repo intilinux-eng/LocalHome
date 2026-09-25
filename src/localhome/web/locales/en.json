@@ -502,7 +502,7 @@
     "led_status_running": "Connected: the matrix shows the state live.",
     "led_status_starting": "Starting...",
     "led_status_no_router": "This board has no link to a microcontroller (it isn't an Arduino UNO Q, or the arduino-router service is stopped): the matrix stays dark. The mirror below still shows what it would draw.",
-    "led_status_no_sketch": "LocalHome's sketch isn't loaded on the microcontroller, so the matrix isn't showing the state. It's loaded once, from the board, with arduino-cli - after installing the Arduino_RouterBridge 0.4.3 and Arduino_RPClite 0.3.0 libraries if they aren't there yet: every command is in step 11 of the quick installation guide (docs/quick-installation-arduino-uno-q.md). No LocalHome restart needed.",
+    "led_status_no_sketch": "LocalHome's sketch isn't loaded on the microcontroller, so the matrix isn't showing the state. It's loaded once, from the board, with arduino-cli - after installing the Arduino_RouterBridge library if it isn't there yet: every command is in step 11 of the quick installation guide (docs/quick-installation-arduino-uno-q.md). No LocalHome restart needed.",
     "led_status_error": "Couldn't talk to the microcontroller: {error}. Retrying by itself every 30 seconds.",
     "led_status_off": "Not active.",
     "led_status_short_running": "active",

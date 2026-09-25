@@ -329,24 +329,21 @@ Check:
 arduino-cli lib list
 ```
 
-The set this sketch is verified to build and run with is:
-`Arduino_RouterBridge` **0.4.3**, `Arduino_RPClite` **0.3.0**,
-`MsgPack` 0.4.2, `ArxContainer` 0.7.0, `ArxTypeTraits` 0.3.2,
-`DebugLog` 0.8.4. If they're missing or `Arduino_RPClite` isn't 0.3.0,
-install exactly these:
+If `Arduino_RouterBridge` isn't listed, install it - its dependencies
+(`Arduino_RPClite`, `MsgPack`, `ArxContainer`, `ArxTypeTraits`,
+`DebugLog`) come with it:
 
 ```bash
 arduino-cli lib install "Arduino_RouterBridge@0.4.3"
-arduino-cli lib install "Arduino_RPClite@0.3.0"
-arduino-cli lib list               # check the versions above
+arduino-cli lib list               # Arduino_RouterBridge 0.4.3 and its dependencies
 ```
 
-The second line matters: installing `Arduino_RouterBridge` alone pulls
-in the newest `Arduino_RPClite` (0.3.1), and with that the build failed
-on a test board with `undefined reference to 'arduino::String...'`
-errors at the link step.
+Verified with `Arduino_RouterBridge` 0.4.3 (with `Arduino_RPClite`
+0.3.0 on one board; a fresh install today brings 0.3.1).
 
-**c. Build and load the sketch:**
+**c. Build and load the sketch** - one build at a time: two
+`arduino-cli compile` runs at once share the same build cache and can
+leave a broken core archive behind (see the troubleshooting table):
 
 ```bash
 cd ~/localhome
@@ -416,5 +413,5 @@ Measured on the 2 GB UNO Q right after this install:
 | A Shelly never connects, a zone says "not reachable yet" forever | the broker still listens on the board only (step 3: `ss -ltn \| grep 1883` must show `0.0.0.0:1883`), or the device's MQTT server / id is wrong |
 | `localhome-cli doctor` lists a skipped driver | the optional TP-Link driver, not installed on purpose - step 5 |
 | Building the LED sketch: `Arduino_RouterBridge.h: No such file or directory` | the libraries aren't installed - step 11b |
-| Building the LED sketch: `undefined reference to 'arduino::String...'` | most likely `Arduino_RPClite` isn't the verified 0.3.0 (0.3.1 failed exactly like this) - step 11b, second command |
+| Building the LED sketch: dozens of `undefined reference to 'arduino::String...'` / `'arduino::Stream...'`, even in the sketch's own lines | a broken core archive in arduino-cli's cache - seen after two compiles ran at the same time (its `core.a` held 16 of the core's 28 objects, none of `String`/`Stream`). Clear it and build once: `rm -rf ~/.cache/arduino/cores/arduino_zephyr_unoq_*`, then step 11c with `--clean` added |
 | The admin panel says "sketch not loaded" | step 11 hasn't been done on this board, or the upload failed - rerun 11c and read its last lines |
