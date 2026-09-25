@@ -644,3 +644,10 @@
 .vmc-period input {
   font-size: 16px;
 }
+
+/* The character count next to a text setting's label, highlighted once
+   the box is full - see textSettingHtml() in climate_admin.js. */
+.setting-range.at-limit {
+  color: var(--accent-stop);
+  font-weight: 600;
+}

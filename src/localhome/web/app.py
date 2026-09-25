@@ -346,12 +346,46 @@ def _set_roles(roles: dict) -> dict:
 
 
 def _register_routes(app: Flask) -> None:
+    def site_name() -> str:
+        """What this installation calls itself: the admin panel's setting,
+        else config.yaml's, else the translated default. Read per page
+        render (pages are rare; the API polls don't touch this), so a new
+        name is there on the next reload without a restart."""
+        settings: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
+        chosen = settings.get().get("site_name")
+        if chosen:
+            return chosen
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        from_config = (config.raw.get("web") or {}).get("site_name")
+        return from_config or app.config["TRANSLATIONS"]["app"]["title"]
+
+    @app.route("/site.webmanifest")
+    def site_webmanifest():
+        # Built here rather than served from static/, so the name under the
+        # icon on a phone's home screen is the one set in the panel.
+        name = site_name()
+        return jsonify(
+            name=name,
+            short_name=name,
+            start_url="/",
+            scope="/",
+            display="standalone",
+            background_color="#0b0d13",
+            theme_color="#0b0d13",
+            icons=[
+                {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+            ],
+        )
+
     @app.route("/")
     def index():
         manager: DeviceManager = app.config["MANAGER"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         return render_template(
             "index.html",
+            site_name=site_name(),
             cover_names=list(manager.covers),
             t=app.config["TRANSLATIONS"],
             lang=config.web_language,
@@ -854,6 +888,7 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         return render_template(
             "climate_admin.html",
+            site_name=site_name(),
             t=app.config["TRANSLATIONS"],
             lang=config.web_language,
         )
@@ -1052,7 +1087,7 @@ def _register_routes(app: Flask) -> None:
         return jsonify(
             ok=True,
             settings=panel_settings.effective(config, saved),
-            restart_pending=saved != app.config["ACTIVE_PANEL_SETTINGS"],
+            restart_pending=panel_settings.needs_restart(saved, app.config["ACTIVE_PANEL_SETTINGS"]),
         )
 
     @app.route("/api/climate-admin/settings", methods=["POST"])
@@ -1063,7 +1098,9 @@ def _register_routes(app: Flask) -> None:
             saved = store.set(data.get("values") or {})
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
-        return jsonify(ok=True, saved=saved, restart_required=True)
+        return jsonify(ok=True, saved=saved,
+                       restart_required=panel_settings.needs_restart(
+                           saved, app.config["ACTIVE_PANEL_SETTINGS"]))
 
     # ------------------------------------------------- maintenance ----
     # Destructive: each needs {"confirm": "RESET"} in the body, and saves a

@@ -435,7 +435,7 @@
     "system_boot_crash": "interrupted",
     "system_problem_clock_unsynced": "The board's clock isn't synchronized: schedule slots may trigger at the wrong time (check its internet connection)",
     "settings_heading": "Settings",
-    "settings_note": "The operating parameters, changed here without touching any file or code. An empty field uses config.yaml's value (or the default). They take effect after LocalHome restarts.",
+    "settings_note": "The operating parameters, changed here without touching any file or code. An empty field uses config.yaml's value (or the default). They take effect after LocalHome restarts, except where the field says otherwise.",
     "settings_save": "Save settings",
     "settings_defaults": "Restore defaults",
     "settings_defaults_confirm": "Remove every setting made here and go back to config.yaml's?",
@@ -482,7 +482,10 @@
     "how_diagnostic_title": "Diagnostics",
     "vmc_pick_device": "Choose which device the program controls.",
     "vmc_program_moved": "The VMC's day/night program is set on the dashboard, on the VMC's own card next to its speed buttons.",
-    "system_problem_device_not_heard_yet": "{subject}: not heard yet since the board came up - battery sensors report every couple of hours"
+    "system_problem_device_not_heard_yet": "{subject}: not heard yet since the board came up - battery sensors report every couple of hours",
+    "setting_site_name": "Page name",
+    "setting_site_name_help": "The heading at the top of the dashboard, and the name under the icon on a phone. At most 24 characters, so it stays readable on a small screen. Blank = LocalHome. Takes effect when the page is reloaded, with no restart.",
+    "settings_saved_live": "Saved. Reload the page to see the new name."
   },
   "vmc_presets": {
     "night": "Night",

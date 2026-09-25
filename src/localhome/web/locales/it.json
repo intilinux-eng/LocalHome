@@ -435,7 +435,7 @@
     "system_boot_crash": "interrotto",
     "system_problem_clock_unsynced": "Orologio della scheda non sincronizzato: le fasce orarie potrebbero scattare all'ora sbagliata (controlla la connessione a internet)",
     "settings_heading": "Impostazioni",
-    "settings_note": "I parametri di funzionamento, modificabili da qui senza toccare file o codice. Un campo vuoto usa il valore di config.yaml (o quello predefinito). Hanno effetto dopo il riavvio di LocalHome.",
+    "settings_note": "I parametri di funzionamento, modificabili da qui senza toccare file o codice. Un campo vuoto usa il valore di config.yaml (o quello predefinito). Hanno effetto dopo il riavvio di LocalHome, tranne dove il campo dice altrimenti.",
     "settings_save": "Salva impostazioni",
     "settings_defaults": "Ripristina predefiniti",
     "settings_defaults_confirm": "Cancellare tutte le impostazioni fatte da qui e tornare a quelle di config.yaml?",
@@ -482,7 +482,10 @@
     "how_diagnostic_title": "Diagnosi",
     "vmc_pick_device": "Scegli quale dispositivo comanda il programma.",
     "vmc_program_moved": "Il programma giorno/notte della VMC si imposta dalla dashboard, sulla card della VMC insieme ai pulsanti della velocità.",
-    "system_problem_device_not_heard_yet": "{subject}: non ancora sentito da quando la scheda è accesa - i sensori a batteria si fanno vivi ogni paio d'ore"
+    "system_problem_device_not_heard_yet": "{subject}: non ancora sentito da quando la scheda è accesa - i sensori a batteria si fanno vivi ogni paio d'ore",
+    "setting_site_name": "Nome della pagina",
+    "setting_site_name_help": "Il titolo in alto nella dashboard e il nome sotto l'icona sul telefono. Massimo 24 caratteri, così resta leggibile su uno schermo piccolo. Vuoto = LocalHome. Cambia al ricaricamento della pagina, senza riavvio.",
+    "settings_saved_live": "Salvato. Ricarica la pagina per vedere il nuovo nome."
   },
   "vmc_presets": {
     "night": "Notte",

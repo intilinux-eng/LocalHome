@@ -41,6 +41,7 @@ web:
   host: "0.0.0.0"    # default: 0.0.0.0
   port: 5000          # default: 5000
   language: "en"       # optional, default: "en" - see "Language" below
+  site_name: "LocalHome"  # optional - the name shown on the dashboard, max 24 characters
   auth:                # optional, off by default - see "Web auth" below
     secrets_file: "secrets_web.json"
 
@@ -580,12 +581,22 @@ still happens to agree with the newly-computed state.
 The admin panel's **Settings** section changes the operating parameters
 without touching this file: `thermostat.hysteresis_c`,
 `thermostat.poll_interval_seconds`, `thermostat.sensor_failsafe_hours`,
-`history.retention_days`, `history.max_db_mb` and `web.language`. Each
-has a safe range (a value outside it is refused), and each field shows
-whether its value comes from the panel, from config.yaml or from the
-built-in default. Saved in `config/panel_settings.json`, they take
-precedence over config.yaml after a restart; "Restore defaults" removes
-them. A factory reset removes them too.
+`history.retention_days`, `history.max_db_mb`, `web.language` and
+`web.site_name`. Each has a safe range (a value outside it is refused),
+and each field shows whether its value comes from the panel, from
+config.yaml or from the built-in default. Saved in
+`config/panel_settings.json`, they take precedence over config.yaml after
+a restart; "Restore defaults" removes them. A factory reset removes them
+too.
+
+**Page name** (`web.site_name`) is the exception that needs no restart:
+it's read on every page render, so it's there on the next reload. It's
+the heading at the top of the dashboard, the browser tab's title and the
+name under the icon when the dashboard is added to a phone's home screen
+(`/site.webmanifest` is built from it). At most 24 characters, so it
+still fits a phone's header; line breaks and repeated spaces are
+flattened, control characters are refused, and a blank field puts
+"LocalHome" back.
 
 ### Maintenance: backup, clear, factory reset
 

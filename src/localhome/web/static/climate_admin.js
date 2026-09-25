@@ -1307,6 +1307,7 @@ function settingFieldHtml(s) {
   const source = tr(`climate_admin.settings_source_${s.source}`);
   const value = s.source === "panel" ? s.value : "";
   const placeholder = s.source === "config" ? s.config_value : s.default;
+  if (s.type === "text") return textSettingHtml(s, label, help, source, value, placeholder);
   const input = s.type === "choice"
     ? `<select data-setting="${s.key}"><option value="">${escapeHtml(tr("climate_admin.settings_inherit", { value: placeholder }))}</option>`
       + s.choices.map(c => `<option value="${c}"${value === c ? " selected" : ""}>${c}</option>`).join("") + `</select>`
@@ -1317,6 +1318,29 @@ function settingFieldHtml(s) {
       ${input}
       <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
     </div>`;
+}
+
+// A name is the one setting someone can get wrong in a way the box
+// itself can show: the count is there while typing, and the browser stops
+// at the limit (the server checks again anyway - see panel_settings.py).
+function textSettingHtml(s, label, help, source, value, placeholder) {
+  const used = String(value).length;
+  return `
+    <div class="admin-field">
+      <label>${escapeHtml(label)} <span class="setting-range" id="count-${s.key}">${used}/${s.max_length}</span></label>
+      <input type="text" data-setting="${s.key}" maxlength="${s.max_length}"
+             value="${escapeHtml(String(value))}" placeholder="${escapeHtml(String(placeholder))}"
+             oninput="countSetting(this)">
+      <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
+    </div>`;
+}
+
+function countSetting(input) {
+  const counter = document.getElementById(`count-${input.dataset.setting}`);
+  if (!counter) return;
+  const max = Number(input.maxLength);
+  counter.textContent = `${input.value.length}/${max}`;
+  counter.classList.toggle("at-limit", input.value.length >= max);
 }
 
 async function postSettings(values, button) {
@@ -1334,7 +1358,12 @@ async function postSettings(values, button) {
       result.className = "hint-text admin-error";
       return;
     }
-    result.innerHTML = `${tr("climate_admin.save_success")} ${restartButtonHtml()}`;
+    // Only some settings need a restart; the page name is live on the
+    // next reload, and asking for a restart it doesn't need would teach
+    // people to restart for nothing.
+    result.innerHTML = data.restart_required
+      ? `${tr("climate_admin.save_success")} ${restartButtonHtml()}`
+      : tr("climate_admin.settings_saved_live");
     result.className = "hint-text admin-success";
     loadSettings();
   } catch (e) {
