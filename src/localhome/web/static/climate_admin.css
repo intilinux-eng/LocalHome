@@ -658,3 +658,12 @@
   color: var(--accent-stop);
   font-weight: 600;
 }
+
+/* The "what's in the history right now" line, under the size setting -
+   see historyUsageHtml() in climate_admin.js. */
+.setting-usage {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--card-border);
+}

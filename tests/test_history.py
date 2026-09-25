@@ -359,6 +359,75 @@ def test_the_database_is_held_under_its_size_cap(tmp_path):
         store.close()
 
 
+def test_the_panel_can_say_what_the_history_is_made_of(tmp_path):
+    """The size setting shows what's in there: the admin panel has no
+    other way to answer "300 MB of what?"."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        for minute in range(10):
+            store.record_many(now - minute * 60, {
+                "Rooms Sensor": {"temperature_c": 21.0, "humidity_pct": 50.0},
+                "Rooms Valve": {"is_on": 1.0},
+            })
+
+        stats = store.stats(now)
+
+        assert stats["sensors"] == 2
+        assert stats["rows"] == 30
+        assert [f["field"] for f in stats["by_field"]][:1] != []
+        by_field = {f["field"]: f["rows"] for f in stats["by_field"]}
+        assert by_field == {"temperature_c": 10, "humidity_pct": 10, "is_on": 10}
+        assert stats["newest_ts"] == now and stats["oldest_ts"] == now - 9 * 60
+        assert stats["used_bytes"] > 0
+        assert stats["size_prune_ts"] is None, "the ceiling has never been reached here"
+    finally:
+        store.close()
+
+
+def test_the_day_the_ceiling_was_reached_is_remembered(tmp_path):
+    """Months later, a history that starts mid-August explains itself
+    only if the database remembers being cut back."""
+    path = tmp_path / "history.db"
+    store = HistoryStore(str(path))
+    try:
+        now = int(time.time())
+        for day in range(10, 0, -1):
+            samples = {f"Sensor {i}": {"temperature_c": 20.0 + i} for i in range(60)}
+            for minute in range(0, 1440, 30):
+                store.record_many(now - day * 86400 + minute * 60, samples)
+        cap = store.used_bytes() // 2
+
+        removed = store.prune_to_size(cap)
+
+        stats = store.stats(now)
+        assert removed > 0
+        assert stats["size_prune_rows"] == removed
+        assert abs(stats["size_prune_ts"] - now) < 60
+    finally:
+        store.close()
+
+    # And it survives a restart - it's in the database, not in memory.
+    reopened = HistoryStore(str(path))
+    try:
+        assert reopened.stats()["size_prune_ts"] is not None
+    finally:
+        reopened.close()
+
+
+def test_a_prune_that_removes_nothing_is_not_remembered_as_a_ceiling(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        store.record_many(now - 60, {"Rooms Sensor": {"temperature_c": 21.0}})
+
+        store.prune_to_size(10_000_000)   # miles under the cap
+
+        assert store.stats(now)["size_prune_ts"] is None
+    finally:
+        store.close()
+
+
 def test_the_last_day_is_never_removed_to_fit_the_cap(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
     try:

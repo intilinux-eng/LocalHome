@@ -59,7 +59,8 @@
     "pm25_ugm3": "PM2.5",
     "pm10_ugm3": "PM10",
     "battery_pct": "Battery",
-    "brightness": "Brightness"
+    "brightness": "Brightness",
+    "is_on": "on/off"
   },
   "air_quality": {
     "label": "Air quality",
@@ -486,7 +487,12 @@
     "setting_site_name": "Page name",
     "setting_site_name_help": "The heading at the top of the dashboard, and the name under the icon on a phone. At most 24 characters, so it stays readable on a small screen. Blank = LocalHome. Takes effect when the page is reloaded, with no restart.",
     "settings_saved_live": "Saved. Reload the page to see the new name.",
-    "zones_fresh_note": "On a fresh installation both zones start simulated: you can save, restart and watch the thermostat, the schedule and the history work with no device connected at all. Switch a zone to \"Shelly\" once the device is installed and you have its id."
+    "zones_fresh_note": "On a fresh installation both zones start simulated: you can save, restart and watch the thermostat, the schedule and the history work with no device connected at all. Switch a zone to \"Shelly\" once the device is installed and you have its id.",
+    "setting_history_now": "Now: {used} MB of {max} ({percent}%), {rows} readings from {sensors} sensors, since {since}.",
+    "setting_history_contents": "It holds device readings only ({fields}): schedules, settings and the zone mapping live in their own files and take up nothing here.",
+    "setting_history_cap_never": "The ceiling has never been reached.",
+    "setting_history_cap_hit": "Ceiling last reached on {when}: the oldest days were removed.",
+    "setting_history_empty": "No readings recorded yet."
   },
   "vmc_presets": {
     "night": "Night",

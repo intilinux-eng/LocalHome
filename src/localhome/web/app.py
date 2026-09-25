@@ -407,6 +407,28 @@ def _register_routes(app: Flask) -> None:
     db_stats_cache = {"ts": 0.0, "value": None}
     DB_STATS_MAX_AGE_SECONDS = 600
 
+    def _database_stats() -> dict:
+        """The history database's size and contents, cached: the scan
+        costs a full table read, and both the system status and the
+        settings panel ask for it."""
+        store: HistoryStore = app.config["HISTORY"]
+        recorder: HistoryRecorder = app.config["RECORDER"]
+        now = time.time()
+        if db_stats_cache["value"] is None or now - db_stats_cache["ts"] > DB_STATS_MAX_AGE_SECONDS:
+            try:
+                db_stats_cache["value"] = store.stats()
+            except Exception:
+                logger.exception("Failed to read history database stats")
+                db_stats_cache["value"] = {}
+            db_stats_cache["ts"] = now
+        return {
+            **db_stats_cache["value"],
+            "path": str(store.db_path),
+            "retention_days": recorder.retention_days,
+            "max_bytes": recorder.max_db_bytes,
+            "stats_age_seconds": round(now - db_stats_cache["ts"]),
+        }
+
     @app.route("/api/system-status")
     def api_system_status():
         # What the admin panel's system-status section shows: anything
@@ -421,20 +443,7 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
 
         now = time.time()
-        if db_stats_cache["value"] is None or now - db_stats_cache["ts"] > DB_STATS_MAX_AGE_SECONDS:
-            try:
-                db_stats_cache["value"] = store.stats()
-            except Exception:
-                logger.exception("Failed to read history database stats")
-                db_stats_cache["value"] = {}
-            db_stats_cache["ts"] = now
-        database = {
-            **db_stats_cache["value"],
-            "path": str(store.db_path),
-            "retention_days": recorder.retention_days,
-            "max_bytes": recorder.max_db_bytes,
-            "stats_age_seconds": round(now - db_stats_cache["ts"]),
-        }
+        database = _database_stats()
 
         loops = [system_status.loop_health("history", recorder.last_write_ok_ts, recorder.poll_interval_seconds, now)]
         if thermostat is not None:
@@ -1087,6 +1096,9 @@ def _register_routes(app: Flask) -> None:
         return jsonify(
             ok=True,
             settings=panel_settings.effective(config, saved),
+            # Next to "maximum history size": what's in there now, so the
+            # ceiling is a number with something to compare it against.
+            history=_database_stats(),
             restart_pending=panel_settings.needs_restart(saved, app.config["ACTIVE_PANEL_SETTINGS"]),
         )
 

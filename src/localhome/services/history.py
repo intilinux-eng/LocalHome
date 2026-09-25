@@ -109,6 +109,7 @@ class HistoryStore:
         rows removed. The file stops growing rather than shrinking: freed
         pages are reused."""
         removed = 0
+        started_over = self.used_bytes() > max_bytes
         while self.used_bytes() > max_bytes:
             conn = self._connect()
             try:
@@ -121,7 +122,30 @@ class HistoryStore:
                 self._on_stats_cache.clear()
             finally:
                 conn.close()
+        if started_over and removed:
+            # Worth knowing months later: "the ceiling was reached on the
+            # 3rd" explains a chart that stops there.
+            self._set_meta("size_prune_ts", str(int(time.time())))
+            self._set_meta("size_prune_rows", str(removed))
         return removed
+
+    def _set_meta(self, key: str, value: str) -> None:
+        conn = self._connect()
+        try:
+            conn.execute("INSERT INTO meta (key, value) VALUES (?, ?) "
+                         "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _meta(self) -> dict:
+        conn = self._connect()
+        try:
+            return {key: value for key, value in conn.execute("SELECT key, value FROM meta")}
+        except sqlite3.OperationalError:
+            return {}   # a database from before this table existed
+        finally:
+            conn.close()
 
     def clear(self) -> int:
         """Removes every sample and gives the space back to the disk."""
@@ -173,6 +197,9 @@ class HistoryStore:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_readings_sensor_field_ts ON readings(sensor, field, ts)")
+            # Notes about this database itself - currently only the last
+            # time the size ceiling forced days out (see prune_to_size).
+            conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             conn.commit()
         finally:
             conn.close()
@@ -251,11 +278,22 @@ class HistoryStore:
                 pass
         conn = self._connect()
         try:
-            rows, oldest_ts = conn.execute("SELECT COUNT(*), MIN(ts) FROM readings").fetchone()
+            rows, oldest_ts, newest_ts = conn.execute(
+                "SELECT COUNT(*), MIN(ts), MAX(ts) FROM readings").fetchone()
             (rows_24h,) = conn.execute("SELECT COUNT(*) FROM readings WHERE ts >= ?", (now - 86400,)).fetchone()
+            (sensors,) = conn.execute("SELECT COUNT(DISTINCT sensor) FROM readings").fetchone()
+            # What the space is actually spent on: one row per kind of
+            # measurement, biggest first. Only measurements are in here -
+            # schedules, settings and the zone mapping are their own files.
+            by_field = [{"field": field, "rows": count} for field, count in conn.execute(
+                "SELECT field, COUNT(*) FROM readings GROUP BY field ORDER BY COUNT(*) DESC")]
         finally:
             conn.close()
-        return {"file_bytes": file_bytes, "rows": rows, "rows_24h": rows_24h, "oldest_ts": oldest_ts}
+        meta = self._meta()
+        return {"file_bytes": file_bytes, "used_bytes": self.used_bytes(), "rows": rows, "rows_24h": rows_24h,
+                "oldest_ts": oldest_ts, "newest_ts": newest_ts, "sensors": sensors, "by_field": by_field,
+                "size_prune_ts": int(meta["size_prune_ts"]) if meta.get("size_prune_ts") else None,
+                "size_prune_rows": int(meta["size_prune_rows"]) if meta.get("size_prune_rows") else None}
 
     def query_peak_today(self, sensor: str, field: str) -> dict:
         now = time.localtime()

@@ -1299,12 +1299,57 @@ async function loadSettings() {
     const res = await fetch("/api/climate-admin/settings");
     const data = await res.json();
     if (!data.ok) return;
+    historyStats = data.history || null;
     document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
     document.getElementById("settings-status").innerHTML = data.restart_pending
       ? `<span class="admin-status neutral">${tr("climate_admin.settings_restart_pending")}</span>` : "";
   } catch (e) {
     // Keep the form as it was.
   }
+}
+
+let historyStats = null; // from the last GET /api/climate-admin/settings
+
+// "300 MB" means nothing without knowing what's in there now. The history
+// holds measurements only - one row per sensor field per cycle - while
+// schedules, settings and the zone mapping live in their own files, which
+// is the first thing people assume is filling it up.
+function historyUsageHtml(maxMb) {
+  const h = historyStats;
+  if (!h || !h.rows) return `<span class="hint-text setting-usage">${escapeHtml(tr("climate_admin.setting_history_empty"))}</span>`;
+  const usedMb = (h.used_bytes || h.file_bytes || 0) / 1e6;
+  const percent = maxMb ? Math.round((usedMb / maxMb) * 100) : 0;
+  const parts = [tr("climate_admin.setting_history_now", {
+    used: formatMb(usedMb), max: maxMb, percent,
+    rows: formatCount(h.rows), sensors: h.sensors || 0,
+    since: h.oldest_ts ? formatDay(h.oldest_ts) : "-",
+  })];
+  const top = (h.by_field || []).slice(0, 3).map(f =>
+    `${fieldName(f.field)} ${Math.round((f.rows / h.rows) * 100)}%`).join(" · ");
+  parts.push(tr("climate_admin.setting_history_contents", { fields: top }));
+  parts.push(h.size_prune_ts
+    ? tr("climate_admin.setting_history_cap_hit", { when: formatDay(h.size_prune_ts) })
+    : tr("climate_admin.setting_history_cap_never"));
+  return `<span class="hint-text setting-usage">${escapeHtml(parts.join(" "))}</span>`;
+}
+
+function fieldName(field) {
+  const name = tr(`fields.${field}`);
+  return name === `fields.${field}` ? field : name;
+}
+
+function formatMb(mb) {
+  return mb >= 100 ? Math.round(mb).toLocaleString(LOCALE) : mb.toLocaleString(LOCALE, { maximumFractionDigits: 1 });
+}
+
+function formatCount(rows) {
+  if (rows >= 1e6) return (rows / 1e6).toLocaleString(LOCALE, { maximumFractionDigits: 1 }) + "M";
+  if (rows >= 1e4) return Math.round(rows / 1e3).toLocaleString(LOCALE) + "k";
+  return rows.toLocaleString(LOCALE);
+}
+
+function formatDay(ts) {
+  return new Date(ts * 1000).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function settingFieldHtml(s) {
@@ -1323,6 +1368,7 @@ function settingFieldHtml(s) {
       <label>${escapeHtml(label)} <span class="setting-range">${s.type === "choice" ? "" : `${s.min}–${s.max}`}</span></label>
       ${input}
       <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
+      ${s.key === "history_max_db_mb" ? historyUsageHtml(Number(s.value)) : ""}
     </div>`;
 }
 

@@ -59,7 +59,8 @@
     "pm25_ugm3": "PM2.5",
     "pm10_ugm3": "PM10",
     "battery_pct": "Batteria",
-    "brightness": "Luminosità"
+    "brightness": "Luminosità",
+    "is_on": "acceso/spento"
   },
   "air_quality": {
     "label": "Qualità dell'aria",
@@ -486,7 +487,12 @@
     "setting_site_name": "Nome della pagina",
     "setting_site_name_help": "Il titolo in alto nella dashboard e il nome sotto l'icona sul telefono. Massimo 24 caratteri, così resta leggibile su uno schermo piccolo. Vuoto = LocalHome. Cambia al ricaricamento della pagina, senza riavvio.",
     "settings_saved_live": "Salvato. Ricarica la pagina per vedere il nuovo nome.",
-    "zones_fresh_note": "Su un'installazione nuova le due zone partono simulate: puoi salvare, riavviare e vedere subito termostato, programmazione e storico funzionare senza alcun dispositivo collegato. Passa a \"Shelly\" quando il dispositivo è installato e ne hai l'ID."
+    "zones_fresh_note": "Su un'installazione nuova le due zone partono simulate: puoi salvare, riavviare e vedere subito termostato, programmazione e storico funzionare senza alcun dispositivo collegato. Passa a \"Shelly\" quando il dispositivo è installato e ne hai l'ID.",
+    "setting_history_now": "Ora: {used} MB su {max} ({percent}%), {rows} misure da {sensors} sensori, dal {since}.",
+    "setting_history_contents": "Dentro ci sono solo misure dei dispositivi ({fields}): programmazione, impostazioni e mappatura zone stanno in file separati e non occupano nulla qui.",
+    "setting_history_cap_never": "Il tetto non è mai stato raggiunto.",
+    "setting_history_cap_hit": "Tetto raggiunto l'ultima volta il {when}: sono stati cancellati i giorni più vecchi.",
+    "setting_history_empty": "Ancora nessuna misura registrata."
   },
   "vmc_presets": {
     "night": "Notte",
