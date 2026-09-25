@@ -9,7 +9,7 @@ the web admin panel, with no source code or config file to edit.
 This page is the whole path, from a new board to a running
 installation, and what to expect of it over the years. For just the
 commands, in order, ending at an empty installation with no devices
-configured, see
+configured - and the board's LED matrix showing its health - see
 [quick-installation-arduino-uno-q.md](quick-installation-arduino-uno-q.md).
 The generic guide for any Linux board is
 [deployment.md](deployment.md); the full configuration reference is

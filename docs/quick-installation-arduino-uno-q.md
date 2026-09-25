@@ -249,6 +249,12 @@ with no intervention.
   24 characters. It replaces "LocalHome" in the header, the browser tab
   and the name under the icon when the dashboard is added to a phone's
   home screen, and takes effect on the next page load.
+- **Outdoor temperature sensor and VMC** - on a fresh installation
+  both start **simulated** too, so the outdoor chart and the VMC's
+  speeds and day/night program can be shown and tried before the
+  hardware exists. Everything simulated is marked "simulated" on the
+  dashboard. Switch each to "Shelly" with its device id once it's
+  installed, or to "None" if the apartment doesn't have one.
 - **Zones** - exactly two, and on a fresh installation both start
   **simulated** on purpose: there is no hardware yet, a real device id
   is required to save a "Shelly" zone, and a zone pointed at a device
@@ -261,6 +267,35 @@ with no intervention.
   and reporting. The panel's per-zone status says whether it is actually
   being heard, and distinguishes "not reachable yet" (a battery sensor
   that hasn't woken up) from "was reporting, now unreachable".
+
+## 11. The LED matrix
+
+The UNO Q's 13x8 LED matrix shows LocalHome's health to whoever is in
+front of the box, without a phone - above all when the network or
+LocalHome itself is down, exactly when the dashboard can't help. The
+admin panel's **LED matrix** section has a live mirror of it, a legend
+of every picture and what each problem code means.
+
+The picture is decided by LocalHome; the microcontroller only draws it,
+and shows two things on its own: a dot running along the bottom until
+LocalHome's first frame, and a blinking X if frames stop for 20 seconds.
+Its sketch has to be loaded once, from the board itself:
+
+```bash
+cd ~/localhome
+arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_matrix
+```
+
+About two minutes, most of it compiling; no LocalHome restart is needed,
+the matrix lights up within 30 seconds. Loading it replaces whatever
+sketch was on the microcontroller (an Arduino App Lab app included).
+Without it, LocalHome runs exactly the same - the admin panel just says
+the sketch isn't loaded.
+
+It's built to cost nothing that matters: one frame a second over a
+single connection to arduino-router, and its state is read from memory
+every 30 seconds - no network probes, no subprocesses. Where there's no
+matrix (a PC, a Raspberry Pi) it does nothing at all.
 
 ## What it costs on the board
 

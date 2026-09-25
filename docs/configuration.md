@@ -440,18 +440,34 @@ these by a different name, update that entry to say "Bathroom Bypass
 Valve"/"Dehumidifier" instead, since this panel always uses those exact
 names.
 
-One more fixed, standalone sensor - an outdoor temperature/humidity
-reading, always a real Shelly H&T Gen3, no simulated/manual stand-in -
-is mappable the same way under its own "Outdoor sensor" section: leave
-its device id blank if not wired yet, same as either extra switch.
-It's not part of either zone (no valve, no thermostat decision), so
-there's nothing tying it to `thermostat.zones`/`interlocks` the way the
-extra switches above can be - the only thing to update if a
-config.yaml entry already covers this is its own `dashboard_tab`/name
-if you want to keep both around, since this panel always builds it as
-"Outdoor Sensor".
+One more fixed, standalone sensor - the outdoor temperature/humidity,
+a Shelly H&T Gen3 - has its own "Outdoor temperature sensor" section.
+It's not part of either zone (no valve, no thermostat decision); it
+feeds the outdoor chip at the top of the Climate tab and its own chart.
+The panel always builds it as "Outdoor Sensor".
 
-The VMC (mechanical ventilation) has its own section too: one device id
+Both it and the VMC below have a **source**, like a zone's sensor:
+
+- **Shelly** - the real device; its id is required.
+- **Simulated** - no hardware behind it. The outdoor sensor follows the
+  month's average temperature with a 5 degree swing over the day
+  (warmest at 15:00, coldest at 03:00), so its chart looks like
+  weather; the VMC is the same card, speeds and day/night program as the
+  real one. Everything simulated is marked "simulated" on the
+  dashboard, so it never passes for the real apartment.
+- **None** - not built at all.
+
+On a climate installation (the panel manages the zones), a section that
+has never been saved starts **simulated**, so a new board shows the
+outdoor chart and the VMC's controls before the hardware exists. Never
+over a real device, though: not if config.yaml already wires one by hand
+(an integration named "Outdoor Sensor" / "VMC", or any `shelly_light`
+dimmer), and not if the section was saved before sources existed - there
+a device id still means the real device and a blank still means none.
+A LocalHome that isn't doing climate at all gets neither.
+
+The VMC (mechanical ventilation) has its own section too, with the
+same Shelly / simulated / none source: one device id
 of the Shelly 0/1-10V Dimmer Gen3 driving its speed builds both an on/off
 switch named "VMC" and its speed as "VMC Speed", paired into one
 dashboard card. The card has no on/off toggle - residential mechanical
