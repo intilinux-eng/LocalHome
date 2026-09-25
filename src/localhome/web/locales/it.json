@@ -86,7 +86,8 @@
     "safe_limit": "limite sicuro ({value}kW)",
     "running": "In funzione",
     "stopped": "Ferma",
-    "stopped_pick_preset": "Scegli una modalità per riavviarla."
+    "stopped_pick_preset": "Scegli una modalità per riavviarla.",
+    "waiting_since_boot": "in attesa del primo dato (scheda accesa da {age})"
   },
   "tabs": {
     "home": "Casa",
@@ -210,7 +211,8 @@
     "vmc_speed_label": "velocità",
     "vmc_program_off": "Non attivo: la velocità resta quella che imposti tu.",
     "vmc_program_running": "Attivo: {period} {value}% fino alle {until}.",
-    "vmc_same_time": "Giorno e notte devono iniziare a orari diversi."
+    "vmc_same_time": "Giorno e notte devono iniziare a orari diversi.",
+    "tile_stale": "dato di {age} fa"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
@@ -473,7 +475,8 @@
     "how_data": "Lo storico dei grafici ha un limite di giorni e di dimensione (in Impostazioni): oltre, si cancellano i dati più vecchi. I registri di sistema stanno in RAM (massimo 30 MB), non consumano la memoria eMMC e si perdono al riavvio. Prima di ogni cancellazione in Manutenzione viene salvato un backup sulla scheda (ultimi 10, più una copia dello storico se c'è spazio).",
     "how_diagnostic_title": "Diagnosi",
     "vmc_pick_device": "Scegli quale dispositivo comanda il programma.",
-    "vmc_program_moved": "Il programma giorno/notte della VMC si imposta dalla dashboard, sulla card della VMC insieme ai pulsanti della velocità."
+    "vmc_program_moved": "Il programma giorno/notte della VMC si imposta dalla dashboard, sulla card della VMC insieme ai pulsanti della velocità.",
+    "system_problem_device_not_heard_yet": "{subject}: non ancora sentito da quando la scheda è accesa - i sensori a batteria si fanno vivi ogni paio d'ore"
   },
   "vmc_presets": {
     "night": "Notte",

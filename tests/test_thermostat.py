@@ -1,4 +1,5 @@
 import json
+import time as tm
 from datetime import datetime, timedelta
 
 import pytest
@@ -486,10 +487,10 @@ def test_unreachable_sensor_leaves_the_valve_alone_before_the_threshold(tmp_path
 
     assert switch.calls == []  # existing base behavior: skipped, not forced
     assert controller.is_failsafe_active("Rooms") is False
-    assert controller.unreachable_hours("Rooms") == pytest.approx(0.0, abs=0.01)
+    assert controller.unreachable_hours("Rooms") is None
 
 
-def test_prolonged_sensor_silence_forces_the_valve_closed(tmp_path, monkeypatch):
+def test_prolonged_sensor_silence_forces_the_valve_closed(tmp_path):
     zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
     switch = FakeSwitch()
     switch.calls.append("on")  # pretend it was already open when the sensor went quiet
@@ -498,39 +499,76 @@ def test_prolonged_sensor_silence_forces_the_valve_closed(tmp_path, monkeypatch)
     controller = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0)
     controller._valve_open["Rooms"] = True
 
-    now = {"t": 1_000_000.0}
-    monkeypatch.setattr("localhome.services.thermostat.time.time", lambda: now["t"])
+    for _ in range(25):  # 25 hours of watched silence, an hour per cycle
+        controller._on_sensor_unreachable(zones[0], 3600)
 
-    controller.tick(now=datetime(2026, 9, 14, 8, 0))  # first sighting of the outage
-    assert controller.is_failsafe_active("Rooms") is False
-
-    now["t"] += 25 * 3600  # 25h later, still unreachable
-    controller.tick(now=datetime(2026, 9, 15, 9, 0))
-
-    assert switch.calls[-1] == "off"
     assert controller.is_failsafe_active("Rooms") is True
-    assert controller.unreachable_hours("Rooms") == pytest.approx(25.0, abs=0.01)
+    assert switch.calls == ["on", "off"]
+    assert controller.unreachable_hours("Rooms") == pytest.approx(25, abs=0.1)
 
 
-def test_failsafe_clears_once_the_sensor_reports_again(tmp_path, monkeypatch):
+def test_silence_is_counted_across_restarts(tmp_path):
+    """A board that restarts every day used to restart the countdown with
+    it, so a genuinely dead sensor never tripped the failsafe."""
     zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
     switch = FakeSwitch()
     manager = FakeManager(readings={"Rooms Temp": {"ok": False}}, switches={"Rooms Valve": switch})
     store = ScheduleStore(str(tmp_path / "schedules.json"))
-    controller = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0)
+    silence = str(tmp_path / "sensor_silence.json")
 
-    now = {"t": 1_000_000.0}
-    monkeypatch.setattr("localhome.services.thermostat.time.time", lambda: now["t"])
-    controller.tick(now=datetime(2026, 9, 14, 8, 0))
-    now["t"] += 25 * 3600
-    controller.tick(now=datetime(2026, 9, 15, 9, 0))
+    def run_for(hours):
+        controller = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0,
+                                          poll_interval_seconds=3600, silence_file=silence)
+        controller.tick(now=datetime(2026, 9, 25, 8, 0))       # first tick of this run: no gap counted
+        for _ in range(hours):
+            controller._on_sensor_unreachable(zones[0], 3600)  # an hour of watched silence
+        return controller
+
+    run_for(13)
+    controller = run_for(13)   # a restart in between, 26h of silence in total
+
+    assert controller.is_failsafe_active("Rooms") is True
+    assert controller.unreachable_hours("Rooms") >= 26
+    assert switch.calls[-1] == "off"
+
+
+def test_time_with_the_board_switched_off_is_not_silence(tmp_path):
+    """Three days off is time nobody was listening - the sensors were
+    talking to an empty room. Coming back must not declare them dead."""
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    manager = FakeManager(readings={"Rooms Temp": {"ok": False}}, switches={"Rooms Valve": FakeSwitch()})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    controller = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0,
+                                      poll_interval_seconds=60, silence_file=str(tmp_path / "s.json"))
+    real_time = tm.time
+
+    # One tick, then the clock jumps three days: the board was off.
+    controller.tick(now=datetime(2026, 9, 22, 8, 0))
+    controller._last_tick_ts = real_time() - 3 * 86400
+    controller.tick(now=datetime(2026, 9, 25, 8, 0))
+
+    assert controller.is_failsafe_active("Rooms") is False
+    # At most a couple of cycles counted, not three days.
+    assert controller.unreachable_hours("Rooms") < 0.2
+
+
+def test_the_failsafe_lifts_and_forgets_when_the_sensor_reports_again(tmp_path):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    manager = FakeManager(readings={"Rooms Temp": {"ok": False}}, switches={"Rooms Valve": FakeSwitch()})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    silence = str(tmp_path / "s.json")
+    controller = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0, silence_file=silence)
+    controller._on_sensor_unreachable(zones[0], 25 * 3600)
     assert controller.is_failsafe_active("Rooms") is True
 
     manager._readings["Rooms Temp"] = {"ok": True, "temperature_c": 18.0}
-    controller.tick(now=datetime(2026, 9, 15, 9, 1))
+    controller.tick(now=datetime(2026, 9, 25, 9, 0))
 
     assert controller.is_failsafe_active("Rooms") is False
     assert controller.unreachable_hours("Rooms") is None
+    # ...and a restart doesn't bring the old total back.
+    fresh = ThermostatController(manager, store, zones, sensor_failsafe_hours=24.0, silence_file=silence)
+    assert fresh.unreachable_hours("Rooms") is None
 
 
 # ----------------------------------------------------- per-season grids -----

@@ -25,6 +25,7 @@
   const SKEW_WARN_MS = 2 * 60 * 1000;
 
   let state = null;       // { skewMs, offsetMin, tzName, tzAbbrev }
+  let boot = {};          // { bootedAt, startedAt } - epoch seconds, from the server
   let appVersion = null;  // the dashboard's files as first loaded - see showUpdateBanner()
   let lastMinuteKey = null;
 
@@ -168,6 +169,7 @@
         tzName: data.tz_name,
         tzAbbrev: data.tz_abbrev,
       };
+      boot = { bootedAt: data.booted_at, startedAt: data.started_at };
       render();
       renderWarning();
       if (data.app_version) {
@@ -180,7 +182,17 @@
     }
   }
 
-  window.ServerClock = { now: serverWallClock };
+  // How long the board (and LocalHome on it) has been up, in seconds -
+  // null until the first sync, or where the board can't tell us.
+  function upFor() {
+    const now = Date.now() / 1000;
+    return {
+      board: boot.bootedAt ? now - boot.bootedAt : null,
+      process: boot.startedAt ? now - boot.startedAt : null,
+    };
+  }
+
+  window.ServerClock = { now: serverWallClock, upFor };
 
   sync();
   setInterval(sync, RESYNC_MS);

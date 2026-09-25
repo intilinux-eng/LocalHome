@@ -122,8 +122,26 @@ function formatUpdatedAgo(seconds) {
 // never uses this value, see services/thermostat.py's tick()) to turn
 // that into an actual date/time, which is what the operator actually
 // wants to see, not just a relative "19h ago".
+// A reading older than the board's own boot was never missed: nobody was
+// listening. After a power cut a battery sensor takes until its next
+// wake-up (up to a couple of hours) to be heard, and calling that "no
+// data for 53h" reads as a broken sensor when nothing is wrong.
+function predatesBoot(ageSeconds) {
+  if (ageSeconds == null) return false;
+  const up = (window.ServerClock && window.ServerClock.upFor()) || {};
+  const since = up.board != null ? up.board : up.process;
+  return since != null && ageSeconds > since + 60;
+}
+
+function waitingSinceBootNote() {
+  const up = (window.ServerClock && window.ServerClock.upFor()) || {};
+  const since = up.board != null ? up.board : up.process;
+  return tr("sensors.waiting_since_boot", { age: formatAge(since) || "?" });
+}
+
 function staleValueNote(ageSeconds) {
   const relative = formatAge(ageSeconds);
+  if (predatesBoot(ageSeconds)) return waitingSinceBootNote();
   if (relative == null) return tr("sensors.stale_value_note", { date: "?", time: "?" });
   const date = new Date(Date.now() - ageSeconds * 1000).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" });
   return tr("sensors.stale_value_note", { date, time: relative });
@@ -1948,12 +1966,20 @@ function zoneTileHtml(zone) {
   const id = slug(zone.name);
   const { temp, hum } = zoneReadingParts(zone);
   const values = `<span class="zt-values"><span class="zt-temp${zone.sensor_ok ? "" : " stale"}">${temp}</span><span class="zt-hum">${hum}</span></span>`;
+  // A reading that stopped coming still shows its last value, dimmed -
+  // but how old it is has to be on the tile, not one tap away, or a
+  // sensor that died on Tuesday reads as today's temperature.
+  const stale = !zone.sensor_ok && zoneHasLastKnownValue(zone)
+    ? `<span class="zt-stale">${predatesBoot(zone.sensor_last_value_age_seconds)
+        ? waitingSinceBootNote()
+        : tr("climate.tile_stale", { age: formatAge(zone.sensor_last_value_age_seconds) || "?" })}</span>`
+    : "";
   if (zoneExcluded(zone)) {
     const valve = excludedValveState(zone);
     return `
       <div class="zone-tile excluded" data-zone="${id}" title="${escapeAttr(valve.title)}">
         <span class="zt-name">${zone.name}</span>
-        ${values}
+        ${values}${stale}
         <span class="zt-status valve-${valve.cls}"><span class="zt-dot"></span>${valve.text}</span>
         <span class="zt-note">${tr("climate.excluded_note")}</span>
       </div>`;
@@ -1962,7 +1988,7 @@ function zoneTileHtml(zone) {
   return `
     <button class="zone-tile state-${state.cls}${id === selectedZoneId ? " selected" : ""}" data-zone="${id}" onclick="selectZone('${id}')">
       <span class="zt-name">${zone.name}</span>
-      ${values}
+      ${values}${stale}
       <span class="zt-status"><span class="zt-dot"></span>${state.short}</span>
     </button>`;
 }

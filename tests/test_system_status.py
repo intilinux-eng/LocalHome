@@ -373,3 +373,34 @@ def test_an_unreachable_cover_becomes_a_problem():
 
     assert [p["code"] for p in found] == ["device_offline"]
     assert found[0]["subject"] == "Kitchen Blind"
+
+
+def test_a_device_not_heard_yet_after_a_boot_is_not_called_offline():
+    """A board that came back five minutes ago hasn't heard from its
+    battery sensors yet - they speak every couple of hours. Calling that
+    "offline" after every power cut is how a problems list gets ignored."""
+    devices = [{"name": "Rooms Sensor", "kind": "climate", "ok": False,
+                "error": "no MQTT message received yet", "seconds_since_update": None}]
+
+    fresh = system_status.problems(devices, [], {"low": False, "path": "/"}, host={"uptime_seconds": 300})
+    running_for_days = system_status.problems(devices, [], {"low": False, "path": "/"}, host={"uptime_seconds": 300000})
+
+    assert [p["code"] for p in fresh] == ["device_not_heard_yet"]
+    assert [p["code"] for p in running_for_days] == ["device_offline"]
+
+
+def test_a_device_that_reported_then_went_quiet_is_offline_even_after_a_boot():
+    devices = [{"name": "Plug", "kind": "switch", "ok": False, "error": "timeout", "seconds_since_update": 120}]
+
+    found = system_status.problems(devices, [], {"low": False, "path": "/"}, host={"uptime_seconds": 300})
+
+    assert [p["code"] for p in found] == ["device_offline"]
+
+
+def test_boot_times_are_reported_for_the_pages():
+    times = system_status.boot_times()
+
+    assert set(times) == {"booted_at", "started_at"}
+    assert times["started_at"] <= time.time()
+    # booted_at is None where the board can't tell us (no /proc/uptime).
+    assert times["booted_at"] is None or times["booted_at"] <= times["started_at"]

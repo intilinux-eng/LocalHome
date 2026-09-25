@@ -7,6 +7,21 @@ date rather than by tag.
 ## Unreleased
 
 ### Fixed
+- **The sensor failsafe now counts silence LocalHome actually watched**,
+  kept in `config/sensor_silence.json` across restarts. It used to count
+  from when the process first noticed, so a board that restarts every
+  day - an update, a power cut - restarted the countdown with it and a
+  genuinely dead sensor never reached the threshold. Counting the age of
+  the last reading instead would have been wrong the other way: a board
+  switched off for three days came back convinced every sensor had died,
+  when nobody had been listening. Time between ticks is capped at a
+  couple of cycles, so a gap costs nothing.
+- **The board's start time is part of the state now.** A reading older
+  than the boot means nobody was there to hear it: the dashboard says
+  "waiting for its first reading (board up 12 min)" instead of "no data
+  for 53h", and the admin panel's problems list separates "not heard yet
+  since the board came up" from "offline" for the first couple of hours -
+  a battery sensor's own heartbeat window.
 - **A Tuya device that isn't working now says so.** tinytuya reports a
   failure as a payload (`{"Error": "Check device key or version"}`)
   rather than raising, and the cover driver read `dps` straight out of

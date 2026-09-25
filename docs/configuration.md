@@ -531,7 +531,11 @@ Telegram bot token or a phone being nearby:
   needed to notice it.
 - **A sensor that's actually unreachable for a long time** - not just
   quiet, no availability/heartbeat at all past `stale_after_seconds` -
-  eventually trips `ThermostatController`'s **sensor failsafe**:
+  eventually trips `ThermostatController`'s **sensor failsafe**. What
+  counts toward it is silence LocalHome was there for: the total is kept
+  in `config/sensor_silence.json` so restarts don't restart the
+  countdown, and time the board spent switched off doesn't count at all
+  (the sensors were talking; nobody was listening). It is
   configurable per-thermostat as `sensor_failsafe_hours` (default 24),
   it forces that zone's valve closed rather than leaving it frozen in
   whatever it was last doing indefinitely, and clears itself the moment

@@ -38,6 +38,64 @@ MODES = ("heat", "cool")
 SEASON_KEYS = {"heat": "zones", "cool": "zones_cool"}
 
 
+class SilenceLog:
+    """How long each zone's sensor has been silent *while LocalHome was
+    watching*, kept in a small file so a restart doesn't forget.
+
+    Wall-clock would be wrong in both directions. Counting from when this
+    process first noticed lets a board that restarts every day dodge the
+    failsafe forever; counting the age of the last reading makes a board
+    that was switched off for three days come back convinced every sensor
+    had died - but nobody listening is not the same as nothing said. So
+    only the time this process spent watching a silent sensor counts, and
+    that total survives restarts."""
+
+    def __init__(self, path: str | None = None, save_every_counted_seconds: float = 300):
+        self.path = path
+        # Written once per this much *counted* silence, not per wall-clock
+        # interval: that bounds both what a power cut can lose (five
+        # minutes of a countdown measured in hours) and how often a silent
+        # sensor writes to the board's eMMC (twelve times an hour at most).
+        self._save_every = save_every_counted_seconds
+        self._lock = threading.Lock()
+        self._unsaved = 0.0
+        self._totals: dict[str, float] = {}
+        if path:
+            try:
+                self._totals = {k: float(v) for k, v in load_json(path).items()}
+            except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
+                self._totals = {}
+
+    def seconds(self, zone_name: str) -> float:
+        return self._totals.get(zone_name, 0.0)
+
+    def add(self, zone_name: str, seconds: float) -> float:
+        with self._lock:
+            seconds = max(0.0, seconds)
+            total = self._totals.get(zone_name, 0.0) + seconds
+            self._totals[zone_name] = total
+            self._unsaved += seconds
+            due = self._unsaved >= self._save_every
+        if due:
+            self._save(force=True)
+        return total
+
+    def clear(self, zone_name: str) -> None:
+        with self._lock:
+            existed = self._totals.pop(zone_name, None) is not None
+        if existed:
+            self._save()
+
+    def _save(self, force: bool = True) -> None:
+        if not self.path:
+            return
+        self._unsaved = 0.0
+        try:
+            save_json_atomic(self.path, self._totals)
+        except OSError as exc:
+            logger.warning("Could not save %s (%s)", self.path, exc)
+
+
 @dataclass
 class Zone:
     name: str
@@ -249,6 +307,7 @@ class ThermostatController:
         hysteresis_c: float = 0.3,
         poll_interval_seconds: float = 60,
         sensor_failsafe_hours: float = 24.0,
+        silence_file: str | None = None,
     ):
         self.manager = manager
         self.schedule_store = schedule_store
@@ -269,8 +328,14 @@ class ThermostatController:
         # clock on every tick) and whether the failsafe has already
         # fired for it, so _apply() is only called once per unreachable
         # spell instead of every tick after the threshold.
-        self._unreachable_since: dict[str, float] = {}
+        self._silence = SilenceLog(silence_file)
         self._failsafe_active: dict[str, bool] = {}
+        # Time between ticks counts toward a sensor's silence, but never
+        # more than a couple of cycles at once: the gap across a restart
+        # (or three days with the board switched off) is time nobody was
+        # listening, not time the sensor stayed quiet.
+        self._max_silence_step = max(2 * poll_interval_seconds, 120)
+        self._last_tick_ts: float | None = None
         # Wall-clock time of the last tick that finished without raising -
         # the admin panel's system status flags a control loop that has
         # stopped completing, which nothing else on the dashboard would show.
@@ -307,8 +372,14 @@ class ThermostatController:
         # was governing the valve, and the chart should show a gap there
         # rather than a line that implies otherwise.
         applied: dict[str, float] = {}
+        # What this cycle is worth to a silent sensor's clock (see
+        # SilenceLog): the time since the last tick, capped so a gap - a
+        # restart, or a board that was off - doesn't count as silence.
+        tick_ts = time.time()
+        elapsed = min(tick_ts - (self._last_tick_ts or tick_ts), self._max_silence_step)
+        self._last_tick_ts = tick_ts
         try:
-            self._tick(now, applied)
+            self._tick(now, applied, elapsed)
             self.last_tick_ok_ts = time.time()
         finally:
             self._applied_targets = applied
@@ -324,7 +395,7 @@ class ThermostatController:
         against, or None if no target was in control - see tick()."""
         return self._applied_targets.get(zone_name)
 
-    def _tick(self, now: datetime | None, applied: dict[str, float]) -> None:
+    def _tick(self, now: datetime | None, applied: dict[str, float], elapsed: float = 0.0) -> None:
         if self.schedule_store.get_diagnostic_mode():
             # Hands off *everything*, not even a forced close - see
             # ScheduleStore.get_diagnostic_mode()'s docstring. Whatever
@@ -363,7 +434,7 @@ class ThermostatController:
                 continue
             reading = self.manager.sensor_reading(zone.sensor)
             if not reading.get("ok") or "temperature_c" not in reading:
-                self._on_sensor_unreachable(zone)
+                self._on_sensor_unreachable(zone, elapsed)
                 continue
             self._on_sensor_recovered(zone)
             # The same `mode` this tick already decided with, not a fresh
@@ -375,33 +446,34 @@ class ThermostatController:
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)
             self._apply(zone, desired)
 
-    def _on_sensor_unreachable(self, zone: Zone) -> None:
-        first_seen = self._unreachable_since.setdefault(zone.name, time.time())
-        hours = (time.time() - first_seen) / 3600
-        if hours >= self.sensor_failsafe_hours and not self._failsafe_active.get(zone.name):
+    def _on_sensor_unreachable(self, zone: Zone, elapsed: float) -> None:
+        hours = self._silence.add(zone.name, elapsed) / 3600
+        if hours < self.sensor_failsafe_hours:
+            return
+        if not self._failsafe_active.get(zone.name):
             logger.warning(
-                "Zone %r's sensor %r has been unreachable for %.1fh (>= %.1fh threshold) - "
+                "Zone %r's sensor %r has been silent for %.1fh of watched time (>= %.1fh threshold) - "
                 "forcing valve %r closed as a failsafe. Clear this from /climate-admin once "
                 "the sensor is fixed, or use diagnostic mode to control the valve manually.",
                 zone.name, zone.sensor, hours, self.sensor_failsafe_hours, zone.valve,
             )
             self._failsafe_active[zone.name] = True
-            self._apply(zone, False)
+        # Every tick while it lasts, not only the first: _apply() compares
+        # the valve's real state, so one opened by hand closes again.
+        self._apply(zone, False)
 
     def _on_sensor_recovered(self, zone: Zone) -> None:
         if self._failsafe_active.get(zone.name):
             logger.info("Zone %r's sensor %r is reporting again - failsafe lifted", zone.name, zone.sensor)
-        self._unreachable_since.pop(zone.name, None)
+        self._silence.clear(zone.name)
         self._failsafe_active.pop(zone.name, None)
 
     def is_failsafe_active(self, zone_name: str) -> bool:
-        return self._failsafe_active.get(zone_name, False)
+        return self._silence.seconds(zone_name) >= self.sensor_failsafe_hours * 3600
 
     def unreachable_hours(self, zone_name: str) -> float | None:
-        first_seen = self._unreachable_since.get(zone_name)
-        if first_seen is None:
-            return None
-        return (time.time() - first_seen) / 3600
+        seconds = self._silence.seconds(zone_name)
+        return seconds / 3600 if seconds else None
 
     def forget_valve_state(self) -> None:
         """Discards _apply()'s memory of what it last commanded every

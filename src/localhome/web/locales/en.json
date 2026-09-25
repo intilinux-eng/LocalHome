@@ -86,7 +86,8 @@
     "safe_limit": "safe limit ({value}kW)",
     "running": "Running",
     "stopped": "Stopped",
-    "stopped_pick_preset": "Pick a mode to start it again."
+    "stopped_pick_preset": "Pick a mode to start it again.",
+    "waiting_since_boot": "waiting for its first reading (board up {age})"
   },
   "tabs": {
     "home": "Home",
@@ -210,7 +211,8 @@
     "vmc_speed_label": "speed",
     "vmc_program_off": "Off: the speed stays whatever you set.",
     "vmc_program_running": "On: {period} {value}% until {until}.",
-    "vmc_same_time": "Day and night must start at different times."
+    "vmc_same_time": "Day and night must start at different times.",
+    "tile_stale": "reading is {age} old"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
@@ -473,7 +475,8 @@
     "how_data": "The charts' history has a day limit and a size limit (in Settings): past them, the oldest data is deleted. System logs live in RAM (30 MB at most), don't wear the eMMC and are lost at reboot. Before any deletion in Maintenance a backup is saved on the board (the last 10, plus one history copy if there's room).",
     "how_diagnostic_title": "Diagnostics",
     "vmc_pick_device": "Choose which device the program controls.",
-    "vmc_program_moved": "The VMC's day/night program is set on the dashboard, on the VMC's own card next to its speed buttons."
+    "vmc_program_moved": "The VMC's day/night program is set on the dashboard, on the VMC's own card next to its speed buttons.",
+    "system_problem_device_not_heard_yet": "{subject}: not heard yet since the board came up - battery sensors report every couple of hours"
   },
   "vmc_presets": {
     "night": "Night",

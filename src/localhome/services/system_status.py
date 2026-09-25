@@ -157,17 +157,33 @@ def cpu_temperature_c(sys_root: str = "/sys") -> float | None:
     return round(max(values), 1) if values else None
 
 
+def _uptime_seconds() -> float | None:
+    try:
+        with open("/proc/uptime", encoding="ascii") as fh:
+            return round(float(fh.read().split()[0]))
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def boot_times() -> dict:
+    """When the board came up, and when LocalHome started on it. Both
+    matter for reading a device's silence: a last reading older than
+    these was never missed - nobody was listening. The board's boot time
+    doesn't change while it runs, so callers read this once."""
+    uptime = _uptime_seconds()
+    return {
+        "booted_at": round(time.time() - uptime) if uptime is not None else None,
+        "started_at": round(PROCESS_STARTED_TS),
+    }
+
+
 def host_stats() -> dict:
     meminfo = _meminfo()
     try:
         load = [round(x, 2) for x in os.getloadavg()]
     except (AttributeError, OSError):
         load = None
-    try:
-        with open("/proc/uptime", encoding="ascii") as fh:
-            uptime = round(float(fh.read().split()[0]))
-    except (OSError, ValueError, IndexError):
-        uptime = None
+    uptime = _uptime_seconds()
     return {
         "cpu_count": os.cpu_count(),
         "load_average": load,
@@ -294,6 +310,10 @@ def network_status(run=_nmcli) -> dict:
 
 
 # Weak enough that dropped MQTT messages and slow pages become likely.
+# How long after a boot a device that hasn't reported yet is still
+# "waiting" rather than "offline" - a Shelly H&T's own heartbeat ceiling.
+FRESH_BOOT_SECONDS = 2 * 3600
+
 WIFI_WEAK_PERCENT = 30
 
 
@@ -452,7 +472,14 @@ def problems(
     if storage and (storage["pre_eol"] in ("warning", "urgent") or (storage["wear_percent_max"] or 0) >= 80):
         found.append({"code": "storage_wear", "subject": storage.get("name") or "eMMC",
                       "detail": f"{storage['wear_percent_max']}% - {storage['pre_eol']}"})
+    # A board that came up minutes ago hasn't heard from its battery
+    # sensors yet - they speak every couple of hours. That's "not yet",
+    # not "offline", and calling it offline right after every power cut
+    # is how a problems list gets ignored.
+    just_booted = (host or {}).get("uptime_seconds") is not None and host["uptime_seconds"] < FRESH_BOOT_SECONDS
     for device in devices:
         if not device["ok"]:
-            found.append({"code": "device_offline", "subject": device["name"], "detail": device["error"]})
+            never_heard = device.get("seconds_since_update") is None
+            code = "device_not_heard_yet" if (never_heard and just_booted) else "device_offline"
+            found.append({"code": code, "subject": device["name"], "detail": device["error"]})
     return found

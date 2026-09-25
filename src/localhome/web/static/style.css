@@ -1704,3 +1704,10 @@ textarea {
 .card.is-faulty .visual {
   opacity: 0.35;
 }
+
+/* How old a zone's last reading is, when it stopped coming. */
+.zt-stale {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent-stop);
+}

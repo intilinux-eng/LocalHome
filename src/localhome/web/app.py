@@ -200,6 +200,7 @@ def create_app(config_path: str | None = None) -> Flask:
             hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.3),
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 24.0),
+            silence_file=config.resolve("sensor_silence.json"),
         )
         # The target each zone's valve was actually driven against, recorded
         # next to that zone's temperature so the dashboard chart can show
@@ -267,6 +268,8 @@ def create_app(config_path: str | None = None) -> Flask:
     # What each cover's last read said - covers are read on demand, not
     # polled, so this is where the system status learns about them.
     app.config["COVER_READS"] = {}
+    # Constant while the process lives, so it's read once, not per request.
+    app.config["BOOT_TIMES"] = system_status.boot_times()
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
@@ -359,7 +362,11 @@ def _register_routes(app: Flask) -> None:
         # The clock both pages show - the server's, not the browser's, so
         # a wrongly-set board timezone is visible instead of silently
         # shifting every schedule slot. See services/system_clock.py.
-        return jsonify(ok=True, app_version=app.config["ASSET_VERSION"], **server_time())
+        # The board's start time goes out with the clock both pages already
+        # poll: it's what tells a page that a days-old reading was simply
+        # never heard (the board was off) rather than a sensor gone quiet.
+        return jsonify(ok=True, app_version=app.config["ASSET_VERSION"],
+                       **app.config["BOOT_TIMES"], **server_time())
 
     # The history table scan behind these numbers is the one slow part of
     # a system-status request; its growth only matters over hours.
