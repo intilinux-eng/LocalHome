@@ -138,7 +138,11 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 10px;
   margin-bottom: 10px;
+}
+.card-head .state {
+  text-align: right;
 }
 .card-head h2 {
   font-size: 0.95rem;
