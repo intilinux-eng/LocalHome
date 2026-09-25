@@ -272,11 +272,26 @@ with no intervention.
   from the panel, and the thermostat, the weekly schedule, the history
   and the statistics all work against simulated sensors - the whole
   system, driveable on a bench.
-- **Shelly devices** - switch a zone's sensor or valve to "Shelly" and
-  paste the device id from the Shelly app, once the device is installed
-  and reporting. The panel's per-zone status says whether it is actually
-  being heard, and distinguishes "not reachable yet" (a battery sensor
-  that hasn't woken up) from "was reporting, now unreachable".
+- **Shelly devices** - two settings, one on each side, and they don't
+  depend on each other:
+  1. **In this admin panel**, the device's **id** (from the Shelly app,
+     e.g. `shellyhtg3-c0ffee000002`): switch the zone's sensor or valve
+     to "Shelly" and paste it. It tells LocalHome which messages are
+     that device's - each Shelly prefixes its own with its id - so no
+     name or address is involved.
+  2. **On the Shelly itself** (Shelly app -> device -> Settings ->
+     MQTT), where the broker is: **Enable** on, **Server**
+     `carlucci.local:1883`, **Generic status update over MQTT** on
+     (it's what publishes the readings), **SSL** off, no username or
+     password. A battery H&T only applies new settings when it wakes:
+     press its button once after saving.
+
+  The panel's per-zone status then says whether the device is really
+  being heard, and tells "not reachable yet" (a battery sensor that
+  hasn't woken up) from "was reporting, now unreachable". A zone that
+  turns "reporting" right after the H&T's button press also proves the
+  H&T resolved `carlucci.local` by itself; if it stays "not reachable
+  yet", use the router's DNS name for the board instead (step 3's link).
 
 ## 11. The LED matrix
 
