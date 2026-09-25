@@ -1,0 +1,14 @@
+; Every 10 minutes, starting 5 minutes after boot - see
+; localhome-resource-log.sh. Stop it with:
+;   sudo systemctl disable --now localhome-resource-log.timer
+
+[Unit]
+Description=LocalHome resource log, every 10 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

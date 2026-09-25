@@ -1,0 +1,13 @@
+; One line of the board's resources into ~/localhome-resource-log.csv -
+; started every 10 minutes by localhome-resource-log.timer. See
+; localhome-resource-log.sh for what's recorded and how to install it.
+; Runs as the same user as LocalHome (edit User= if yours differs).
+
+[Unit]
+Description=LocalHome resource log (one sample)
+
+[Service]
+Type=oneshot
+User=arduino
+ExecStart=/usr/local/bin/localhome-resource-log.sh
+Nice=10
