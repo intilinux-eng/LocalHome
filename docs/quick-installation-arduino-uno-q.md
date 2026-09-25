@@ -70,40 +70,39 @@ sudo apt-get install -y mosquitto python3.13-venv libnss-mdns
 `git`, `avahi-daemon` and `docker` are already on the UNO Q image;
 avahi is what answers `carlucci.local`, and it is already running.
 
-## 3. The MQTT broker's listener
+## 3. Open the MQTT broker to the LAN
 
-Out of the box mosquitto listens on loopback only:
+The Shelly devices publish to the broker on this board: in each
+device's MQTT settings the server is `carlucci.local:1883` (the board's
+own name), with no username or password. Out of the box, though,
+mosquitto only accepts connections from the board itself:
 
 ```bash
-ss -ltn | grep 1883      # -> 127.0.0.1:1883 and [::1]:1883
+ss -ltn | grep 1883      # fresh install -> 127.0.0.1:1883 and [::1]:1883 only
 ```
 
-That is enough for LocalHome itself, which connects to `localhost` - the
-dashboard, the thermostat, the history and every simulated device work
-fully with the broker exactly as installed. It is **not** enough for
-real Shelly devices, which publish from elsewhere on the LAN and need
-the broker to accept connections on the network interface.
+LocalHome, running on the board, would work like that - every Shelly
+would be refused. Two lines open it to the LAN:
 
-Decide this consciously, because it is the one step here that exposes
-something:
+```bash
+printf 'listener 1883\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+sudo systemctl restart mosquitto
+ss -ltn | grep 1883      # -> 0.0.0.0:1883 and [::]:1883
+```
 
-- **The reference installation's setting** - open to the LAN, no
-  credentials. Simple, and what
-  [arduino-uno-q.md](arduino-uno-q.md) documents; it means anyone on
-  your Wi-Fi can read and publish MQTT on this board:
+- `listener 1883`, with no address, listens on every interface, IPv4
+  and IPv6: a PC that resolves `carlucci.local` to an IPv6 address
+  connects just as well as a Shelly using IPv4.
+- `allow_anonymous true` means no password - the usual choice on a home
+  LAN. Anyone on the same Wi-Fi can then read and publish MQTT on this
+  board, the valves' commands included. To add a password later: a user
+  created with `mosquitto_passwd`, the same credentials in every Shelly
+  and in the admin panel's MQTT broker section - see
+  [integrations/mqtt.md](integrations/mqtt.md).
 
-  ```bash
-  printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
-  sudo systemctl restart mosquitto
-  ```
-
-- **With a password** - the same listener, plus a user each Shelly is
-  configured with (`mosquitto_passwd`), and the same credentials in
-  `config/mqtt_broker.json` or in the admin panel's MQTT section. More
-  typing at install time, one less open service on the LAN.
-
-Leave it on loopback while there is no hardware: an empty installation
-and a simulated one need nothing here.
+Checked on this board: from a PC on the LAN, an MQTT connection with no
+credentials is accepted over both IPv4 and IPv6. The admin panel's MQTT
+broker section says "reachable" as well.
 
 ## 4. The code
 
@@ -317,5 +316,5 @@ Measured on the 2 GB UNO Q right after this install:
 | `scp`/`sftp` fails with `ENOENT` on any path | the board's SFTP subsystem refuses writes; copy over the exec channel instead - step 4 |
 | `sudo: a terminal is required to read the password` | a `sudo` in the middle of a piped command over SSH; put `sudo` first and use `sudo -S` |
 | The clock in the dashboard header is wrong | step 1, or `timedatectl` says "synchronized: no" |
-| A zone says "not reachable yet" forever | the broker is on loopback (step 3) or the device id is wrong - the panel's MQTT section says which |
+| A Shelly never connects, a zone says "not reachable yet" forever | the broker still listens on the board only (step 3: `ss -ltn \| grep 1883` must show `0.0.0.0:1883`), or the device's MQTT server / id is wrong |
 | `localhome-cli doctor` lists a skipped driver | the optional TP-Link driver, not installed on purpose - step 5 |

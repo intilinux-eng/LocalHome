@@ -51,7 +51,7 @@ sudo apt update
 sudo apt install -y git mosquitto avahi-daemon libnss-mdns python3.13-venv
 
 # 4. MQTT broker, reachable by the Shelly devices on the LAN
-printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+printf 'listener 1883\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
 sudo systemctl restart mosquitto avahi-daemon
 
 # 5. LocalHome

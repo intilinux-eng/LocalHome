@@ -83,8 +83,9 @@ python3 -m venv .venv
 #    already survives a reboot - this just gives it LocalHome's own
 #    settings instead of the untouched default, which only listens on
 #    localhost and refuses every device on your LAN):
-printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
+printf 'listener 1883\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
 sudo systemctl restart mosquitto
+# (no address after the port: every interface, IPv4 and IPv6)
 # -> confirm it's listening and accepting messages:
 #    mosquitto_sub -h localhost -t '#' -v      (Ctrl+C to stop)
 # `allow_anonymous true` is fine for a broker only reachable on your
