@@ -139,10 +139,19 @@ def test_each_code_once_and_system_problems_mapped():
         {"code": "disk_low", "subject": "/", "detail": None},
         {"code": "device_offline", "subject": "Lamp", "detail": None},
         {"code": "device_offline", "subject": "Plug", "detail": None},
-        {"code": "wifi_weak", "subject": "home", "detail": "20%"},
+        {"code": "loop_stalled", "subject": "thermostat", "detail": None},
         {"code": "something_new", "subject": "?", "detail": None},
     ]
-    assert [p["code"] for p in lm.problem_codes(problems, ZONES)] == ["DK", "DV", "WF"]
+    assert [p["code"] for p in lm.problem_codes(problems, ZONES)] == ["DK", "DV", "LP"]
+
+
+def test_what_needs_a_subprocess_stays_off_the_matrix():
+    """Wi-Fi strength, clock sync, temperature and eMMC wear need nmcli,
+    timedatectl or sysfs digging: the admin panel's system status shows
+    them; the matrix, running all day, doesn't go looking."""
+    problems = [{"code": code, "subject": "x", "detail": None}
+                for code in ("wifi_weak", "clock_unsynced", "cpu_hot", "storage_wear")]
+    assert lm.problem_codes(problems, ZONES) == []
 
 
 # ------------------------------------------------------------ the bridge --
@@ -243,17 +252,27 @@ def test_a_missing_sketch_is_reported_and_retried_later_not_every_frame():
     client = FakeClient(error=lm.RouterError("method lh_frame not available"))
     service = lm.LedMatrixService(lambda: lm.MatrixState(), client=client, clock=clock)
 
-    service.step()
+    wait = service.step()
     assert service.status()["status"] == "no_sketch"
+    assert wait == lm.LedMatrixService.RETRY_SECONDS, "not asked again on every frame"
 
     client.error = None
-    clock.now += 1
-    service.step()
-    assert client.frames == [], "not asked again on every frame"
-
-    clock.now += lm.LedMatrixService.RETRY_SECONDS
+    clock.now += wait
     service.step()
     assert service.status()["status"] == "running", "the sketch loaded later is picked up with no restart"
+
+
+def test_where_there_is_no_matrix_it_does_no_work_at_all():
+    calls = []
+
+    def provider():
+        calls.append(1)
+        return lm.MatrixState()
+
+    service = lm.LedMatrixService(provider, client=FakeClient(present=False), clock=Clock())
+    for _ in range(3):
+        service.step()
+    assert calls == [], "the state isn't even read"
 
 
 def test_the_state_is_reread_now_and_then_not_every_frame():
@@ -286,6 +305,27 @@ def test_where_there_is_no_matrix_the_mirror_still_follows_the_clock():
     clock.now += lm.FRAME_SECONDS
     second = service.status()["screen"]["frame"]
     assert first != second, "the heartbeat moved"
+
+# ---------------------------------------------------- the broker, for MQ --
+
+def test_the_broker_is_known_down_from_the_client_itself(monkeypatch):
+    """No probe of the broker: the shared MQTT client already knows
+    whether it's connected, and since when it isn't."""
+    from localhome.drivers.mqtt import client as mqtt_client
+
+    class Conn:
+        def __init__(self, down_since):
+            self.down_since = down_since
+
+    monkeypatch.setattr(mqtt_client, "_pool", {("a", 1883, None): Conn(None)})
+    assert mqtt_client.broker_down_for(now=1000.0) == 0.0
+
+    monkeypatch.setattr(mqtt_client, "_pool", {("a", 1883, None): Conn(None), ("b", 1883, None): Conn(900.0)})
+    assert mqtt_client.broker_down_for(now=1000.0) == 100.0
+
+    monkeypatch.setattr(mqtt_client, "_pool", {})
+    assert mqtt_client.broker_down_for(now=1000.0) == 0.0, "no MQTT at all is not a broker down"
+
 
 # ------------------------------------------------------------------ API --
 

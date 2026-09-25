@@ -540,11 +540,7 @@
     "led_code_MQ": "il broker MQTT non è raggiungibile: nessun dispositivo Shelly può comunicare",
     "led_code_CF": "un dispositivo configurato non si è caricato (errore di configurazione)",
     "led_code_LP": "un ciclo di controllo si è fermato (termostato o storico)",
-    "led_code_DK": "disco quasi pieno",
-    "led_code_CK": "l'orologio della scheda non è sincronizzato",
-    "led_code_WF": "segnale Wi-Fi debole",
-    "led_code_HT": "processore troppo caldo",
-    "led_code_EM": "memoria eMMC molto usurata"
+    "led_code_DK": "disco quasi pieno"
   },
   "vmc_presets": {
     "night": "Notte",

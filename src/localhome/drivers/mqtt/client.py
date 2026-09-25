@@ -16,6 +16,7 @@ stance (see core/manager.py).
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,15 +39,27 @@ class MqttConnection:
         if username:
             self._client.username_pw_set(username, password)
         self._client.on_connect = self._on_connect
+        self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
+        # Since when this connection has been down (monotonic), None while
+        # it's up. Starts "down": nothing is connected until the broker
+        # has answered once. What the LED matrix's "MQ" reads - the client
+        # already knows, so nothing needs to probe the broker for it.
+        self.down_since: float | None = time.monotonic()
         self._client.connect_async(host, port, keepalive=60)
         self._client.loop_start()
 
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
+        if not getattr(reason_code, "is_failure", False):
+            self.down_since = None
         with self._lock:
             topics = list(self._subscribers)
         for topic in topics:
             client.subscribe(topic)
+
+    def _on_disconnect(self, client, userdata, flags, reason_code, properties) -> None:
+        if self.down_since is None:
+            self.down_since = time.monotonic()
 
     def _on_message(self, client, userdata, message) -> None:
         with self._lock:
@@ -94,6 +107,15 @@ def get_connection(broker: dict[str, Any]) -> MqttConnection:
             )
             _pool[key] = connection
         return connection
+
+
+def broker_down_for(now: float | None = None) -> float:
+    """How long the longest-down broker connection has been down, in
+    seconds (0 when every connection is up, or there are none)."""
+    now = time.monotonic() if now is None else now
+    with _pool_lock:
+        downs = [c.down_since for c in _pool.values() if c.down_since is not None]
+    return max((now - since for since in downs), default=0.0)
 
 
 def load_broker_config(options: dict) -> dict:

@@ -39,6 +39,8 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 
+from localhome.services.log_throttle import FailureLog
+
 logger = logging.getLogger(__name__)
 
 W, H = 13, 8
@@ -52,10 +54,15 @@ BRIGHT = 7
 DIM = 1
 BEAT = 3
 
-FRAME_SECONDS = 0.5          # normal screens: the heartbeat's own rhythm
-SCROLL_STEP_SECONDS = 0.1    # one column per step while the IP scrolls by
+# It's a nicety, so it's kept cheap: one frame a second (the heartbeat
+# is one second on, one off), the state re-read from memory every 30 s.
+FRAME_SECONDS = 1.0          # normal screens: the heartbeat's own rhythm
+SCROLL_STEP_SECONDS = 0.1    # one column per step - only while the IP scrolls by, once at start-up
 SLOT_SECONDS = 3.0           # each problem code, and the normal screen between them
-STATE_REFRESH_SECONDS = 10.0 # re-reading the problems costs a few PRAGMAs and a network probe
+STATE_REFRESH_SECONDS = 30.0
+# A broker connection that drops comes back by itself within seconds;
+# MQ is for one that stays down.
+BROKER_GRACE_SECONDS = 60.0
 
 
 def _bitmap(rows: list[str]) -> list[list[int]]:
@@ -150,14 +157,13 @@ FONT = {ch: _bitmap(rows) for ch, rows in {
 # system_status.problems() codes -> what the matrix shows. The zone
 # devices get their own codes with the zone's number (S1, V2); anything
 # else offline is just "a device" (DV) - the admin panel says which.
+# Only what can be known from memory: Wi-Fi strength, clock sync,
+# temperature and eMMC wear need subprocesses and stay in the admin
+# panel's system status.
 PROBLEM_CODES = {
     "integration_failed": "CF",
     "loop_stalled": "LP",
     "disk_low": "DK",
-    "clock_unsynced": "CK",
-    "wifi_weak": "WF",
-    "cpu_hot": "HT",
-    "storage_wear": "EM",
 }
 # "Not heard from yet" right after a boot is normal for a battery sensor -
 # the system status says so itself; a blinking "!" for it would teach
@@ -411,6 +417,9 @@ class LedMatrixService:
         self.ip_provider = ip_provider
         self.clock = clock
         self._lock = threading.Lock()
+        # The loop and the admin panel's mirror can both compute a screen.
+        self._compute_lock = threading.Lock()
+        self._failures = FailureLog(logger)
         self._state = MatrixState()
         self._state_ts = None
         self._started_ts = None
@@ -419,7 +428,6 @@ class LedMatrixService:
         self._error = None
         self._screen = None
         self._frames_sent = 0
-        self._retry_at = 0.0
         self._started = False
 
     def start(self) -> None:
@@ -432,50 +440,50 @@ class LedMatrixService:
         while True:
             try:
                 delay = self.step()
+                self._failures.succeeded("LED matrix")
             except Exception:
-                logger.exception("LED matrix loop failed, retrying")
+                self._failures.failed("LED matrix", "LED matrix loop failed, retrying")
                 delay = self.RETRY_SECONDS
             time.sleep(delay)
 
     def _screen_now(self, now: float) -> dict:
         """The screen for this moment, re-reading the state when it's due."""
-        if self._started_ts is None:
-            self._started_ts = now
-            try:
-                self._ip = self.ip_provider() if self.ip_provider else None
-            except Exception:
-                self._ip = None
-        if self._state_ts is None or now - self._state_ts >= STATE_REFRESH_SECONDS:
-            self._state_ts = now
-            try:
-                self._state = self.state_provider()
-            except Exception:
-                logger.exception("LED matrix: couldn't read the system state")
-        screen = screen_at(self._state, now - self._started_ts, self._ip)
+        with self._compute_lock:
+            if self._started_ts is None:
+                self._started_ts = now
+                try:
+                    self._ip = self.ip_provider() if self.ip_provider else None
+                except Exception:
+                    self._ip = None
+            if self._state_ts is None or now - self._state_ts >= STATE_REFRESH_SECONDS:
+                self._state_ts = now
+                try:
+                    self._state = self.state_provider()
+                    self._failures.succeeded("LED matrix state")
+                except Exception:
+                    self._failures.failed("LED matrix state", "LED matrix: couldn't read the system state")
+            screen = screen_at(self._state, now - self._started_ts, self._ip)
         with self._lock:
             self._screen = screen
         return screen
 
     def step(self) -> float:
-        """One frame. Returns how long to wait before the next one."""
-        now = self.clock()
-        screen = self._screen_now(now)
+        """One frame. Returns how long to wait before the next one.
+
+        Where there's nothing to draw on - no matrix, no sketch - it does
+        nothing at all but look again in RETRY_SECONDS."""
         if not self.client.available():
             self._set_status("no_router", None)
             return self.RETRY_SECONDS
-        if self._status in ("no_sketch", "error") and now < self._retry_at:
-            return FRAME_SECONDS
+        screen = self._screen_now(self.clock())
         try:
             self.client.call(FRAME_METHOD, to_wire(screen["frame"]))
         except RouterError as exc:
-            status = "no_sketch" if "not available" in str(exc) else "error"
-            self._set_status(status, str(exc))
-            self._retry_at = now + self.RETRY_SECONDS
-            return FRAME_SECONDS
+            self._set_status("no_sketch" if "not available" in str(exc) else "error", str(exc))
+            return self.RETRY_SECONDS
         except OSError as exc:
             self._set_status("error", str(exc))
-            self._retry_at = now + self.RETRY_SECONDS
-            return FRAME_SECONDS
+            return self.RETRY_SECONDS
         self._frames_sent += 1
         self._set_status("running", None)
         return SCROLL_STEP_SECONDS if screen["screen"] == "boot" else FRAME_SECONDS

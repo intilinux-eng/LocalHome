@@ -540,11 +540,7 @@
     "led_code_MQ": "the MQTT broker can't be reached: no Shelly device can talk to LocalHome",
     "led_code_CF": "a configured device didn't load (a configuration error)",
     "led_code_LP": "a control loop has stopped (thermostat or history)",
-    "led_code_DK": "disk nearly full",
-    "led_code_CK": "the board's clock isn't synchronised",
-    "led_code_WF": "weak Wi-Fi signal",
-    "led_code_HT": "processor too hot",
-    "led_code_EM": "eMMC storage badly worn"
+    "led_code_DK": "disk nearly full"
   },
   "vmc_presets": {
     "night": "Night",

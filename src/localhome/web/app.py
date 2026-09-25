@@ -37,6 +37,7 @@ from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
+from localhome.drivers.mqtt import client as mqtt_client
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import Interlock, InterlockController, ModeLimitedSwitch, ModeSwitch
 from localhome.services.self_restart import is_supported, schedule_restart
@@ -351,11 +352,7 @@ def _set_roles(roles: dict) -> dict:
     return {key: value for key, value in (roles or {}).items() if value}
 
 
-def _health(app: Flask) -> dict:
-    """What the system status is built from - shared with the LED matrix,
-    which shows the same problems as codes."""
-    manager: DeviceManager = app.config["MANAGER"]
-    store: HistoryStore = app.config["HISTORY"]
+def _loops(app: Flask) -> list[dict]:
     recorder: HistoryRecorder = app.config["RECORDER"]
     thermostat: ThermostatController | None = app.config["THERMOSTAT"]
     now = time.time()
@@ -364,6 +361,14 @@ def _health(app: Flask) -> dict:
         loops.append(
             system_status.loop_health("thermostat", thermostat.last_tick_ok_ts, thermostat.poll_interval_seconds, now)
         )
+    return loops
+
+
+def _health(app: Flask) -> dict:
+    """What the admin panel's system status is built from."""
+    manager: DeviceManager = app.config["MANAGER"]
+    store: HistoryStore = app.config["HISTORY"]
+    loops = _loops(app)
     devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
     failed = manager.failed_integrations
     disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
@@ -379,17 +384,26 @@ def _health(app: Flask) -> dict:
 
 def _matrix_state(app: Flask) -> led_matrix.MatrixState:
     """What the LED matrix needs to know: the season, away/diagnostic,
-    each zone's valve, and the problems as codes."""
+    each zone's valve, and the problems as codes.
+
+    From memory only - the devices' cached readings, the loops'
+    timestamps, one statvfs, the MQTT client's own connection state -
+    never the system status's subprocesses (nmcli, timedatectl) or a
+    probe of the broker: this runs all day, every day, for a nicety."""
     manager: DeviceManager = app.config["MANAGER"]
+    store: HistoryStore = app.config["HISTORY"]
     thermostat: ThermostatController | None = app.config["THERMOSTAT"]
-    config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
     zones = thermostat.zones if thermostat else []
-    broker_file = config.resolve("mqtt_broker.json")
-    uses_mqtt = any(i.type.startswith("mqtt") or i.type.startswith("shelly") for i in config.integrations)
-    broker_down = bool(uses_mqtt and os.path.exists(broker_file) and not check_broker(broker_file).get("reachable"))
+    problems = system_status.problems(
+        system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"]),
+        manager.failed_integrations,
+        system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path))),
+        _loops(app),
+        host={"uptime_seconds": system_status._uptime_seconds()},   # "not heard yet" after a boot isn't a fault
+    )
     state = led_matrix.MatrixState(
         thermostat=thermostat is not None,
-        problems=led_matrix.problem_codes(_health(app)["problems"], zones, broker_down),
+        problems=led_matrix.problem_codes(problems, zones, mqtt_client.broker_down_for() > led_matrix.BROKER_GRACE_SECONDS),
     )
     if thermostat is not None:
         store = thermostat.schedule_store
