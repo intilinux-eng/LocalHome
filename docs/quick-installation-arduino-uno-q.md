@@ -104,6 +104,17 @@ Checked on this board: from a PC on the LAN, an MQTT connection with no
 credentials is accepted over both IPv4 and IPv6. The admin panel's MQTT
 broker section says "reachable" as well.
 
+Nothing in the installation depends on the board's IP address - the
+router's DHCP can move it freely: LocalHome reaches the broker as
+`localhost`, the Shellys reach it as `carlucci.local:1883`, browsers
+open `http://carlucci.local:5000`. How to set a battery H&T's MQTT
+server (it only listens while awake), how to check each device really
+connected, and what to do if one can't resolve `.local`: see
+[deployment.md, "Addressing: names, not IP addresses"](deployment.md#addressing-names-not-ip-addresses).
+The Shelly 0/1-10V Dimmer Gen3 is confirmed to resolve `.local` names by
+itself; check the H&T Gen3 the first time with
+`journalctl -u mosquitto | grep "New client connected"`.
+
 ## 4. The code
 
 The repository travels as one file - no GitHub account on the board, no
