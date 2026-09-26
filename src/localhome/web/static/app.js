@@ -154,7 +154,7 @@ function renderCovers(names) {
   el.innerHTML = names.map(name => `
     <div class="card">
       <div class="card-head">
-        <h2>${name}</h2>
+        <h2>${escapeHtml(name)}</h2>
         <span class="state" id="cover-state-${slug(name)}">${tr("covers.loading")}</span>
       </div>
       <div class="visual">
@@ -162,9 +162,9 @@ function renderCovers(names) {
         <span class="pct-badge" id="cover-badge-${slug(name)}">--</span>
       </div>
       <div class="buttons">
-        <button class="icon-btn open" onclick="sendCoverAction('${name}', 'open')" title="${tr("covers.btn_open")}">${ICON_OPEN}</button>
-        <button class="icon-btn stop" onclick="sendCoverAction('${name}', 'stop')" title="${tr("covers.btn_stop")}">${ICON_STOP}</button>
-        <button class="icon-btn close" onclick="sendCoverAction('${name}', 'close')" title="${tr("covers.btn_close")}">${ICON_CLOSE}</button>
+        <button class="icon-btn open" onclick="sendCoverAction(${jsArg(name)}, 'open')" title="${tr("covers.btn_open")}">${ICON_OPEN}</button>
+        <button class="icon-btn stop" onclick="sendCoverAction(${jsArg(name)}, 'stop')" title="${tr("covers.btn_stop")}">${ICON_STOP}</button>
+        <button class="icon-btn close" onclick="sendCoverAction(${jsArg(name)}, 'close')" title="${tr("covers.btn_close")}">${ICON_CLOSE}</button>
       </div>
       <div class="slider-row">
         <input type="range" min="0" max="100" value="0" class="pct-slider" id="cover-slider-${slug(name)}" data-name="${name}">
@@ -340,7 +340,7 @@ function presetRowHtml(sensor) {
   return `
     <div class="preset-row" id="number-presets-${slug(sensor.name)}">
       ${sensor.presets.map(p => `
-        <button class="preset-btn" data-name="${sensor.name}" data-value="${p.value}">
+        <button class="preset-btn" data-name="${escapeAttr(sensor.name)}" data-value="${p.value}">
           <span class="preset-name">${presetLabel(p)}</span>
           <span class="preset-value">${p.value}${unit === "%" ? "%" : ` ${unit}`}</span>
         </button>`).join("")}
@@ -355,7 +355,7 @@ function sliderRowHtml(sensor) {
     ${presetRowHtml(sensor)}
     <div class="slider-row" style="margin-top:4px">
       <input type="range" min="${range.min}" max="${range.max}" value="${range.min}"
-             class="number-slider" id="number-slider-${id}" data-name="${sensor.name}">
+             class="number-slider" id="number-slider-${id}" data-name="${escapeAttr(sensor.name)}">
       <span class="pct" id="number-value-${id}">-- ${range.unit}</span>
     </div>
     ${programPanelHtml(sensor)}
@@ -373,17 +373,17 @@ function programPanelHtml(sensor) {
       <div class="vmc-period-row">
         <span class="vmc-period-name">${icon} ${tr(`climate.vmc_period_${key}`)}</span>
         <label>${tr("climate.vmc_from")}
-          <input type="time" id="vmc-${key}-at-${id}" data-program="${sensor.name}">
+          <input type="time" id="vmc-${key}-at-${id}" data-program="${escapeAttr(sensor.name)}">
         </label>
         <label>${tr("climate.vmc_speed_label")}
-          <input type="number" min="0" max="100" step="5" id="vmc-${key}-value-${id}" data-program="${sensor.name}">
+          <input type="number" min="0" max="100" step="5" id="vmc-${key}-value-${id}" data-program="${escapeAttr(sensor.name)}">
         </label>
       </div>`;
   return `
     <div class="vmc-program" id="vmc-program-${id}">
       <div class="vmc-program-head">
         <label class="vmc-program-toggle">
-          <input type="checkbox" id="vmc-program-on-${id}" data-program="${sensor.name}">
+          <input type="checkbox" id="vmc-program-on-${id}" data-program="${escapeAttr(sensor.name)}">
           <span>${tr("climate.vmc_program_title")}</span>
         </label>
         <span class="vmc-program-state" id="vmc-program-state-${id}"></span>
@@ -449,7 +449,7 @@ function buildSensorCard(sensor) {
   return `
     <div class="sensor-card kind-${sensor.kind}" id="sensor-${id}" data-visible-in-mode="${sensor.visible_in_mode || ""}">
       <div class="sensor-top">
-        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${displayName(sensor.name)}</span>${simulatedTagHtml(sensor.simulated)}</span>
+        <span class="sensor-title"><span class="dot" id="dot-${id}"></span><span>${escapeHtml(displayName(sensor.name))}</span>${simulatedTagHtml(sensor.simulated)}</span>
         <span class="state" id="updated-${id}"></span>
       </div>
       <div id="metrics-${id}"></div>
@@ -628,7 +628,7 @@ function updateSensorCard(sensor, reading, linkedReading) {
     // is shown, but switching it off from here isn't offered.
     const toggleHtml = sensor.controllable && !sensor.hide_toggle ? `
         <label class="toggle">
-          <input type="checkbox" ${reading.is_on ? "checked" : ""} onchange="onSwitchToggle('${sensor.name}', this)">
+          <input type="checkbox" ${reading.is_on ? "checked" : ""} onchange="onSwitchToggle(${jsArg(sensor.name)}, this)">
           <span class="track"></span>
         </label>` : "";
     html += `
@@ -1960,6 +1960,20 @@ function escapeAttr(text) {
   return String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
+// Names come from people - "Camera dell'ospite", "Luce dell'ingresso" -
+// and go into HTML: as text they're escaped, and as an inline handler's
+// argument they're a JSON string literal (any quote inside is fine) made
+// safe for the attribute around it. Never pasted in raw.
+function escapeHtml(text) {
+  return String(text == null ? "" : text).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function jsArg(value) {
+  return escapeAttr(JSON.stringify(String(value)));
+}
+
 function zoneReadingParts(zone) {
   const known = (zone.sensor_ok || zoneHasLastKnownValue(zone)) && zone.temperature_c != null;
   return {
@@ -1984,7 +1998,7 @@ function zoneTileHtml(zone) {
     const valve = excludedValveState(zone);
     return `
       <div class="zone-tile excluded" data-zone="${id}" title="${escapeAttr(valve.title)}">
-        <span class="zt-name">${zone.name}${simulatedTagHtml(zone.sensor_simulated)}</span>
+        <span class="zt-name">${escapeHtml(zone.name)}${simulatedTagHtml(zone.sensor_simulated)}</span>
         ${values}${stale}
         <span class="zt-status valve-${valve.cls}"><span class="zt-dot"></span>${valve.text}</span>
         <span class="zt-note">${tr("climate.excluded_note")}</span>
@@ -1993,7 +2007,7 @@ function zoneTileHtml(zone) {
   const state = zoneState(zone);
   return `
     <button class="zone-tile state-${state.cls}${id === selectedZoneId ? " selected" : ""}" data-zone="${id}" onclick="selectZone('${id}')">
-      <span class="zt-name">${zone.name}${simulatedTagHtml(zone.sensor_simulated)}</span>
+      <span class="zt-name">${escapeHtml(zone.name)}${simulatedTagHtml(zone.sensor_simulated)}</span>
       ${values}${stale}
       <span class="zt-status"><span class="zt-dot"></span>${state.short}</span>
     </button>`;
@@ -2033,7 +2047,7 @@ function buildZoneCard(zone) {
     <section class="zone-card" id="zone-${id}" data-zone="${id}"${id === selectedZoneId ? "" : " hidden"}>
       <div class="zone-head">
         <div class="zone-head-row">
-          <h3 class="zone-title">${zone.name}</h3>
+          <h3 class="zone-title">${escapeHtml(zone.name)}</h3>
           <span class="zone-state state-${state.cls}" id="zone-state-${id}"><span class="zs-dot"></span><span class="zs-label">${state.label}</span></span>
         </div>
         <div class="zone-detail" id="zone-detail-${id}">${state.detail}</div>
@@ -2058,8 +2072,8 @@ function buildZoneCard(zone) {
 
         <div class="zone-actions">
           <span class="copy-label">${tr("climate.copy_label")}</span>
-          <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', true)">${tr("climate.copy_weekdays")}</button>
-          <button class="range-btn" onclick="copyMondayToWeek('${zone.name}', '${id}', false)">${tr("climate.copy_monday")}</button>
+          <button class="range-btn" onclick="copyMondayToWeek(${jsArg(zone.name)}, '${id}', true)">${tr("climate.copy_weekdays")}</button>
+          <button class="range-btn" onclick="copyMondayToWeek(${jsArg(zone.name)}, '${id}', false)">${tr("climate.copy_monday")}</button>
         </div>
         ${copyToZoneHtml(zone)}
       </div>
@@ -2224,7 +2238,7 @@ function copyToZoneHtml(zone) {
         <div class="zone-actions">
           <span class="copy-label">${tr("climate.copy_zone_label")}</span>
           ${targets.map(target => `
-            <button class="range-btn" onclick="copyScheduleToZone('${zone.name}', '${target.name}')">${target.name}</button>`).join("")}
+            <button class="range-btn" onclick="copyScheduleToZone(${jsArg(zone.name)}, ${jsArg(target.name)})">${escapeHtml(target.name)}</button>`).join("")}
         </div>`;
 }
 

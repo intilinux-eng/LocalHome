@@ -111,6 +111,13 @@ def validate_zones(zones: list[dict]) -> None:
         name = zone.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"zone {i}: 'name' is required")
+        # The name is part of the zone's URLs (/api/climate/zones/<name>/...):
+        # a slash splits it however it's encoded. Anything else - accents,
+        # apostrophes, quotes - is fine.
+        if "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
+            raise ValueError(f"zone {i} ('{name}'): a zone name can't contain '/', '\\' or control characters")
+        if len(name.strip()) > 40:
+            raise ValueError(f"zone {i}: a zone name can be at most 40 characters")
         names.append(name)
 
         mode = zone.get("sensor_mode")

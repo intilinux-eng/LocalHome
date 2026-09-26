@@ -139,7 +139,7 @@ function zoneFormHtml(zone, index) {
     <div class="admin-zone-card" data-index="${index}">
       <div class="admin-field">
         <label>${tr("climate_admin.name_label")}</label>
-        <input type="text" class="zone-name" value="${z.name || ""}" placeholder="${tr("climate_admin.name_placeholder")}">
+        <input type="text" class="zone-name" value="${escapeHtml(z.name || "")}" placeholder="${tr("climate_admin.name_placeholder")}">
       </div>
       <div class="admin-field">
         <label>${tr("climate_admin.sensor_mode_label")}</label>
@@ -147,7 +147,7 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-sensor-id-field"${z.sensor_mode !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.sensor_device_id_label")}</label>
-        <input type="text" class="zone-sensor-device-id" value="${z.sensor_device_id || ""}" placeholder="shellyht-XXXXXXXXXXXX">
+        <input type="text" class="zone-sensor-device-id" value="${escapeHtml(z.sensor_device_id || "")}" placeholder="shellyht-XXXXXXXXXXXX">
       </div>
       <p class="hint-text zone-manual-hint"${z.sensor_mode !== "manual" ? " hidden" : ""}>${tr("climate_admin.manual_mode_hint")}</p>
       <div class="admin-field">
@@ -156,7 +156,7 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-valve-id-field"${(z.valve_mode || "shelly") !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.valve_device_id_label")}</label>
-        <input type="text" class="zone-valve-device-id" value="${z.valve_device_id || ""}" placeholder="shellyplus1-XXXXXXXXXXXX">
+        <input type="text" class="zone-valve-device-id" value="${escapeHtml(z.valve_device_id || "")}" placeholder="shellyplus1-XXXXXXXXXXXX">
       </div>
       <label class="admin-checkbox">
         <input type="checkbox" class="zone-cool-enabled" ${z.cool_enabled !== false ? "checked" : ""}>
@@ -660,8 +660,8 @@ function sensorStatusHtml(zone, mode) {
 function valveStatusHtml(zone, valveMode) {
   const pill = valveMode === "simulated" ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ` : "";
   const testButtons = `
-    <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'on', this)">${tr("climate_admin.valve_test_open")}</button>
-    <button class="range-btn admin-valve-test" onclick="testValve('${zone.valve}', 'off', this)">${tr("climate_admin.valve_test_close")}</button>
+    <button class="range-btn admin-valve-test" onclick="testValve(${jsArg(zone.valve)}, 'on', this)">${tr("climate_admin.valve_test_open")}</button>
+    <button class="range-btn admin-valve-test" onclick="testValve(${jsArg(zone.valve)}, 'off', this)">${tr("climate_admin.valve_test_close")}</button>
   `;
   if (zone.valve_ok) {
     const state = zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed");
@@ -719,7 +719,7 @@ function zoneStatusInnerHtml(zone, mapEntry, mode) {
     <div class="admin-manual-box">
       <input type="number" step="0.1" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
       <input type="number" step="0.1" class="manual-humidity-input" placeholder="${tr("climate_admin.manual_humidity_label")}">
-      <button class="range-btn" onclick="setManualValue('${zone.name}', this)">${tr("climate_admin.manual_set_button")}</button>
+      <button class="range-btn" onclick="setManualValue(${jsArg(zone.name)}, this)">${tr("climate_admin.manual_set_button")}</button>
     </div>` : "";
 
   return `
@@ -825,11 +825,11 @@ function diagnosticValveRowHtml(name, isOn, isOk) {
       : `<span class="admin-status neutral">${tr("climate_admin.valve_closed")}</span>`;
   return `
     <div class="admin-zone-card admin-diagnostic-row">
-      <div><strong>${name}</strong></div>
+      <div><strong>${escapeHtml(name)}</strong></div>
       <div>${state}</div>
       <div class="toolbar">
-        <button class="range-btn" onclick="diagnosticToggle('${name}', 'on', this)">${tr("climate_admin.valve_test_open")}</button>
-        <button class="range-btn" onclick="diagnosticToggle('${name}', 'off', this)">${tr("climate_admin.valve_test_close")}</button>
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(name)}, 'on', this)">${tr("climate_admin.valve_test_open")}</button>
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(name)}, 'off', this)">${tr("climate_admin.valve_test_close")}</button>
       </div>
     </div>
   `;
@@ -1007,6 +1007,12 @@ function escapeHtml(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
+}
+
+// A name as an inline handler's argument: a JSON string literal (any
+// apostrophe or quote inside is fine), escaped for the attribute.
+function jsArg(value) {
+  return escapeHtml(JSON.stringify(String(value)));
 }
 
 function formatBytes(bytes) {

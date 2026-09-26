@@ -578,3 +578,25 @@ def test_vmc_card_has_modes_and_no_toggle():
 def test_extra_switches_are_shown_only_while_cooling():
     for integration in build_extra_switch_integrations(VALID_EXTRA_SWITCHES, "broker.json"):
         assert integration.options["visible_in_mode"] == "cool"
+
+
+
+@pytest.mark.parametrize("name, ok", [
+    ("Camera dell'ospite", True),          # apostrophes are how Italian names rooms
+    ('Bagno "grande"', True),
+    ("Più è", True),
+    ("Bagno/2", False),                     # a slash splits the zone's URLs
+    ("Bagno\\2", False),
+    ("Bagno\n2", False),
+    ("x" * 41, False),
+])
+def test_zone_names_people_really_use(name, ok):
+    zones = [
+        {"name": name, "sensor_mode": "simulated", "valve_mode": "simulated", "cool_enabled": True},
+        {"name": "Altro", "sensor_mode": "simulated", "valve_mode": "simulated", "cool_enabled": True},
+    ]
+    if ok:
+        validate_zones(zones)
+    else:
+        with pytest.raises(ValueError):
+            validate_zones(zones)
