@@ -8,7 +8,7 @@
     "warning_skew": "<strong>L'orologio del sistema è sfasato di {minutes} min</strong> rispetto a questo dispositivo. Verifica che la sincronizzazione NTP sia attiva sulla scheda (<code>timedatectl</code>).",
     "update_available": "LocalHome è stato aggiornato: questa pagina usa ancora la versione precedente.",
     "update_reload": "Ricarica",
-    "warning_unsynced": "L'ora della scheda non è ancora sincronizzata con internet: finché non lo è, la programmazione può scattare all'ora sbagliata. Si corregge da sola appena la scheda raggiunge internet (dopo un'accensione può volerci qualche minuto)."
+    "warning_unsynced": "L'ora della scheda non è ancora sincronizzata con internet: finché non lo è, la programmazione può scattare all'ora sbagliata e lo storico resta in pausa, per non registrare letture con l'ora sbagliata. Si corregge da sola appena la scheda raggiunge internet (dopo un'accensione può volerci qualche minuto)."
   },
   "app": {
     "cancel": "Annulla",

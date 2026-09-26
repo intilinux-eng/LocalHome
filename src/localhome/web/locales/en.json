@@ -8,7 +8,7 @@
     "warning_skew": "<strong>The system clock is {minutes} min off</strong> compared to this device. Check that NTP sync is active on the board (<code>timedatectl</code>).",
     "update_available": "LocalHome was updated: this page is still running the previous version.",
     "update_reload": "Reload",
-    "warning_unsynced": "The board's clock isn't synchronized with the internet yet: until it is, the schedules may switch at the wrong time. It corrects itself as soon as the board reaches the internet (a few minutes after a power-on)."
+    "warning_unsynced": "The board's clock isn't synchronized with the internet yet: until it is, the schedules may switch at the wrong time and the history is paused, so no reading is stored with the wrong time. It corrects itself as soon as the board reaches the internet (a few minutes after a power-on)."
   },
   "app": {
     "cancel": "Cancel",

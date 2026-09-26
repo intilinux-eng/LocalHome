@@ -441,6 +441,13 @@ class HistoryRecorder:
         # When the last cycle's samples were written - see
         # ThermostatController.last_tick_ok_ts for why this is tracked.
         self.last_write_ok_ts: float | None = None
+        # Optional callable -> False while the board's clock can't be
+        # trusted (not synchronized yet after a power-on, or no internet):
+        # rows stamped with it would land hours or days in the past and
+        # sit in the charts as if they'd happened then. Recording waits;
+        # everything else in the cycle (the power-budget alert) goes on.
+        self.clock_ready = None
+        self.paused_for_clock = False
 
     def start(self) -> None:
         if self._started:
@@ -486,6 +493,16 @@ class HistoryRecorder:
                     batch.setdefault(name, {}).update(values)
             except Exception:
                 logger.exception("Failed to collect extra history samples - recording the rest")
+        if self.clock_ready is not None and not self.clock_ready():
+            if not self.paused_for_clock:
+                logger.warning("History paused: the board's clock isn't synchronized yet - "
+                               "readings would be stamped with the wrong time")
+                self.paused_for_clock = True
+            self.last_write_ok_ts = time.time()   # paused on purpose, not stalled
+            return
+        if self.paused_for_clock:
+            logger.info("History resumed: the clock is synchronized")
+            self.paused_for_clock = False
         self.store.record_many(now, batch)
         self.last_write_ok_ts = time.time()
         self._maybe_prune(now)

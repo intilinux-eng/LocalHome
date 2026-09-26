@@ -437,3 +437,39 @@ def test_the_last_day_is_never_removed_to_fit_the_cap(tmp_path):
         assert store.stats(now)["rows"] == 1
     finally:
         store.close()
+
+
+
+def test_nothing_is_recorded_while_the_clock_is_not_synchronized(tmp_path):
+    """After a power-on without internet the board's clock is the evening
+    before's: rows stamped with it would sit in the charts hours in the
+    past. Recording waits for the clock; the loop still counts as alive."""
+    from localhome.services.history import HistoryRecorder
+
+    class Poller:
+        class driver:
+            history_fields = ("temperature_c",)
+
+        def get(self):
+            return {"ok": True, "temperature_c": 21.0}
+
+    class Manager:
+        pollers = {"Rooms Sensor": Poller()}
+
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        recorder = HistoryRecorder(Manager(), store)
+        synced = {"value": False}
+        recorder.clock_ready = lambda: synced["value"]
+
+        recorder.poll_once()
+        assert store.stats()["rows"] == 0
+        assert recorder.paused_for_clock is True
+        assert recorder.last_write_ok_ts is not None, "paused on purpose, not a stalled loop"
+
+        synced["value"] = True
+        recorder.poll_once()
+        assert store.stats()["rows"] == 1
+        assert recorder.paused_for_clock is False
+    finally:
+        store.close()

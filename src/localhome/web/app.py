@@ -178,6 +178,10 @@ def create_app(config_path: str | None = None) -> Flask:
         retention_days=history_cfg.get("retention_days", 30),
         max_db_bytes=int(history_cfg.get("max_db_mb", 300) * 1_000_000),
     )
+    # No rows with a clock that isn't synchronized yet - see
+    # HistoryRecorder.clock_ready. Where that can't be known (a PC), it
+    # records as always.
+    recorder.clock_ready = lambda: system_status.clock_synced_fast() is not False
 
     thermostat = None
     interlock = None
@@ -535,6 +539,7 @@ def _register_routes(app: Flask) -> None:
             "path": str(store.db_path),
             "retention_days": recorder.retention_days,
             "max_bytes": recorder.max_db_bytes,
+            "paused_for_clock": recorder.paused_for_clock,
             "stats_age_seconds": round(now - db_stats_cache["ts"]),
         }
 
