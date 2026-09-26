@@ -7,7 +7,8 @@
     "warning_timezone": "<strong>The system's timezone differs from this device's.</strong> The system uses {server}, this device {device}. The hourly schedule follows the system clock, so every slot is applied {shift} off. If the system isn't set to the home's timezone, fix it on the board with <code>sudo timedatectl set-timezone {zone}</code> and restart LocalHome.",
     "warning_skew": "<strong>The system clock is {minutes} min off</strong> compared to this device. Check that NTP sync is active on the board (<code>timedatectl</code>).",
     "update_available": "LocalHome was updated: this page is still running the previous version.",
-    "update_reload": "Reload"
+    "update_reload": "Reload",
+    "warning_unsynced": "The board's clock isn't synchronized with the internet yet: until it is, the schedules may switch at the wrong time. It corrects itself as soon as the board reaches the internet (a few minutes after a power-on)."
   },
   "app": {
     "cancel": "Cancel",
@@ -543,7 +544,8 @@
     "led_code_LP": "a control loop has stopped (thermostat or history)",
     "led_code_DK": "disk nearly full",
     "extra_role_mode_label": "Source",
-    "mode_none": "None (not installed)"
+    "mode_none": "None (not installed)",
+    "led_code_CK": "the board's clock isn't synchronized with the internet: schedules may be off"
   },
   "vmc_presets": {
     "night": "Night",

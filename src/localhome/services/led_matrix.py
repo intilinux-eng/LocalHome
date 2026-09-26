@@ -157,13 +157,14 @@ FONT = {ch: _bitmap(rows) for ch, rows in {
 # system_status.problems() codes -> what the matrix shows. The zone
 # devices get their own codes with the zone's number (S1, V2); anything
 # else offline is just "a device" (DV) - the admin panel says which.
-# Only what can be known from memory: Wi-Fi strength, clock sync,
-# temperature and eMMC wear need subprocesses and stay in the admin
-# panel's system status.
+# Only what can be known cheaply: Wi-Fi strength, temperature and eMMC
+# wear need subprocesses and stay in the admin panel's system status. The
+# clock's sync is a file systemd keeps (system_status.clock_synced_fast()).
 PROBLEM_CODES = {
     "integration_failed": "CF",
     "loop_stalled": "LP",
     "disk_low": "DK",
+    "clock_unsynced": "CK",
 }
 # "Not heard from yet" right after a boot is normal for a battery sensor -
 # the system status says so itself; a blinking "!" for it would teach

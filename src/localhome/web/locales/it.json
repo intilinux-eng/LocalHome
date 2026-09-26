@@ -7,7 +7,8 @@
     "warning_timezone": "<strong>Il fuso orario del sistema è diverso da quello di questo dispositivo.</strong> Il sistema usa {server}, questo dispositivo {device}. La programmazione oraria segue l'orologio del sistema, quindi le fasce vengono applicate con {shift} di sfasamento. Se il sistema non è impostato sul fuso della casa, correggilo sulla scheda con <code>sudo timedatectl set-timezone {zone}</code> e riavvia LocalHome.",
     "warning_skew": "<strong>L'orologio del sistema è sfasato di {minutes} min</strong> rispetto a questo dispositivo. Verifica che la sincronizzazione NTP sia attiva sulla scheda (<code>timedatectl</code>).",
     "update_available": "LocalHome è stato aggiornato: questa pagina usa ancora la versione precedente.",
-    "update_reload": "Ricarica"
+    "update_reload": "Ricarica",
+    "warning_unsynced": "L'ora della scheda non è ancora sincronizzata con internet: finché non lo è, la programmazione può scattare all'ora sbagliata. Si corregge da sola appena la scheda raggiunge internet (dopo un'accensione può volerci qualche minuto)."
   },
   "app": {
     "cancel": "Annulla",
@@ -543,7 +544,8 @@
     "led_code_LP": "un ciclo di controllo si è fermato (termostato o storico)",
     "led_code_DK": "disco quasi pieno",
     "extra_role_mode_label": "Fonte",
-    "mode_none": "Nessuno (non installato)"
+    "mode_none": "Nessuno (non installato)",
+    "led_code_CK": "l'ora della scheda non è sincronizzata con internet: la programmazione può essere sfasata"
   },
   "vmc_presets": {
     "night": "Notte",

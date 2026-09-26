@@ -224,9 +224,27 @@ def _os_name() -> str | None:
     return None
 
 
+# systemd-timesyncd creates this file once it has synchronized the clock
+# since boot - checking it is a stat, cheap enough for every page poll and
+# the LED matrix, where running timedatectl each time wouldn't be.
+TIMESYNC_DIR = "/run/systemd/timesync"
+
+
+def clock_synced_fast() -> bool | None:
+    """Whether the clock has been synchronized over NTP since boot. None
+    where systemd-timesyncd isn't what keeps the time (a PC, another NTP
+    client): then nothing is claimed either way."""
+    if not os.path.isdir(TIMESYNC_DIR):
+        return None
+    return os.path.exists(os.path.join(TIMESYNC_DIR, "synchronized"))
+
+
 def _clock_synced() -> bool | None:
     """Whether systemd says the clock is synchronized over NTP - the
     schedules run on it. None where there's no timedatectl (a PC)."""
+    fast = clock_synced_fast()
+    if fast is not None:
+        return fast
     try:
         out = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
                              capture_output=True, text=True, timeout=5)

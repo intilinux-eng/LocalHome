@@ -130,7 +130,16 @@
         zone: esc(deviceZone),
       }));
     }
-    if (Math.abs(state.skewMs) > SKEW_WARN_MS) {
+    // Not synchronized over NTP yet (right after a power-on, or no internet
+    // at all): the board runs on the time it last saved, and so do the
+    // schedules. That's the cause, so it's what's said - with how far off
+    // it is from this device when that's noticeable.
+    if (state.clockSynced === false) {
+      messages.push(tr("clock.warning_unsynced"));
+      if (Math.abs(state.skewMs) > SKEW_WARN_MS) {
+        messages.push(tr("clock.warning_skew", { minutes: esc(Math.round(Math.abs(state.skewMs) / 60000)) }));
+      }
+    } else if (Math.abs(state.skewMs) > SKEW_WARN_MS) {
       messages.push(tr("clock.warning_skew", { minutes: esc(Math.round(Math.abs(state.skewMs) / 60000)) }));
     }
 
@@ -168,6 +177,7 @@
         offsetMin: data.utc_offset_minutes,
         tzName: data.tz_name,
         tzAbbrev: data.tz_abbrev,
+        clockSynced: data.clock_synced,
       };
       boot = { bootedAt: data.booted_at, startedAt: data.started_at };
       render();

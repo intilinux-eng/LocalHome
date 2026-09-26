@@ -146,12 +146,19 @@ def test_each_code_once_and_system_problems_mapped():
 
 
 def test_what_needs_a_subprocess_stays_off_the_matrix():
-    """Wi-Fi strength, clock sync, temperature and eMMC wear need nmcli,
-    timedatectl or sysfs digging: the admin panel's system status shows
-    them; the matrix, running all day, doesn't go looking."""
+    """Wi-Fi strength, temperature and eMMC wear need nmcli or sysfs
+    digging: the admin panel's system status shows them; the matrix,
+    running all day, doesn't go looking."""
     problems = [{"code": code, "subject": "x", "detail": None}
-                for code in ("wifi_weak", "clock_unsynced", "cpu_hot", "storage_wear")]
+                for code in ("wifi_weak", "cpu_hot", "storage_wear")]
     assert lm.problem_codes(problems, ZONES) == []
+
+
+def test_an_unsynchronized_clock_is_ck():
+    """Right after a power-on, or with no internet, the schedules run on
+    the time the board last saved - worth a code on the matrix."""
+    problems = [{"code": "clock_unsynced", "subject": "NTP", "detail": None}]
+    assert [p["code"] for p in lm.problem_codes(problems, ZONES)] == ["CK"]
 
 
 # ------------------------------------------------------------ the bridge --

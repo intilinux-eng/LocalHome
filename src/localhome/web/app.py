@@ -405,7 +405,10 @@ def _matrix_state(app: Flask) -> led_matrix.MatrixState:
         manager.failed_integrations,
         system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path))),
         _loops(app),
-        host={"uptime_seconds": system_status._uptime_seconds()},   # "not heard yet" after a boot isn't a fault
+        # "not heard yet" after a boot isn't a fault; an unsynchronized
+        # clock is (CK) - both read without a subprocess.
+        host={"uptime_seconds": system_status._uptime_seconds(),
+              "clock_synced": system_status.clock_synced_fast()},
     )
     state = led_matrix.MatrixState(
         thermostat=thermostat is not None,
@@ -493,6 +496,7 @@ def _register_routes(app: Flask) -> None:
         # poll: it's what tells a page that a days-old reading was simply
         # never heard (the board was off) rather than a sensor gone quiet.
         return jsonify(ok=True, app_version=app.config["ASSET_VERSION"],
+                       clock_synced=system_status.clock_synced_fast(),
                        **system_status.boot_times(), **server_time())
 
     # The history table scan behind these numbers is the one slow part of
