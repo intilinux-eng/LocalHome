@@ -119,7 +119,7 @@ def create_app(config_path: str | None = None) -> Flask:
             # would with no errorhandler registered at all.
             return exc
         logger.exception("Unhandled error handling %s %s", request.method, request.path)
-        return jsonify(ok=False, error="internal error - see server logs"), 500
+        return jsonify(ok=False, error="internal error - see server logs", code="internal_error", params={}), 500
 
     config = load_config(config_path)
 
@@ -357,6 +357,19 @@ def _valve_driver(manager: DeviceManager, link) -> dict | None:
 
 
 AWAY_MAX_HOURS = 24 * 366
+
+
+def _fail(code: str, message: str, status: int = 400, **params):
+    """A refusal with a code the pages translate (errors.<code>) - the
+    English message stays for logs and API callers. See localhome/errors.py."""
+    return jsonify(ok=False, error=message, code=code, params=params), status
+
+
+def _refusal(exc: Exception, status: int = 400):
+    """A validation error as an answer: its code and parameters when it's
+    an InputError, the plain message otherwise."""
+    return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None),
+                   params=getattr(exc, "params", None) or {}), status
 
 
 def _json_body() -> dict:
@@ -739,7 +752,7 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         diagnostic_mode = bool(thermostat and thermostat.schedule_store.get_diagnostic_mode())
         if name in app.config["MODE_SWITCH_NAMES"] and not diagnostic_mode:
-            return jsonify(ok=False, error=f"'{name}' is controlled automatically by the thermostat mode"), 409
+            return _fail("switch_mode_controlled", f"'{name}' is controlled automatically by the thermostat mode", 409, name=name)
         try:
             switch.turn_on() if action == "on" else switch.turn_off()
         except Exception as exc:
@@ -779,7 +792,7 @@ def _register_routes(app: Flask) -> None:
         try:
             schedule = vmc.store.set(_json_body())
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         # Applied straight away, so saving is the whole action - no
         # restart, and no waiting for the next tick to see it work.
         vmc.tick()
@@ -880,7 +893,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_set_mode():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
         mode = data.get("mode")
         if mode not in ("heat", "cool"):
@@ -901,13 +914,13 @@ def _register_routes(app: Flask) -> None:
     def api_climate_set_away():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
         hours = data.get("hours")
         # Up to a year: beyond that the date overflows (a 500), and no
         # absence the dashboard offers comes anywhere near it.
         if not isinstance(hours, (int, float)) or isinstance(hours, bool) or not 0 < hours <= AWAY_MAX_HOURS:
-            return jsonify(ok=False, error=f"hours must be a number between 0 and {AWAY_MAX_HOURS}"), 400
+            return _fail("away_hours_invalid", f"hours must be a number between 0 and {AWAY_MAX_HOURS}", max=AWAY_MAX_HOURS)
         until = datetime.now() + timedelta(hours=hours)
         thermostat.schedule_store.set_away_until(until)
         thermostat.tick()
@@ -917,7 +930,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_cancel_away():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         thermostat.schedule_store.set_away_until(None)
         thermostat.tick()
         return jsonify(ok=True)
@@ -926,7 +939,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_set_diagnostic_mode():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
         enabled = data.get("enabled")
         if not isinstance(enabled, bool):
@@ -959,7 +972,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_get_schedule(name):
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         mode = request.args.get("mode") or thermostat.schedule_store.get_mode()
         if mode not in MODES:
             return jsonify(ok=False, error=f"mode must be one of {MODES}"), 400
@@ -969,7 +982,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_set_schedule(name):
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
         week, cells = data.get("week"), data.get("cells")
         if not isinstance(week, dict) and cells is None:
@@ -985,7 +998,7 @@ def _register_routes(app: Flask) -> None:
             else:
                 thermostat.schedule_store.set_week(name, week, mode)
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         # Same reasoning as the mode switch above: don't leave the valve
         # (and the status label derived from it) stale until the next
         # scheduled tick just because the new target was written to disk.
@@ -996,7 +1009,7 @@ def _register_routes(app: Flask) -> None:
     def api_climate_on_hours(name):
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
-            return jsonify(ok=False, error="no thermostat configured"), 404
+            return _fail("no_thermostat", "no thermostat configured", 404)
         zone = next((z for z in thermostat.zones if z.name == name), None)
         if zone is None:
             return jsonify(ok=False, error=f"unknown zone '{name}'"), 404
@@ -1061,7 +1074,7 @@ def _register_routes(app: Flask) -> None:
                 bool(data.get("change_password")),
             )
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
 
     @app.route("/api/climate-admin/broker/test", methods=["POST"])
@@ -1108,7 +1121,7 @@ def _register_routes(app: Flask) -> None:
         try:
             climate_map.set_zones(zones)
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         warnings = []
         if previous is not None:
             for old_zone, new_zone in zip(previous, zones):
@@ -1135,7 +1148,7 @@ def _register_routes(app: Flask) -> None:
         try:
             climate_map.set_extra_switches(extra_switches)
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
 
     @app.route("/api/climate-admin/extra-sensors")
@@ -1158,7 +1171,7 @@ def _register_routes(app: Flask) -> None:
         try:
             climate_map.set_extra_sensors(extra_sensors)
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
 
     @app.route("/api/climate-admin/extra-dimmers")
@@ -1193,7 +1206,7 @@ def _register_routes(app: Flask) -> None:
         try:
             climate_map.set_extra_dimmers(extra_dimmers)
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
 
     @app.route("/api/climate-admin/restart", methods=["POST"])
@@ -1240,7 +1253,7 @@ def _register_routes(app: Flask) -> None:
         try:
             saved = store.set(data.get("values") or {})
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 400
+            return _refusal(exc, 400)
         return jsonify(ok=True, saved=saved,
                        restart_required=panel_settings.needs_restart(
                            saved, app.config["ACTIVE_PANEL_SETTINGS"]))
@@ -1279,7 +1292,7 @@ def _register_routes(app: Flask) -> None:
         try:
             result = app.config["MAINTENANCE"].clear_schedules()
         except ValueError as exc:
-            return jsonify(ok=False, error=str(exc)), 409
+            return _refusal(exc, 409)
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is not None:
             thermostat.tick()  # no schedule left: close the valves now, not in a minute
@@ -1312,7 +1325,7 @@ def _register_routes(app: Flask) -> None:
         active_zones = app.config["ACTIVE_CLIMATE_ZONES"] or []
         zone = next((z for z in active_zones if z.get("name") == name), None)
         if zone is None or zone.get("sensor_mode") != "manual":
-            return jsonify(ok=False, error=f"zone '{name}' is not currently configured in manual mode"), 409
+            return _fail("zone_not_manual", f"zone '{name}' is not currently configured in manual mode", 409, zone=name)
         # Diagnostic mode makes the thermostat.tick() below a no-op (see
         # ScheduleStore.get_diagnostic_mode()), so setting a value here
         # would silently do nothing to the valve - confusing during the
@@ -1320,7 +1333,7 @@ def _register_routes(app: Flask) -> None:
         # box exists for. Same "reject, don't silently no-op" stance as the
         # mode_switch block in api_sensor_action() below.
         if thermostat and thermostat.schedule_store.get_diagnostic_mode():
-            return jsonify(ok=False, error="diagnostic mode is active - turn it off to let the thermostat react to a manual value"), 409
+            return _fail("diagnostic_active", "diagnostic mode is active - turn it off to let the thermostat react to a manual value", 409)
 
         data = _json_body()
         if "temperature_c" not in data:
@@ -1329,14 +1342,14 @@ def _register_routes(app: Flask) -> None:
             temperature_c = float(data["temperature_c"])
             humidity_pct = float(data["humidity_pct"]) if data.get("humidity_pct") is not None else None
         except (TypeError, ValueError):
-            return jsonify(ok=False, error="temperature_c/humidity_pct must be numbers"), 400
+            return _fail("manual_not_numbers", "temperature_c/humidity_pct must be numbers")
         # A typo ("215" for 21.5) would drive the valves on nonsense, and
         # float() also takes "nan"/"inf" - which aren't valid JSON for the
         # pages that read the value back. Real indoor readings only.
         if not (math.isfinite(temperature_c) and -30 <= temperature_c <= 60):
-            return jsonify(ok=False, error="temperature_c must be between -30 and 60"), 400
+            return _fail("manual_temp_range", "temperature_c must be between -30 and 60")
         if humidity_pct is not None and not (math.isfinite(humidity_pct) and 0 <= humidity_pct <= 100):
-            return jsonify(ok=False, error="humidity_pct must be between 0 and 100"), 400
+            return _fail("manual_humidity_range", "humidity_pct must be between 0 and 100")
 
         sensor_name = f"{name} Sensor"
         manual_override.set(sensor_name, temperature_c, humidity_pct)

@@ -246,7 +246,7 @@ async function testBroker(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -279,7 +279,7 @@ async function saveBroker(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -305,7 +305,7 @@ async function saveMap(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -355,7 +355,7 @@ async function saveExtraSwitches(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -413,7 +413,7 @@ async function saveExtraSensor(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -511,7 +511,7 @@ async function saveVmc(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + data.error;
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
       resultEl.className = "hint-text admin-error";
       return;
     }
@@ -803,7 +803,7 @@ async function onDiagnosticModeToggle(checkbox) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       checkbox.checked = !enabled;
       return;
     }
@@ -845,7 +845,7 @@ async function diagnosticToggle(name, action, button) {
   try {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + apiError(data));
     refreshStatus();
   } catch (e) {
     notify(tr("sensors.request_failed"));
@@ -927,7 +927,7 @@ async function testValve(valveName, action, button) {
   try {
     const res = await fetch(`/api/sensors/${encodeURIComponent(valveName)}/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + apiError(data));
     refreshStatus();
   } catch (e) {
     notify(tr("sensors.request_failed"));
@@ -995,7 +995,7 @@ async function setManualValue(zoneName, button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       return;
     }
     refreshStatus();
@@ -1014,6 +1014,28 @@ async function setManualValue(zoneName, button) {
 
 const SYSTEM_STATUS_INTERVAL_MS = 15000;
 let systemStatusFetchedAt = 0;
+
+// The server's refusal in this page's language: its code and parameters
+// (errors.<code> in the locale files, see localhome/errors.py), a
+// setting's own label for its key, and the English message only when
+// there's no translation.
+function apiError(data) {
+  if (!data) return "";
+  const params = Object.assign({}, data.params || {});
+  if (params.key) {
+    const label = tr(`climate_admin.setting_${params.key}`);
+    params.label = label.startsWith("climate_admin.") ? params.key : label;
+  }
+  if (params.period) {
+    const period = tr(`errors.period_${params.period}`);
+    if (!period.startsWith("errors.")) params.period = period;
+  }
+  if (typeof data.code === "string") {
+    const text = tr(`errors.${data.code}`, params);
+    if (text !== `errors.${data.code}`) return text;
+  }
+  return data.error || "";
+}
 
 function escapeHtml(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, c => ({
@@ -1315,7 +1337,7 @@ async function confirmSeason(button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      result.textContent = tr("sensors.error_prefix") + data.error;
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
       result.className = "hint-text admin-error";
       return;
     }
@@ -1450,7 +1472,7 @@ async function postSettings(values, button) {
     });
     const data = await res.json();
     if (!data.ok) {
-      result.textContent = tr("sensors.error_prefix") + data.error;
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
       result.className = "hint-text admin-error";
       return;
     }
@@ -1584,7 +1606,7 @@ async function runMaintenance(action, button) {
   }
   cancelMaintenance(action);
   if (!data.ok) {
-    result.textContent = tr("sensors.error_prefix") + data.error;
+    result.textContent = tr("sensors.error_prefix") + apiError(data);
     result.className = "hint-text admin-error";
     return;
   }

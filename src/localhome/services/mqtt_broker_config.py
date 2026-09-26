@@ -15,6 +15,7 @@ asks to actually change it.
 """
 from __future__ import annotations
 
+from localhome.errors import InputError
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 
@@ -46,9 +47,9 @@ def set_broker(
     the field blank in the form never silently drops it back to
     anonymous."""
     if not isinstance(host, str) or not host.strip():
-        raise ValueError("host is required")
+        raise InputError("broker_host_required", "host is required")
     if not isinstance(port, int) or isinstance(port, bool) or not (1 <= port <= 65535):
-        raise ValueError("port must be a number between 1 and 65535")
+        raise InputError("broker_port_invalid", "port must be a number between 1 and 65535")
 
     broker: dict = {"host": host.strip(), "port": port}
     if username and username.strip():

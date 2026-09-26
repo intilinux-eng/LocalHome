@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 
+from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
 from localhome.util.jsonfile import load_json, save_json_atomic
 
@@ -131,7 +132,7 @@ class ScheduleStore:
     def _season_key(self, mode: str | None, data: dict) -> str:
         season = mode or data.get("mode", self.default_mode)
         if season not in MODES:
-            raise ValueError(f"mode must be one of {MODES}")
+            raise InputError("mode_invalid", f"mode must be one of {MODES}")
         return SEASON_KEYS[season]
 
     def _load(self) -> dict:
@@ -163,7 +164,7 @@ class ScheduleStore:
 
     def set_mode(self, mode: str) -> None:
         if mode not in MODES:
-            raise ValueError(f"mode must be one of {MODES}")
+            raise InputError("mode_invalid", f"mode must be one of {MODES}")
         with self._lock:
             data = self._load()
             data["mode"] = mode
@@ -212,7 +213,7 @@ class ScheduleStore:
         for day in DAYS:
             hours = week.get(day)
             if not isinstance(hours, list) or len(hours) != HOURS_PER_DAY:
-                raise ValueError(f"week['{day}'] must be a list of exactly {HOURS_PER_DAY} values")
+                raise InputError("schedule_invalid", f"week['{day}'] must be a list of exactly {HOURS_PER_DAY} values")
             for hour, value in enumerate(hours):
                 # Rejected here, not left for get_target()'s float(value)
                 # to discover later - that runs from the thermostat's
@@ -221,7 +222,7 @@ class ScheduleStore:
                 # generic "log and retry next tick" fallback rather than
                 # ever telling anyone what was actually wrong.
                 if value is not None and not isinstance(value, (int, float)):
-                    raise ValueError(f"week['{day}'][{hour}] must be a number or null, got {value!r}")
+                    raise InputError("schedule_invalid", f"week['{day}'][{hour}] must be a number or null, got {value!r}")
         with self._lock:
             data = self._load()
             data.setdefault(self._season_key(mode, data), {})[zone_name] = week
@@ -237,18 +238,18 @@ class ScheduleStore:
         cell by cell, both survive; only the same cell edited twice keeps
         the later value."""
         if not isinstance(cells, list):
-            raise ValueError("'cells' must be a list of [day, hour, value]")
+            raise InputError("schedule_invalid", "'cells' must be a list of [day, hour, value]")
         changes = []
         for cell in cells:
             if not isinstance(cell, (list, tuple)) or len(cell) != 3:
-                raise ValueError(f"each cell must be [day, hour, value], got {cell!r}")
+                raise InputError("schedule_invalid", f"each cell must be [day, hour, value], got {cell!r}")
             day, hour, value = cell
             if day not in DAYS:
-                raise ValueError(f"unknown day {day!r}")
+                raise InputError("schedule_invalid", f"unknown day {day!r}")
             if isinstance(hour, bool) or not isinstance(hour, int) or not 0 <= hour < HOURS_PER_DAY:
-                raise ValueError(f"hour must be 0-{HOURS_PER_DAY - 1}, got {hour!r}")
+                raise InputError("schedule_invalid", f"hour must be 0-{HOURS_PER_DAY - 1}, got {hour!r}")
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
-                raise ValueError(f"{day} {hour}:00 must be a number or null, got {value!r}")
+                raise InputError("schedule_invalid", f"{day} {hour}:00 must be a number or null, got {value!r}")
             changes.append((day, hour, value))
         with self._lock:
             data = self._load()

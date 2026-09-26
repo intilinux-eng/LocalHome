@@ -18,6 +18,7 @@ import logging
 import os
 import threading
 
+from localhome.errors import InputError
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,12 @@ def validate(values: dict) -> dict:
     naming the first bad one. None (or a missing key) means "not set
     here" - fall back to config.yaml."""
     if not isinstance(values, dict):
-        raise ValueError("settings must be an object")
+        raise InputError("request_invalid", "settings must be an object")
     clean = {}
     for key, value in values.items():
         spec = SETTINGS.get(key)
         if spec is None:
-            raise ValueError(f"unknown setting '{key}'")
+            raise InputError("setting_unknown", f"unknown setting '{key}'", key=key)
         if value is None or value == "":
             continue
         if spec["type"] == "text":
@@ -71,15 +72,17 @@ def validate(values: dict) -> dict:
             continue
         if spec["type"] == "choice":
             if value not in spec["choices"]:
-                raise ValueError(f"{key}: must be one of {spec['choices']}")
+                raise InputError("setting_choice", f"{key}: must be one of {spec['choices']}",
+                                 key=key, choices=", ".join(spec["choices"]))
             clean[key] = value
             continue
         try:
             number = float(value)
         except (TypeError, ValueError):
-            raise ValueError(f"{key}: must be a number") from None
+            raise InputError("setting_number", f"{key}: must be a number", key=key) from None
         if not spec["min"] <= number <= spec["max"]:
-            raise ValueError(f"{key}: must be between {spec['min']} and {spec['max']}")
+            raise InputError("setting_range", f"{key}: must be between {spec['min']} and {spec['max']}",
+                             key=key, min=spec["min"], max=spec["max"])
         clean[key] = int(round(number)) if spec["type"] == "int" else round(number, 2)
     return clean
 
@@ -88,15 +91,16 @@ def _text(key: str, value, spec: dict) -> str | None:
     """A name someone typed, cleaned up and checked. None means "they left
     it blank" - not set here, so the default comes back."""
     if not isinstance(value, (str, int, float)) or isinstance(value, bool):
-        raise ValueError(f"{key}: must be text")
+        raise InputError("setting_text", f"{key}: must be text", key=key)
     text = " ".join(str(value).split())  # no line breaks, no runs of spaces
     if not text:
         return None
     if any(ord(char) < 32 or ord(char) == 127 for char in text):
-        raise ValueError(f"{key}: must not contain control characters")
+        raise InputError("setting_control_chars", f"{key}: must not contain control characters", key=key)
     if len(text) > spec["max_length"]:
-        raise ValueError(f"{key}: at most {spec['max_length']} characters, "
-                         f"this one has {len(text)}")
+        raise InputError("setting_too_long", f"{key}: at most {spec['max_length']} characters, "
+                                             f"this one has {len(text)}",
+                         key=key, max=spec["max_length"], length=len(text))
     return text
 
 

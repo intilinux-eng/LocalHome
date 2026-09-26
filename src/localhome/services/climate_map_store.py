@@ -84,6 +84,7 @@ import os
 import threading
 
 from localhome.config import Integration, LocalHomeConfig
+from localhome.errors import InputError
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -101,33 +102,35 @@ def validate_zones(zones: list[dict]) -> None:
     core/manager.py's DeviceManager._register()), a missing id for the
     mode that needs one."""
     if not isinstance(zones, list) or len(zones) != ZONE_COUNT:
-        raise ValueError(f"exactly {ZONE_COUNT} zones are required")
+        raise InputError("zones_count", f"exactly {ZONE_COUNT} zones are required", count=ZONE_COUNT)
 
     names: list[str] = []
     device_ids: list[str] = []
     for i, zone in enumerate(zones):
         if not isinstance(zone, dict):
-            raise ValueError(f"zone {i} must be an object")
+            raise InputError("zone_invalid", f"zone {i} must be an object", zone=i + 1)
         name = zone.get("name")
         if not isinstance(name, str) or not name.strip():
-            raise ValueError(f"zone {i}: 'name' is required")
+            raise InputError("zone_name_required", f"zone {i}: 'name' is required", zone=i + 1)
         # The name is part of the zone's URLs (/api/climate/zones/<name>/...):
         # a slash splits it however it's encoded. Anything else - accents,
         # apostrophes, quotes - is fine.
         if "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
-            raise ValueError(f"zone {i} ('{name}'): a zone name can't contain '/', '\\' or control characters")
+            raise InputError("zone_name_chars", f"zone {i} ('{name}'): a zone name can't contain '/', '\\' or control characters",
+                             zone=name)
         if len(name.strip()) > 40:
-            raise ValueError(f"zone {i}: a zone name can be at most 40 characters")
+            raise InputError("zone_name_long", f"zone {i}: a zone name can be at most 40 characters", zone=i + 1, max=40)
         names.append(name)
 
         mode = zone.get("sensor_mode")
         if mode not in SENSOR_MODES:
-            raise ValueError(f"zone {i} ('{name}'): sensor_mode must be one of {SENSOR_MODES}")
+            raise InputError("sensor_mode_invalid", f"zone {i} ('{name}'): sensor_mode must be one of {SENSOR_MODES}", zone=name)
 
         sensor_device_id = zone.get("sensor_device_id")
         if mode == "shelly":
             if not isinstance(sensor_device_id, str) or not sensor_device_id.strip():
-                raise ValueError(f"zone {i} ('{name}'): sensor_device_id is required when sensor_mode is 'shelly'")
+                raise InputError("sensor_id_required",
+                                 f"zone {i} ('{name}'): sensor_device_id is required when sensor_mode is 'shelly'", zone=name)
             device_ids.append(sensor_device_id.strip())
 
         # Same "no hardware yet" escape hatch as the sensor - a valve
@@ -138,24 +141,26 @@ def validate_zones(zones: list[dict]) -> None:
         # before any Shelly relay is actually wired.
         valve_mode = zone.get("valve_mode", "shelly")
         if valve_mode not in VALVE_MODES:
-            raise ValueError(f"zone {i} ('{name}'): valve_mode must be one of {VALVE_MODES}")
+            raise InputError("valve_mode_invalid", f"zone {i} ('{name}'): valve_mode must be one of {VALVE_MODES}", zone=name)
         valve_device_id = zone.get("valve_device_id")
         if valve_mode == "shelly":
             if not isinstance(valve_device_id, str) or not valve_device_id.strip():
-                raise ValueError(f"zone {i} ('{name}'): valve_device_id is required when valve_mode is 'shelly'")
+                raise InputError("valve_id_required",
+                                 f"zone {i} ('{name}'): valve_device_id is required when valve_mode is 'shelly'", zone=name)
             device_ids.append(valve_device_id.strip())
 
         if "cool_enabled" in zone and not isinstance(zone["cool_enabled"], bool):
-            raise ValueError(f"zone {i} ('{name}'): cool_enabled must be true or false")
+            raise InputError("zone_invalid", f"zone {i} ('{name}'): cool_enabled must be true or false", zone=name)
 
-    _check_no_duplicates(names, "duplicate zone name '{value}' - zone names must be unique")
+    _check_no_duplicates(names, "duplicate zone name '{value}' - zone names must be unique", "duplicate_zone_name")
     _check_no_duplicates(
         device_ids,
         "duplicate id '{value}' - each Shelly device id may only be used for one role",
+        "duplicate_device_id",
     )
 
 
-def _check_no_duplicates(values: list[str], message: str) -> None:
+def _check_no_duplicates(values: list[str], message: str, code: str = "duplicate_device_id") -> None:
     """Names the actual duplicate rather than just saying "something's
     duplicated" - with up to 2 zones and 2 extra switches all sharing
     one device-id namespace, "a duplicate id was found" alone leaves a
@@ -163,7 +168,7 @@ def _check_no_duplicates(values: list[str], message: str) -> None:
     seen: set[str] = set()
     for value in values:
         if value in seen:
-            raise ValueError(message.format(value=value))
+            raise InputError(code, message.format(value=value), value=value)
         seen.add(value)
 
 
@@ -252,26 +257,27 @@ def _validate_role_mode(section: dict, id_key: str, mode_key: str) -> None:
     if mode is None:
         return
     if mode not in EXTRA_ROLE_MODES:
-        raise ValueError(f"{mode_key} must be one of {list(EXTRA_ROLE_MODES)}")
+        raise InputError("role_mode_invalid", f"{mode_key} must be one of {list(EXTRA_ROLE_MODES)}")
     if mode == "shelly" and not (isinstance(section.get(id_key), str) and section[id_key].strip()):
-        raise ValueError(f"{id_key} is required when {mode_key} is 'shelly'")
+        raise InputError("role_id_required", f"{id_key} is required when {mode_key} is 'shelly'")
 
 
 def _validate_role_ids(section: dict, fields: dict, other_ids: list[str], section_name: str) -> None:
     """The shared rule for every fixed-role section: each role optional,
     a given id non-empty, and no id reused by any other role anywhere."""
     if not isinstance(section, dict):
-        raise ValueError(f"{section_name} must be an object")
+        raise InputError("request_invalid", f"{section_name} must be an object")
     device_ids = list(other_ids)
     for key in fields:
         device_id = section.get(key)
         if device_id is not None:
             if not isinstance(device_id, str) or not device_id.strip():
-                raise ValueError(f"{key}: device id must be a non-empty string or null")
+                raise InputError("device_id_invalid", f"{key}: device id must be a non-empty string or null")
             device_ids.append(device_id.strip())
     _check_no_duplicates(
         device_ids,
         "duplicate id '{value}' - each Shelly device id may only be used for one role",
+        "duplicate_device_id",
     )
 
 

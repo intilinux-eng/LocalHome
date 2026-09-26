@@ -272,7 +272,7 @@ async function sendCoverAction(name, action) {
   try {
     const res = await fetch(`/api/covers/${encodeURIComponent(name)}/action/${action}`, { method: "POST" });
     const data = await res.json();
-    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + apiError(data));
   } catch (e) {
     notify(tr("sensors.request_failed"));
   }
@@ -292,7 +292,7 @@ async function movePercent(name, percent) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       sliderEl.disabled = false;
       refreshCovers(window.COVER_NAMES);
       return;
@@ -481,7 +481,7 @@ async function setNumberValue(name, value, sensors) {
       body: JSON.stringify({ value: parseFloat(value) }),
     });
     const data = await res.json();
-    if (!data.ok) notify(tr("sensors.error_prefix") + data.error);
+    if (!data.ok) notify(tr("sensors.error_prefix") + apiError(data));
   } catch (e) {
     notify(tr("sensors.request_failed"));
   }
@@ -712,7 +712,7 @@ async function onSwitchToggle(name, el) {
     const res = await fetch(`/api/sensors/${encodeURIComponent(name)}/${el.checked ? "on" : "off"}`, { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       el.checked = !el.checked;
     }
   } catch (e) {
@@ -799,7 +799,7 @@ async function saveVmcProgram(name) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       return refreshVmcProgram();
     }
     fillVmcProgram(data);
@@ -1615,7 +1615,7 @@ async function setAway(hours) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       return;
     }
     climateAwayUntil = data.away_until;
@@ -1633,7 +1633,7 @@ async function cancelAway() {
     const res = await fetch("/api/climate/away/cancel", { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      notify(tr("sensors.error_prefix") + data.error);
+      notify(tr("sensors.error_prefix") + apiError(data));
       return;
     }
     climateAwayUntil = null;
@@ -1954,6 +1954,28 @@ function applyPane() {
     });
     card.querySelectorAll(".zone-pane").forEach(pane => { pane.hidden = pane.dataset.pane !== selectedPane; });
   });
+}
+
+// The server's refusal in this page's language: its code and parameters
+// (errors.<code> in the locale files, see localhome/errors.py), a
+// setting's own label for its key, and the English message only when
+// there's no translation.
+function apiError(data) {
+  if (!data) return "";
+  const params = Object.assign({}, data.params || {});
+  if (params.key) {
+    const label = tr(`climate_admin.setting_${params.key}`);
+    params.label = label.startsWith("climate_admin.") ? params.key : label;
+  }
+  if (params.period) {
+    const period = tr(`errors.period_${params.period}`);
+    if (!period.startsWith("errors.")) params.period = period;
+  }
+  if (typeof data.code === "string") {
+    const text = tr(`errors.${data.code}`, params);
+    if (text !== `errors.${data.code}`) return text;
+  }
+  return data.error || "";
 }
 
 function escapeAttr(text) {
@@ -2332,7 +2354,7 @@ async function saveSchedule(zoneName) {
     });
     const data = await res.json();
     if (!data.ok) {
-      notify(`${tr("climate.save_failed")}: ${data.error}`);
+      notify(`${tr("climate.save_failed")}: ${apiError(data)}`);
       return;
     }
     if (data.week) adoptServerWeek(zoneName, data.week);

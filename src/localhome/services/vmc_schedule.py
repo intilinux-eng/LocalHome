@@ -25,6 +25,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
 from localhome.util.jsonfile import load_json, save_json_atomic
 
@@ -44,10 +45,10 @@ def validate(schedule: dict) -> dict:
     """Returns the schedule cleaned up, or raises ValueError describing
     the first problem - the same shape every other store here uses."""
     if not isinstance(schedule, dict):
-        raise ValueError("the schedule must be an object")
+        raise InputError("request_invalid", "the schedule must be an object")
     target = schedule.get("target")
     if target is not None and (not isinstance(target, str) or not target.strip()):
-        raise ValueError("target must be a device name or null")
+        raise InputError("vmc_target_invalid", "target must be a device name or null")
     clean = {
         "enabled": bool(schedule.get("enabled", False)),
         "target": target.strip() if isinstance(target, str) and target.strip() else None,
@@ -55,18 +56,19 @@ def validate(schedule: dict) -> dict:
     for period in PERIODS:
         data = schedule.get(period) or {}
         if not isinstance(data, dict):
-            raise ValueError(f"{period} must be an object with 'at' and 'value'")
+            raise InputError("request_invalid", f"{period} must be an object with 'at' and 'value'")
         at = data.get("at", DEFAULT_SCHEDULE[period]["at"])
         if not isinstance(at, str) or not TIME_PATTERN.match(at):
-            raise ValueError(f"{period}: 'at' must be a time like 07:00, got {at!r}")
+            raise InputError("vmc_time_invalid", f"{period}: 'at' must be a time like 07:00, got {at!r}", period=period)
         value = data.get("value", DEFAULT_SCHEDULE[period]["value"])
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 100:
-            raise ValueError(f"{period}: 'value' must be a speed between 0 and 100, got {value!r}")
+            raise InputError("vmc_speed_invalid", f"{period}: 'value' must be a speed between 0 and 100, got {value!r}",
+                             period=period)
         clean[period] = {"at": at, "value": round(float(value))}
     if clean["day"]["at"] == clean["night"]["at"]:
-        raise ValueError("day and night must start at different times")
+        raise InputError("vmc_same_times", "day and night must start at different times")
     if clean["enabled"] and not clean["target"]:
-        raise ValueError("choose which device the program controls before turning it on")
+        raise InputError("vmc_no_target", "choose which device the program controls before turning it on")
     return clean
 
 
