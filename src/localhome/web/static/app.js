@@ -1699,6 +1699,7 @@ const scheduleWeeks = {};   // zone name -> working copy of its week grid
 const saveTimers = {};      // zone name -> debounce timer for schedule saves
 let paintValue = DEFAULT_PAINT_VALUE.heat;
 let isPainting = false;
+let strokeZone = null;      // the zone a stroke painted, until the pointer is released
 
 function schedulePresets() {
   return SCHEDULE_PRESETS[climateMode] || SCHEDULE_PRESETS.heat;
@@ -2229,7 +2230,22 @@ function buildScheduleGrid(zoneId, week) {
   });
 }
 
-document.addEventListener("pointerup", () => { isPainting = false; });
+// What moves the layout around the grid waits for the end of the stroke:
+// the empty-schedule note vanishing at the first cell used to shift the
+// grid under a still-pressed pointer, and whatever cell slid under it
+// got painted too - two cells for one click.
+function endStroke() {
+  isPainting = false;
+  if (!strokeZone) return;
+  const zoneName = strokeZone;
+  strokeZone = null;
+  updateEmptyScheduleHint(zoneName);
+  const zone = climateZones.find(z => z.name === zoneName);
+  if (zone) updateZoneNext(zone);
+}
+
+document.addEventListener("pointerup", endStroke);
+document.addEventListener("pointercancel", endStroke);
 
 function paintCell(zoneId, cell) {
   const zone = climateZones.find(z => slug(z.name) === zoneId);
@@ -2311,9 +2327,13 @@ function updateEmptyScheduleHint(zoneName) {
 }
 
 function scheduleSave(zoneName) {
-  updateEmptyScheduleHint(zoneName);
-  const zone = climateZones.find(z => z.name === zoneName);
-  if (zone) updateZoneNext(zone);
+  if (isPainting) {
+    strokeZone = zoneName;   // see endStroke()
+  } else {
+    updateEmptyScheduleHint(zoneName);
+    const zone = climateZones.find(z => z.name === zoneName);
+    if (zone) updateZoneNext(zone);
+  }
   clearTimeout(saveTimers[zoneName]);
   saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), 600);
 }
