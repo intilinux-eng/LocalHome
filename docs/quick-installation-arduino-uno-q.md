@@ -256,11 +256,14 @@ The admin panel's **System status** shows whether each of these is on
 problem) and the **Watchdog history**: every reconnect, restart and
 reboot they did, with the time - it survives reboots.
 
-What no watchdog can see from the board: the router answering while
-phones and PCs can't reach the board (it happened once on the test
-bench - reconnecting the Wi-Fi fixed it). Give each board a **fixed IP
-in the router** (a DHCP reservation on its MAC address): it avoids that
-kind of stale state, and the board is always at the same address.
+What no check from the board can see: the router passing pings to the
+board but not connections - the page, SSH, MQTT - after a fresh boot. It
+happened on both test boards (two boots out of three), and re-activating
+the Wi-Fi cleared it every time, so the watchdog does that once, two
+minutes after every boot, as a precaution: a few seconds without Wi-Fi,
+logged in the watchdog history, and the Shellys reconnect by themselves.
+Give each board a **fixed IP in the router** too (a DHCP reservation on
+its MAC address): the board is always at the same address.
 
 Every step prints how to undo it. Add `--lean` to also turn off Arduino
 App Lab, its Docker runtime and the firmware updater: ~270 MB of RAM and

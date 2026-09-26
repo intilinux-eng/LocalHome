@@ -643,7 +643,8 @@
     "wd_unhealthy": "LocalHome non risponde o un ciclo di controllo è fermo: viene riavviato se continua",
     "wd_healthy": "LocalHome di nuovo a posto, senza riavvio",
     "wd_restarted": "LocalHome riavviato dal watchdog",
-    "wd_killed": "LocalHome bloccato da 2 minuti: riavviato dal watchdog"
+    "wd_killed": "LocalHome bloccato da 2 minuti: riavviato dal watchdog",
+    "wd_boot_reconnect": "Wi-Fi riconnesso dopo l'avvio (precauzione)"
   },
   "vmc_presets": {
     "night": "Notte",

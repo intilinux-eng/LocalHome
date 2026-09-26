@@ -643,7 +643,8 @@
     "wd_unhealthy": "LocalHome not answering or a control loop stuck: it's restarted if this lasts",
     "wd_healthy": "LocalHome fine again, no restart needed",
     "wd_restarted": "LocalHome restarted by the watchdog",
-    "wd_killed": "LocalHome hung for 2 minutes: restarted by the watchdog"
+    "wd_killed": "LocalHome hung for 2 minutes: restarted by the watchdog",
+    "wd_boot_reconnect": "Wi-Fi reconnected after start-up (precaution)"
   },
   "vmc_presets": {
     "night": "Night",

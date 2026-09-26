@@ -8,6 +8,11 @@
 #   - the Wi-Fi radio is on, and every Wi-Fi profile retries for ever with
 #     power saving off (a profile added later - a new access point - gets
 #     the same, the first minute it exists);
+#   - once per boot, two minutes in, the Wi-Fi is reconnected anyway: on
+#     both test boards a fresh boot sometimes left the router passing
+#     pings to the board but not connections (web page, SSH, MQTT) - a
+#     state no check from the board can see, cleared by a reconnect every
+#     time. A few seconds of Wi-Fi; the Shellys reconnect by themselves;
 #   - the router (the default gateway) is pinged. Not answering, it steps
 #     up: 3 min -> reconnect the Wi-Fi, 10 min -> restart NetworkManager,
 #     20 min -> reconnect again, 30 min -> reboot the board (not in its
@@ -31,7 +36,7 @@ LAST_REBOOT=$DATA/wifi-watchdog-reboot
 
 mkdir -p "$STATE" "$DATA"
 
-# log <code> [values...] - codes: radio_on, profile_fixed <name>,
+# log <code> [values...] - codes: radio_on, profile_fixed <name>, boot_reconnect,
 # router_down <gateway>, back <seconds>, reconnect <minutes> <device>,
 # nm_restart <minutes>, reboot <minutes>, reboot_skipped <minutes>.
 log() {
@@ -71,6 +76,25 @@ gateway=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
 gateway=${LOCALHOME_WIFI_WATCHDOG_TARGET:-$gateway}
 wifi_dev=$(nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi" {print $1; exit}')
 
+# Re-activating the Wi-Fi profile is what clears a stuck connection (seen
+# on both test boards); `nmcli device reconnect` doesn't exist, and
+# `device connect` on a connected device may do nothing.
+wifi_up() {
+    profile=$(nmcli -g GENERAL.CONNECTION device show "$wifi_dev" 2>/dev/null | sed 's/\\:/:/g')
+    if [ -n "$profile" ]; then
+        nmcli connection up "$profile" >/dev/null 2>&1
+    else
+        nmcli device connect "$wifi_dev" >/dev/null 2>&1
+    fi
+}
+
+if [ -n "$wifi_dev" ] && [ ! -f "$STATE/boot_reconnect_done" ] && [ "$uptime_s" -ge 90 ]; then
+    touch "$STATE/boot_reconnect_done"
+    log boot_reconnect
+    wifi_up
+    sleep 5
+fi
+
 up=0
 if [ -n "$gateway" ]; then
     for try in 1 2 3; do
@@ -82,7 +106,8 @@ fi
 if [ "$up" = 1 ]; then
     if [ -f "$STATE/down_since" ]; then
         log back "$((uptime_s - $(cat "$STATE/down_since")))"
-        rm -f "$STATE"/*
+        rm -f "$STATE/down_since" "$STATE/reconnect1" "$STATE/reconnect2" "$STATE/nm_restart" \
+            "$STATE/reboot_skipped"
     fi
     exit 0
 fi
@@ -100,10 +125,8 @@ first_time() {
 }
 
 reconnect() {
-    if [ -n "$wifi_dev" ]; then
-        log reconnect "$((down / 60))" "$wifi_dev"
-        nmcli device reconnect "$wifi_dev" >/dev/null 2>&1 || nmcli device connect "$wifi_dev" >/dev/null 2>&1
-    fi
+    log reconnect "$((down / 60))" "$wifi_dev"
+    wifi_up
 }
 
 if [ "$down" -ge 1800 ]; then
