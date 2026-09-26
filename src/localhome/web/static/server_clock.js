@@ -185,7 +185,11 @@
   // How long the board (and LocalHome on it) has been up, in seconds -
   // null until the first sync, or where the board can't tell us.
   function upFor() {
-    const now = Date.now() / 1000;
+    // "Now" on the board's own clock, like bootedAt/startedAt: right after
+    // a power-on the board runs on yesterday's time until NTP corrects it
+    // (8 minutes, measured), and mixing the phone's clock with the board's
+    // turned the difference into "on for 17h".
+    const now = (Date.now() + (state ? state.skewMs : 0)) / 1000;
     return {
       board: boot.bootedAt ? now - boot.bootedAt : null,
       process: boot.startedAt ? now - boot.startedAt : null,
