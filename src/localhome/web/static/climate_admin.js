@@ -1330,6 +1330,7 @@ async function loadSettings() {
     const data = await res.json();
     if (!data.ok) return;
     historyStats = data.history || null;
+    settingsLoaded = Object.fromEntries(data.settings.map(s => [s.key, s.source === "panel" ? s.value : null]));
     document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
     document.getElementById("settings-status").innerHTML = data.restart_pending
       ? `<span class="admin-status neutral">${tr("climate_admin.settings_restart_pending")}</span>` : "";
@@ -1339,6 +1340,7 @@ async function loadSettings() {
 }
 
 let historyStats = null; // from the last GET /api/climate-admin/settings
+let settingsLoaded = {};  // key -> the value set here when the form was loaded (null = not set here)
 
 // "300 MB" means nothing without knowing what's in there now. The history
 // holds measurements only - one row per sensor field per cycle - while
@@ -1443,9 +1445,13 @@ async function postSettings(values, button) {
     // Only some settings need a restart; the page name is live on the
     // next reload, and asking for a restart it doesn't need would teach
     // people to restart for nothing.
+    // Said about what actually changed: the page name is live on the
+    // next reload, the rest needs a restart, and nothing changed is just
+    // "saved".
+    const nameChanged = (values.site_name || null) !== (settingsLoaded.site_name || null);
     result.innerHTML = data.restart_required
       ? `${tr("climate_admin.save_success")} ${restartButtonHtml()}`
-      : tr("climate_admin.settings_saved_live");
+      : nameChanged ? tr("climate_admin.settings_saved_live") : tr("climate_admin.settings_saved");
     result.className = "hint-text admin-success";
     loadSettings();
   } catch (e) {
@@ -1456,11 +1462,43 @@ async function postSettings(values, button) {
   }
 }
 
+// Checked here first, in the page's language and on the field's own
+// label: the server checks again, but its answer names the setting's
+// internal key in English. And a half-typed number ("-", "1e") reads as
+// empty in the browser - which here means "back to the default" - so it
+// has to be caught, not saved as a silent reset.
+function settingsInputError(el) {
+  const label = el.closest(".admin-field").querySelector("label").firstChild.textContent.trim();
+  if (el.type === "number") {
+    if (el.validity.badInput) return tr("climate_admin.settings_not_a_number", { label });
+    if (el.value === "") return null;
+    const value = Number(el.value);
+    const min = Number(el.min), max = Number(el.max);
+    if (value < min || value > max) {
+      return tr("climate_admin.settings_out_of_range", {
+        label, min: min.toLocaleString(LOCALE), max: max.toLocaleString(LOCALE),
+      });
+    }
+  }
+  return null;
+}
+
 function saveSettings(button) {
   const values = {};
+  const result = document.getElementById("settings-result");
+  let firstError = null;
   document.querySelectorAll("#settings-form [data-setting]").forEach(el => {
+    const error = settingsInputError(el);
+    el.classList.toggle("input-invalid", !!error);
+    if (error && !firstError) firstError = { el, error };
     values[el.dataset.setting] = el.value === "" ? null : el.value;
   });
+  if (firstError) {
+    result.textContent = firstError.error;
+    result.className = "hint-text admin-error";
+    firstError.el.focus();
+    return;
+  }
   postSettings(values, button);
 }
 

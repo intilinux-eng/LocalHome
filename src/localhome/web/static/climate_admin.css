@@ -733,3 +733,9 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* A settings field the page refused before saving - see saveSettings(). */
+.admin-field input.input-invalid {
+  border-color: var(--accent-close);
+  box-shadow: 0 0 0 1px var(--accent-close);
+}
