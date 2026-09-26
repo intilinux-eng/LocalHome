@@ -965,21 +965,26 @@ def _register_routes(app: Flask) -> None:
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
         data = _json_body()
-        week = data.get("week")
-        if not isinstance(week, dict):
-            return jsonify(ok=False, error="missing 'week'"), 400
+        week, cells = data.get("week"), data.get("cells")
+        if not isinstance(week, dict) and cells is None:
+            return jsonify(ok=False, error="missing 'week' or 'cells'"), 400
         mode = data.get("mode")
         if mode is not None and mode not in MODES:
             return jsonify(ok=False, error=f"mode must be one of {MODES}"), 400
         try:
-            thermostat.schedule_store.set_week(name, week, mode)
+            if cells is not None:
+                # Just the hours that changed, merged into the week as it is
+                # now - see ScheduleStore.set_cells().
+                week = thermostat.schedule_store.set_cells(name, cells, mode)
+            else:
+                thermostat.schedule_store.set_week(name, week, mode)
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         # Same reasoning as the mode switch above: don't leave the valve
         # (and the status label derived from it) stale until the next
         # scheduled tick just because the new target was written to disk.
         thermostat.tick()
-        return jsonify(ok=True)
+        return jsonify(ok=True, week=thermostat.schedule_store.get_week(name, mode))
 
     @app.route("/api/climate/zones/<name>/on-hours")
     def api_climate_on_hours(name):

@@ -2296,19 +2296,70 @@ function scheduleSave(zoneName) {
   saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), 600);
 }
 
+// The week as the server last said it was, per zone - what an edit is
+// compared against to know which hours to send.
+const scheduleSavedWeeks = {};
+
+function copyWeek(week) {
+  const out = {};
+  for (const day of DAY_KEYS) out[day] = week[day].slice();
+  return out;
+}
+
+// Only the hours that changed go to the server, which merges them into
+// the week as it is *now* and sends that back. Two phones editing the same
+// zone used to each send their whole week, and the second save wiped the
+// first one's changes; now both survive, and this page shows the other's
+// too as soon as it saves.
 async function saveSchedule(zoneName) {
   delete saveTimers[zoneName];
+  const week = scheduleWeeks[zoneName];
+  if (!week) return;
+  const saved = scheduleSavedWeeks[zoneName];
+  const cells = [];
+  for (const day of DAY_KEYS) {
+    for (let h = 0; h < 24; h++) {
+      const value = week[day][h];
+      if (!saved || saved[day][h] !== value) cells.push([day, h, value]);
+    }
+  }
+  if (!cells.length) return;
   try {
     const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ week: scheduleWeeks[zoneName], mode: scheduleWeekModes[zoneName] || climateMode }),
+      body: JSON.stringify({ cells, mode: scheduleWeekModes[zoneName] || climateMode }),
     });
     const data = await res.json();
-    if (!data.ok) notify(`${tr("climate.save_failed")}: ${data.error}`);
+    if (!data.ok) {
+      notify(`${tr("climate.save_failed")}: ${data.error}`);
+      return;
+    }
+    if (data.week) adoptServerWeek(zoneName, data.week);
   } catch (e) {
     notify(tr("climate.save_failed"));
   }
+}
+
+// The merged week from the server becomes this page's: the grid is
+// redrawn only if it differs (someone else's edit) and nobody is in the
+// middle of painting on it, and edits made since the save was sent stay.
+function adoptServerWeek(zoneName, serverWeek) {
+  const local = scheduleWeeks[zoneName];
+  scheduleSavedWeeks[zoneName] = copyWeek(serverWeek);
+  if (saveTimers[zoneName] || isPainting) return;  // a newer local edit is on its way
+  let differs = false;
+  for (const day of DAY_KEYS) {
+    for (let h = 0; h < 24; h++) {
+      if (local[day][h] !== serverWeek[day][h]) differs = true;
+    }
+  }
+  if (!differs) return;
+  scheduleWeeks[zoneName] = copyWeek(serverWeek);
+  buildScheduleGrid(slug(zoneName), scheduleWeeks[zoneName]);
+  updateEmptyScheduleHint(zoneName);
+  const zone = climateZones.find(z => z.name === zoneName);
+  if (zone) updateZoneNext(zone);
 }
 
 // Saves any edit still waiting on its debounce right now, before a reload
@@ -2325,6 +2376,7 @@ async function loadZoneSchedule(zoneName) {
     const data = await res.json();
     if (!data.ok) return;
     scheduleWeeks[zoneName] = data.week;
+    scheduleSavedWeeks[zoneName] = copyWeek(data.week);
     scheduleWeekModes[zoneName] = data.mode || climateMode;
     buildScheduleGrid(slug(zoneName), data.week);
     updateEmptyScheduleHint(zoneName);

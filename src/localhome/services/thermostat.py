@@ -175,7 +175,9 @@ class ScheduleStore:
 
     def get_week(self, zone_name: str, mode: str | None = None) -> dict[str, list]:
         """`mode` picks the season's grid; None means the current season."""
-        data = self._load()
+        return self._week_in(self._load(), zone_name, mode)
+
+    def _week_in(self, data: dict, zone_name: str, mode: str | None) -> dict[str, list]:
         week = data.get(self._season_key(mode, data), {}).get(zone_name)
         if not week:
             return self.empty_week()
@@ -224,6 +226,38 @@ class ScheduleStore:
             data = self._load()
             data.setdefault(self._season_key(mode, data), {})[zone_name] = week
             self._save(data)
+
+    def set_cells(self, zone_name: str, cells: list, mode: str | None = None) -> dict[str, list]:
+        """Changes just these hours - [[day, hour, value], ...] - on top of
+        whatever the week is *now*, and returns the week that results.
+
+        What the dashboard saves: two phones editing the same schedule each
+        used to send their whole week, and the second one's save wiped the
+        first one's changes - it had loaded the week before them. Merged
+        cell by cell, both survive; only the same cell edited twice keeps
+        the later value."""
+        if not isinstance(cells, list):
+            raise ValueError("'cells' must be a list of [day, hour, value]")
+        changes = []
+        for cell in cells:
+            if not isinstance(cell, (list, tuple)) or len(cell) != 3:
+                raise ValueError(f"each cell must be [day, hour, value], got {cell!r}")
+            day, hour, value = cell
+            if day not in DAYS:
+                raise ValueError(f"unknown day {day!r}")
+            if isinstance(hour, bool) or not isinstance(hour, int) or not 0 <= hour < HOURS_PER_DAY:
+                raise ValueError(f"hour must be 0-{HOURS_PER_DAY - 1}, got {hour!r}")
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+                raise ValueError(f"{day} {hour}:00 must be a number or null, got {value!r}")
+            changes.append((day, hour, value))
+        with self._lock:
+            data = self._load()
+            week = self._week_in(data, zone_name, mode)
+            for day, hour, value in changes:
+                week[day][hour] = value
+            data.setdefault(self._season_key(mode, data), {})[zone_name] = week
+            self._save(data)
+        return week
 
     def get_target(self, zone_name: str, when: datetime, mode: str | None = None) -> float | None:
         week = self.get_week(zone_name, mode)

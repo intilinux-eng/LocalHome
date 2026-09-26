@@ -963,3 +963,45 @@ def test_a_zone_with_no_schedule_at_all_keeps_its_valve_closed(tmp_path):
     controller.tick(now=datetime(2026, 9, 14, 8, 0))
 
     assert switch.calls == ["off"]
+
+
+
+# ------------------------------------------- two phones, one schedule -----
+
+def test_cells_from_two_pages_are_merged_not_overwritten(tmp_path):
+    """Phone A saves Monday 08:00, then phone B - opened before - saves
+    Monday 20:00. Sending whole weeks, B's save wiped A's hour."""
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+
+    store.set_cells("Rooms", [["mon", 8, 21.0]])
+    week = store.set_cells("Rooms", [["mon", 20, 19.0]])
+
+    assert week["mon"][8] == 21.0 and week["mon"][20] == 19.0
+    assert store.get_week("Rooms")["mon"][8] == 21.0
+
+
+def test_the_same_hour_edited_twice_keeps_the_later_value(tmp_path):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_cells("Rooms", [["mon", 8, 21.0]])
+    store.set_cells("Rooms", [["mon", 8, None]])
+    assert store.get_week("Rooms")["mon"][8] is None
+
+
+def test_cells_go_to_the_season_they_were_edited_for(tmp_path):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    store.set_cells("Rooms", [["tue", 7, 24.0]], mode="cool")
+    assert store.get_week("Rooms", "cool")["tue"][7] == 24.0
+    assert store.get_week("Rooms", "heat")["tue"][7] is None
+
+
+@pytest.mark.parametrize("cells", [
+    "x", [["mon", 8]], [["xyz", 8, 20]], [["mon", 24, 20]], [["mon", "8", 20]],
+    [["mon", 8, "warm"]], [["mon", 8, True]],
+])
+def test_a_bad_cell_is_refused_and_nothing_is_written(tmp_path, cells):
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_cells("Rooms", [["mon", 1, 20.0]])
+    with pytest.raises(ValueError):
+        store.set_cells("Rooms", cells)
+    assert store.get_week("Rooms")["mon"][1] == 20.0
