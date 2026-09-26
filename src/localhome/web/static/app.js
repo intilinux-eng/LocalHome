@@ -2536,9 +2536,12 @@ function updateZoneNext(zone) {
 // "Other devices" heading goes with the last visible card.
 function applyClimateModeVisibility() {
   let anyVisible = false;
+  // A switch its season rule forces off in this season is hidden too.
+  const offNow = new Set(((climateSeasonEffects || {}).rules || [])
+    .filter(rule => rule[climateMode] === "off").map(rule => `sensor-${slug(rule.switch)}`));
   document.querySelectorAll("#climate-extra .sensor-card").forEach(card => {
     const requiredMode = card.dataset.visibleInMode;
-    card.hidden = !!requiredMode && requiredMode !== climateMode;
+    card.hidden = (!!requiredMode && requiredMode !== climateMode) || offNow.has(card.id);
     anyVisible = anyVisible || !card.hidden;
   });
   const head = document.getElementById("climate-extra-head");
@@ -2546,17 +2549,18 @@ function applyClimateModeVisibility() {
 }
 
 // The season's own effects on the Climate tab's other devices, from
-// /api/climate/zones: a switch it turns on and off by itself (a bathroom
-// bypass valve) and one only usable in one season (a dehumidifier).
+// /api/climate/zones: what each switch that follows the season does in
+// winter and in summer (always on, always off, or left to the user).
 let climateSeasonEffects = null;
 
 // One line under each such device - otherwise "why is it on?" or "why
 // can't I switch it on?" has no answer on the page.
 function annotateSeasonDevices() {
-  const effects = climateSeasonEffects || {};
   const notes = {};
-  (effects.mode_switches || []).forEach(m => { notes[m.switch] = tr(`climate.device_auto_${m.active_in_mode}`); });
-  (effects.mode_limited || []).forEach(m => { notes[m.switch] = tr(`climate.device_only_${m.only_in_mode}`); });
+  ((climateSeasonEffects || {}).rules || []).forEach(rule => {
+    notes[rule.switch] = `${tr("climate.season_winter")}: ${tr(`climate.rule_action_${rule.heat}`)} · `
+      + `${tr("climate.season_summer")}: ${tr(`climate.rule_action_${rule.cool}`)}`;
+  });
   for (const [name, text] of Object.entries(notes)) {
     const top = document.querySelector(`#climate-extra #sensor-${slug(name)} .sensor-top`);
     if (!top) continue;

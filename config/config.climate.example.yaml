@@ -33,15 +33,12 @@ thermostat:
   poll_interval_seconds: 60
   # No reading from a zone's sensor for this long: its valve is closed.
   sensor_failsafe_hours: 24
-  # The names below are the fixed ones the admin panel gives these two
-  # devices. If an apartment doesn't have one, leave its admin-panel field
-  # blank: LocalHome notes it once in the log and carries on.
-  mode_switches:
-    - switch: "Bathroom Bypass Valve"   # on while cooling, off while heating
-      active_in_mode: "cool"
-  mode_limited_switches:
-    - switch: "Dehumidifier"            # usable while cooling, off otherwise
-      only_in_mode: "cool"
+  # The bypass valve and the dehumidifier entered in the admin panel get
+  # their season rules there (Extra switches -> Behaviour per season):
+  # by default the bypass is on in summer and off in winter, the
+  # dehumidifier yours to switch in summer and off in winter. Writing a
+  # rule here instead (`season_rules`, see docs/configuration.md) takes
+  # precedence and makes the panel's read-only.
 
 positions_file: "positions.json"
 history:

@@ -321,6 +321,39 @@ simply held closed all summer (see above).
 Nothing about `interlocks` is dehumidifier-specific - any "switch A on
 requires switch B on too" relationship fits.
 
+### `season_rules`: what a switch does in each season
+
+The general form of the two sections below. For each season, a switch
+is one of:
+
+- `on` - LocalHome keeps it on;
+- `off` - LocalHome keeps it off (and the dashboard hides its card);
+- `manual` - left to whoever uses it, from the dashboard.
+
+```yaml
+thermostat:
+  ...
+  season_rules:
+    - switch: "Bathroom Bypass Valve"   # a `switch` integration's name
+      heat: "off"
+      cool: "on"
+    - switch: "Dehumidifier"
+      heat: "off"
+      cool: "manual"
+```
+
+A season left out is `manual`. While a season forces a switch on or off,
+the dashboard shows its state without a control and a manual command is
+refused - it would only be undone on the next control cycle (every
+`poll_interval_seconds`). Diagnostic mode suspends every rule.
+
+The admin panel's two extra switches (bypass valve, dehumidifier) have
+the same rules without any of this: **Extra switches → Behaviour per
+season** in `/climate-admin`, starting from the ones above, applied as
+soon as they're saved - no restart. A switch config.yaml already gives
+a rule (here, or in the two sections below, or as an interlock follower)
+keeps that one, and the panel shows it read-only.
+
 ### `mode_limited_switches`: a switch usable in one mode only
 
 For a switch you control by hand, but that only makes sense in one mode -

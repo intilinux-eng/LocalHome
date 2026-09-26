@@ -575,9 +575,12 @@ def test_vmc_card_has_modes_and_no_toggle():
     assert speed.options["on_with_value"] is True
 
 
-def test_extra_switches_are_shown_only_while_cooling():
+def test_extra_switches_have_no_fixed_season_of_their_own():
+    """Their season rules decide when the dashboard shows them (hidden in
+    a season whose rule is "off") - a fixed visible_in_mode would hide a
+    dehumidifier someone made usable in winter too."""
     for integration in build_extra_switch_integrations(VALID_EXTRA_SWITCHES, "broker.json"):
-        assert integration.options["visible_in_mode"] == "cool"
+        assert "visible_in_mode" not in integration.options
 
 
 
@@ -600,3 +603,39 @@ def test_zone_names_people_really_use(name, ok):
     else:
         with pytest.raises(ValueError):
             validate_zones(zones)
+
+
+
+# ------------------------------------------------------------ season rules --
+
+def test_extra_switch_rules_start_from_the_defaults(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    assert store.get_season_rules() == {
+        "bypass_valve_device_id": {"heat": "off", "cool": "on"},
+        "dehumidifier_device_id": {"heat": "off", "cool": "manual"},
+    }
+
+
+def test_a_rule_is_saved_per_season_and_checked(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_season_rules({"dehumidifier_device_id": {"heat": "manual", "cool": "on"}})
+    assert store.get_season_rules()["dehumidifier_device_id"] == {"heat": "manual", "cool": "on"}
+    assert store.get_season_rules()["bypass_valve_device_id"] == {"heat": "off", "cool": "on"}, "the other untouched"
+    for bad in ({"dehumidifier_device_id": {"heat": "sometimes", "cool": "on"}},
+                {"dehumidifier_device_id": {"heat": "off"}},
+                {"lamp": {"heat": "off", "cool": "on"}},
+                ["not", "a", "dict"]):
+        with pytest.raises(ValueError):
+            store.set_season_rules(bad)
+
+
+def test_only_wired_switches_get_a_panel_rule_and_config_yaml_wins():
+    from localhome.services.climate_map_store import panel_season_rules
+    rules = {"bypass_valve_device_id": {"heat": "off", "cool": "on"},
+             "dehumidifier_device_id": {"heat": "off", "cool": "manual"}}
+    wired = {"bypass_valve_device_id": "shellyplus1-aaa", "dehumidifier_device_id": None}
+    assert panel_season_rules(wired, rules, {"mode": "heat"}) == [
+        {"role": "bypass_valve_device_id", "switch": "Bathroom Bypass Valve", "heat": "off", "cool": "on"}]
+    mine = {"mode_switches": [{"switch": "Bathroom Bypass Valve", "active_in_mode": "heat"}]}
+    assert panel_season_rules(wired, rules, mine) == [], "config.yaml's own rule for it stays"
+    assert panel_season_rules(wired, rules, None) == [], "no thermostat, no season"

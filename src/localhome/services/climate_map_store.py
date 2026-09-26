@@ -492,11 +492,6 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
             options = _valve_integration_options(zone_shaped, display_name, broker_file)
-            # Both roles only matter while cooling (the bypass keeps chilled
-            # water out of the bathroom panels, the dehumidifier runs in
-            # summer): their cards are hidden in winter, like the
-            # hand-written ones on the first installation.
-            options["visible_in_mode"] = "cool"
             integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 
@@ -718,6 +713,58 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
     return thermostat_cfg
 
 
+# What each panel-managed extra switch does in each season until someone
+# changes it in the admin panel: "on"/"off" are forced by LocalHome,
+# "manual" is left to whoever uses it (see services/interlock.py's
+# SeasonRule). The bypass valve keeps chilled water out of the bathroom
+# panels in summer; the dehumidifier is only of use in summer.
+SEASON_MODES = ("heat", "cool")
+SEASON_RULE_DEFAULTS = {
+    "bypass_valve_device_id": {"heat": "off", "cool": "on"},
+    "dehumidifier_device_id": {"heat": "off", "cool": "manual"},
+}
+
+
+def configured_rule_switches(thermostat_cfg: dict | None) -> set[str]:
+    """Switches config.yaml already gives a season rule (or an interlock
+    leader): those keep it, and the panel's rule for them is ignored."""
+    cfg = thermostat_cfg or {}
+    names = {item.get("switch") for key in ("mode_switches", "mode_limited_switches", "season_rules")
+             for item in cfg.get(key) or []}
+    return names | {link.get("follower") for link in cfg.get("interlocks") or []}
+
+
+def panel_season_rules(extra_switches: dict, saved_rules: dict, thermostat_cfg: dict | None) -> list[dict]:
+    """[{"role", "switch", "heat", "cool"}] for each extra switch the panel
+    has a device id for and config.yaml doesn't already rule. Nothing
+    without a thermostat: no thermostat, no season."""
+    if thermostat_cfg is None:
+        return []
+    taken = configured_rule_switches(thermostat_cfg)
+    rules = []
+    for field, name in EXTRA_SWITCH_FIELDS.items():
+        if (extra_switches or {}).get(field) and name not in taken:
+            rules.append({"role": field, "switch": name, **(saved_rules or {}).get(field, SEASON_RULE_DEFAULTS[field])})
+    return rules
+
+
+def validate_season_rules(rules) -> dict:
+    """{role: {"heat": action, "cool": action}} for the panel's two extra
+    switch roles; raises InputError on anything else."""
+    from localhome.services.interlock import SEASON_ACTIONS
+    if not isinstance(rules, dict):
+        raise InputError("request_invalid", "'rules' must be an object")
+    clean = {}
+    for field, rule in rules.items():
+        if field not in SEASON_RULE_DEFAULTS:
+            raise InputError("season_rule_invalid", f"unknown switch role {field!r}")
+        if not isinstance(rule, dict) or set(rule) != set(SEASON_MODES)                 or any(rule[m] not in SEASON_ACTIONS for m in SEASON_MODES):
+            raise InputError("season_rule_invalid",
+                             f"{field}: give 'heat' and 'cool', each one of {', '.join(SEASON_ACTIONS)}")
+        clean[field] = {m: rule[m] for m in SEASON_MODES}
+    return clean
+
+
 def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     """The outdoor sensor's and the VMC's effective source and id. On a
     climate installation (the panel manages the zones), a role the panel
@@ -805,6 +852,18 @@ class ClimateMapStore:
         """Whether the panel has ever saved this section - "never saved"
         and "saved empty" mean different things (see extra_roles())."""
         return key in self._load()
+
+    def get_season_rules(self) -> dict:
+        """{role: {"heat", "cool"}} - the defaults for a role never saved."""
+        saved = self._load().get("season_rules") or {}
+        return {field: {**default, **saved.get(field, {})} for field, default in SEASON_RULE_DEFAULTS.items()}
+
+    def set_season_rules(self, rules: dict) -> None:
+        clean = validate_season_rules(rules)
+        with self._lock:
+            data = self._load()
+            data["season_rules"] = {**(data.get("season_rules") or {}), **clean}
+            save_json_atomic(self.path, data)
 
     def get_extra_sensors(self) -> dict:
         # Same independence from zones/extra_switches as get_extra_switches()

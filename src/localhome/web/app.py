@@ -29,9 +29,13 @@ from localhome.services.climate_map_store import (
     EXTRA_SWITCH_FIELDS,
     OUTDOOR_MODE_KEY,
     VMC_MODE_KEY,
+    SEASON_MODES,
+    SEASON_RULE_DEFAULTS,
     ClimateMapStore,
     apply_to_config,
+    configured_rule_switches,
     extra_roles,
+    panel_season_rules,
     snapshot_from_config,
 )
 from localhome.services.dewpoint import dew_point_c
@@ -43,7 +47,15 @@ from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.drivers.mqtt import client as mqtt_client
 from localhome.services.position_control import PositionStore
-from localhome.services.interlock import Interlock, InterlockController, ModeLimitedSwitch, ModeSwitch
+from localhome.services.interlock import (
+    SEASON_ACTIONS,
+    Interlock,
+    InterlockController,
+    ModeLimitedSwitch,
+    ModeSwitch,
+    SeasonRule,
+    season_rules_of,
+)
 from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
@@ -149,6 +161,29 @@ def create_app(config_path: str | None = None) -> Flask:
 
     manager = DeviceManager(config)
 
+    def _panel_rules() -> list[tuple[SeasonRule, dict]]:
+        """The admin panel's rules for its extra switches, read fresh - an
+        edit there applies on the next tick, no restart."""
+        rows = panel_season_rules(extra_switches, climate_map.get_season_rules(), thermostat_cfg)
+        return [(SeasonRule(r["switch"], {m: r[m] for m in SEASON_MODES}), r) for r in rows]
+
+    def season_rules() -> list[dict]:
+        """Every switch that follows the season, whatever form its rule was
+        written in: [{"switch", "heat", "cool", "source"}]."""
+        rows = [{"switch": r.switch, **{m: r.action(m) for m in SEASON_MODES}, "source": "config"}
+                for r in static_rules]
+        rows += [{"switch": r.switch, **{m: r.action(m) for m in SEASON_MODES}, "source": "panel", "role": row["role"]}
+                 for r, row in _panel_rules()]
+        return rows
+
+    def forced_by_season(name: str) -> bool:
+        """Whether the current season turns this switch on or off by itself -
+        a manual command would just be undone on the next tick."""
+        if thermostat is None:
+            return False
+        mode = thermostat.schedule_store.get_mode()
+        return any(r["switch"] == name and r[mode] != "manual" for r in season_rules())
+
     auth_cfg = (config.raw.get("web") or {}).get("auth")
     if auth_cfg:
         register_auth(app, config.resolve(auth_cfg["secrets_file"]))
@@ -187,7 +222,9 @@ def create_app(config_path: str | None = None) -> Flask:
     interlock = None
     interlock_followers: dict[str, str] = {}
     interlock_links: list[Interlock] = []
-    mode_switch_names: set[str] = set()
+    # Every season rule, whatever it was written as - see season_rules() below.
+    static_rules: list[SeasonRule] = []
+    config_rules: list[SeasonRule] = []
     # thermostat_cfg (from apply_to_config() above) already has the
     # panel's saved zones whole-block-replacing config.yaml's own, if
     # any were saved - see that function's docstring for why "whole
@@ -231,22 +268,33 @@ def create_app(config_path: str | None = None) -> Flask:
             ModeSwitch(switch=item["switch"], active_in_mode=item["active_in_mode"])
             for item in thermostat_cfg.get("mode_switches", [])
         ]
-        mode_switch_names = {ms.switch for ms in mode_switches}
         mode_limited = [
             ModeLimitedSwitch(switch=item["switch"], only_in_mode=item["only_in_mode"])
             for item in thermostat_cfg.get("mode_limited_switches", [])
         ]
-        if interlocks or mode_switches or mode_limited:
-            interlock = InterlockController(
-                manager,
-                interlocks,
-                mode_switches,
-                mode_provider=schedule_store.get_mode,
-                mode_limited=mode_limited,
-                diagnostic_mode_provider=schedule_store.get_diagnostic_mode,
-                poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
-            )
-            interlock_followers = {link.leader: link.follower for link in interlocks}
+        # The general form: `season_rules: [{switch, heat, cool}]`, each
+        # season "on", "off" or "manual".
+        for item in thermostat_cfg.get("season_rules") or []:
+            actions = {m: item.get(m, "manual") for m in SEASON_MODES}
+            if not item.get("switch") or any(a not in SEASON_ACTIONS for a in actions.values()):
+                logger.warning("thermostat.season_rules entry %r skipped: needs 'switch' and heat/cool "
+                               "each one of %s", item, ", ".join(SEASON_ACTIONS))
+                continue
+            config_rules.append(SeasonRule(item["switch"], actions))
+        static_rules = season_rules_of(mode_switches, mode_limited, SEASON_MODES) + config_rules
+        # Always there with a thermostat: the admin panel's rules can appear
+        # at any moment, and a tick with nothing to do costs nothing.
+        interlock = InterlockController(
+            manager,
+            interlocks,
+            mode_switches,
+            mode_provider=schedule_store.get_mode,
+            mode_limited=mode_limited,
+            diagnostic_mode_provider=schedule_store.get_diagnostic_mode,
+            poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
+            season_rules_provider=lambda: config_rules + [rule for rule, _ in _panel_rules()],
+        )
+        interlock_followers = {link.leader: link.follower for link in interlocks}
         thermostat.interlock_owned_valves = {link.follower: link.active_in_mode for link in interlocks}
         interlock_links = interlocks
 
@@ -283,15 +331,8 @@ def create_app(config_path: str | None = None) -> Flask:
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
-    app.config["MODE_SWITCH_NAMES"] = mode_switch_names
-    # What switching season does besides the zones - shown next to the
-    # season switch in /climate-admin, so it's clear before confirming.
-    app.config["SEASON_EFFECTS"] = {
-        "mode_switches": [{"switch": m.switch, "active_in_mode": m.active_in_mode} for m in interlock.mode_switches]
-        if interlock else [],
-        "mode_limited": [{"switch": m.switch, "only_in_mode": m.only_in_mode} for m in interlock.mode_limited]
-        if interlock else [],
-    }
+    app.config["SEASON_RULES"] = season_rules
+    app.config["FORCED_BY_SEASON"] = forced_by_season
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
     # A snapshot of exactly what was loaded to build the integrations
@@ -604,19 +645,18 @@ def _register_routes(app: Flask) -> None:
         power_budget: PowerBudget | None = app.config["POWER_BUDGET"]
         power_sensor = app.config["POWER_SENSOR"]
         interlock_followers: dict[str, str] = app.config["INTERLOCK_FOLLOWERS"]
-        mode_switch_names: set[str] = app.config["MODE_SWITCH_NAMES"]
+        forced_by_season = app.config["FORCED_BY_SEASON"]
 
         sensors = []
         for name in manager.pollers:
             entry = {
                 "name": name,
                 "kind": manager.sensor_kinds.get(name, "unknown"),
-                # A mode_switch has no owner of its own - it's forced by
-                # the thermostat's mode alone (see services/interlock.py)
-                # - so a manual toggle would just get overridden on the
-                # next tick. Show its state, but don't offer a control
-                # that wouldn't actually do anything lasting.
-                "controllable": (name in manager.switches or name in manager.numbers) and name not in mode_switch_names,
+                # A switch the current season turns on or off by itself
+                # (see services/interlock.py's SeasonRule) would just be
+                # switched back on the next tick. Show its state, but don't
+                # offer a control that wouldn't do anything lasting.
+                "controllable": (name in manager.switches or name in manager.numbers) and not forced_by_season(name),
                 "tab": manager.dashboard_tab.get(name, "home"),
                 "visible_in_mode": manager.visible_in_mode.get(name),
                 # Simulated readings are marked on the dashboard, so a demo
@@ -751,7 +791,7 @@ def _register_routes(app: Flask) -> None:
             return jsonify(ok=False, error=f"'{name}' is not a controllable switch"), 404
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         diagnostic_mode = bool(thermostat and thermostat.schedule_store.get_diagnostic_mode())
-        if name in app.config["MODE_SWITCH_NAMES"] and not diagnostic_mode:
+        if app.config["FORCED_BY_SEASON"](name) and not diagnostic_mode:
             return _fail("switch_mode_controlled", f"'{name}' is controlled automatically by the thermostat mode", 409, name=name)
         try:
             switch.turn_on() if action == "on" else switch.turn_off()
@@ -885,7 +925,9 @@ def _register_routes(app: Flask) -> None:
             # For the chart's band around the target: the valve only
             # changes state once the temperature leaves target ± this.
             hysteresis_c=thermostat.hysteresis_c,
-            season_effects=app.config["SEASON_EFFECTS"],
+            # What the season does besides the zones: every switch that
+            # follows it, and what it does in each season.
+            season_effects={"rules": app.config["SEASON_RULES"]()},
             zones=zones,
         )
 
@@ -1150,6 +1192,35 @@ def _register_routes(app: Flask) -> None:
         except ValueError as exc:
             return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/season-rules")
+    def api_climate_admin_get_season_rules():
+        """What each of the panel's extra switches does in each season. A
+        role config.yaml already rules is shown but not editable here."""
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        taken = configured_rule_switches(config.raw.get("thermostat"))
+        saved = climate_map.get_season_rules()
+        wired = climate_map.get_extra_switches()
+        roles = [{"role": field, "switch": EXTRA_SWITCH_FIELDS[field], **saved[field],
+                  "wired": bool(wired.get(field)), "in_config": EXTRA_SWITCH_FIELDS[field] in taken}
+                 for field in SEASON_RULE_DEFAULTS]
+        return jsonify(ok=True, thermostat=app.config["THERMOSTAT"] is not None, roles=roles,
+                       actions=list(SEASON_ACTIONS))
+
+    @app.route("/api/climate-admin/season-rules", methods=["POST"])
+    def api_climate_admin_set_season_rules():
+        """Takes effect at once: the interlock reads the rules on every tick,
+        and ticks now instead of within the minute."""
+        climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
+        try:
+            climate_map.set_season_rules(_json_body().get("rules"))
+        except ValueError as exc:
+            return _refusal(exc, 400)
+        interlock = app.config["INTERLOCK"]
+        if interlock is not None:
+            interlock.tick()
+        return jsonify(ok=True)
 
     @app.route("/api/climate-admin/extra-sensors")
     def api_climate_admin_get_extra_sensors():

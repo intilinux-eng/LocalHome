@@ -195,10 +195,6 @@
     "excluded_short_unknown": "Valve: state unknown",
     "tier_off": "Off",
     "copy_label": "Copy Monday to:",
-    "device_auto_cool": "Automatic: on in summer, off in winter",
-    "device_auto_heat": "Automatic: on in winter, off in summer",
-    "device_only_cool": "Can only be switched on in summer",
-    "device_only_heat": "Can only be switched on in winter",
     "sensor_updated": "Sensor updated {ago}",
     "tile_no_sensor": "Sensor not reachable",
     "detail_no_sensor": "The sensor isn't answering: no temperature reading",
@@ -221,7 +217,10 @@
     "copy_zone_button": "Copy",
     "copy_zone_done": "Schedule copied to {to}.",
     "season_name_heat": "winter",
-    "season_name_cool": "summer"
+    "season_name_cool": "summer",
+    "rule_action_on": "always on",
+    "rule_action_off": "always off",
+    "rule_action_manual": "your choice"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
@@ -596,7 +595,24 @@
     "save_short": "Save",
     "broker_not_configured": "Not set up",
     "system_problems_count_one": "1 problem",
-    "ov_devices_one_offline": "{count} devices · 1 not answering"
+    "ov_devices_one_offline": "{count} devices · 1 not answering",
+    "rule_now_on": "Now on",
+    "rule_now_off": "Now off",
+    "rule_ok": "As expected",
+    "rule_free": "Your choice this season",
+    "rule_waiting": "Catching up",
+    "rule_should_be_on": "Should be on",
+    "rule_should_be_off": "Should be off",
+    "rule_offline": "Not answering",
+    "rule_diag": "Rule paused: diagnostic mode",
+    "pill_rule_check": "To check",
+    "rules_heading": "Behaviour per season",
+    "rules_note": "What each switch does in winter and in summer. Always on or always off: LocalHome drives it. Your choice: you switch it from the dashboard. Applies at once, no restart.",
+    "rules_save": "Save rules",
+    "rules_saved": "Rules saved: they apply at once.",
+    "rule_in_config": "Rule written in config.yaml: change it there.",
+    "rule_not_wired": "Not wired: the rule applies once you enter its id below.",
+    "extra_switches_ids_heading": "Device ids"
   },
   "vmc_presets": {
     "night": "Night",
@@ -645,6 +661,7 @@
     "manual_temp_range": "The temperature must be between -30 and 60 °C.",
     "manual_humidity_range": "The humidity must be between 0 and 100 %.",
     "away_hours_invalid": "Invalid length of absence.",
-    "switch_mode_controlled": "“{name}” is switched automatically by the thermostat's season."
+    "switch_mode_controlled": "“{name}” is switched automatically by the thermostat's season.",
+    "season_rule_invalid": "Invalid season rule: for winter and summer choose always on, always off or your choice."
   }
 }

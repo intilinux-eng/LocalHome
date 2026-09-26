@@ -168,7 +168,8 @@ with the MQTT broker itself down:
 - the thermostat leaves a zone without a sensor reading alone, and after
   `sensor_failsafe_hours` (24 by default) closes its valve;
 - a zone with no schedule for the current hour keeps its valve closed;
-- a device named in `mode_switches`/`mode_limited_switches` that the
+- a device named in a season rule (`season_rules`, `mode_switches`,
+  `mode_limited_switches`) that the
   apartment doesn't have (no bypass valve wired, say) is noted once in
   the log and skipped;
 - memory, threads and the control loops stay flat - see the admin

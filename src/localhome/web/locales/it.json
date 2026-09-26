@@ -195,10 +195,6 @@
     "excluded_short_unknown": "Valvola: stato sconosciuto",
     "tier_off": "Spento",
     "copy_label": "Copia il lunedì su:",
-    "device_auto_cool": "Automatico: acceso in estate, spento in inverno",
-    "device_auto_heat": "Automatico: acceso in inverno, spento in estate",
-    "device_only_cool": "Si può accendere solo in estate",
-    "device_only_heat": "Si può accendere solo in inverno",
     "sensor_updated": "Sensore aggiornato {ago}",
     "tile_no_sensor": "Sensore non raggiungibile",
     "detail_no_sensor": "Il sensore non risponde: nessuna lettura della temperatura",
@@ -221,7 +217,10 @@
     "copy_zone_button": "Copia",
     "copy_zone_done": "Programmazione copiata su {to}.",
     "season_name_heat": "invernale",
-    "season_name_cool": "estiva"
+    "season_name_cool": "estiva",
+    "rule_action_on": "sempre acceso",
+    "rule_action_off": "sempre spento",
+    "rule_action_manual": "a scelta"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
@@ -596,7 +595,24 @@
     "save_short": "Salva",
     "broker_not_configured": "Non configurato",
     "system_problems_count_one": "1 anomalia",
-    "ov_devices_one_offline": "{count} dispositivi · 1 non risponde"
+    "ov_devices_one_offline": "{count} dispositivi · 1 non risponde",
+    "rule_now_on": "Ora accesa",
+    "rule_now_off": "Ora spenta",
+    "rule_ok": "Come previsto",
+    "rule_free": "A tua scelta in questa stagione",
+    "rule_waiting": "In allineamento",
+    "rule_should_be_on": "Dovrebbe essere accesa",
+    "rule_should_be_off": "Dovrebbe essere spenta",
+    "rule_offline": "Non risponde",
+    "rule_diag": "Regola sospesa: modalità diagnosi",
+    "pill_rule_check": "Da controllare",
+    "rules_heading": "Comportamento per stagione",
+    "rules_note": "Cosa fa ogni interruttore in inverno e in estate. Sempre acceso o sempre spento: lo comanda LocalHome. A scelta: lo comandi tu dalla dashboard. Vale subito, senza riavvio.",
+    "rules_save": "Salva regole",
+    "rules_saved": "Regole salvate: valgono subito.",
+    "rule_in_config": "Regola scritta in config.yaml: si cambia lì.",
+    "rule_not_wired": "Non collegato: la regola vale quando inserisci il suo ID qui sotto.",
+    "extra_switches_ids_heading": "ID dei dispositivi"
   },
   "vmc_presets": {
     "night": "Notte",
@@ -645,6 +661,7 @@
     "manual_temp_range": "La temperatura deve essere tra -30 e 60 °C.",
     "manual_humidity_range": "L'umidità deve essere tra 0 e 100 %.",
     "away_hours_invalid": "Durata dell'assenza non valida.",
-    "switch_mode_controlled": "«{name}» è comandato automaticamente dalla stagione del termostato."
+    "switch_mode_controlled": "«{name}» è comandato automaticamente dalla stagione del termostato.",
+    "season_rule_invalid": "Regola stagionale non valida: per inverno ed estate scegli sempre acceso, sempre spento o a scelta."
   }
 }

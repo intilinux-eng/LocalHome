@@ -247,3 +247,46 @@ def test_a_missing_switch_is_reported_once_not_every_tick(caplog):
         controller.tick()
     warnings = [r for r in caplog.records if "Bathroom Bypass Valve" in r.getMessage()]
     assert len(warnings) == 1
+
+
+def test_a_season_rule_forces_on_forces_off_or_leaves_alone():
+    from localhome.services.interlock import SeasonRule
+    bypass, dehumidifier = FakeSwitch(), FakeSwitch()
+    manager = FakeManager(readings={"Bypass": {"ok": True, "is_on": False}, "Dehumidifier": {"ok": True, "is_on": True}},
+                          switches={"Bypass": bypass, "Dehumidifier": dehumidifier})
+    mode = {"now": "cool"}
+    rules = [SeasonRule("Bypass", {"heat": "off", "cool": "on"}),
+             SeasonRule("Dehumidifier", {"heat": "off", "cool": "manual"})]
+    controller = InterlockController(manager, [], mode_provider=lambda: mode["now"],
+                                     season_rules_provider=lambda: rules)
+    controller.tick()
+    assert (bypass.calls, dehumidifier.calls) == (["on"], []), "summer: bypass on, dehumidifier left to the user"
+    mode["now"] = "heat"
+    manager._readings["Bypass"] = {"ok": True, "is_on": True}
+    controller.tick()
+    assert (bypass.calls, dehumidifier.calls) == (["on", "off"], ["off"]), "winter: both forced off"
+
+
+def test_rules_are_read_on_every_tick_and_diagnostic_mode_suspends_them():
+    from localhome.services.interlock import SeasonRule
+    bypass = FakeSwitch()
+    manager = FakeManager(readings={"Bypass": {"ok": True, "is_on": False}}, switches={"Bypass": bypass})
+    rules, diagnostic = [], {"on": False}
+    controller = InterlockController(manager, [], mode_provider=lambda: "heat",
+                                     diagnostic_mode_provider=lambda: diagnostic["on"],
+                                     season_rules_provider=lambda: rules)
+    controller.tick()
+    rules.append(SeasonRule("Bypass", {"heat": "on", "cool": "off"}))   # changed in the admin panel
+    diagnostic["on"] = True
+    controller.tick()
+    assert bypass.calls == [], "diagnostic mode: hands off"
+    diagnostic["on"] = False
+    controller.tick()
+    assert bypass.calls == ["on"], "the new rule, no restart"
+
+
+def test_the_older_forms_map_onto_season_rules():
+    from localhome.services.interlock import season_rules_of
+    rules = season_rules_of([ModeSwitch("Bypass", "cool")], [ModeLimitedSwitch("Dehumidifier", "cool")])
+    assert [(r.switch, r.actions) for r in rules] == [
+        ("Bypass", {"heat": "off", "cool": "on"}), ("Dehumidifier", {"heat": "off", "cool": "manual"})]

@@ -714,3 +714,44 @@ def test_manual_value_route_refuses_readings_no_room_has(tmp_path, body):
 
     assert res.status_code == 400
     assert app.config["MANAGER"].sensor_reading("Bathrooms Sensor").get("temperature_c") is None
+
+
+
+# ------------------------------------------------------------ season rules --
+
+def _panel_with_extra_switches(tmp_path):
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+    store.set_zones(VALID_ZONES)
+    store.set_extra_switches({"bypass_valve_device_id": "shellyplus1-EEEE", "dehumidifier_device_id": "shellyplus1-FFFF"})
+    return _app(tmp_path, CONFIG_NO_THERMOSTAT)
+
+
+def test_a_bypass_entered_only_in_the_panel_follows_the_season(tmp_path, fake_mqtt):
+    """No thermostat block in config.yaml at all: the rule for the panel's
+    bypass valve and dehumidifier comes from the panel's defaults."""
+    app = _panel_with_extra_switches(tmp_path)
+    client = app.test_client()
+    rules = client.get("/api/climate/zones").get_json()["season_effects"]["rules"]
+    assert [(r["switch"], r["heat"], r["cool"]) for r in rules] == [
+        ("Bathroom Bypass Valve", "off", "on"), ("Dehumidifier", "off", "manual")]
+
+    app.config["INTERLOCK"].tick()   # heating: both forced off
+    assert ("shellyplus1-EEEE/command/switch:0", "false") in [(t, str(p).lower()) for t, p in fake_mqtt.published]
+    devices = {d["name"]: d for d in client.get("/api/devices").get_json()["sensors"]}
+    assert devices["Bathroom Bypass Valve"]["controllable"] is False
+    assert client.post("/api/sensors/Dehumidifier/on").get_json()["code"] == "switch_mode_controlled"
+
+
+def test_a_rule_changed_in_the_panel_applies_without_a_restart(tmp_path, fake_mqtt):
+    app = _panel_with_extra_switches(tmp_path)
+    client = app.test_client()
+    res = client.post("/api/climate-admin/season-rules",
+                      json={"rules": {"dehumidifier_device_id": {"heat": "manual", "cool": "manual"}}})
+    assert res.get_json() == {"ok": True}
+    devices = {d["name"]: d for d in client.get("/api/devices").get_json()["sensors"]}
+    assert devices["Dehumidifier"]["controllable"] is True, "manual in winter now: the dashboard may switch it"
+    roles = {r["role"]: r for r in client.get("/api/climate-admin/season-rules").get_json()["roles"]}
+    assert roles["dehumidifier_device_id"]["heat"] == "manual" and roles["dehumidifier_device_id"]["wired"] is True
+    res = client.post("/api/climate-admin/season-rules",
+                      json={"rules": {"dehumidifier_device_id": {"heat": "maybe", "cool": "on"}}})
+    assert res.status_code == 400 and res.get_json()["code"] == "season_rule_invalid"

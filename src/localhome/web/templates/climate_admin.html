@@ -216,6 +216,17 @@
   <details class="admin-details" id="extra-switches" data-nav="group-devices">
     <summary>{{ icon("switches") }}<span class="sec-title">{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
+    <!-- What each switch does in each season - editable for the panel's
+         own switches, effective at once - and whether it's doing it right
+         now: see the season rules section of climate_admin.js. -->
+    <h3 class="admin-subheading">{{ t.climate_admin.rules_heading }}</h3>
+    <p class="hint-text">{{ t.climate_admin.rules_note }}</p>
+    <div class="season-rules" id="season-rules"></div>
+    <div class="toolbar admin-actions" id="season-rules-actions" hidden>
+      <button class="tbtn open" onclick="saveSeasonRules(this)">{{ t.climate_admin.rules_save }}</button>
+    </div>
+    <p class="hint-text" id="season-rules-result"></p>
+    <h3 class="admin-subheading">{{ t.climate_admin.extra_switches_ids_heading }}</h3>
     <div class="admin-zone-card" id="extra-switch-form">
       <div class="admin-field">
         <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>

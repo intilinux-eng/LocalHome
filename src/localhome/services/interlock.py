@@ -26,6 +26,13 @@ nothing to do with the thermostat's own temperature-driven logic:
   The motivating case: a dehumidifier, usable only while cooling - switch
   to heating and it's turned off (and its card hidden, via
   `visible_in_mode`), instead of staying on unseen.
+
+- `SeasonRule` is the general form of the two above: for each season,
+  what a switch does - "on" or "off" (forced by LocalHome) or "manual"
+  (left to whoever uses it). A bypass valve is {heat: off, cool: on}, a
+  dehumidifier {heat: off, cool: manual}. Rules come from a provider
+  called on every tick, so ones edited in the admin panel apply without
+  a restart. See season_rules_of() for how the older two map onto it.
 """
 from __future__ import annotations
 
@@ -64,6 +71,28 @@ class ModeLimitedSwitch:
     only_in_mode: str
 
 
+SEASON_ACTIONS = ("on", "off", "manual")
+
+
+@dataclass
+class SeasonRule:
+    switch: str
+    # mode -> "on" / "off" / "manual"; a mode not listed is "manual".
+    actions: dict
+
+    def action(self, mode: str | None) -> str:
+        return self.actions.get(mode, "manual")
+
+
+def season_rules_of(mode_switches, mode_limited, modes=("heat", "cool")) -> list[SeasonRule]:
+    """The older ModeSwitch/ModeLimitedSwitch forms, as SeasonRules."""
+    rules = [SeasonRule(m.switch, {mode: "on" if mode == m.active_in_mode else "off" for mode in modes})
+             for m in mode_switches]
+    rules += [SeasonRule(m.switch, {mode: "manual" if mode == m.only_in_mode else "off" for mode in modes})
+              for m in mode_limited]
+    return rules
+
+
 class InterlockController:
     def __init__(
         self,
@@ -74,6 +103,7 @@ class InterlockController:
         mode_limited: list[ModeLimitedSwitch] = (),
         diagnostic_mode_provider=None,
         poll_interval_seconds: float = 20,
+        season_rules_provider=None,
     ):
         self.manager = manager
         self.interlocks = interlocks
@@ -83,6 +113,9 @@ class InterlockController:
         self._failures = FailureLog(logger)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
+        # callable returning the current list[SeasonRule], or None - read on
+        # every tick, so a rule changed in the admin panel applies at once.
+        self.season_rules_provider = season_rules_provider
         self.poll_interval_seconds = poll_interval_seconds
         self._started = False
         # As in ThermostatController: the loop thread and the request
@@ -132,6 +165,10 @@ class InterlockController:
             # Left to the user inside its mode; only ever forced off.
             if current_mode != limited.only_in_mode:
                 self._apply(limited.switch, False)
+        for rule in (self.season_rules_provider() if self.season_rules_provider else []):
+            action = rule.action(current_mode)
+            if action != "manual":
+                self._apply(rule.switch, action == "on")
 
     def _apply(self, follower_name: str, desired_on: bool) -> None:
         switch = self.manager.switches.get(follower_name)

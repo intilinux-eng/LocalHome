@@ -1039,3 +1039,63 @@
   border-color: var(--accent-close);
   box-shadow: 0 0 0 1px var(--accent-close);
 }
+
+/* The switches that follow the season - see refreshSeasonRules(). */
+.season-rules {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.season-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.85rem;
+}
+.season-rule > strong {
+  flex: 1 1 160px;
+}
+.rule-seasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rule-season {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.rule-season select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: var(--text);
+  font-size: 16px;
+}
+.rule-season select:disabled {
+  opacity: 0.6;
+}
+.rule-live {
+  flex: 1 1 100%;
+  font-size: 0.8rem;
+}
+.rule-live:empty {
+  display: none;
+}
+.season-rule .rule-note {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* `display: flex` above would otherwise beat the hidden attribute. */
+.toolbar[hidden] {
+  display: none;
+}
