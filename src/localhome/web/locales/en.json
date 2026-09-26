@@ -530,7 +530,7 @@
     "led_legend_problem_title": "Problem",
     "led_legend_problem": "A blinking exclamation mark and a two-character code (see the table below). With more than one problem they take turns, with the normal screen in between.",
     "led_legend_boot_title": "Start-up",
-    "led_legend_boot": "When LocalHome starts, the board's IP address scrolls by once - for when its .local name doesn't answer.",
+    "led_legend_boot": "When LocalHome starts, after the name the board's IP address scrolls by once - for when its .local name doesn't answer.",
     "led_legend_silence_title": "LocalHome stopped",
     "led_legend_silence": "Blinking X: the microcontroller hasn't heard anything for 20 seconds. LocalHome has stopped, hung or is restarting - if it lasts more than a minute, restart the board.",
     "led_legend_waiting_title": "Waiting",
@@ -612,7 +612,10 @@
     "rules_saved": "Rules saved: they apply at once.",
     "rule_in_config": "Rule written in config.yaml: change it there.",
     "rule_not_wired": "Not wired: the rule applies once you enter its id below.",
-    "extra_switches_ids_heading": "Device ids"
+    "extra_switches_ids_heading": "Device ids",
+    "led_now_name": "The page's name scrolling by: {name}.",
+    "led_legend_name_title": "Name",
+    "led_legend_name": "The page's name scrolls by at start-up and then every 5 minutes, when there's no problem to show: which board this is, at a glance."
   },
   "vmc_presets": {
     "night": "Night",

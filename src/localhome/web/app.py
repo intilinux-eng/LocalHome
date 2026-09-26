@@ -372,7 +372,8 @@ def create_app(config_path: str | None = None) -> Flask:
     # The UNO Q's LED matrix: health at a glance for whoever is standing
     # in front of the box - off by itself on anything that isn't a UNO Q
     # (no arduino-router socket). See services/led_matrix.py.
-    matrix = led_matrix.LedMatrixService(lambda: _matrix_state(app), ip_provider=_lan_ip)
+    matrix = led_matrix.LedMatrixService(lambda: _matrix_state(app), ip_provider=_lan_ip,
+                                         name_provider=lambda: app.config["SITE_NAME"]())
     app.config["LED_MATRIX"] = matrix
     matrix.start()
     return app
@@ -524,6 +525,8 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         from_config = (config.raw.get("web") or {}).get("site_name")
         return from_config or app.config["TRANSLATIONS"]["app"]["title"]
+
+    app.config["SITE_NAME"] = site_name
 
     @app.route("/site.webmanifest")
     def site_webmanifest():

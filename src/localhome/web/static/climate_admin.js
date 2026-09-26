@@ -1971,6 +1971,9 @@ function ledCodeMeaning(code) {
 // In words, what the matrix is showing right now.
 function ledNowText(screen, state) {
   if (!screen) return "";
+  if (screen.screen === "name" || (screen.screen === "boot" && screen.showing === "name")) {
+    return tr("climate_admin.led_now_name", { name: screen.name });
+  }
   if (screen.screen === "boot") return tr("climate_admin.led_now_boot", { ip: screen.ip });
   if (screen.screen === "problem") {
     return tr("climate_admin.led_now_problem", { code: screen.code, meaning: ledCodeMeaning(screen.code), subject: screen.subject });

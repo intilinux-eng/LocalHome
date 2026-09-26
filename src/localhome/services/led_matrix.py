@@ -11,8 +11,11 @@ when the dashboard can't help. So it shows health, not data:
 - **A problem**: a blinking "!" and a two-character code (S1 = zone 1's
   sensor not answering, MQ = MQTT broker down, ...), taking turns with
   the normal screen when there's more than one thing to say.
-- **At start-up**: the board's IP address scrolls past once, for when
-  its .local name doesn't resolve.
+- **At start-up**: the page's name, then the board's IP address, scroll
+  past once - which board this is, and how to reach it when its .local
+  name doesn't resolve.
+- **Every 5 minutes**: the name scrolls past again - with two boards
+  around, which one is which at a glance. Not while a problem is shown.
 - **Heartbeat**: the top-right pixel blinks with every frame - LocalHome
   is alive and drawing.
 
@@ -37,6 +40,7 @@ import os
 import socket
 import threading
 import time
+import unicodedata
 from dataclasses import asdict, dataclass, field
 
 from localhome.services.log_throttle import FailureLog
@@ -57,7 +61,8 @@ BEAT = 3
 # It's a nicety, so it's kept cheap: one frame a second (the heartbeat
 # is one second on, one off), the state re-read from memory every 30 s.
 FRAME_SECONDS = 1.0          # normal screens: the heartbeat's own rhythm
-SCROLL_STEP_SECONDS = 0.1    # one column per step - only while the IP scrolls by, once at start-up
+SCROLL_STEP_SECONDS = 0.1    # one column per step - only while text scrolls by
+NAME_EVERY_SECONDS = 300.0   # the page's name scrolls by again this often
 SLOT_SECONDS = 3.0           # each problem code, and the normal screen between them
 STATE_REFRESH_SECONDS = 30.0
 # A broker connection that drops comes back by itself within seconds;
@@ -149,6 +154,19 @@ FONT = {ch: _bitmap(rows) for ch, rows in {
     "T": ["###", ".#.", ".#.", ".#.", ".#."],
     "V": ["#.#", "#.#", "#.#", "#.#", ".#."],
     "W": ["#.#", "#.#", "###", "###", "#.#"],
+    "A": [".#.", "#.#", "###", "#.#", "#.#"],
+    "B": ["##.", "#.#", "##.", "#.#", "##."],
+    "G": ["###", "#..", "#.#", "#.#", "###"],
+    "I": ["###", ".#.", ".#.", ".#.", "###"],
+    "J": ["..#", "..#", "..#", "#.#", "###"],
+    "N": ["##.", "#.#", "#.#", "#.#", "#.#"],
+    "O": ["###", "#.#", "#.#", "#.#", "###"],
+    "R": ["##.", "#.#", "##.", "#.#", "#.#"],
+    "U": ["#.#", "#.#", "#.#", "#.#", "###"],
+    "X": ["#.#", "#.#", ".#.", "#.#", "#.#"],
+    "Y": ["#.#", "#.#", ".#.", ".#.", ".#."],
+    "Z": ["###", "..#", ".#.", "#..", "###"],
+    "'": [".#.", ".#.", "...", "...", "..."],
     ".": ["...", "...", "...", "...", ".#."],
     "-": ["...", "...", "###", "...", "..."],
     " ": ["...", "...", "...", "...", "..."],
@@ -268,6 +286,13 @@ def render_problem(code: str, blink_on: bool = True, beat: bool = False) -> list
     return grid
 
 
+def matrix_text(text: str) -> str:
+    """`text` as the matrix can draw it: capitals (lowercase is unreadable
+    on 8 rows), accents dropped, anything else a space."""
+    plain = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().upper()
+    return " ".join("".join(c if c in FONT else " " for c in plain).split())
+
+
 def text_width(text: str) -> int:
     return len(text) * 4
 
@@ -306,17 +331,27 @@ def scroll_seconds(text: str) -> float:
     return (W + text_width(text)) * SCROLL_STEP_SECONDS
 
 
-def screen_at(state: MatrixState, seconds: float, ip: str | None = None) -> dict:
-    """What the matrix shows `seconds` after LocalHome started: the IP
-    scrolling by once, then the normal screen - taking turns with each
-    problem code when there are any. Returns {"screen", "frame", ...}."""
+def screen_at(state: MatrixState, seconds: float, ip: str | None = None, name: str | None = None) -> dict:
+    """What the matrix shows `seconds` after LocalHome started: the page's
+    name and the IP scrolling by once, then the normal screen - taking
+    turns with each problem code when there are any, and with the name
+    every NAME_EVERY_SECONDS when there aren't. Returns {"screen", "frame", ...}."""
     beat = int(seconds / FRAME_SECONDS) % 2 == 0
-    if ip:
-        scroll = scroll_seconds(ip)
+    name = matrix_text(name) if name else ""
+    for text, key in ((name, "name"), (ip, "boot")):
+        if not text:
+            continue
+        scroll = scroll_seconds(text)
         if seconds < scroll:
             offset = int(seconds / SCROLL_STEP_SECONDS)
-            return {"screen": "boot", "ip": ip, "frame": render_scroll(ip, offset, beat)}
+            return {"screen": "boot", "ip": ip, "name": name, "showing": key,
+                    "frame": render_scroll(text, offset, beat)}
         seconds -= scroll
+    if name and not state.problems:
+        since = seconds % NAME_EVERY_SECONDS
+        if seconds >= NAME_EVERY_SECONDS and since < scroll_seconds(name):
+            return {"screen": "name", "name": name,
+                    "frame": render_scroll(name, int(since / SCROLL_STEP_SECONDS), beat)}
     slots = [p for p in state.problems] + ([None] if state.problems else [])
     if slots:
         slot = slots[int(seconds // SLOT_SECONDS) % len(slots)]
@@ -343,6 +378,7 @@ def legend() -> list[dict]:
         {"key": "idle", "frame": render_normal(MatrixState(), True)},
         {"key": "problem", "frame": render_problem("S1", True, True)},
         {"key": "boot", "frame": render_scroll("192.168", 9, True)},
+        {"key": "name", "frame": render_scroll("CASA", 6, True)},
         {"key": "silence", "frame": render_silence()},
         {"key": "waiting", "frame": render_waiting()},
     ]
@@ -436,10 +472,15 @@ class LedMatrixService:
     RETRY_SECONDS = 30.0
     QUICK_RETRY_SECONDS = 2.0
 
-    def __init__(self, state_provider, client: RouterClient | None = None, ip_provider=None, clock=time.monotonic):
+    def __init__(self, state_provider, client: RouterClient | None = None, ip_provider=None, clock=time.monotonic,
+                 name_provider=None):
         self.state_provider = state_provider
         self.client = client or RouterClient()
         self.ip_provider = ip_provider
+        # The page's name - re-read with the state, so a new one shows
+        # without a restart.
+        self.name_provider = name_provider
+        self._name = None
         self.clock = clock
         self._lock = threading.Lock()
         # The loop and the admin panel's mirror can both compute a screen.
@@ -484,10 +525,11 @@ class LedMatrixService:
                 self._state_ts = now
                 try:
                     self._state = self.state_provider()
+                    self._name = self.name_provider() if self.name_provider else None
                     self._failures.succeeded("LED matrix state")
                 except Exception:
                     self._failures.failed("LED matrix state", "LED matrix: couldn't read the system state")
-            screen = screen_at(self._state, now - self._started_ts, self._ip)
+            screen = screen_at(self._state, now - self._started_ts, self._ip, self._name)
         with self._lock:
             self._screen = screen
         return screen
@@ -516,7 +558,7 @@ class LedMatrixService:
             return self.QUICK_RETRY_SECONDS if quick else self.RETRY_SECONDS
         self._frames_sent += 1
         self._set_status("running", None)
-        return SCROLL_STEP_SECONDS if screen["screen"] == "boot" else FRAME_SECONDS
+        return SCROLL_STEP_SECONDS if screen["screen"] in ("boot", "name") else FRAME_SECONDS
 
     def _set_status(self, status: str, error: str | None) -> None:
         if status != self._status:

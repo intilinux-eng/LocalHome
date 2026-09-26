@@ -395,7 +395,32 @@ def test_the_admin_panel_gets_status_mirror_and_legend(tmp_path):
     assert data["ok"] is True
     assert data["status"] in ("starting", "no_router", "running", "no_sketch", "error")
     keys = [entry["key"] for entry in data["legend"]]
-    assert keys == ["heat", "cool", "away", "diagnostic", "idle", "problem", "boot", "silence", "waiting"]
+    assert keys == ["heat", "cool", "away", "diagnostic", "idle", "problem", "boot", "name", "silence", "waiting"]
     assert all(_valid(entry["frame"]) for entry in data["legend"])
     assert {"S1", "V1", "MQ", "DK"} <= set(data["codes"])
     assert "legend" not in polled and polled["screen"] is not None, "the frequent poll stays small"
+
+
+def test_the_name_is_written_the_way_the_matrix_can_draw_it():
+    assert lm.matrix_text("Carlucci-test") == "CARLUCCI-TEST"
+    assert lm.matrix_text("Casa Città ☀") == "CASA CITTA"
+    assert all(c in lm.FONT for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+
+def test_at_start_up_the_name_scrolls_then_the_ip():
+    state, ip, name = lm.MatrixState(), "192.168.1.25", "carlucci-test"
+    first = lm.screen_at(state, 0.5, ip, name)
+    assert (first["screen"], first["showing"]) == ("boot", "name")
+    after_name = lm.scroll_seconds("CARLUCCI-TEST") + 0.5
+    assert lm.screen_at(state, after_name, ip, name)["showing"] == "boot"
+    assert lm.screen_at(state, after_name + lm.scroll_seconds(ip), ip, name)["screen"] == "normal"
+
+
+def test_the_name_comes_back_every_five_minutes_but_not_over_a_problem():
+    boot = lm.scroll_seconds("CASA")
+    at = boot + lm.NAME_EVERY_SECONDS + 0.5
+    assert lm.screen_at(lm.MatrixState(), at, None, "Casa")["screen"] == "name"
+    assert lm.screen_at(lm.MatrixState(), at + lm.scroll_seconds("CASA"), None, "Casa")["screen"] == "normal"
+    assert lm.screen_at(lm.MatrixState(), boot + 60, None, "Casa")["screen"] == "normal", "not every minute"
+    troubled = lm.MatrixState(problems=[{"code": "S1", "subject": "x"}])
+    assert lm.screen_at(troubled, at, None, "Casa")["screen"] != "name"

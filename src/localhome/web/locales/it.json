@@ -530,7 +530,7 @@
     "led_legend_problem_title": "Problema",
     "led_legend_problem": "Punto esclamativo lampeggiante e un codice di due caratteri (vedi la tabella sotto). Se i problemi sono più d'uno si alternano, con la schermata normale in mezzo.",
     "led_legend_boot_title": "Avvio",
-    "led_legend_boot": "Quando LocalHome parte, l'indirizzo IP della scheda scorre una volta: serve se il nome .local non risponde.",
+    "led_legend_boot": "Quando LocalHome parte, dopo il nome scorre una volta l'indirizzo IP della scheda: serve se il nome .local non risponde.",
     "led_legend_silence_title": "LocalHome fermo",
     "led_legend_silence": "X lampeggiante: il microcontrollore non riceve niente da 20 secondi. LocalHome è fermo, bloccato o si sta riavviando: se dura più di un minuto, riavvia la scheda.",
     "led_legend_waiting_title": "In attesa",
@@ -612,7 +612,10 @@
     "rules_saved": "Regole salvate: valgono subito.",
     "rule_in_config": "Regola scritta in config.yaml: si cambia lì.",
     "rule_not_wired": "Non collegato: la regola vale quando inserisci il suo ID qui sotto.",
-    "extra_switches_ids_heading": "ID dei dispositivi"
+    "extra_switches_ids_heading": "ID dei dispositivi",
+    "led_now_name": "Scorre il nome della pagina: {name}.",
+    "led_legend_name_title": "Nome",
+    "led_legend_name": "Il nome della pagina scorre all'avvio e poi ogni 5 minuti, se non c'è un problema da mostrare: dice subito quale scheda è."
   },
   "vmc_presets": {
     "night": "Notte",
