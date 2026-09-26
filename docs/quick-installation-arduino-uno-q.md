@@ -211,7 +211,10 @@ systemctl is-active localhome     # -> active
 The unit runs as the ordinary `arduino` user, restarts on failure, and
 is hardened with `ProtectSystem=strict`: the only writable path is
 `config/`, which is exactly where the history database and every runtime
-file live.
+file live. It also restarts LocalHome when it hangs rather than crashes:
+LocalHome tells systemd it's alive every 40 seconds while its page answers
+and its control loops run, and after two minutes of silence systemd
+restarts it (on a board installed before this existed, step 8 adds it).
 
 > Over SSH there is no terminal for sudo's prompt. If you are scripting
 > this, feed the password to `sudo -S` on stdin and keep `sudo` at the
@@ -220,15 +223,44 @@ file live.
 
 ## 8. Tune the board
 
-Required on every new board, and safe to run again at any time: it cuts
-the flash writes that wear the eMMC out (measured elsewhere: ~7.5 GB/day
-down to ~0.6 GB/day) by keeping the system log in RAM, stops the daily
-background downloads, sends the broker's log to the journal and turns
-off the graphical session.
+Required on every new board, and safe to run again at any time - run it
+again after every LocalHome update, too. Two things:
+
+**Years on its eMMC.** It cuts the flash writes that wear the eMMC out
+(measured elsewhere: ~7.5 GB/day down to ~0.6 GB/day) by keeping the
+system log in RAM, stops the daily background downloads, sends the
+broker's log to the journal and turns off the graphical session.
+
+**On Wi-Fi 24/7, with nobody around.** The board depends on Wi-Fi for
+everything - Shellys, phones, the clock - so:
+
+- *Wi-Fi never dozes or gives up*: power saving off, and every Wi-Fi
+  network retries for ever instead of stopping after a few failures (a
+  network added later - the tester's access point - gets the same within
+  a minute, from the watchdog below).
+- *A Wi-Fi watchdog*, every minute, independent of LocalHome: when the
+  router doesn't answer for 3 minutes it reconnects the Wi-Fi, at 10
+  restarts the network manager, at 20 reconnects again, at 30 reboots the
+  board - at most once every 6 hours, so a router switched off for the
+  night doesn't reboot it all night.
+- *The hardware watchdog*: if the whole system freezes, the chip resets
+  the board by itself (off on a stock UNO Q image).
+- *LocalHome restarted if it hangs* - see step 7.
 
 ```bash
 sudo sh /home/arduino/localhome/deploy/tune-board.sh
 ```
+
+The admin panel's **System status** shows whether each of these is on
+("Protections for running all year" - a missing one is also listed as a
+problem) and the **Watchdog history**: every reconnect, restart and
+reboot they did, with the time - it survives reboots.
+
+What no watchdog can see from the board: the router answering while
+phones and PCs can't reach the board (it happened once on the test
+bench - reconnecting the Wi-Fi fixed it). Give each board a **fixed IP
+in the router** (a DHCP reservation on its MAC address): it avoids that
+kind of stale state, and the board is always at the same address.
 
 Every step prints how to undo it. Add `--lean` to also turn off Arduino
 App Lab, its Docker runtime and the firmware updater: ~270 MB of RAM and
@@ -253,6 +285,22 @@ sudo systemctl reboot
 
 The dashboard answered again 40 seconds after the reboot on this board,
 with no intervention.
+
+And check the protections from step 8: **System status → Protections for
+running all year** must show all four on (or "not available" for a
+hardware watchdog on a board without one).
+
+To see the Wi-Fi watchdog act without touching the router, point it at
+an address that doesn't answer for one run - it logs "the router isn't
+answering"; four more minutes of that and it reconnects the Wi-Fi:
+
+```bash
+sudo LOCALHOME_WIFI_WATCHDOG_TARGET=192.0.2.1 sh /usr/local/lib/localhome/localhome-wifi-watchdog.sh
+cat /var/lib/localhome/wifi-watchdog.log
+```
+
+The next regular run, a minute later, finds the real router answering
+and logs "network back".
 
 ## 10. First run in the panel
 
@@ -415,3 +463,6 @@ Measured on the 2 GB UNO Q right after this install:
 | Building the LED sketch: `Arduino_RouterBridge.h: No such file or directory` | the libraries aren't installed - step 11b |
 | Building the LED sketch: dozens of `undefined reference to 'arduino::String...'` / `'arduino::Stream...'`, even in the sketch's own lines | a broken core archive in arduino-cli's cache - seen after two compiles ran at the same time (its `core.a` held 16 of the core's 28 objects, none of `String`/`Stream`). Clear it and build once: `rm -rf ~/.cache/arduino/cores/arduino_zephyr_unoq_*`, then step 11c with `--clean` added |
 | The admin panel says "sketch not loaded" | step 11 hasn't been done on this board, or the upload failed - rerun 11c and read its last lines |
+| System status lists "Protection not on" | step 8 hasn't been run since the board was installed or updated - run it again |
+| The page doesn't open, but the LED matrix is drawing normally (top-right pixel blinking) | LocalHome is fine: the Wi-Fi or the router is the problem. Wait a few minutes for the watchdog, or switch the board off and on; the watchdog history says afterwards what happened. If it keeps happening, give the board a fixed IP in the router (step 8) |
+| Someone far away needs to see what happened | System status → **Download diagnostics**: one file with the status, this boot's logs, the watchdog history, the resource log and the configuration without passwords |

@@ -31,12 +31,18 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+; LocalHome tells systemd it's alive (services/service_watchdog.py): no
+; sign of life for two minutes - a hang, not only a crash - and it's
+; restarted.
+Type=notify
+NotifyAccess=main
+WatchdogSec=120
+TimeoutStartSec=180
 User=YOUR_USER
 Group=YOUR_USER
 WorkingDirectory=/home/YOUR_USER/localhome
 ExecStart=/home/YOUR_USER/localhome/.venv/bin/localhome
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 ; Basic hardening - relax if a driver you add needs more (e.g. writing

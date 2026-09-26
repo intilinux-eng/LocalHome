@@ -1,0 +1,11 @@
+# Every minute, from two minutes after boot - see localhome-wifi-watchdog.sh.
+[Unit]
+Description=LocalHome Wi-Fi watchdog, every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

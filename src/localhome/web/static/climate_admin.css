@@ -1099,3 +1099,19 @@
 .toolbar[hidden] {
   display: none;
 }
+
+/* The diagnostics download, at the top of the system status. */
+.diagnostics-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 14px;
+}
+.diagnostics-row .tbtn {
+  text-decoration: none;
+}
+.diagnostics-row .hint-text {
+  margin: 0;
+  flex: 1 1 240px;
+}

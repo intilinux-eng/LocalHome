@@ -40,7 +40,7 @@ from localhome.services.climate_map_store import (
 )
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
-from localhome.services import led_matrix, panel_settings
+from localhome.services import diagnostics, led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
@@ -57,6 +57,7 @@ from localhome.services.interlock import (
     season_rules_of,
 )
 from localhome.services.self_restart import is_supported, schedule_restart
+from localhome.services.service_watchdog import ServiceWatchdog
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
@@ -452,10 +453,12 @@ def _health(app: Flask) -> dict:
     host = system_status.host_stats()
     storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
     network = system_status.network_status()
+    protections = system_status.board_protections()
     return {
         "devices": devices, "failed": failed, "disk": disk, "loops": loops, "host": host,
-        "storage": storage, "network": network,
-        "problems": system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host),
+        "storage": storage, "network": network, "protections": protections,
+        "problems": system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host,
+                                           protections),
     }
 
 
@@ -607,12 +610,18 @@ def _register_routes(app: Flask) -> None:
         # whether the background loops are still cycling, and the
         # process/disk/database numbers that tell a slow leak or a disk
         # filling up apart from normal - see services/system_status.py.
+        return jsonify(ok=True, **_system_status_payload())
+
+    def _system_status_payload() -> dict:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         health = _health(app)
-        return jsonify(
-            ok=True,
+        return dict(
             problems=health["problems"],
             boots=system_status.boot_history(),
+            # What tune-board.sh's protections are on, and what the
+            # watchdogs have done - LocalHome's own and the Wi-Fi one.
+            protections=health["protections"],
+            watchdog_history=system_status.watchdog_history(config.resolve("watchdog.log")),
             software=app.config["SOFTWARE_VERSION"],
             network=health["network"],
             storage=health["storage"],
@@ -1346,6 +1355,23 @@ def _register_routes(app: Flask) -> None:
                        has_thermostat=maintenance.schedule_store is not None,
                        restart_supported=is_supported())
 
+    @app.route("/api/climate-admin/diagnostics.zip")
+    def api_diagnostics_download():
+        """Everything needed to understand this board from afar, in one file
+        - see services/diagnostics.py. No passwords or keys in it."""
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        software = app.config["SOFTWARE_VERSION"] or {}
+        data = diagnostics.build_zip(
+            _system_status_payload(),
+            app.config["MAINTENANCE"].backup_zip(include_credentials=False),
+            config.resolve("watchdog.log"),
+            system_status.WIFI_WATCHDOG_LOG,
+            service_events=system_status.SERVICE_WATCHDOG_LOG,
+            version=" ".join(str(v) for v in (software.get("commit"), software.get("date")) if v),
+        )
+        name = f"localhome-diagnostics-{datetime.now():%Y%m%d-%H%M}.zip"
+        return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True, download_name=name)
+
     @app.route("/api/climate-admin/maintenance/backup.zip")
     def api_maintenance_backup_download():
         maintenance: Maintenance = app.config["MAINTENANCE"]
@@ -1463,6 +1489,12 @@ def main() -> None:
     # volume, all written to the board's eMMC by journald).
     from waitress import serve
 
+    # Tells systemd it's alive while the page answers and the loops run -
+    # a hang gets LocalHome restarted, not only a crash. Does nothing where
+    # systemd didn't ask for it; see services/service_watchdog.py.
+    host = "127.0.0.1" if config.web_host in ("0.0.0.0", "", "::") else config.web_host
+    ServiceWatchdog(f"http://{host}:{config.web_port}/api/server-time", lambda: _loops(app),
+                    event_log=config.resolve("watchdog.log")).start()
     serve(app, host=config.web_host, port=config.web_port, threads=WEB_THREADS, ident="LocalHome")
 
 

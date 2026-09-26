@@ -309,6 +309,12 @@
          a full disk) - see GET /api/system-status. -->
     <div class="admin-problems" id="system-problems" hidden></div>
     <p class="hint-text">{{ t.climate_admin.system_note }}</p>
+    <!-- Everything needed to understand the board from afar, one file to
+         send - see services/diagnostics.py. -->
+    <div class="diagnostics-row">
+      <a class="tbtn open" href="/api/climate-admin/diagnostics.zip" download>{{ t.climate_admin.diagnostics_button }}</a>
+      <span class="hint-text">{{ t.climate_admin.diagnostics_note }}</span>
+    </div>
     <div id="system-status-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
   </details>
 

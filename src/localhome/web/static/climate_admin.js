@@ -1260,7 +1260,9 @@ function statRowHtml(label, value, bad) {
 }
 
 function problemHtml(problem) {
-  const title = tr(`climate_admin.system_problem_${problem.code}`, { subject: displayName(problem.subject) });
+  const subject = problem.code === "protection_missing"
+    ? tr(`climate_admin.protection_${problem.subject}`) : displayName(problem.subject);
+  const title = tr(`climate_admin.system_problem_${problem.code}`, { subject });
   const detail = problem.detail ? `<div class="admin-problem-detail">${escapeHtml(problem.detail)}</div>` : "";
   return `<li>${escapeHtml(title)}${detail}</li>`;
 }
@@ -1317,6 +1319,40 @@ function bootsHtml(boots) {
     <ul class="admin-device-list boot-list">${rows}</ul>`;
 }
 
+// What deploy/tune-board.sh sets up for running all year on Wi-Fi - on,
+// missing, or not applicable on this board. Null off a board (a PC).
+function protectionRows(protections) {
+  if (!protections) return "";
+  return Object.entries(protections.items).map(([key, on]) => statRowHtml(
+    tr(`climate_admin.protection_${key}`),
+    tr(on === null ? "climate_admin.protection_na" : on ? "climate_admin.protection_on" : "climate_admin.protection_off"),
+    on === false)).join("");
+}
+
+// One watchdog action in words: the log keeps a code and its values.
+function watchdogEventText(event) {
+  const values = event.values ? event.values.split(" ") : [];
+  const vars = { a: values[0] || "", b: values[1] || "", all: event.values };
+  if (event.code === "back") vars.a = formatDuration(Number(values[0]));
+  const text = tr(`climate_admin.wd_${event.code}`, vars);
+  return text.startsWith("climate_admin.") ? `${event.code} ${event.values}` : text;
+}
+
+function watchdogHistoryHtml(events) {
+  const rows = (events || []).map(event => {
+    const detail = event.code === "unhealthy" && event.values
+      ? `<div class="admin-problem-detail">${escapeHtml(event.values)}</div>` : "";
+    return `<li><div class="admin-device-line">
+        <span class="admin-pill">${escapeHtml(tr(`climate_admin.watchdog_source_${event.source}`))}</span>
+        <span>${escapeHtml(watchdogEventText(event))}</span>
+        <span class="admin-device-age">${escapeHtml(formatWhen(Date.parse(event.when.replace(" ", "T")) / 1000))}</span>
+      </div>${detail}</li>`;
+  }).join("");
+  return `<h3>${tr("climate_admin.watchdog_heading")}</h3>
+    <p class="hint-text">${tr("climate_admin.watchdog_note")}</p>
+    ${rows ? `<ul class="admin-device-list">${rows}</ul>` : `<p class="hint-text">${tr("climate_admin.watchdog_none")}</p>`}`;
+}
+
 function systemStatusHtml(data) {
   const p = data.process || {};
   const h = data.host || {};
@@ -1370,6 +1406,7 @@ function systemStatusHtml(data) {
       ] : []),
     ].join("")],
     [tr("climate_admin.system_group_network"), networkRows(data.network)],
+    ...(data.protections ? [[tr("climate_admin.system_group_protections"), protectionRows(data.protections)]] : []),
     [tr("climate_admin.system_group_history"), [
       statRowHtml(tr("climate_admin.system_db_size"), formatBytes(db.file_bytes)),
       statRowHtml(tr("climate_admin.system_db_rows_24h"), count(db.rows_24h)),
@@ -1405,6 +1442,7 @@ function systemStatusHtml(data) {
     <h3>${tr("climate_admin.system_devices_heading", { count: devices.length })}</h3>
     <ul class="admin-device-list">${deviceRows}</ul>
     ${bootsHtml(data.boots)}
+    ${data.protections || (data.watchdog_history || []).length ? watchdogHistoryHtml(data.watchdog_history) : ""}
     ${skippedHtml}
     <p class="hint-text admin-path">${escapeHtml(tr("climate_admin.system_config_path", { path: data.config_path }))}</p>`;
 }

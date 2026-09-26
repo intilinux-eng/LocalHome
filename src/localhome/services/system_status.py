@@ -456,6 +456,78 @@ def cover_health(last_reads: dict, now: float | None = None) -> list[dict]:
     ]
 
 
+# What deploy/tune-board.sh sets up for running unattended on Wi-Fi, all
+# year - each one a file it writes, so checking is a stat, not a command.
+WIFI_CONF = "/etc/NetworkManager/conf.d/99-localhome-wifi.conf"
+WIFI_WATCHDOG_ENABLED = "/etc/systemd/system/timers.target.wants/localhome-wifi-watchdog.timer"
+WIFI_WATCHDOG_LOG = "/var/lib/localhome/wifi-watchdog.log"
+# Written by systemd's stop hook when the watchdog restarted a hung LocalHome
+# (deploy/watchdog/localhome-service-stopped.sh) - it couldn't say so itself.
+SERVICE_WATCHDOG_LOG = "/var/lib/localhome/service-watchdog.log"
+HARDWARE_WATCHDOG_CONF = "/etc/systemd/system.conf.d/localhome-watchdog.conf"
+HARDWARE_WATCHDOG_DEVICE = "/dev/watchdog"
+NETWORKMANAGER_DIR = "/etc/NetworkManager"
+
+
+def board_protections(env=os.environ) -> dict | None:
+    """Which of tune-board.sh's protections are on - {"items": {key: True /
+    False / None (doesn't apply here)}, "events": the Wi-Fi watchdog's last
+    actions}. None where none of it applies: no NetworkManager (a PC,
+    Docker)."""
+    if not os.path.isdir(NETWORKMANAGER_DIR):
+        return None
+    items = {
+        "wifi_always_on": os.path.exists(WIFI_CONF),
+        "wifi_watchdog": os.path.exists(WIFI_WATCHDOG_ENABLED),
+        "hardware_watchdog": os.path.exists(HARDWARE_WATCHDOG_CONF) if os.path.exists(HARDWARE_WATCHDOG_DEVICE) else None,
+        # systemd sets it for a service with WatchdogSec - see service_watchdog.py.
+        "service_watchdog": bool(env.get("WATCHDOG_USEC")),
+    }
+    return {"items": items}
+
+
+# The watchdogs' event logs - one line per action, "<date> <time> <code>
+# [values...]", rare enough to live on disk and survive the reboots they
+# are about. The admin panel words each code in its own language.
+EVENT_LOG_KEEP = 200
+
+
+def append_event(path: str, code: str, *values) -> None:
+    """One line in an event log, keeping the last EVENT_LOG_KEEP."""
+    line = " ".join([time.strftime("%Y-%m-%d %H:%M:%S"), code, *[str(v) for v in values]])
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    lines = (lines + [line])[-EVENT_LOG_KEEP:]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def read_events(path: str, source: str) -> list[dict]:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return []
+    events = []
+    for line in lines:
+        parts = line.split(" ", 3)
+        if len(parts) >= 3:
+            events.append({"when": f"{parts[0]} {parts[1]}", "source": source, "code": parts[2],
+                           "values": parts[3] if len(parts) == 4 else ""})
+    return events
+
+
+def watchdog_history(localhome_log: str, wifi_log: str = WIFI_WATCHDOG_LOG,
+                     service_log: str = SERVICE_WATCHDOG_LOG, limit: int = 30) -> list[dict]:
+    """Both watchdogs' actions, newest first."""
+    events = (read_events(localhome_log, "localhome") + read_events(service_log, "localhome")
+              + read_events(wifi_log, "wifi"))
+    return sorted(events, key=lambda e: e["when"], reverse=True)[:limit]
+
+
 def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, now: float | None = None) -> dict:
     """Whether a background loop is still completing its cycles. Stalled
     after three missed intervals - but not during the first ones after
@@ -482,6 +554,7 @@ def _short_error(error: str) -> str:
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
     cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
+    protections: dict | None = None,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -501,6 +574,9 @@ def problems(
         found.append({"code": "disk_low", "subject": disk["path"], "detail": None})
     if host and host.get("clock_synced") is False:
         found.append({"code": "clock_unsynced", "subject": "NTP", "detail": None})
+    for key, on in ((protections or {}).get("items") or {}).items():
+        if on is False:
+            found.append({"code": "protection_missing", "subject": key, "detail": "sudo sh deploy/tune-board.sh"})
     wifi = (network or {}).get("wifi") or {}
     if wifi.get("signal_percent") is not None and wifi["signal_percent"] < WIFI_WEAK_PERCENT:
         found.append({"code": "wifi_weak", "subject": wifi.get("ssid") or "Wi-Fi", "detail": f"{wifi['signal_percent']}%"})

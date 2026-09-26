@@ -1,0 +1,9 @@
+# LocalHome's Wi-Fi watchdog - see deploy/watchdog/localhome-wifi-watchdog.sh. Installed
+# and enabled by deploy/tune-board.sh.
+[Unit]
+Description=LocalHome Wi-Fi watchdog
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /usr/local/lib/localhome/localhome-wifi-watchdog.sh

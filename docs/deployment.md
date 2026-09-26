@@ -120,9 +120,12 @@ sudo systemctl status localhome
 # -> dashboard at http://localhome.local:5000 (the name from step 1)
 #    logs: sudo journalctl -u localhome -f
 
-# 7. Tune the board for years of unattended running on its eMMC -
-#    system log in RAM, no background update downloads, no desktop.
-#    Don't skip it on an Arduino UNO Q: see "Tune the board" below.
+# 7. Tune the board for years of unattended running - on its eMMC
+#    (system log in RAM, no background update downloads, no desktop) and
+#    on Wi-Fi (never dozing or giving up, a Wi-Fi watchdog, the hardware
+#    watchdog, LocalHome restarted if it hangs). Don't skip it on an
+#    Arduino UNO Q, and run it again after updates: see "Tune the board"
+#    below and docs/quick-installation-arduino-uno-q.md step 8.
 sudo sh deploy/tune-board.sh
 ```
 
