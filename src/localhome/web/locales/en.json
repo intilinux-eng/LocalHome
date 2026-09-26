@@ -594,7 +594,9 @@
     "pill_restart": "Restart needed",
     "pill_settings_custom": "{count} set here",
     "save_short": "Save",
-    "broker_not_configured": "Not set up"
+    "broker_not_configured": "Not set up",
+    "system_problems_count_one": "1 problem",
+    "ov_devices_one_offline": "{count} devices · 1 not answering"
   },
   "vmc_presets": {
     "night": "Night",

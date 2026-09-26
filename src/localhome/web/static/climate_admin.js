@@ -207,13 +207,18 @@ function updatePlantOverview(data, restartPending) {
     : tr("climate_admin.pill_zones_ok", { count: zones.length })) : "");
 }
 
+// "1 anomalia", not "1 anomalie".
+function problemsCountText(count) {
+  return tr(count === 1 ? "climate_admin.system_problems_count_one" : "climate_admin.system_problems_count", { count });
+}
+
 function updateBoardOverview(data) {
   const devices = data.devices || [];
   const offline = devices.filter(d => !d.ok).length;
   const problems = data.problems || [];
   setTile("ov-system", problems.length ? "bad" : "ok",
-    problems.length ? tr("climate_admin.system_problems_count", { count: problems.length }) : tr("climate_admin.system_all_ok"),
-    offline ? tr("climate_admin.ov_devices", { count: devices.length, offline })
+    problems.length ? problemsCountText(problems.length) : tr("climate_admin.system_all_ok"),
+    offline ? tr(offline === 1 ? "climate_admin.ov_devices_one_offline" : "climate_admin.ov_devices", { count: devices.length, offline })
       : tr("climate_admin.ov_devices_all", { count: devices.length }));
   const p = data.process || {};
   const h = data.host || {};
@@ -1410,7 +1415,7 @@ function renderSystemProblems(problems) {
   box.innerHTML = `
     <strong>${tr("climate_admin.system_problems_heading", { count: problems.length })}</strong>
     <ul>${problems.map(problemHtml).join("")}</ul>`;
-  summary.innerHTML = `<span class="admin-status bad">${tr("climate_admin.system_problems_count", { count: problems.length })}</span>`;
+  summary.innerHTML = `<span class="admin-status bad">${escapeHtml(problemsCountText(problems.length))}</span>`;
 }
 
 async function refreshSystemStatus(force) {

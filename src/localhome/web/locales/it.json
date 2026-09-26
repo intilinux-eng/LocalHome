@@ -594,7 +594,9 @@
     "pill_restart": "Riavvio necessario",
     "pill_settings_custom": "{count} impostate qui",
     "save_short": "Salva",
-    "broker_not_configured": "Non configurato"
+    "broker_not_configured": "Non configurato",
+    "system_problems_count_one": "1 anomalia",
+    "ov_devices_one_offline": "{count} dispositivi · 1 non risponde"
   },
   "vmc_presets": {
     "night": "Notte",
