@@ -1683,6 +1683,38 @@ function watchLedMatrix() {
   refreshLedMatrix();   // the header's status, even while it's collapsed
 }
 
+// ----------------------------------------------------------- connection ----
+// The same rule as the dashboard (app.js's updateConnectionBanner): two
+// failed checks in a row and 15 s without an answer mean the board isn't
+// answering - and everything on this page is then the last known state,
+// which an installer watching it must not take for live. Checked on the
+// cheapest request there is, every 5 s.
+
+const adminConnection = { lastOk: Date.now(), failures: 0 };
+
+async function checkConnection() {
+  try {
+    const res = await fetch("/api/server-time", { cache: "no-store" });
+    if (!res.ok) throw new Error(String(res.status));
+    adminConnection.lastOk = Date.now();
+    adminConnection.failures = 0;
+  } catch (e) {
+    adminConnection.failures += 1;
+  }
+  const banner = document.getElementById("connection-banner");
+  if (!banner) return;
+  const offline = adminConnection.failures >= 2 && Date.now() - adminConnection.lastOk > 15000;
+  banner.hidden = !offline;
+  document.body.classList.toggle("is-offline", offline);
+  if (offline) {
+    banner.textContent = tr("app.offline", {
+      time: new Date(adminConnection.lastOk).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
+    });
+  }
+}
+
+setInterval(checkConnection, 5000);
+
 // -------------------------------------------------------------- polling ----
 // Fast enough to watch live during install verification, but paused
 // while the tab isn't focused so a session left open all day doesn't
