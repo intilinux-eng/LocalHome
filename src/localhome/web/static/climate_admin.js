@@ -1333,7 +1333,10 @@ function protectionRows(protections) {
 function watchdogEventText(event) {
   const values = event.values ? event.values.split(" ") : [];
   const vars = { a: values[0] || "", b: values[1] || "", all: event.values };
-  if (event.code === "back") vars.a = formatDuration(Number(values[0]));
+  if (event.code === "back") {
+    const seconds = Number(values[0]);
+    vars.a = seconds < 60 ? `${seconds}s` : formatDuration(seconds);
+  }
   const text = tr(`climate_admin.wd_${event.code}`, vars);
   return text.startsWith("climate_admin.") ? `${event.code} ${event.values}` : text;
 }
