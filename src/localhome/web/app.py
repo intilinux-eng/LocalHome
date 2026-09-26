@@ -276,7 +276,6 @@ def create_app(config_path: str | None = None) -> Flask:
     # polled, so this is where the system status learns about them.
     app.config["COVER_READS"] = {}
     # Constant while the process lives, so it's read once, not per request.
-    app.config["BOOT_TIMES"] = system_status.boot_times()
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["MODE_SWITCH_NAMES"] = mode_switch_names
@@ -494,7 +493,7 @@ def _register_routes(app: Flask) -> None:
         # poll: it's what tells a page that a days-old reading was simply
         # never heard (the board was off) rather than a sensor gone quiet.
         return jsonify(ok=True, app_version=app.config["ASSET_VERSION"],
-                       **app.config["BOOT_TIMES"], **server_time())
+                       **system_status.boot_times(), **server_time())
 
     # The history table scan behind these numbers is the one slow part of
     # a system-status request; its growth only matters over hours.

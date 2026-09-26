@@ -138,9 +138,9 @@ def test_loop_is_stalled_after_three_missed_intervals():
 
 def test_loop_that_never_finished_is_only_stalled_once_past_the_startup_grace(monkeypatch):
     now = time.time()
-    monkeypatch.setattr(system_status, "PROCESS_STARTED_TS", now - 10)
+    monkeypatch.setattr(system_status, "PROCESS_STARTED_MONO", time.monotonic() - 10)
     assert not system_status.loop_health("thermostat", None, 60, now)["stalled"]
-    monkeypatch.setattr(system_status, "PROCESS_STARTED_TS", now - 600)
+    monkeypatch.setattr(system_status, "PROCESS_STARTED_MONO", time.monotonic() - 600)
     assert system_status.loop_health("thermostat", None, 60, now)["stalled"]
 
 
@@ -397,6 +397,21 @@ def test_a_device_that_reported_then_went_quiet_is_offline_even_after_a_boot():
     assert [p["code"] for p in found] == ["device_offline"]
 
 
+def test_boot_times_follow_a_clock_corrected_after_startup(monkeypatch):
+    """The UNO Q boots with yesterday's time and NTP fixes it moments
+    later. Boot and start times must come out right on the corrected
+    clock - not frozen at whatever the clock said when LocalHome started."""
+    monkeypatch.setattr(system_status, "_uptime_seconds", lambda: 780)             # up 13 minutes
+    monkeypatch.setattr(system_status, "PROCESS_STARTED_MONO", time.monotonic() - 760)
+    corrected_now = time.time()
+
+    times = system_status.boot_times()
+
+    assert abs(times["booted_at"] - (corrected_now - 780)) <= 2
+    assert abs(times["started_at"] - (corrected_now - 760)) <= 2
+    assert abs(system_status.process_stats()["uptime_seconds"] - 760) <= 2
+
+
 def test_boot_times_are_reported_for_the_pages():
     times = system_status.boot_times()
 
@@ -404,3 +419,19 @@ def test_boot_times_are_reported_for_the_pages():
     assert times["started_at"] <= time.time()
     # booted_at is None where the board can't tell us (no /proc/uptime).
     assert times["booted_at"] is None or times["booted_at"] <= times["started_at"]
+
+
+def test_the_page_gets_the_boot_time_on_the_corrected_clock(tmp_path, monkeypatch):
+    """/api/server-time used to hand out a boot time computed once, when
+    LocalHome started - before NTP had fixed the board's clock."""
+    from localhome.web.app import create_app
+
+    path = tmp_path / "config.yaml"
+    path.write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
+    app = create_app(str(path))
+    try:
+        monkeypatch.setattr(system_status, "_uptime_seconds", lambda: 780)
+        data = app.test_client().get("/api/server-time").get_json()
+        assert abs(data["booted_at"] - (time.time() - 780)) <= 2
+    finally:
+        app.config["HISTORY"].close()

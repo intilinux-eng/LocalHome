@@ -382,7 +382,8 @@ class ThermostatController:
         # restart, or a board that was off - doesn't count as silence.
         with self._tick_lock:
             tick_ts = time.time()
-            elapsed = min(tick_ts - (self._last_tick_ts or tick_ts), self._max_silence_step)
+            # Never negative either: the clock can be set back too.
+            elapsed = max(0.0, min(tick_ts - (self._last_tick_ts or tick_ts), self._max_silence_step))
             self._last_tick_ts = tick_ts
             try:
                 self._tick(now, applied, elapsed)

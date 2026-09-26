@@ -18,8 +18,22 @@ import threading
 import time
 
 # When this process started, as close to it as this module gets: it's
-# imported while create_app() builds everything else.
-PROCESS_STARTED_TS = time.time()
+# imported while create_app() builds everything else. Monotonic, never
+# the wall clock: the UNO Q has no battery-backed clock, so it boots
+# with the time it last saved (often the evening before) and NTP fixes
+# it moments later - a wall-clock timestamp taken in between stays wrong
+# by however long the board was off. Wall-clock times are derived from
+# this when asked (process_started_at()).
+PROCESS_STARTED_MONO = time.monotonic()
+
+
+def process_age_seconds() -> float:
+    return time.monotonic() - PROCESS_STARTED_MONO
+
+
+def process_started_at(now: float | None = None) -> float:
+    """This process's start, on today's (corrected) wall clock."""
+    return (time.time() if now is None else now) - process_age_seconds()
 
 # CPU temperature worth flagging. Idle, the UNO Q's cores sit around
 # 45°C; boards like it start throttling in the 85-95°C range.
@@ -32,9 +46,9 @@ DISK_LOW_FRACTION = 0.10
 DISK_LOW_BYTES = 500 * 1024 * 1024
 
 _cpu_lock = threading.Lock()
-# (wall clock, process CPU seconds) at the previous reading - seeded here
-# so the first reading doesn't count the CPU spent before this import.
-_cpu_last: tuple[float, float] = (PROCESS_STARTED_TS, time.process_time())
+# (monotonic clock, process CPU seconds) at the previous reading - seeded
+# here so the first reading doesn't count the CPU spent before this import.
+_cpu_last: tuple[float, float] = (PROCESS_STARTED_MONO, time.process_time())
 
 
 def _proc_status() -> dict[str, int]:
@@ -90,7 +104,7 @@ def _cpu_percent() -> float | None:
     """This process's CPU use since the previous call (or since startup,
     on the first one), as a percentage of one core."""
     global _cpu_last
-    now, cpu = time.time(), time.process_time()
+    now, cpu = time.monotonic(), time.process_time()
     with _cpu_lock:
         last_wall, last_cpu = _cpu_last
         _cpu_last = (now, cpu)
@@ -110,14 +124,14 @@ def process_stats() -> dict:
             rss, peak = windows
     return {
         "pid": os.getpid(),
-        "uptime_seconds": round(time.time() - PROCESS_STARTED_TS),
+        "uptime_seconds": round(process_age_seconds()),
         "rss_bytes": rss,
         "peak_rss_bytes": peak,
         # /proc counts every OS thread (including ones native libraries
         # start); threading only knows Python's own. Prefer the former.
         "threads": status.get("Threads") or threading.active_count(),
         "cpu_percent": _cpu_percent(),
-        "started_at": round(PROCESS_STARTED_TS),
+        "started_at": round(process_started_at()),
         "python": sys.version.split()[0],
     }
 
@@ -168,12 +182,17 @@ def _uptime_seconds() -> float | None:
 def boot_times() -> dict:
     """When the board came up, and when LocalHome started on it. Both
     matter for reading a device's silence: a last reading older than
-    these was never missed - nobody was listening. The board's boot time
-    doesn't change while it runs, so callers read this once."""
+    these was never missed - nobody was listening.
+
+    Computed on every call, from the kernel's uptime and this process's
+    monotonic age: a value taken once at startup was taken before NTP had
+    corrected the clock, and a board switched on at 17:11 said it had been
+    up since 23:59 the evening before ("on for 17h")."""
+    now = time.time()
     uptime = _uptime_seconds()
     return {
-        "booted_at": round(time.time() - uptime) if uptime is not None else None,
-        "started_at": round(PROCESS_STARTED_TS),
+        "booted_at": round(now - uptime) if uptime is not None else None,
+        "started_at": round(process_started_at(now)),
     }
 
 
@@ -427,7 +446,7 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
     now = time.time() if now is None else now
     grace = 3 * interval_seconds
     if last_ok_ts is None:
-        stalled = now - PROCESS_STARTED_TS > grace
+        stalled = process_age_seconds() > grace
         ago = None
     else:
         ago = round(now - last_ok_ts)
