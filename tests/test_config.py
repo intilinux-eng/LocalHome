@@ -61,3 +61,28 @@ def test_absolute_paths_are_returned_unchanged(tmp_path):
 def test_missing_config_file_raises_with_a_helpful_hint(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_config(tmp_path / "does-not-exist.yaml")
+
+
+def test_an_entry_with_enabled_false_is_left_out(tmp_path):
+    """A device not installed yet stays in the file, but isn't loaded -
+    so it raises no error in the admin panel or on the LED matrix."""
+    path = tmp_path / "config.yaml"
+    path.write_text("""
+integrations:
+  - kind: switch
+    type: tplink_led_strip
+    name: "Divano"
+    enabled: false
+  - kind: switch
+    type: simulated
+    name: "Lamp"
+  - kind: switch
+    type: simulated
+    name: "Explicitly on"
+    enabled: true
+""", encoding="utf-8")
+
+    config = load_config(path)
+
+    assert [i.options["name"] for i in config.integrations] == ["Lamp", "Explicitly on"]
+    assert all("enabled" not in i.options for i in config.integrations)

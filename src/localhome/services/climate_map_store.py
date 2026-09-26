@@ -712,7 +712,8 @@ def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     real one by hand (its fixed name, or for the VMC any Shelly dimmer):
     a simulated stand-in would replace or duplicate it. Anywhere else -
     LocalHome running covers or plugs only - nothing appears by itself."""
-    hand_wired = config.raw.get("integrations") or []
+    hand_wired = [e for e in config.raw.get("integrations") or []
+                  if isinstance(e, dict) and e.get("enabled", True) is not False]
     names = {entry.get("name") for entry in hand_wired if isinstance(entry, dict)}
     has_dimmer = any(isinstance(e, dict) and e.get("type") == "shelly_light" for e in hand_wired)
     climate_panel = climate_map.get_zones() is not None

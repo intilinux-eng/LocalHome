@@ -1150,7 +1150,8 @@ def _register_routes(app: Flask) -> None:
         suggested = None
         if not saved.get("vmc_device_id"):
             for entry in config.raw.get("integrations") or []:
-                if entry.get("type") == "shelly_light" and entry.get("kind") == "switch" and entry.get("device_id"):
+                if (entry.get("type") == "shelly_light" and entry.get("kind") == "switch" and entry.get("device_id")
+                        and entry.get("enabled", True) is not False):
                     suggested = {"device_id": entry["device_id"], "name": entry.get("name")}
                     break
         return jsonify(

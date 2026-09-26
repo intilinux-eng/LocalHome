@@ -79,6 +79,19 @@ are common across most of them:
 - `devices_file` / `secrets_file` - paths to that driver's device
   inventory and/or credentials, resolved as described above.
 
+Any entry can also carry `enabled: false`: it stays in the file but isn't
+loaded at all - for a device that isn't installed yet or is out for
+repair. It then raises no error anywhere (the admin panel's system
+status, the LED matrix's problem codes), and turning it back on is
+deleting that one line and restarting.
+
+```yaml
+  - kind: switch
+    type: tplink_led_strip
+    name: "Divano"
+    enabled: false        # not installed yet
+```
+
 Known `kind`/`type` combinations (run `python -c "from localhome.core.registry import known_drivers; print(known_drivers())"`
 after installing to list what your checkout actually has registered):
 
