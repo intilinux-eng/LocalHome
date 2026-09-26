@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import os
 import subprocess
 import time
@@ -1324,6 +1325,13 @@ def _register_routes(app: Flask) -> None:
             humidity_pct = float(data["humidity_pct"]) if data.get("humidity_pct") is not None else None
         except (TypeError, ValueError):
             return jsonify(ok=False, error="temperature_c/humidity_pct must be numbers"), 400
+        # A typo ("215" for 21.5) would drive the valves on nonsense, and
+        # float() also takes "nan"/"inf" - which aren't valid JSON for the
+        # pages that read the value back. Real indoor readings only.
+        if not (math.isfinite(temperature_c) and -30 <= temperature_c <= 60):
+            return jsonify(ok=False, error="temperature_c must be between -30 and 60"), 400
+        if humidity_pct is not None and not (math.isfinite(humidity_pct) and 0 <= humidity_pct <= 100):
+            return jsonify(ok=False, error="humidity_pct must be between 0 and 100"), 400
 
         sensor_name = f"{name} Sensor"
         manual_override.set(sensor_name, temperature_c, humidity_pct)

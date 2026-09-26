@@ -548,7 +548,9 @@
     "led_code_CK": "the board's clock isn't synchronized with the internet: schedules may be off",
     "settings_not_a_number": "{label}: that isn't a valid number. Correct it, or empty the field to go back to the default.",
     "settings_out_of_range": "{label}: the value must be between {min} and {max}.",
-    "settings_saved": "Saved."
+    "settings_saved": "Saved.",
+    "manual_temp_range": "The temperature must be between -30 and 60 °C.",
+    "manual_humidity_range": "The humidity must be between 0 and 100 %."
   },
   "vmc_presets": {
     "night": "Night",

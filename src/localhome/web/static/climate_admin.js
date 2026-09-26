@@ -717,8 +717,8 @@ function zoneStatusInnerHtml(zone, mapEntry, mode) {
   const valveMode = mapEntry ? (mapEntry.valve_mode || "shelly") : "shelly";
   const manualBoxHtml = sensorMode === "manual" ? `
     <div class="admin-manual-box">
-      <input type="number" step="0.1" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
-      <input type="number" step="0.1" class="manual-humidity-input" placeholder="${tr("climate_admin.manual_humidity_label")}">
+      <input type="number" step="0.1" min="-30" max="60" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
+      <input type="number" step="0.1" min="0" max="100" class="manual-humidity-input" placeholder="${tr("climate_admin.manual_humidity_label")}">
       <button class="range-btn" onclick="setManualValue(${jsArg(zone.name)}, this)">${tr("climate_admin.manual_set_button")}</button>
     </div>` : "";
 
@@ -972,9 +972,21 @@ async function setManualValue(zoneName, button) {
     notify(tr("climate_admin.manual_temp_required"));
     return;
   }
+  // The same limits the server enforces, said here in the page's language:
+  // a typo like 215 for 21.5 would otherwise drive the valves on nonsense.
+  if (temperature_c < -30 || temperature_c > 60) {
+    notify(tr("climate_admin.manual_temp_range"));
+    return;
+  }
   const humidityRaw = box.querySelector(".manual-humidity-input").value;
   const body = { temperature_c };
-  if (humidityRaw !== "") body.humidity_pct = parseFloat(humidityRaw);
+  if (humidityRaw !== "") {
+    body.humidity_pct = parseFloat(humidityRaw);
+    if (Number.isNaN(body.humidity_pct) || body.humidity_pct < 0 || body.humidity_pct > 100) {
+      notify(tr("climate_admin.manual_humidity_range"));
+      return;
+    }
+  }
   try {
     const res = await fetch(`/api/climate-admin/zones/${encodeURIComponent(zoneName)}/manual-value`, {
       method: "POST",

@@ -696,3 +696,21 @@ def test_a_command_re_reads_the_device_and_its_paired_partner():
     woken.clear()
     _wake_poller(Manager, "Other")
     assert woken == ["Other"]
+
+
+
+@pytest.mark.parametrize("body", [
+    {"temperature_c": 215},                      # a typo for 21.5
+    {"temperature_c": -100},
+    {"temperature_c": "nan"},                    # float() takes it; JSON can't carry it
+    {"temperature_c": "inf"},
+    {"temperature_c": 21, "humidity_pct": 140},
+])
+def test_manual_value_route_refuses_readings_no_room_has(tmp_path, body):
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(VALID_ZONES)
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+
+    res = app.test_client().post("/api/climate-admin/zones/Bathrooms/manual-value", json=body)
+
+    assert res.status_code == 400
+    assert app.config["MANAGER"].sensor_reading("Bathrooms Sensor").get("temperature_c") is None

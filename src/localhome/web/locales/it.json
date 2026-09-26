@@ -548,7 +548,9 @@
     "led_code_CK": "l'ora della scheda non è sincronizzata con internet: la programmazione può essere sfasata",
     "settings_not_a_number": "{label}: il valore non è un numero valido. Correggilo, oppure svuota il campo per tornare al valore predefinito.",
     "settings_out_of_range": "{label}: il valore deve essere tra {min} e {max}.",
-    "settings_saved": "Salvato."
+    "settings_saved": "Salvato.",
+    "manual_temp_range": "La temperatura deve essere tra -30 e 60 °C.",
+    "manual_humidity_range": "L'umidità deve essere tra 0 e 100 %."
   },
   "vmc_presets": {
     "night": "Notte",
