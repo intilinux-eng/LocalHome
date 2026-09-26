@@ -428,6 +428,19 @@ you with a page that never comes back - `services/self_restart.py`'s
 `is_supported()` is the check. Developing on Windows: stop the process
 yourself (Ctrl+C) and start it again instead).
 
+The page opens on an **overview**: one tile each for the system status,
+the season, the zones, the MQTT broker, the board (uptime, clock) and
+the LED matrix, coloured by how they're doing and each a link to its
+section. Below it the sections come in four groups - *Plant* (season,
+zones), *Devices* (broker, extra switches, outdoor sensor, VMC), *Board*
+(system status, LED matrix, settings) and *Tools* (diagnostic mode,
+maintenance, how it works) - each a card whose header says its state
+even when closed. A sticky bar of links follows the scroll. Two notices
+sit above everything when they apply: saved changes waiting for a
+restart (naming which, with the restart button), and diagnostic mode
+being on. Which sections are open is remembered for the tab, so the
+reload after a restart lands back where you were.
+
 Per zone:
 
 - **Sensor source**: a real Shelly device (needs a device id), a
@@ -581,6 +594,8 @@ Telegram bot token or a phone being nearby:
 ### Diagnostic mode
 
 A system-wide override, toggled from its own section on `/climate-admin`
+(under *Tools*; while it's on, a banner at the top of the page says so
+and the section opens by itself)
 (`POST /api/climate/diagnostic-mode`, persisted as `diagnostic_mode` in
 `schedules.json` via `ScheduleStore`) - while on, `ThermostatController`
 and `InterlockController` both skip every zone/interlock/mode_switch
@@ -629,7 +644,7 @@ flattened, control characters are refused, and a blank field puts
 
 ### Maintenance: backup, clear, factory reset
 
-A collapsed **Maintenance** section at the bottom of `/climate-admin`:
+A collapsed **Maintenance** section under *Tools* in `/climate-admin`:
 
 - **Download backup** - config.yaml, the panel's zones and devices,
   schedules and manual values as a `.zip`. Credentials are left out

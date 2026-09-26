@@ -77,8 +77,8 @@ ids - no real hardware needed to see this for yourself.
 ![A zone's statistics: every run in the last 24 hours with what temperature and humidity did meanwhile, then the charts with the stretches the system was on shaded](docs/screenshots/statistics.png)
 *A zone's statistics: when the system ran, and what it did.*
 
-![Climate admin panel: mapping zones onto Shelly device ids, MQTT broker settings, the VMC's day/night program, and live per-zone status](docs/screenshots/climate-admin.png)
-*Climate admin panel - see [below](#the-shelly-climate-admin-panel).*
+![Admin panel: an overview of the whole installation, the zones mapped onto Shelly device ids with their live status, and every other section folded with its state in its header](docs/screenshots/climate-admin.png)
+*Admin panel - see [below](#the-shelly-climate-admin-panel).*
 
 ## Install on an Arduino UNO Q
 

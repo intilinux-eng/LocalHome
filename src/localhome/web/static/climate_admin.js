@@ -58,6 +58,7 @@ function restartButtonHtml() {
 
 async function restartLocalHome(button) {
   if (!await confirmAction(tr("climate_admin.restart_confirm"), { confirmLabel: tr("climate_admin.restart_button") })) return;
+  restartInProgress = true;
   button.disabled = true;
   const container = button.parentElement;
   let data = { ok: true };
@@ -108,7 +109,120 @@ const VALVE_MODES = ["shelly", "simulated"];
 
 let savedMap = null; // last GET /api/climate-admin/map response
 let extraSwitchesRestartPending = false; // from the last GET /api/climate-admin/extra-switches
+let brokerRestartPending = false;   // saved from this page since it was loaded
+let settingsRestartPending = false; // from the last GET /api/climate-admin/settings
+let restartInProgress = false;
+let guideDecided = false;
 let pollTimer = null;
+
+// ------------------------------------------------------------- overview ----
+// The tiles at the top of the page and the pills in each section's
+// header. Each is filled by the request that already runs for its
+// section - none of this asks the server anything of its own.
+
+function setTile(id, state, value, sub) {
+  const tile = document.getElementById(id);
+  if (!tile) return;
+  tile.dataset.state = state;
+  tile.querySelector(".ov-value").textContent = value;
+  tile.querySelector(".ov-sub").textContent = sub || "";
+}
+
+function pillHtml(state, text) {
+  return `<span class="admin-status ${state}">${escapeHtml(text)}</span>`;
+}
+
+function setPill(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+// An outdoor sensor's or VMC's header: its source, coloured by whether
+// the real device answers (`live`: "ok"/"neutral"/"bad", or null before
+// the first reading).
+function rolePillHtml(mode, restartPending, live) {
+  if (restartPending) return pillHtml("neutral", tr("climate_admin.pill_restart"));
+  return pillHtml(mode === "shelly" && live ? live : "idle", tr(`climate_admin.pill_${mode}`));
+}
+
+// Every save on this page waits for a restart; this names the ones that
+// are waiting, with the button, at the top of the page.
+function updateRestartBar() {
+  const bar = document.getElementById("restart-bar");
+  if (!bar || restartInProgress) return;
+  const waiting = [
+    [savedMap && savedMap.restart_pending, "zones_heading"],
+    [brokerRestartPending, "broker_heading"],
+    [extraSwitchesRestartPending, "extra_switches_heading"],
+    [extraSensorRestartPending, "extra_sensor_heading"],
+    [vmcRestartPending, "vmc_heading"],
+    [settingsRestartPending, "settings_heading"],
+  ].filter(([pending]) => pending).map(([, key]) => tr(`climate_admin.${key}`));
+  bar.hidden = !waiting.length;
+  if (!waiting.length) return;
+  document.getElementById("restart-bar-text").textContent = tr("climate_admin.restart_bar", { what: waiting.join(", ") });
+  const action = bar.querySelector(".restart-bar-action");
+  if (!action.querySelector("button")) action.innerHTML = restartButtonHtml();
+}
+
+// A valve that doesn't answer is a fault; a battery sensor that hasn't
+// reported yet may just be asleep - "to check", not red.
+function zoneHealth(zone) {
+  if (!zone.valve_ok) return "bad";
+  return zone.sensor_ok ? "ok" : "neutral";
+}
+
+function updatePlantOverview(data, restartPending) {
+  if (data.mode) {
+    const name = tr(`climate.mode_${data.mode}`);
+    let state = data.mode;
+    let sub = tr("climate_admin.ov_season_normal");
+    if (data.diagnostic_mode) {
+      state = "bad";
+      sub = tr("climate_admin.ov_season_diag");
+    } else if (data.away_until) {
+      state = "neutral";
+      sub = tr("climate_admin.ov_season_away", {
+        until: new Date(data.away_until).toLocaleString(LOCALE, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+      });
+    }
+    setTile("ov-season", state, name, sub);
+    setPill("season-summary", pillHtml(`season-${data.mode}`, name));
+  }
+  const zones = data.zones || [];
+  const temps = zones.map(z => `${z.name} ${fmt(z.temperature_c, 1)}°`).join(" · ");
+  const health = zones.map(zoneHealth);
+  const toCheck = health.filter(h => h !== "ok").length;
+  let state = health.includes("bad") ? "bad" : toCheck ? "neutral" : "ok";
+  let value = toCheck ? tr("climate_admin.ov_zones_check", { count: toCheck }) : tr("climate_admin.ov_zones_ok");
+  if (restartPending) {
+    state = "neutral";
+    value = tr("climate_admin.ov_zones_restart");
+  } else if (!zones.length) {
+    state = "idle";
+    value = tr("climate.no_zones");
+  }
+  setTile("ov-zones", state, value, temps);
+  setPill("zones-summary", zones.length ? pillHtml(state, restartPending || toCheck ? value
+    : tr("climate_admin.pill_zones_ok", { count: zones.length })) : "");
+}
+
+function updateBoardOverview(data) {
+  const devices = data.devices || [];
+  const offline = devices.filter(d => !d.ok).length;
+  const problems = data.problems || [];
+  setTile("ov-system", problems.length ? "bad" : "ok",
+    problems.length ? tr("climate_admin.system_problems_count", { count: problems.length }) : tr("climate_admin.system_all_ok"),
+    offline ? tr("climate_admin.ov_devices", { count: devices.length, offline })
+      : tr("climate_admin.ov_devices_all", { count: devices.length }));
+  const p = data.process || {};
+  const h = data.host || {};
+  const clock = h.clock_synced;
+  setTile("ov-board", clock === false ? "neutral" : "ok",
+    tr("climate_admin.ov_board_up", { age: formatDuration(typeof h.uptime_seconds === "number" ? h.uptime_seconds : p.uptime_seconds) }),
+    clock == null ? tr("climate_admin.ov_clock_unknown", { ram: formatBytes(p.rss_bytes) })
+      : tr(clock ? "climate_admin.ov_clock_ok" : "climate_admin.ov_clock_bad"));
+}
 
 // Same threshold as the main dashboard's app.js (LOW_BATTERY_PCT) -
 // copied rather than shared, matching this file's own "separate
@@ -191,6 +305,14 @@ async function loadMap() {
   document.getElementById("zone-forms").innerHTML = zones.map((z, i) => zoneFormHtml(z, i)).join("");
   const fresh = document.getElementById("zones-fresh-note");
   if (fresh) fresh.hidden = !!savedMap.configured;
+  // Open on a fresh install, closed once something is saved - unless it
+  // was opened or closed by hand in this tab.
+  const guide = document.getElementById("guide");
+  if (guide && !guideDecided) {
+    guideDecided = true;
+    if (!(guide.id in openSectionsSaved)) guide.open = !savedMap.configured;
+  }
+  updateRestartBar();
   refreshAll();
 }
 
@@ -285,6 +407,8 @@ async function saveBroker(button) {
     }
     resultEl.innerHTML = `${tr("climate_admin.broker_save_success")} ${restartButtonHtml()}`;
     resultEl.className = "hint-text admin-success";
+    brokerRestartPending = true;
+    updateRestartBar();
     await loadBroker();
   } catch (e) {
     resultEl.textContent = tr("sensors.request_failed");
@@ -338,6 +462,10 @@ async function loadExtraSwitches() {
   document.getElementById("extra-bypass-valve-id").value = data.bypass_valve_device_id || "";
   document.getElementById("extra-dehumidifier-id").value = data.dehumidifier_device_id || "";
   extraSwitchesRestartPending = !!data.restart_pending;
+  const wired = [data.bypass_valve_device_id, data.dehumidifier_device_id].filter(Boolean).length;
+  setPill("extra-switches-summary", extraSwitchesRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
+    : pillHtml("idle", wired ? tr("climate_admin.pill_switches", { count: wired }) : tr("climate_admin.pill_none")));
+  updateRestartBar();
 }
 
 async function saveExtraSwitches(button) {
@@ -396,6 +524,8 @@ async function loadExtraSensor() {
   document.getElementById("extra-outdoor-sensor-mode").value = data.outdoor_sensor_mode || "none";
   extraSensorRestartPending = !!data.restart_pending;
   syncExtraRoleFields();
+  setPill("extra-sensor-summary", rolePillHtml(data.outdoor_sensor_mode || "none", extraSensorRestartPending, null));
+  updateRestartBar();
 }
 
 async function saveExtraSensor(button) {
@@ -444,6 +574,7 @@ async function refreshExtraSensorStatus() {
     return;
   }
   if (extraSensorRestartPending) {
+    setPill("extra-sensor-summary", rolePillHtml(mode, true, null));
     slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
     return;
   }
@@ -460,6 +591,7 @@ async function refreshExtraSensorStatus() {
       sensor_last_value_age_seconds: reading.last_value_age_seconds,
     };
     slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, mode)}</div>`;
+    setPill("extra-sensor-summary", rolePillHtml(mode, false, reading.ok ? "ok" : "neutral"));
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -483,6 +615,7 @@ async function loadVmc() {
   input.value = data.vmc_device_id || "";
   mode.value = data.vmc_mode || "none";
   vmcRestartPending = !!data.restart_pending;
+  setPill("vmc-summary", rolePillHtml(data.vmc_mode || "none", vmcRestartPending, null));
   // Not managed here yet, but config.yaml already has one: pre-fill it,
   // and say that saving takes it over.
   if (!data.vmc_device_id && data.suggested_vmc) {
@@ -494,6 +627,7 @@ async function loadVmc() {
     hint.hidden = true;
   }
   syncExtraRoleFields();
+  updateRestartBar();
 }
 
 async function saveVmc(button) {
@@ -538,6 +672,7 @@ async function refreshVmcStatus() {
   }
   if (vmcRestartPending) {
     slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+    setPill("vmc-summary", rolePillHtml(vmcMode, true, null));
     return;
   }
   try {
@@ -547,6 +682,7 @@ async function refreshVmcStatus() {
     ]);
     const sw = await switchRes.json();
     const speed = await speedRes.json();
+    setPill("vmc-summary", rolePillHtml(vmcMode, false, sw.ok ? "ok" : "bad"));
     if (!sw.ok) {
       slot.innerHTML = `<div><span class="admin-status bad">${tr("climate_admin.vmc_offline")}</span> ${tr("climate_admin.vmc_offline_hint")}</div>`
         + (sw.error ? `<div class="admin-problem-detail">${escapeHtml(sw.error)}</div>` : "");
@@ -825,7 +961,7 @@ function diagnosticValveRowHtml(name, isOn, isOk) {
       : `<span class="admin-status neutral">${tr("climate_admin.valve_closed")}</span>`;
   return `
     <div class="admin-zone-card admin-diagnostic-row">
-      <div><strong>${escapeHtml(name)}</strong></div>
+      <div><strong>${escapeHtml(displayName(name))}</strong></div>
       <div>${state}</div>
       <div class="toolbar">
         <button class="range-btn" onclick="diagnosticToggle(${jsArg(name)}, 'on', this)">${tr("climate_admin.valve_test_open")}</button>
@@ -858,9 +994,17 @@ async function refreshDiagnosticSection(data) {
   const toggle = document.getElementById("diagnostic-mode-toggle");
   const banner = document.getElementById("diagnostic-mode-banner");
   const container = document.getElementById("diagnostic-valves");
+  const wasEnabled = diagnosticModeEnabled;
   diagnosticModeEnabled = !!data.diagnostic_mode;
   if (toggle) toggle.checked = diagnosticModeEnabled;
   if (banner) banner.hidden = !diagnosticModeEnabled;
+  const alert = document.getElementById("diagnostic-alert");
+  if (alert) alert.hidden = !diagnosticModeEnabled;
+  setPill("diagnostic-summary", pillHtml(diagnosticModeEnabled ? "bad" : "idle",
+    tr(diagnosticModeEnabled ? "climate_admin.pill_on" : "climate_admin.pill_off")));
+  // Turned on - here or from another phone: its section opens by itself.
+  const section = document.getElementById("diagnostic");
+  if (section && diagnosticModeEnabled && !wasEnabled) section.open = true;
   if (!container) return;
   if (!diagnosticModeEnabled) {
     container.innerHTML = "";
@@ -899,6 +1043,7 @@ async function refreshStatus() {
     // every card's status is stale, not just the zone that changed -
     // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
     const restartPending = (savedMap && savedMap.restart_pending) || extraSwitchesRestartPending;
+    updatePlantOverview(data, restartPending);
     const byName = {};
     (data.zones || []).forEach(z => { byName[z.name] = z; });
     mapZones.forEach((mapEntry, index) => {
@@ -946,12 +1091,20 @@ async function refreshBroker() {
   try {
     const res = await fetch("/api/climate-admin/broker-status");
     const data = await res.json();
-    const where = `${data.host || "?"}:${data.port || "?"}`;
-    if (data.reachable) {
-      el.innerHTML = `<span class="admin-status ok">${tr("climate_admin.broker_ok")}</span> ${where}`;
-    } else {
-      el.innerHTML = `<span class="admin-status bad">${tr("climate_admin.broker_down")}</span> ${where} - ${tr("climate_admin.broker_down_hint")}`;
+    const hint = document.getElementById("broker-down-hint");
+    // No mqtt_broker.json at all: nothing to reach yet - an installation
+    // with only simulated devices, not a broker that's down.
+    if (!data.host) {
+      el.innerHTML = pillHtml("idle", tr("climate_admin.broker_not_configured"));
+      if (hint) hint.hidden = true;
+      setTile("ov-broker", "idle", tr("climate_admin.broker_not_configured"), "");
+      return;
     }
+    const where = `${data.host}:${data.port || "?"}`;
+    const text = tr(data.reachable ? "climate_admin.broker_ok" : "climate_admin.broker_down");
+    el.innerHTML = `${pillHtml(data.reachable ? "ok" : "bad", text)} <span class="sec-note">${escapeHtml(where)}</span>`;
+    if (hint) hint.hidden = !!data.reachable;
+    setTile("ov-broker", data.reachable ? "ok" : "bad", text, where);
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -963,6 +1116,17 @@ async function refreshAll() {
   await refreshExtraSensorStatus();
   await refreshVmcStatus();
   await refreshSystemStatus();
+  refreshLedSummary();
+}
+
+// While its section is closed the LED matrix isn't polled; its header
+// and tile still follow it, at the system status's pace.
+let ledSummaryFetchedAt = 0;
+
+function refreshLedSummary() {
+  if (ledTimer || Date.now() - ledSummaryFetchedAt < SYSTEM_STATUS_INTERVAL_MS) return;
+  ledSummaryFetchedAt = Date.now();
+  refreshLedMatrix();
 }
 
 async function setManualValue(zoneName, button) {
@@ -1043,6 +1207,19 @@ function escapeHtml(value) {
   })[c]);
 }
 
+// The fixed English names the panel gives its extra devices (see
+// services/climate_map_store.py), shown in the page's language - same
+// table as app.js's.
+const DISPLAY_NAMES = {
+  "Outdoor Sensor": "climate.outdoor_name",
+  "Bathroom Bypass Valve": "climate.bypass_name",
+  "Dehumidifier": "climate.dehumidifier",
+};
+
+function displayName(name) {
+  return DISPLAY_NAMES[name] ? tr(DISPLAY_NAMES[name]) : name;
+}
+
 // A name as an inline handler's argument: a JSON string literal (any
 // apostrophe or quote inside is fine), escaped for the attribute.
 function jsArg(value) {
@@ -1072,7 +1249,7 @@ function statRowHtml(label, value, bad) {
 }
 
 function problemHtml(problem) {
-  const title = tr(`climate_admin.system_problem_${problem.code}`, { subject: problem.subject });
+  const title = tr(`climate_admin.system_problem_${problem.code}`, { subject: displayName(problem.subject) });
   const detail = problem.detail ? `<div class="admin-problem-detail">${escapeHtml(problem.detail)}</div>` : "";
   return `<li>${escapeHtml(title)}${detail}</li>`;
 }
@@ -1202,7 +1379,7 @@ function systemStatusHtml(data) {
       ? tr("climate_admin.system_device_never")
       : tr("climate_admin.system_device_age", { age: formatAge(d.seconds_since_update) });
     const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
-    return `<li><div class="admin-device-line">${status}<strong>${escapeHtml(d.name)}</strong>`
+    return `<li><div class="admin-device-line">${status}<strong>${escapeHtml(displayName(d.name))}</strong>`
       + `<span class="admin-pill">${escapeHtml(d.kind)}</span><span class="admin-device-age">${escapeHtml(age)}</span></div>${error}</li>`;
   }).join("");
 
@@ -1245,6 +1422,7 @@ async function refreshSystemStatus(force) {
     if (!data.ok) return;
     renderSystemProblems(data.problems || []);
     document.getElementById("system-status-body").innerHTML = systemStatusHtml(data);
+    updateBoardOverview(data);
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -1272,9 +1450,9 @@ function seasonEffects(mode, data) {
     zones.filter(z => z.cool_enabled === false).forEach(z => items.push(tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) })));
   }
   (effects.mode_switches || []).forEach(m => items.push(tr(
-    m.active_in_mode === mode ? "climate_admin.season_switch_on" : "climate_admin.season_switch_off", { name: escapeHtml(m.switch) })));
+    m.active_in_mode === mode ? "climate_admin.season_switch_on" : "climate_admin.season_switch_off", { name: escapeHtml(displayName(m.switch)) })));
   (effects.mode_limited || []).forEach(m => items.push(tr(
-    m.only_in_mode === mode ? "climate_admin.season_limited_usable" : "climate_admin.season_limited_off", { name: escapeHtml(m.switch) })));
+    m.only_in_mode === mode ? "climate_admin.season_limited_usable" : "climate_admin.season_limited_off", { name: escapeHtml(displayName(m.switch)) })));
   items.push(tr(`climate_admin.season_schedule_${mode}`));
   return items;
 }
@@ -1366,8 +1544,11 @@ async function loadSettings() {
     historyStats = data.history || null;
     settingsLoaded = Object.fromEntries(data.settings.map(s => [s.key, s.source === "panel" ? s.value : null]));
     document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
-    document.getElementById("settings-status").innerHTML = data.restart_pending
-      ? `<span class="admin-status neutral">${tr("climate_admin.settings_restart_pending")}</span>` : "";
+    settingsRestartPending = !!data.restart_pending;
+    const setHere = Object.values(settingsLoaded).filter(v => v != null).length;
+    setPill("settings-status", settingsRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
+      : setHere ? pillHtml("idle", tr("climate_admin.pill_settings_custom", { count: setHere })) : "");
+    updateRestartBar();
   } catch (e) {
     // Keep the form as it was.
   }
@@ -1674,9 +1855,11 @@ async function refreshLedMatrix() {
   }
   if (!data.ok) return;
   const running = data.status === "running";
-  document.getElementById("led-matrix-summary").innerHTML =
-    `<span class="admin-status ${running ? "ok" : data.status === "no_router" || data.status === "off" ? "neutral" : "bad"}">${
-      escapeHtml(tr(`climate_admin.led_status_short_${data.status}`))}</span>`;
+  const ledState = running ? "ok" : data.status === "no_router" || data.status === "off" ? "idle" : "bad";
+  const ledShort = tr(`climate_admin.led_status_short_${data.status}`);
+  document.getElementById("led-matrix-summary").innerHTML = pillHtml(ledState, ledShort);
+  setTile("ov-led", ledState, ledShort.charAt(0).toUpperCase() + ledShort.slice(1),
+    running && data.screen ? ledNowText(data.screen, data.state) : "");
   const status = document.getElementById("led-matrix-status");
   status.textContent = tr(`climate_admin.led_status_${data.status}`, { error: data.error || "" });
   // Red only for what someone should fix: a board with no matrix at all
@@ -1774,6 +1957,91 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// ----------------------------------------------------------- navigation ----
+// Which sections are open survives a reload in the same tab - above all
+// the one the restart button does - so whoever just saved the VMC and
+// restarted lands back on the VMC's status, not on a folded page.
+
+const OPEN_SECTIONS_KEY = "localhome-admin-open";
+
+function readOpenSections() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(OPEN_SECTIONS_KEY) || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+const openSectionsSaved = readOpenSections();
+
+function rememberOpenSections() {
+  document.querySelectorAll("details.admin-details[id]").forEach(section => {
+    if (typeof openSectionsSaved[section.id] === "boolean") section.open = openSectionsSaved[section.id];
+    section.addEventListener("toggle", () => {
+      const now = readOpenSections();
+      now[section.id] = section.open;
+      try {
+        sessionStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(now));
+      } catch (e) {
+        // Private mode or storage off: sections just start as designed.
+      }
+    });
+  });
+}
+
+// The link of the section being read is highlighted - the last one
+// whose top has passed just under the bar, or at the very bottom of the
+// page the last one on screen - and scrolled into view in the bar on a
+// phone. Once per frame at most, a dozen positions each time.
+function watchNav() {
+  const nav = document.getElementById("admin-nav");
+  if (!nav) return;
+  const links = new Map([...nav.querySelectorAll("a")].map(a => [a.getAttribute("href").slice(1), a]));
+  const targets = [...document.querySelectorAll("[data-nav]")];
+  let current = null;
+  let queued = false;
+  const update = () => {
+    queued = false;
+    const line = nav.getBoundingClientRect().bottom + 40;
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    let pick = targets[0];
+    for (const el of targets) {
+      const top = el.getBoundingClientRect().top;
+      if (atBottom ? top < window.innerHeight : top <= line) pick = el;
+    }
+    if (!pick || pick.dataset.nav === current) return;
+    current = pick.dataset.nav;
+    links.forEach((a, id) => a.classList.toggle("current", id === current));
+    const link = links.get(current);
+    if (link && nav.scrollWidth > nav.clientWidth) {
+      nav.scrollTo({ left: link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2, behavior: "smooth" });
+    }
+  };
+  const queue = () => {
+    if (!queued) {
+      queued = true;
+      requestAnimationFrame(update);
+    }
+  };
+  window.addEventListener("scroll", queue, { passive: true });
+  window.addEventListener("resize", queue);
+  document.addEventListener("toggle", queue, true);   // a section opening moves the rest
+  queue();
+}
+
+// A link to a closed section - the bar's, a tile, the diagnostic
+// banner's - opens it. (A repeated click on the same link fires no
+// hashchange, hence this on top of openLinkedSection().)
+document.addEventListener("click", event => {
+  const link = event.target.closest && event.target.closest('a[href^="#"]');
+  if (!link) return;
+  const target = document.getElementById(link.getAttribute("href").slice(1));
+  if (target && target.tagName === "DETAILS") target.open = true;
+});
+
+rememberOpenSections();
+watchNav();
 loadMap();
 loadBroker();
 loadExtraSwitches();
@@ -1783,7 +2051,7 @@ loadMaintenance();
 loadSettings();
 watchLedMatrix();
 
-// A link to a collapsed section (the guide's, or a bookmark) opens it.
+// A link to a collapsed section (a bookmark, another page) opens it.
 function openLinkedSection() {
   const target = location.hash && document.getElementById(location.hash.slice(1));
   if (target && target.tagName === "DETAILS") target.open = true;

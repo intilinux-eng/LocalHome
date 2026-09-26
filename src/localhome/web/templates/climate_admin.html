@@ -17,6 +17,26 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='climate_admin.css') }}">
 </head>
 <body>
+  {#- One line-icon per section, same stroke style as the rest of the UI. -#}
+  {%- set ICONS = {
+    "guide": '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    "season": '<path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>',
+    "zones": '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    "broker": '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+    "switches": '<rect x="1" y="5" width="22" height="14" rx="7" ry="7"/><circle cx="8" cy="12" r="3"/>',
+    "outdoor": '<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+    "vmc": '<path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>',
+    "system": '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    "led": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+    "settings": '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    "diagnostic": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    "maintenance": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    "help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  } -%}
+  {%- macro icon(name) -%}
+    <svg class="sec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name] | safe }}</svg>
+  {%- endmacro %}
+
   <header>
     <h1>{{ t.climate_admin.page_title }}</h1>
     <div class="header-right">
@@ -29,46 +49,94 @@
   <div class="server-clock-warning" id="server-clock-warning" hidden></div>
   <div class="offline-banner" id="connection-banner" role="status" aria-live="polite" hidden></div>
 
-  <p class="hint-text">{{ t.climate_admin.intro }}</p>
+  <!-- Diagnostic mode changes what every valve on this page means, so
+       while it's on it's said here, above everything, wherever its own
+       section happens to be scrolled - see refreshDiagnosticSection(). -->
+  <div class="admin-alert" id="diagnostic-alert" role="status" hidden>
+    <span>{{ t.climate_admin.diagnostic_alert }}</span>
+    <a href="#diagnostic">{{ t.climate_admin.diagnostic_alert_link }}</a>
+  </div>
 
-  <!-- How to use this page, in four steps, and a way to jump to any
-       section - collapsed sections open when their link is used (see
-       climate_admin.js's openLinkedSection()). -->
-  <section class="admin-guide" id="guide">
-    <h2>{{ t.climate_admin.guide_heading }}</h2>
+  <!-- Every save on this page takes effect after a restart; this says
+       which ones are waiting for it, in one place - see updateRestartBar(). -->
+  <div class="admin-restart-bar" id="restart-bar" role="status" hidden>
+    <span id="restart-bar-text"></span>
+    <span class="restart-bar-action"></span>
+  </div>
+
+  <!-- Sticky, scrolls sideways on a phone; the link of the section on
+       screen is highlighted - see watchNav() in climate_admin.js. -->
+  <nav class="admin-nav" id="admin-nav" aria-label="{{ t.climate_admin.nav_label }}">
+    <a href="#overview">{{ t.climate_admin.ov_label }}</a>
+    <a href="#season">{{ t.climate_admin.season_heading }}</a>
+    <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
+    <a href="#group-devices">{{ t.climate_admin.group_devices }}</a>
+    <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
+    <a href="#led-matrix">{{ t.climate_admin.led_heading }}</a>
+    <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
+    <a href="#group-tools">{{ t.climate_admin.group_tools }}</a>
+  </nav>
+
+  <!-- The whole installation at a glance, each tile a link to its
+       section - filled by the polls that already run for those sections
+       (setTile() in climate_admin.js), no requests of its own. -->
+  <section class="admin-overview" id="overview" data-nav="overview" aria-label="{{ t.climate_admin.ov_label }}">
+    <a class="ov-tile" id="ov-system" href="#system-status" data-state="idle">
+      <span class="ov-label">{{ icon("system") }}{{ t.climate_admin.ov_system }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+    <a class="ov-tile" id="ov-season" href="#season" data-state="idle">
+      <span class="ov-label">{{ icon("season") }}{{ t.climate_admin.ov_season }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+    <a class="ov-tile" id="ov-zones" href="#zones" data-state="idle">
+      <span class="ov-label">{{ icon("zones") }}{{ t.climate_admin.ov_zones }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+    <a class="ov-tile" id="ov-broker" href="#broker" data-state="idle">
+      <span class="ov-label">{{ icon("broker") }}{{ t.climate_admin.broker_heading }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+    <a class="ov-tile" id="ov-board" href="#system-status" data-state="idle">
+      <span class="ov-label">{{ icon("settings") }}{{ t.climate_admin.ov_board }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+    <a class="ov-tile" id="ov-led" href="#led-matrix" data-state="idle">
+      <span class="ov-label">{{ icon("led") }}{{ t.climate_admin.led_heading }}</span>
+      <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
+      <span class="ov-sub"></span>
+    </a>
+  </section>
+
+  <!-- How to use this page, in four steps. Open on a fresh install
+       (nothing saved yet), closed otherwise - see loadMap(). -->
+  <details class="admin-details admin-guide" id="guide" data-nav="overview">
+    <summary>{{ icon("guide") }}<span class="sec-title">{{ t.climate_admin.guide_heading }}</span></summary>
+    <p class="hint-text">{{ t.climate_admin.intro }}</p>
     <ol class="guide-steps">
       <li><strong>{{ t.climate_admin.guide_step1_title }}</strong> {{ t.climate_admin.guide_step1 }}</li>
       <li><strong>{{ t.climate_admin.guide_step2_title }}</strong> {{ t.climate_admin.guide_step2 }}</li>
       <li><strong>{{ t.climate_admin.guide_step3_title }}</strong> {{ t.climate_admin.guide_step3 }}</li>
       <li><strong>{{ t.climate_admin.guide_step4_title }}</strong> {{ t.climate_admin.guide_step4 }}</li>
     </ol>
-    <nav class="guide-nav">
-      <a href="#season">{{ t.climate_admin.season_heading }}</a>
-      <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
-      <a href="#extra-switches">{{ t.climate_admin.extra_switches_heading }}</a>
-      <a href="#extra-sensor">{{ t.climate_admin.extra_sensor_heading }}</a>
-      <a href="#vmc">{{ t.climate_admin.vmc_heading }}</a>
-      <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
-      <a href="#maintenance">{{ t.climate_admin.maint_heading }}</a>
-      <a href="#led-matrix">{{ t.climate_admin.led_heading }}</a>
-      <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
-      <a href="#how-it-works">{{ t.climate_admin.guide_how_link }}</a>
-    </nav>
-  </section>
+  </details>
 
-  <!-- The one thing that decides which formula every valve below
-       follows - see climate_admin.css's .admin-mode-banner. First
-       thing on the page on purpose, not buried under the status
-       section, so it frames everything below instead of following it. -->
-  <p class="admin-mode-banner" id="mode-away-line"></p>
+  <!-- ============================================================ plant -->
+  <div class="admin-group" id="group-plant" data-nav="season">
+    <h2>{{ t.climate_admin.group_plant }}</h2>
+    <p>{{ t.climate_admin.group_plant_note }}</p>
+  </div>
 
   <!-- The heating/cooling season: seasonal, changed twice a year, so it
        lives here (not on the dashboard) and needs the new season's name
        typed to switch - see climate_admin.js's season section. -->
-  <section class="season-section" id="season">
-    <div class="section-head">
-      <h2>{{ t.climate_admin.season_heading }}</h2>
-    </div>
+  <details class="admin-details" id="season" data-nav="season" open>
+    <summary>{{ icon("season") }}<span class="sec-title">{{ t.climate_admin.season_heading }}</span><span class="sec-pills" id="season-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.season_note }}</p>
     <div class="season-cards" id="season-cards"></div>
     <div class="season-confirm" id="season-confirm" hidden>
@@ -79,16 +147,283 @@
       <button class="range-btn" onclick="cancelSeason()">{{ t.climate_admin.maint_cancel_button }}</button>
     </div>
     <p class="hint-text" id="season-result"></p>
-  </section>
+  </details>
 
-  <!-- Explains every non-obvious battery-sensor behavior this panel's
-       status pills can otherwise leave a technician guessing about
-       (see climate_admin.js's sensorStatusHtml()/zoneStatusInnerHtml())
-       - collapsed by default (it's reference material, read once per
-       install, not on every visit) but placed above the zone cards
-       so it's found before the technician starts guessing. -->
-  <details class="admin-details" id="how-it-works">
-    <summary>{{ t.climate_admin.how_it_works_heading }}</summary>
+  <details class="admin-details" id="zones" data-nav="zones" open>
+    <summary>{{ icon("zones") }}<span class="sec-title">{{ t.climate_admin.zones_heading }}</span><span class="sec-pills" id="zones-summary"></span></summary>
+    <!-- Which formula every valve below follows, and whether "away" is
+         overriding the schedule - the cards only say open/closed. -->
+    <p class="admin-mode-banner" id="mode-away-line"></p>
+    <p class="hint-text">{{ t.climate_admin.zones_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.zones_note_more }}</p>
+    </details>
+    <p class="hint-text" id="zones-fresh-note" hidden>{{ t.climate_admin.zones_fresh_note }}</p>
+    <!-- Each zone's config form and live status live in one card (see
+         zoneFormHtml() in climate_admin.js) - editing a device id and
+         seeing whether it's actually reporting happen in the same place. -->
+    <div id="zone-forms"></div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" id="save-btn" onclick="saveMap(this)">{{ t.climate_admin.save_button }}</button>
+      <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
+    </div>
+    <p class="hint-text" id="save-result"></p>
+  </details>
+
+  <!-- ========================================================== devices -->
+  <!-- One-time, rarely-touched setup: collapsed, with each one's state
+       in its header so there's no need to open them to check. -->
+  <div class="admin-group" id="group-devices" data-nav="group-devices">
+    <h2>{{ t.climate_admin.group_devices }}</h2>
+    <p>{{ t.climate_admin.group_devices_note }}</p>
+  </div>
+
+  <details class="admin-details" id="broker" data-nav="group-devices">
+    <summary>{{ icon("broker") }}<span class="sec-title">{{ t.climate_admin.broker_heading }}</span><span class="sec-pills" id="broker-status"></span></summary>
+    <p class="hint-text admin-error" id="broker-down-hint" hidden>{{ t.climate_admin.broker_down_hint }}</p>
+    <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
+    <div class="admin-zone-card" id="broker-form">
+      <div class="admin-field">
+        <label for="broker-host">{{ t.climate_admin.broker_host_label }}</label>
+        <input type="text" id="broker-host" placeholder="localhost">
+      </div>
+      <div class="admin-field">
+        <label for="broker-port">{{ t.climate_admin.broker_port_label }}</label>
+        <input type="number" id="broker-port" placeholder="1883">
+      </div>
+      <div class="admin-field">
+        <label for="broker-username">{{ t.climate_admin.broker_username_label }}</label>
+        <input type="text" id="broker-username" placeholder="{{ t.climate_admin.broker_optional }}">
+      </div>
+      <label class="admin-checkbox">
+        <input type="checkbox" id="broker-change-password" onchange="onChangePasswordToggle(this)">
+        <span id="broker-password-toggle-label">{{ t.climate_admin.broker_set_password_label }}</span>
+      </label>
+      <div class="admin-field" id="broker-password-field" hidden>
+        <label for="broker-password">{{ t.climate_admin.broker_password_label }}</label>
+        <input type="password" id="broker-password" autocomplete="new-password">
+      </div>
+      <div class="toolbar">
+        <button class="range-btn" onclick="testBroker(this)">{{ t.climate_admin.broker_test_button }}</button>
+        <button class="tbtn open" onclick="saveBroker(this)">{{ t.climate_admin.broker_save_button }}</button>
+      </div>
+      <p class="hint-text" id="broker-test-result"></p>
+      <p class="hint-text" id="broker-save-result"></p>
+    </div>
+  </details>
+
+  <details class="admin-details" id="extra-switches" data-nav="group-devices">
+    <summary>{{ icon("switches") }}<span class="sec-title">{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
+    <div class="admin-zone-card" id="extra-switch-form">
+      <div class="admin-field">
+        <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
+        <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+      </div>
+      <div class="admin-field">
+        <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
+        <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+      </div>
+    </div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches(this)">{{ t.climate_admin.save_short }}</button>
+    </div>
+    <p class="hint-text" id="save-extra-result"></p>
+  </details>
+
+  <details class="admin-details" id="extra-sensor" data-nav="group-devices">
+    <summary>{{ icon("outdoor") }}<span class="sec-title">{{ t.climate_admin.extra_sensor_heading }}</span><span class="sec-pills" id="extra-sensor-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
+    <div class="admin-zone-card" id="extra-sensor-form">
+      <div class="admin-field">
+        <label for="extra-outdoor-sensor-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
+        <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
+          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+          <option value="none">{{ t.climate_admin.mode_none }}</option>
+        </select>
+      </div>
+      <div class="admin-field" id="extra-outdoor-sensor-id-field">
+        <label for="extra-outdoor-sensor-id">{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
+        <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
+      </div>
+      <div class="admin-zone-status" id="extra-sensor-status"></div>
+    </div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" id="save-extra-sensor-btn" onclick="saveExtraSensor(this)">{{ t.climate_admin.save_short }}</button>
+    </div>
+    <p class="hint-text" id="save-extra-sensor-result"></p>
+  </details>
+
+  <details class="admin-details" id="vmc" data-nav="group-devices">
+    <summary>{{ icon("vmc") }}<span class="sec-title">{{ t.climate_admin.vmc_heading }}</span><span class="sec-pills" id="vmc-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
+    <div class="admin-zone-card" id="vmc-form">
+      <div class="admin-field">
+        <label for="extra-vmc-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
+        <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
+          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+          <option value="none">{{ t.climate_admin.mode_none }}</option>
+        </select>
+      </div>
+      <div class="admin-field" id="extra-vmc-id-field">
+        <label for="extra-vmc-id">{{ t.climate_admin.vmc_label }}</label>
+        <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
+      </div>
+      <p class="hint-text" id="vmc-suggestion" hidden></p>
+      <div class="admin-zone-status" id="vmc-status"></div>
+    </div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_short }}</button>
+    </div>
+    <p class="hint-text" id="save-vmc-result"></p>
+    <!-- The day/night program lives on the dashboard, with the VMC's own
+         speed buttons: it's a daily control, not installation config. -->
+    <p class="hint-text">{{ t.climate_admin.vmc_program_moved }}</p>
+  </details>
+
+  <!-- ============================================================ board -->
+  <div class="admin-group" id="group-board" data-nav="system-status">
+    <h2>{{ t.climate_admin.group_board }}</h2>
+    <p>{{ t.climate_admin.group_board_note }}</p>
+  </div>
+
+  <!-- Open by default: this is what someone diagnosing the board came for. -->
+  <details class="admin-details" id="system-status" data-nav="system-status" open>
+    <summary>{{ icon("system") }}<span class="sec-title">{{ t.climate_admin.system_heading }}</span><span class="sec-pills" id="system-status-summary"></span></summary>
+    <!-- Only shown when something is wrong with the installation itself
+         (a driver that didn't load, a device gone quiet, a stalled loop,
+         a full disk) - see GET /api/system-status. -->
+    <div class="admin-problems" id="system-problems" hidden></div>
+    <p class="hint-text">{{ t.climate_admin.system_note }}</p>
+    <div id="system-status-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
+  </details>
+
+  <!-- What the UNO Q's LED matrix is showing and what every picture
+       on it means - for whoever will stand in front of the box. The
+       legend is drawn by the server with the same code that drives the
+       LEDs (services/led_matrix.py), so the two can't drift apart. -->
+  <details class="admin-details" id="led-matrix" data-nav="led-matrix">
+    <summary>{{ icon("led") }}<span class="sec-title">{{ t.climate_admin.led_heading }}</span><span class="sec-pills" id="led-matrix-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.led_note }}</p>
+    <p class="hint-text" id="led-matrix-status"></p>
+    <div class="led-live">
+      <div id="led-matrix-mirror"></div>
+      <div>
+        <p class="led-live-label">{{ t.climate_admin.led_live_label }}</p>
+        <p id="led-matrix-now"></p>
+      </div>
+    </div>
+    <h3 class="admin-subheading">{{ t.climate_admin.led_legend_heading }}</h3>
+    <div class="led-legend" id="led-matrix-legend"></div>
+    <h3 class="admin-subheading">{{ t.climate_admin.led_codes_heading }}</h3>
+    <div class="led-codes" id="led-matrix-codes"></div>
+  </details>
+
+  <!-- Thermostat tuning, history limits and language - changed here
+       instead of in config.yaml; see services/panel_settings.py. -->
+  <details class="admin-details" id="settings" data-nav="settings">
+    <summary>{{ icon("settings") }}<span class="sec-title">{{ t.climate_admin.settings_heading }}</span><span class="sec-pills" id="settings-status"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.settings_note }}</p>
+    <div class="admin-zone-card settings-grid" id="settings-form"></div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" onclick="saveSettings(this)">{{ t.climate_admin.settings_save }}</button>
+      <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
+    </div>
+    <p class="hint-text" id="settings-result"></p>
+  </details>
+
+  <!-- ============================================================ tools -->
+  <div class="admin-group" id="group-tools" data-nav="group-tools">
+    <h2>{{ t.climate_admin.group_tools }}</h2>
+    <p>{{ t.climate_admin.group_tools_note }}</p>
+  </div>
+
+  <!-- System-wide override, not per-zone - see services/thermostat.py's
+       ScheduleStore.get_diagnostic_mode(). Collapsed while off; while on,
+       the banner at the top of the page says so and this section opens
+       by itself - see refreshDiagnosticSection(). -->
+  <details class="admin-details" id="diagnostic" data-nav="group-tools">
+    <summary>{{ icon("diagnostic") }}<span class="sec-title">{{ t.climate_admin.diagnostic_heading }}</span><span class="sec-pills" id="diagnostic-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.diagnostic_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.diagnostic_note_more }}</p>
+    </details>
+    <label class="admin-checkbox admin-diagnostic-toggle">
+      <input type="checkbox" id="diagnostic-mode-toggle" onchange="onDiagnosticModeToggle(this)">
+      <span id="diagnostic-mode-toggle-label">{{ t.climate_admin.diagnostic_toggle_label }}</span>
+    </label>
+    <p class="admin-mode-exclusion" id="diagnostic-mode-banner" hidden>{{ t.climate_admin.diagnostic_active_banner }}</p>
+    <div id="diagnostic-valves"></div>
+  </details>
+
+  <!-- Clear / reset / backup - see the maintenance section of
+       climate_admin.js and services/maintenance.py. Every action behind
+       it is destructive. -->
+  <details class="admin-details admin-danger" id="maintenance" data-nav="group-tools">
+    <summary>{{ icon("maintenance") }}<span class="sec-title">{{ t.climate_admin.maint_heading }}</span></summary>
+    <p class="hint-text">{{ t.climate_admin.maint_note }}</p>
+    <div class="maint-row">
+      <div class="maint-text">
+        <strong>{{ t.climate_admin.maint_backup_title }}</strong>
+        <span class="hint-text">{{ t.climate_admin.maint_backup_note }}</span>
+        <span class="hint-text" id="maintenance-backups"></span>
+      </div>
+      <a class="tbtn open maint-download" href="/api/climate-admin/maintenance/backup.zip" download>{{ t.climate_admin.maint_backup_button }}</a>
+    </div>
+    <div class="maint-row" id="maint-row-clear-history">
+      <div class="maint-text">
+        <strong>{{ t.climate_admin.maint_history_title }}</strong>
+        <span class="hint-text">{{ t.climate_admin.maint_history_note }}</span>
+      </div>
+      <button class="tbtn close" onclick="askMaintenance('clear-history')">{{ t.climate_admin.maint_history_button }}</button>
+      <div class="maint-confirm" id="maint-confirm-clear-history" hidden>
+        <label for="maint-input-clear-history">{{ t.climate_admin.maint_type_reset }}</label>
+        <input type="text" id="maint-input-clear-history" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="RESET" oninput="onMaintenanceInput('clear-history', this)">
+        <button class="tbtn close" id="maint-go-clear-history" disabled onclick="runMaintenance('clear-history', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+        <button class="range-btn" onclick="cancelMaintenance('clear-history')">{{ t.climate_admin.maint_cancel_button }}</button>
+      </div>
+    </div>
+    <div class="maint-row" id="maint-row-clear-schedules">
+      <div class="maint-text">
+        <strong>{{ t.climate_admin.maint_schedules_title }}</strong>
+        <span class="hint-text">{{ t.climate_admin.maint_schedules_note }}</span>
+      </div>
+      <button class="tbtn close" onclick="askMaintenance('clear-schedules')">{{ t.climate_admin.maint_schedules_button }}</button>
+      <div class="maint-confirm" id="maint-confirm-clear-schedules" hidden>
+        <label for="maint-input-clear-schedules">{{ t.climate_admin.maint_type_reset }}</label>
+        <input type="text" id="maint-input-clear-schedules" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="RESET" oninput="onMaintenanceInput('clear-schedules', this)">
+        <button class="tbtn close" id="maint-go-clear-schedules" disabled onclick="runMaintenance('clear-schedules', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+        <button class="range-btn" onclick="cancelMaintenance('clear-schedules')">{{ t.climate_admin.maint_cancel_button }}</button>
+      </div>
+    </div>
+    <div class="maint-row" id="maint-row-factory-reset">
+      <div class="maint-text">
+        <strong>{{ t.climate_admin.maint_reset_title }}</strong>
+        <span class="hint-text">{{ t.climate_admin.maint_reset_note }}</span>
+      </div>
+      <button class="tbtn close" onclick="askMaintenance('factory-reset')">{{ t.climate_admin.maint_reset_button }}</button>
+      <div class="maint-confirm" id="maint-confirm-factory-reset" hidden>
+        <label for="maint-input-factory-reset">{{ t.climate_admin.maint_type_reset }}</label>
+        <input type="text" id="maint-input-factory-reset" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="RESET" oninput="onMaintenanceInput('factory-reset', this)">
+        <button class="tbtn close" id="maint-go-factory-reset" disabled onclick="runMaintenance('factory-reset', this)">{{ t.climate_admin.maint_confirm_button }}</button>
+        <button class="range-btn" onclick="cancelMaintenance('factory-reset')">{{ t.climate_admin.maint_cancel_button }}</button>
+      </div>
+    </div>
+    <p class="hint-text" id="maintenance-result"></p>
+  </details>
+
+  <!-- Every non-obvious behavior the status pills above can leave a
+       technician guessing about - reference material, read once per
+       install. -->
+  <details class="admin-details" id="how-it-works" data-nav="group-tools">
+    <summary>{{ icon("help") }}<span class="sec-title">{{ t.climate_admin.how_it_works_heading }}</span></summary>
     <h3 class="how-h">{{ t.climate_admin.how_seasons_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_seasons }}</p>
     <h3 class="how-h">{{ t.climate_admin.how_bathrooms_title }}</h3>
@@ -106,258 +441,6 @@
     <p class="hint-text">{{ t.climate_admin.how_data }}</p>
     <h3 class="how-h">{{ t.climate_admin.how_diagnostic_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
-  </details>
-
-  <!-- System-wide override, not per-zone - see
-       services/thermostat.py's ScheduleStore.get_diagnostic_mode().
-       Deliberately its own always-visible section (not tucked into a
-       <details>, unlike the one-time setup sections below): whether
-       this is on changes what every valve state on this whole page
-       actually means, so it can't be something a technician has to
-       remember to expand first. -->
-  <div class="section-head">
-    <h2>{{ t.climate_admin.diagnostic_heading }}</h2>
-  </div>
-  <p class="hint-text">{{ t.climate_admin.diagnostic_note }}</p>
-  <label class="admin-checkbox admin-diagnostic-toggle">
-    <input type="checkbox" id="diagnostic-mode-toggle" onchange="onDiagnosticModeToggle(this)">
-    <span id="diagnostic-mode-toggle-label">{{ t.climate_admin.diagnostic_toggle_label }}</span>
-  </label>
-  <p class="admin-mode-exclusion" id="diagnostic-mode-banner" hidden>{{ t.climate_admin.diagnostic_active_banner }}</p>
-  <div id="diagnostic-valves"></div>
-
-  <div class="section-head" id="zones">
-    <h2>{{ t.climate_admin.zones_heading }}</h2>
-    <div class="toolbar">
-      <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
-    </div>
-  </div>
-  <p class="hint-text">{{ t.climate_admin.zones_note }}</p>
-  <p class="hint-text" id="zones-fresh-note" hidden>{{ t.climate_admin.zones_fresh_note }}</p>
-  <!-- Each zone's config form and live status live in one card (see
-       zoneFormHtml() in climate_admin.js) - editing a device id and
-       seeing whether it's actually reporting happen in the same place,
-       no scrolling between a config section and a separate status
-       section to correlate the two. -->
-  <div id="zone-forms"></div>
-
-  <button class="tbtn open" id="save-btn" onclick="saveMap(this)">{{ t.climate_admin.save_button }}</button>
-  <p class="hint-text" id="save-result"></p>
-
-  <!-- Broker connection and the two extra switches are one-time,
-       rarely-touched setup, not part of the "swap a sensor" loop the
-       zone cards above are built for - native <details> keeps them one
-       click away without competing for attention with what's actually
-       being debugged most of the time. -->
-  <details class="admin-details">
-    <summary>
-      {{ t.climate_admin.broker_heading }}
-      <span id="broker-status" class="admin-broker-status"></span>
-    </summary>
-    <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
-    <div class="admin-zone-card" id="broker-form">
-      <div class="admin-field">
-        <label>{{ t.climate_admin.broker_host_label }}</label>
-        <input type="text" id="broker-host" placeholder="localhost">
-      </div>
-      <div class="admin-field">
-        <label>{{ t.climate_admin.broker_port_label }}</label>
-        <input type="number" id="broker-port" placeholder="1883">
-      </div>
-      <div class="admin-field">
-        <label>{{ t.climate_admin.broker_username_label }}</label>
-        <input type="text" id="broker-username" placeholder="{{ t.climate_admin.broker_optional }}">
-      </div>
-      <label class="admin-checkbox">
-        <input type="checkbox" id="broker-change-password" onchange="onChangePasswordToggle(this)">
-        <span id="broker-password-toggle-label">{{ t.climate_admin.broker_set_password_label }}</span>
-      </label>
-      <div class="admin-field" id="broker-password-field" hidden>
-        <label>{{ t.climate_admin.broker_password_label }}</label>
-        <input type="password" id="broker-password" autocomplete="new-password">
-      </div>
-      <div class="toolbar">
-        <button class="range-btn" onclick="testBroker(this)">{{ t.climate_admin.broker_test_button }}</button>
-        <button class="tbtn open" onclick="saveBroker(this)">{{ t.climate_admin.broker_save_button }}</button>
-      </div>
-      <p class="hint-text" id="broker-test-result"></p>
-      <p class="hint-text" id="broker-save-result"></p>
-    </div>
-  </details>
-
-  <details class="admin-details" id="extra-switches">
-    <summary>{{ t.climate_admin.extra_switches_heading }}</summary>
-    <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
-    <div class="admin-zone-card" id="extra-switch-form">
-      <div class="admin-field">
-        <label>{{ t.climate_admin.extra_bypass_valve_label }}</label>
-        <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
-      </div>
-      <div class="admin-field">
-        <label>{{ t.climate_admin.extra_dehumidifier_label }}</label>
-        <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
-      </div>
-    </div>
-    <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches(this)">{{ t.climate_admin.save_button }}</button>
-    <p class="hint-text" id="save-extra-result"></p>
-  </details>
-
-  <details class="admin-details" id="extra-sensor">
-    <summary>{{ t.climate_admin.extra_sensor_heading }}</summary>
-    <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
-    <div class="admin-zone-card" id="extra-sensor-form">
-      <div class="admin-field">
-        <label>{{ t.climate_admin.extra_role_mode_label }}</label>
-        <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
-          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
-          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
-          <option value="none">{{ t.climate_admin.mode_none }}</option>
-        </select>
-      </div>
-      <div class="admin-field" id="extra-outdoor-sensor-id-field">
-        <label>{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
-        <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
-      </div>
-    </div>
-    <button class="tbtn open" id="save-extra-sensor-btn" onclick="saveExtraSensor(this)">{{ t.climate_admin.save_button }}</button>
-    <p class="hint-text" id="save-extra-sensor-result"></p>
-    <div class="admin-zone-status" id="extra-sensor-status"></div>
-  </details>
-
-  <details class="admin-details" id="vmc">
-    <summary>{{ t.climate_admin.vmc_heading }}</summary>
-    <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
-    <div class="admin-zone-card" id="vmc-form">
-      <div class="admin-field">
-        <label>{{ t.climate_admin.extra_role_mode_label }}</label>
-        <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
-          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
-          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
-          <option value="none">{{ t.climate_admin.mode_none }}</option>
-        </select>
-      </div>
-      <div class="admin-field" id="extra-vmc-id-field">
-        <label>{{ t.climate_admin.vmc_label }}</label>
-        <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
-      </div>
-      <p class="hint-text" id="vmc-suggestion" hidden></p>
-    </div>
-    <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_button }}</button>
-    <p class="hint-text" id="save-vmc-result"></p>
-    <div class="admin-zone-status" id="vmc-status"></div>
-
-    <!-- The day/night program lives on the dashboard, with the VMC's own
-         speed buttons: it's a daily control, not installation config. -->
-    <p class="hint-text">{{ t.climate_admin.vmc_program_moved }}</p>
-  </details>
-
-  <!-- Clear / reset / backup - see static/climate_admin.js's maintenance
-       section and services/maintenance.py. Collapsed: rarely needed, and
-       every action behind it is destructive. -->
-  <!-- Thermostat tuning, history limits and language - changed here
-       instead of in config.yaml; see services/panel_settings.py. -->
-  <details class="admin-details" id="settings">
-    <summary>{{ t.climate_admin.settings_heading }} <span id="settings-status" class="admin-broker-status"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.settings_note }}</p>
-    <div class="admin-zone-card settings-grid" id="settings-form"></div>
-    <div class="toolbar">
-      <button class="tbtn open" onclick="saveSettings(this)">{{ t.climate_admin.settings_save }}</button>
-      <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
-    </div>
-    <p class="hint-text" id="settings-result"></p>
-  </details>
-
-  <details class="admin-details admin-danger" id="maintenance">
-    <summary>{{ t.climate_admin.maint_heading }}</summary>
-    <p class="hint-text">{{ t.climate_admin.maint_note }}</p>
-    <div class="maint-row">
-      <div class="maint-text">
-        <strong>{{ t.climate_admin.maint_backup_title }}</strong>
-        <span class="hint-text">{{ t.climate_admin.maint_backup_note }}</span>
-        <span class="hint-text" id="maintenance-backups"></span>
-      </div>
-      <a class="tbtn open maint-download" href="/api/climate-admin/maintenance/backup.zip" download>{{ t.climate_admin.maint_backup_button }}</a>
-    </div>
-      <div class="maint-row" id="maint-row-clear-history">
-        <div class="maint-text">
-          <strong>{{ t.climate_admin.maint_history_title }}</strong>
-          <span class="hint-text">{{ t.climate_admin.maint_history_note }}</span>
-        </div>
-        <button class="tbtn close" onclick="askMaintenance('clear-history')">{{ t.climate_admin.maint_history_button }}</button>
-        <div class="maint-confirm" id="maint-confirm-clear-history" hidden>
-          <label>{{ t.climate_admin.maint_type_reset }}</label>
-          <input type="text" id="maint-input-clear-history" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                 placeholder="RESET" oninput="onMaintenanceInput('clear-history', this)">
-          <button class="tbtn close" id="maint-go-clear-history" disabled onclick="runMaintenance('clear-history', this)">{{ t.climate_admin.maint_confirm_button }}</button>
-          <button class="range-btn" onclick="cancelMaintenance('clear-history')">{{ t.climate_admin.maint_cancel_button }}</button>
-        </div>
-      </div>
-      <div class="maint-row" id="maint-row-clear-schedules">
-        <div class="maint-text">
-          <strong>{{ t.climate_admin.maint_schedules_title }}</strong>
-          <span class="hint-text">{{ t.climate_admin.maint_schedules_note }}</span>
-        </div>
-        <button class="tbtn close" onclick="askMaintenance('clear-schedules')">{{ t.climate_admin.maint_schedules_button }}</button>
-        <div class="maint-confirm" id="maint-confirm-clear-schedules" hidden>
-          <label>{{ t.climate_admin.maint_type_reset }}</label>
-          <input type="text" id="maint-input-clear-schedules" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                 placeholder="RESET" oninput="onMaintenanceInput('clear-schedules', this)">
-          <button class="tbtn close" id="maint-go-clear-schedules" disabled onclick="runMaintenance('clear-schedules', this)">{{ t.climate_admin.maint_confirm_button }}</button>
-          <button class="range-btn" onclick="cancelMaintenance('clear-schedules')">{{ t.climate_admin.maint_cancel_button }}</button>
-        </div>
-      </div>
-      <div class="maint-row" id="maint-row-factory-reset">
-        <div class="maint-text">
-          <strong>{{ t.climate_admin.maint_reset_title }}</strong>
-          <span class="hint-text">{{ t.climate_admin.maint_reset_note }}</span>
-        </div>
-        <button class="tbtn close" onclick="askMaintenance('factory-reset')">{{ t.climate_admin.maint_reset_button }}</button>
-        <div class="maint-confirm" id="maint-confirm-factory-reset" hidden>
-          <label>{{ t.climate_admin.maint_type_reset }}</label>
-          <input type="text" id="maint-input-factory-reset" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                 placeholder="RESET" oninput="onMaintenanceInput('factory-reset', this)">
-          <button class="tbtn close" id="maint-go-factory-reset" disabled onclick="runMaintenance('factory-reset', this)">{{ t.climate_admin.maint_confirm_button }}</button>
-          <button class="range-btn" onclick="cancelMaintenance('factory-reset')">{{ t.climate_admin.maint_cancel_button }}</button>
-        </div>
-      </div>
-    <p class="hint-text" id="maintenance-result"></p>
-  </details>
-
-  <!-- What the UNO Q's LED matrix is showing and what every picture
-       on it means - for whoever will stand in front of the box. The
-       legend is drawn by the server with the same code that drives the
-       LEDs (services/led_matrix.py), so the two can't drift apart. -->
-  <details class="admin-details" id="led-matrix">
-    <summary>{{ t.climate_admin.led_heading }} <span id="led-matrix-summary" class="admin-broker-status"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.led_note }}</p>
-    <p class="hint-text" id="led-matrix-status"></p>
-    <div class="led-live">
-      <div id="led-matrix-mirror"></div>
-      <div>
-        <p class="led-live-label">{{ t.climate_admin.led_live_label }}</p>
-        <p id="led-matrix-now"></p>
-      </div>
-    </div>
-    <h3 class="admin-subheading">{{ t.climate_admin.led_legend_heading }}</h3>
-    <div class="led-legend" id="led-matrix-legend"></div>
-    <h3 class="admin-subheading">{{ t.climate_admin.led_codes_heading }}</h3>
-    <div class="led-codes" id="led-matrix-codes"></div>
-  </details>
-
-  <!-- Open by default: this is what someone diagnosing the board came
-       for. Not one-time setup like the collapsed sections above it. -->
-  <details class="admin-details" id="system-status" open>
-    <summary>
-      {{ t.climate_admin.system_heading }}
-      <span id="system-status-summary" class="admin-broker-status"></span>
-    </summary>
-    <!-- Only shown when something is wrong with the installation itself
-         (a driver that didn't load, a device gone quiet, a stalled loop,
-         a full disk) - see GET /api/system-status. The section's header
-         shows the count even while it's collapsed. -->
-    <div class="admin-problems" id="system-problems" hidden></div>
-    <p class="hint-text">{{ t.climate_admin.system_note }}</p>
-    <div id="system-status-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
   </details>
 
   <script>
