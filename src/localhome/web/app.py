@@ -351,6 +351,17 @@ def _valve_driver(manager: DeviceManager, link) -> dict | None:
     return {"name": link.leader, "ok": bool(reading.get("ok")), "on": bool(reading.get("ok") and reading.get("is_on"))}
 
 
+AWAY_MAX_HOURS = 24 * 366
+
+
+def _json_body() -> dict:
+    """The request's JSON body when it's an object, else an empty one. A
+    body that parses but isn't an object (a bare number, a string) used to
+    reach `.get()` in every POST route and come back as a 500."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 def _set_roles(roles: dict) -> dict:
     """Only the roles that have a device id - a saved `{"x": null}` and
     nothing saved at all build the same drivers, so a cleared field isn't
@@ -692,7 +703,7 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/covers/<name>/position", methods=["POST"])
     def api_cover_position(name):
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         if "percent" not in data:
             return jsonify(ok=False, error="missing 'percent' parameter"), 400
         manager: DeviceManager = app.config["MANAGER"]
@@ -733,7 +744,7 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/sensors/<name>/set-value", methods=["POST"])
     def api_sensor_set_value(name):
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         if "value" not in data:
             return jsonify(ok=False, error="missing 'value' parameter"), 400
         manager: DeviceManager = app.config["MANAGER"]
@@ -760,7 +771,7 @@ def _register_routes(app: Flask) -> None:
     def api_vmc_schedule_save():
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
         try:
-            schedule = vmc.store.set(request.get_json(silent=True) or {})
+            schedule = vmc.store.set(_json_body())
         except ValueError as exc:
             return jsonify(ok=False, error=str(exc)), 400
         # Applied straight away, so saving is the whole action - no
@@ -864,7 +875,7 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         mode = data.get("mode")
         if mode not in ("heat", "cool"):
             return jsonify(ok=False, error="mode must be 'heat' or 'cool'"), 400
@@ -885,10 +896,12 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         hours = data.get("hours")
-        if not isinstance(hours, (int, float)) or hours <= 0:
-            return jsonify(ok=False, error="hours must be a positive number"), 400
+        # Up to a year: beyond that the date overflows (a 500), and no
+        # absence the dashboard offers comes anywhere near it.
+        if not isinstance(hours, (int, float)) or isinstance(hours, bool) or not 0 < hours <= AWAY_MAX_HOURS:
+            return jsonify(ok=False, error=f"hours must be a number between 0 and {AWAY_MAX_HOURS}"), 400
         until = datetime.now() + timedelta(hours=hours)
         thermostat.schedule_store.set_away_until(until)
         thermostat.tick()
@@ -908,7 +921,7 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         enabled = data.get("enabled")
         if not isinstance(enabled, bool):
             return jsonify(ok=False, error="'enabled' must be true or false"), 400
@@ -951,7 +964,7 @@ def _register_routes(app: Flask) -> None:
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return jsonify(ok=False, error="no thermostat configured"), 404
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         week = data.get("week")
         if not isinstance(week, dict):
             return jsonify(ok=False, error="missing 'week'"), 400
@@ -1026,7 +1039,7 @@ def _register_routes(app: Flask) -> None:
         # process start.
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         broker_file = config.resolve("mqtt_broker.json")
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         try:
             set_broker(
                 broker_file,
@@ -1045,7 +1058,7 @@ def _register_routes(app: Flask) -> None:
         # Tests whatever the operator just typed, before it's saved -
         # same probe as broker-status above (services/mqtt_broker_status.py),
         # just against unsaved values instead of the file on disk.
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         host, port = data.get("host"), data.get("port")
         if not isinstance(host, str) or not host.strip() or not isinstance(port, int) or isinstance(port, bool):
             return jsonify(ok=False, error="host and port are required"), 400
@@ -1076,7 +1089,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/map", methods=["POST"])
     def api_climate_admin_set_map():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         zones = data.get("zones")
         if not isinstance(zones, list):
             return jsonify(ok=False, error="missing 'zones'"), 400
@@ -1106,7 +1119,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/extra-switches", methods=["POST"])
     def api_climate_admin_set_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         extra_switches = {key: data.get(key) for key in EXTRA_SWITCH_FIELDS}
         try:
             climate_map.set_extra_switches(extra_switches)
@@ -1127,7 +1140,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/extra-sensors", methods=["POST"])
     def api_climate_admin_set_extra_sensors():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         extra_sensors = {key: data.get(key) for key in EXTRA_SENSOR_FIELDS}
         if data.get(OUTDOOR_MODE_KEY) is not None:
             extra_sensors[OUTDOOR_MODE_KEY] = data[OUTDOOR_MODE_KEY]
@@ -1162,7 +1175,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/extra-dimmers", methods=["POST"])
     def api_climate_admin_set_extra_dimmers():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         extra_dimmers = {key: data.get(key) for key in EXTRA_DIMMER_FIELDS}
         if data.get(VMC_MODE_KEY) is not None:
             extra_dimmers[VMC_MODE_KEY] = data[VMC_MODE_KEY]
@@ -1212,7 +1225,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/climate-admin/settings", methods=["POST"])
     def api_panel_settings_set():
         store: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         try:
             saved = store.set(data.get("values") or {})
         except ValueError as exc:
@@ -1226,7 +1239,7 @@ def _register_routes(app: Flask) -> None:
     # backup on the board first - see services/maintenance.py.
 
     def _confirmed() -> bool:
-        return (request.get_json(silent=True) or {}).get("confirm") == "RESET"
+        return (_json_body()).get("confirm") == "RESET"
 
     @app.route("/api/climate-admin/maintenance")
     def api_maintenance_info():
@@ -1298,7 +1311,7 @@ def _register_routes(app: Flask) -> None:
         if thermostat and thermostat.schedule_store.get_diagnostic_mode():
             return jsonify(ok=False, error="diagnostic mode is active - turn it off to let the thermostat react to a manual value"), 409
 
-        data = request.get_json(silent=True) or {}
+        data = _json_body()
         if "temperature_c" not in data:
             return jsonify(ok=False, error="missing 'temperature_c'"), 400
         try:
