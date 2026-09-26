@@ -19,3 +19,18 @@ jobs:
       # optional for users - GPL, see THIRD_PARTY_NOTICES.md).
       - run: pip install -e ".[dev,tplink]"
       - run: pytest
+
+  # The browser tests (tests/ui): a real LocalHome started from a throwaway
+  # config, driven by a real Chromium - the pages at phone and desktop
+  # widths, names that would break careless HTML, two phones on one
+  # schedule. Left out of the job above (`pytest` skips the `ui` marker).
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,ui]"
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest -m ui

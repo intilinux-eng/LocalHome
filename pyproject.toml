@@ -26,6 +26,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# The browser tests (tests/ui, `pytest -m ui`) - also needs
+# `python -m playwright install chromium` once.
+ui = ["playwright>=1.40"]
 # GPL-3.0-or-later, unlike every other dependency here - opt-in on
 # purpose, see THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically
 tplink = ["python-kasa>=0.7"]
@@ -42,3 +45,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The browser tests need Playwright and a Chromium and take a minute or
+# two: left out of a plain `pytest`, run with `pytest -m ui`.
+addopts = "-m 'not ui'"
+markers = ["ui: drives a real browser against a real server (tests/ui)"]

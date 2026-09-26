@@ -88,3 +88,20 @@ too - just add `[dev]` to the `pip install -e .` you already ran.)
 
 Tests must not require real hardware or real cloud credentials - mock or
 construct fake driver instances instead (see `tests/` for examples).
+
+### Browser tests
+
+`tests/ui` drives the real pages in a real Chromium, against a LocalHome
+it starts itself from a throwaway config (simulated devices only, two
+zones named to break careless HTML). A plain `pytest` leaves them out;
+they take a minute or two:
+
+```bash
+pip install -e ".[dev,ui]"
+python -m playwright install chromium    # once
+pytest -m ui
+```
+
+CI runs them as their own job (`.github/workflows/tests.yml`). A change
+to a page - `templates/`, `static/`, the locale files - should keep them
+green, and a bug found by hand in a browser is worth one there.
