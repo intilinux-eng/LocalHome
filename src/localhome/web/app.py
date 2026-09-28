@@ -331,6 +331,9 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["COVER_READS"] = {}
     # Whether the Shellys still reach the board - see system_status.LanWatch.
     app.config["LAN_WATCH"] = system_status.LanWatch()
+    # The eMMC's writes over the last hour - see system_status.WriteRate.
+    app.config["WRITE_RATE"] = system_status.WriteRate()
+    app.config["WRITE_RATE"].start()
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
@@ -466,7 +469,8 @@ def _health(app: Flask) -> dict:
     failed = manager.failed_integrations
     disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
     host = system_status.host_stats()
-    storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
+    storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"),
+                                           recent=app.config["WRITE_RATE"].per_day())
     network = system_status.network_status()
     protections = system_status.board_protections()
     return {

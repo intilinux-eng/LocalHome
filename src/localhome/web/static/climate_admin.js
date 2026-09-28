@@ -1405,7 +1405,9 @@ function systemStatusHtml(data) {
           }),
           data.storage.pre_eol !== "normal"),
         statRowHtml(tr("climate_admin.system_emmc_writes"),
-          data.storage.written_per_day_bytes == null ? "--" : tr("climate_admin.system_emmc_per_day", { amount: formatBytes(data.storage.written_per_day_bytes) })),
+          data.storage.written_per_day_bytes == null ? "--"
+            : tr(data.storage.written_per_day_basis === "recent" ? "climate_admin.system_emmc_per_day_recent" : "climate_admin.system_emmc_per_day",
+              { amount: formatBytes(data.storage.written_per_day_bytes), minutes: data.storage.per_day_minutes })),
       ] : []),
     ].join("")],
     [tr("climate_admin.system_group_network"), networkRows(data.network)],

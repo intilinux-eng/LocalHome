@@ -362,7 +362,61 @@ def _read(path: str) -> str | None:
         return None
 
 
-def storage_health(sys_root: str = "/sys", proc_root: str = "/proc", uptime_seconds: float | None = None) -> dict | None:
+def emmc_written_bytes(proc_root: str = "/proc") -> int | None:
+    """Bytes written to the board's eMMC since boot (/proc/diskstats)."""
+    for line in (_read(os.path.join(proc_root, "diskstats")) or "").splitlines():
+        fields = line.split()
+        if len(fields) > 9 and re.fullmatch(r"mmcblk\d+", fields[2]):
+            return int(fields[9]) * 512
+    return None
+
+
+class WriteRate:
+    """The eMMC's writes over the last hour. The average since boot looked
+    alarming right after a restart or an update - 1.3 GB/day, 38 minutes
+    in, on a board writing 0.26 - so it's sampled every 5 minutes, one
+    number read from /proc, and the last hour's rate is what's shown."""
+
+    WINDOW = 3600
+    MIN_SPAN = 600          # less than 10 minutes of samples: not a rate yet
+
+    def __init__(self, read=emmc_written_bytes, clock=time.monotonic):
+        self.read = read
+        self.clock = clock
+        self.samples: list[tuple[float, int]] = []
+
+    def sample(self) -> None:
+        written = self.read()
+        if written is None:
+            return
+        now = self.clock()
+        if self.samples and written < self.samples[-1][1]:
+            self.samples = []          # the counter went back: a reboot
+        self.samples.append((now, written))
+        self.samples = [s for s in self.samples if now - s[0] <= self.WINDOW]
+
+    def per_day(self) -> tuple[int, int] | None:
+        """(bytes per day, minutes measured) over the window, or None."""
+        if len(self.samples) < 2:
+            return None
+        (t0, w0), (t1, w1) = self.samples[0], self.samples[-1]
+        if t1 - t0 < self.MIN_SPAN:
+            return None
+        return round((w1 - w0) / (t1 - t0) * 86400), round((t1 - t0) / 60)
+
+    def start(self, every: float = 300) -> None:
+        def loop():
+            while True:
+                try:
+                    self.sample()
+                except Exception:
+                    pass
+                time.sleep(every)
+        threading.Thread(target=loop, daemon=True, name="emmc-write-rate").start()
+
+
+def storage_health(sys_root: str = "/sys", proc_root: str = "/proc", uptime_seconds: float | None = None,
+                   recent: tuple[int, int] | None = None) -> dict | None:
     """The board's eMMC as it reports itself: wear in 10% steps (JEDEC
     DEVICE_LIFE_TIME_EST, the worse of its two estimates), whether it
     has entered its reserve blocks (PRE_EOL_INFO), and how much has been
@@ -389,15 +443,12 @@ def storage_health(sys_root: str = "/sys", proc_root: str = "/proc", uptime_seco
             except ValueError:
                 continue
             worst = max(steps) if steps else 0
-            written = None
-            for line in (_read(os.path.join(proc_root, "diskstats")) or "").splitlines():
-                fields = line.split()
-                if len(fields) > 9 and re.fullmatch(r"mmcblk\d+", fields[2]):
-                    written = int(fields[9]) * 512
-                    break
-            per_day = None
-            if written is not None and uptime_seconds:
-                per_day = round(written / uptime_seconds * 86400)
+            written = emmc_written_bytes(proc_root)
+            per_day, basis, minutes = None, None, None
+            if recent is not None:
+                (per_day, minutes), basis = recent, "recent"
+            elif written is not None and uptime_seconds:
+                per_day, basis = round(written / uptime_seconds * 86400), "since_boot"
             return {
                 "name": _read(os.path.join(base, "name")),
                 # 0x01 = 0-10% used ... 0x0A = 90-100%, 0x0B = past its rated life
@@ -405,6 +456,10 @@ def storage_health(sys_root: str = "/sys", proc_root: str = "/proc", uptime_seco
                 "pre_eol": {1: "normal", 2: "warning", 3: "urgent"}.get(pre_eol, "unknown"),
                 "written_since_boot_bytes": written,
                 "written_per_day_bytes": per_day,
+                # "recent": over the last `per_day_minutes` (up to an hour);
+                # "since_boot": the first minutes after a boot, start-up included.
+                "written_per_day_basis": basis,
+                "per_day_minutes": minutes,
             }
     return None
 

@@ -435,3 +435,23 @@ def test_the_page_gets_the_boot_time_on_the_corrected_clock(tmp_path, monkeypatc
         assert abs(data["booted_at"] - (time.time() - 780)) <= 2
     finally:
         app.config["HISTORY"].close()
+
+
+def test_the_write_rate_is_the_last_hours_not_since_boot():
+    clock = {"t": 0.0}
+    written = {"b": 0}
+    rate = system_status.WriteRate(read=lambda: written["b"], clock=lambda: clock["t"])
+    rate.sample()
+    assert rate.per_day() is None
+    written["b"], clock["t"] = 500_000_000, 60        # the start-up burst
+    rate.sample()
+    assert rate.per_day() is None, "less than 10 minutes measured"
+    for minute in range(5, 125, 5):                    # then 1 MB every 5 min
+        clock["t"] = 60 + minute * 60
+        written["b"] += 1_000_000
+        rate.sample()
+    per_day, minutes = rate.per_day()
+    assert minutes == 60 and 250_000_000 < per_day < 300_000_000, "the burst is out of the window"
+    written["b"] = 10                                   # a reboot resets the counter
+    rate.sample()
+    assert rate.per_day() is None

@@ -364,7 +364,7 @@
     "system_emmc_urgent": "{wear} - nearly worn out",
     "system_emmc_unknown": "{wear}",
     "system_emmc_writes": "eMMC writes",
-    "system_emmc_per_day": "{amount} a day (average since boot)",
+    "system_emmc_per_day": "{amount} a day (since boot: only minutes yet, start-up included)",
     "system_problem_storage_wear": "{subject} storage worn: plan a replacement",
     "system_cpu_temp": "CPU temperature",
     "system_problem_cpu_hot": "CPU running hot ({subject}): check the board's airflow and placement",
@@ -653,7 +653,8 @@
     "how_network": "The board stays on the Wi-Fi day and night: power saving is off, it never stops trying to connect, and a watchdog checks every minute that the router answers - when it doesn't, it reconnects the Wi-Fi (3 minutes), restarts the network manager (10), tries again (20) and finally reboots the board (30, at most every 6 hours). All it does goes in the Watchdog history, under System status. The page and the Shellys use the board's name (name.local), not its address: when the router hands out new addresses nothing changes.",
     "how_network_router": "One thing the board can't see by itself: the router answering it but no longer passing it the other devices' connections. It happened on the home board: pings got through, the page and the sensors didn't, until the router was restarted. When the Shellys all stop arriving at once while the Wi-Fi is connected, LocalHome says so here in System status and with RT on the LED matrix, and the watchdog reconnects the Wi-Fi; if that's not enough, restart the router. To prevent it: in the router, 5 GHz on a fixed channel between 36 and 48 (channels 52-144 are \"radar\" ones the router may leave by itself), the board and the Shellys on the main network, never the guest one, and a fixed address for the board if possible. If the page won't open but the LED matrix draws normally, the board is fine: it's the network.",
     "wd_lan_silent": "No Shelly connected for {a} min although the router answers: Wi-Fi reconnected (if that's not enough, restart the router)",
-    "wd_lan_back": "The Shellys reach the board again"
+    "wd_lan_back": "The Shellys reach the board again",
+    "system_emmc_per_day_recent": "{amount} a day (last {minutes} min)"
   },
   "vmc_presets": {
     "night": "Night",

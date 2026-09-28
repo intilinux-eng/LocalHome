@@ -364,7 +364,7 @@
     "system_emmc_urgent": "{wear} - quasi esaurita",
     "system_emmc_unknown": "{wear}",
     "system_emmc_writes": "Scritture eMMC",
-    "system_emmc_per_day": "{amount} al giorno (media dall'avvio)",
+    "system_emmc_per_day": "{amount} al giorno (dall'avvio: ancora pochi minuti, avvio compreso)",
     "system_problem_storage_wear": "Memoria {subject} consumata: pianifica la sostituzione",
     "system_cpu_temp": "Temperatura CPU",
     "system_problem_cpu_hot": "CPU molto calda ({subject}): controlla ventilazione e posizione della scheda",
@@ -653,7 +653,8 @@
     "how_network": "La scheda resta sul Wi-Fi giorno e notte: il risparmio energetico è spento, non smette mai di riprovare a collegarsi, e un watchdog controlla ogni minuto che il router risponda - se non risponde ricollega il Wi-Fi (3 minuti), riavvia la gestione di rete (10), riprova (20) e alla fine riavvia la scheda (30, al massimo ogni 6 ore). Tutto quello che fa finisce nello Storico watchdog, sotto Stato sistema. Pagina e Shelly usano il nome della scheda (nome.local), non l'indirizzo: se il router cambia gli indirizzi non cambia niente.",
     "how_network_router": "Una cosa la scheda da sola non può vedere: il router che risponde a lei ma smette di passarle le connessioni degli altri dispositivi. È successo sulla scheda di casa: il ping passava, la pagina e i sensori no, finché il router non è stato riavviato. Quando gli Shelly smettono tutti insieme di arrivare mentre il Wi-Fi è collegato, LocalHome lo segnala qui in Stato sistema e con RT sulla matrice LED, e il watchdog ricollega il Wi-Fi; se non basta, riavviate il router. Per prevenirlo: nel router il 5 GHz su un canale fisso tra 36 e 48 (i canali 52-144 sono \"radar\" e il router può cambiarli da solo), la scheda e gli Shelly sulla rete principale e mai su quella ospiti, e se possibile un indirizzo fisso per la scheda. Se la pagina non si apre ma la matrice LED disegna normalmente, la scheda sta bene: è la rete.",
     "wd_lan_silent": "Nessuno Shelly collegato da {a} min anche se il router risponde: ricollegato il Wi-Fi (se non basta, riavviare il router)",
-    "wd_lan_back": "Gli Shelly raggiungono di nuovo la scheda"
+    "wd_lan_back": "Gli Shelly raggiungono di nuovo la scheda",
+    "system_emmc_per_day_recent": "{amount} al giorno (ultimi {minutes} min)"
   },
   "vmc_presets": {
     "night": "Notte",
