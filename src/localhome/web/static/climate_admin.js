@@ -1321,6 +1321,16 @@ function bootsHtml(boots) {
 
 // What deploy/tune-board.sh sets up for running all year on Wi-Fi - on,
 // missing, or not applicable on this board. Null off a board (a PC).
+// The 5-minute load average as a share of the board's processors, in
+// words: "1.2 / 0.9 / 0.7 (4 CPU)" meant nothing to most people. At or
+// past 100% there's more work than the processors keep up with.
+function loadRowHtml(h) {
+  if (!h.load_average || !h.cpu_count) return statRowHtml(tr("climate_admin.system_load"), "--");
+  const percent = Math.round(h.load_average[1] / h.cpu_count * 100);
+  const level = percent >= 100 ? "high" : percent >= 50 ? "medium" : "low";
+  return statRowHtml(tr("climate_admin.system_load"), tr(`climate_admin.system_load_${level}`, { percent }), level === "high");
+}
+
 function protectionRows(protections) {
   if (!protections) return "";
   return Object.entries(protections.items).map(([key, on]) => statRowHtml(
@@ -1391,7 +1401,7 @@ function systemStatusHtml(data) {
       statRowHtml(tr("climate_admin.system_host_ram"), freeOf(h.mem_available_bytes, h.mem_total_bytes)),
       statRowHtml(tr("climate_admin.system_cpu_temp"),
         typeof h.cpu_temp_c === "number" ? `${h.cpu_temp_c.toFixed(0)}°C` : "--", h.cpu_temp_c >= 80),
-      statRowHtml(tr("climate_admin.system_load"), h.load_average ? `${h.load_average.join(" / ")} (${h.cpu_count} CPU)` : "--"),
+      loadRowHtml(h),
       statRowHtml(tr("climate_admin.system_last_boot"), sinceText(h.booted_at, h.uptime_seconds)),
       statRowHtml(tr("climate_admin.system_clock"),
         h.clock_synced == null ? "--" : tr(h.clock_synced ? "climate_admin.system_clock_ok" : "climate_admin.system_clock_bad"),
@@ -1404,10 +1414,13 @@ function systemStatusHtml(data) {
             wear: data.storage.wear_percent_max == null ? "?" : `${Math.max(0, data.storage.wear_percent_max - 10)}-${data.storage.wear_percent_max}%`,
           }),
           data.storage.pre_eol !== "normal"),
+        // Only the last hour's rate: an average since boot is mostly the
+        // start-up's own writes, projected over a whole day.
         statRowHtml(tr("climate_admin.system_emmc_writes"),
-          data.storage.written_per_day_bytes == null ? "--"
-            : tr(data.storage.written_per_day_basis === "recent" ? "climate_admin.system_emmc_per_day_recent" : "climate_admin.system_emmc_per_day",
-              { amount: formatBytes(data.storage.written_per_day_bytes), minutes: data.storage.per_day_minutes })),
+          data.storage.written_per_day_basis === "recent"
+            ? tr("climate_admin.system_emmc_per_day_recent",
+              { amount: formatBytes(data.storage.written_per_day_bytes), minutes: data.storage.per_day_minutes })
+            : tr("climate_admin.system_emmc_measuring")),
       ] : []),
     ].join("")],
     [tr("climate_admin.system_group_network"), networkRows(data.network)],

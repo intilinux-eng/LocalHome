@@ -347,7 +347,7 @@
     "system_loop_ago": "{age} ago (every {every})",
     "system_loop_never": "not completed yet",
     "system_host_ram": "Memory",
-    "system_load": "Load 1/5/15 min",
+    "system_load": "Processor use",
     "system_disk": "Disk",
     "system_free_of": "{free} free of {total}",
     "system_db_size": "Database size",
@@ -380,7 +380,6 @@
     "system_emmc_urgent": "{wear} - nearly worn out",
     "system_emmc_unknown": "{wear}",
     "system_emmc_writes": "eMMC writes",
-    "system_emmc_per_day": "{amount} a day (since boot: only minutes yet, start-up included)",
     "system_problem_storage_wear": "{subject} storage worn: plan a replacement",
     "system_cpu_temp": "CPU temperature",
     "system_problem_cpu_hot": "CPU running hot ({subject}): check the board's airflow and placement",
@@ -670,7 +669,11 @@
     "how_network_router": "One thing the board can't see by itself: the router answering it but no longer passing it the other devices' connections. It happened on the home board: pings got through, the page and the sensors didn't, until the router was restarted. When the Shellys all stop arriving at once while the Wi-Fi is connected, LocalHome says so here in System status and with RT on the LED matrix, and the watchdog reconnects the Wi-Fi; if that's not enough, restart the router. To prevent it: in the router, 5 GHz on a fixed channel between 36 and 48 (channels 52-144 are \"radar\" ones the router may leave by itself), the board and the Shellys on the main network, never the guest one, and a fixed address for the board if possible. If the page won't open but the LED matrix draws normally, the board is fine: it's the network.",
     "wd_lan_silent": "No Shelly connected for {a} min although the router answers: Wi-Fi reconnected (if that's not enough, restart the router)",
     "wd_lan_back": "The Shellys reach the board again",
-    "system_emmc_per_day_recent": "{amount} a day (last {minutes} min)"
+    "system_emmc_per_day_recent": "{amount} a day (last {minutes} min)",
+    "system_load_low": "low ({percent}%)",
+    "system_load_medium": "medium ({percent}%)",
+    "system_load_high": "high ({percent}%) - the board is struggling",
+    "system_emmc_measuring": "measuring - ready 10 minutes after start"
   },
   "vmc_presets": {
     "night": "Night",
