@@ -347,10 +347,10 @@ fit this pattern - see the next section.
 
 Confirmed by hand against a real Shelly 0/1-10V Dimmer Gen3
 (`shelly0110dimg3-XXXXXXXXXXXX`) driving a VMC's 0-10V speed input:
-unlike the H&T sensor's `status/temperature:0`/`status/humidity:0`
-topics (retained, republished in full on every change), this device
-never publishes a retained `status/light:0` topic at all. Its only
-passive signal is `events/rpc`, and those messages are **partial** -
+its `status/light:0` topic is published only when something changes,
+and never retained, so a subscriber that starts later has nothing to
+read until the next change. Its other passive signal, `events/rpc`, is
+**partial** -
 a `NotifyStatus` about the `sys` or `wifi` component is a complete,
 different JSON payload that doesn't mention `light:0`. Caching "the last
 message on this topic" the way `mqtt_json`/`MqttJsonState` does would
