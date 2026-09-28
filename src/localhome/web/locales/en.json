@@ -659,7 +659,7 @@
     "wd_healthy": "LocalHome fine again, no restart needed",
     "wd_restarted": "LocalHome restarted by the watchdog",
     "wd_killed": "LocalHome hung for 2 minutes: restarted by the watchdog",
-    "wd_boot_reconnect": "Wi-Fi reconnected after start-up (precaution)",
+    "wd_boot_reconnect": "Wi-Fi reconnected once after start-up (normal, a precaution)",
     "protection_power_saving_off": "No power saving",
     "protection_services_restart": "Essential services always restarted",
     "system_problem_lan_unreachable": "The Shelly devices haven't reached the board for {subject}, although the board is on and connected to the Wi-Fi: almost certainly the router. Restart the router.",

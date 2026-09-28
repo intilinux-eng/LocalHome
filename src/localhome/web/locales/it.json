@@ -659,7 +659,7 @@
     "wd_healthy": "LocalHome di nuovo a posto, senza riavvio",
     "wd_restarted": "LocalHome riavviato dal watchdog",
     "wd_killed": "LocalHome bloccato da 2 minuti: riavviato dal watchdog",
-    "wd_boot_reconnect": "Wi-Fi riconnesso dopo l'avvio (precauzione)",
+    "wd_boot_reconnect": "Wi-Fi ricollegato una volta dopo l'accensione (normale, per sicurezza)",
     "protection_power_saving_off": "Nessun risparmio energetico",
     "protection_services_restart": "Servizi essenziali sempre riavviati",
     "system_problem_lan_unreachable": "I dispositivi Shelly non raggiungono la scheda da {subject}, anche se la scheda è accesa e collegata al Wi-Fi: quasi certamente il router. Riavviate il router.",
