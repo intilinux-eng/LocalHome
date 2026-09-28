@@ -19,7 +19,7 @@ install` against the system Python:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"     # or: pip install -r requirements.txt
+pip install -e ".[dev]" -c constraints.txt     # or: pip install -r requirements.txt
 ```
 A venv's own `pip` is never "externally managed", so this sidesteps the
 restriction entirely instead of fighting it with `--break-system-packages`

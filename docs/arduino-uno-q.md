@@ -62,7 +62,7 @@ git clone <this-repo> ~/localhome      # or copy the repository over
 cd ~/localhome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
+.venv/bin/pip install -e . -c constraints.txt
 
 # 5. Configuration: climate only, no devices in the file.
 cp config/config.climate.example.yaml config/config.yaml
@@ -190,7 +190,7 @@ Copy the new code to the board (or `git pull`), then:
 
 ```bash
 cd ~/localhome
-.venv/bin/pip install -e .       # always - an update may add a dependency
+.venv/bin/pip install -e . -c constraints.txt   # always - an update may add a dependency
 sudo systemctl restart localhome
 ```
 

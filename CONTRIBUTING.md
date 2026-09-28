@@ -79,12 +79,12 @@ valve/sensor was involved.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev]" -c constraints.txt
 pytest
 ```
 
 (Same venv from the [README](README.md)'s Quick start works fine here
-too - just add `[dev]` to the `pip install -e .` you already ran.)
+too - just add `[dev]` to the `pip install -e . -c constraints.txt` you already ran.)
 
 Tests must not require real hardware or real cloud credentials - mock or
 construct fake driver instances instead (see `tests/` for examples).
@@ -97,7 +97,7 @@ zones named to break careless HTML). A plain `pytest` leaves them out;
 they take a minute or two:
 
 ```bash
-pip install -e ".[dev,ui]"
+pip install -e ".[dev,ui]" -c constraints.txt
 python -m playwright install chromium    # once
 pytest -m ui
 ```

@@ -103,7 +103,7 @@ sudo systemctl restart mosquitto
 
 # 4. LocalHome
 git clone https://github.com/intilinux-eng/LocalHome.git ~/localhome && cd ~/localhome
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e . -c constraints.txt
 
 # 5. An empty configuration - devices are added from the admin panel
 printf 'web:\n  host: "0.0.0.0"\n  port: 5000\n  language: "it"\n\nintegrations: []\n' > config/config.yaml
@@ -140,7 +140,7 @@ devices:
 git clone https://github.com/intilinux-eng/LocalHome.git && cd LocalHome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
+.venv/bin/pip install -e . -c constraints.txt
 
 cp config/config.example.yaml config/config.yaml
 # ...and the *.example.json files you need - see docs/configuration.md

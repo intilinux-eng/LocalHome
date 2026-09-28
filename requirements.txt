@@ -1,11 +1,16 @@
-flask>=3.0
-waitress>=3.0
-tinytuya>=1.13
-aiohttp>=3.9
-meross-iot>=0.4
-requests>=2.31
-PyYAML>=6.0
-paho-mqtt>=2.0
+# The same as `pip install -e .` - pyproject.toml is the one list; this
+# file is for tools that only read requirements files. The versions come
+# from constraints.txt.
+-c constraints.txt
+flask>=3.0,<4
+waitress>=3.0,<4
+tinytuya>=1.13,<2
+aiohttp>=3.9,<4
+meross-iot>=0.4,<0.5
+requests>=2.31,<3
+PyYAML>=6.0,<7
+paho-mqtt>=2.0,<3
+msgpack>=1.0,<2
 # python-kasa (TP-Link Kasa/Tapo) is GPL-3.0-or-later, unlike everything
 # above - opt-in only, add it yourself (or `pip install -e ".[tplink]"`
 # instead of this file) if you're using tplink_led_strip. See

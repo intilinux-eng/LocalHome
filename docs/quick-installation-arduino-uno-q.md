@@ -158,14 +158,14 @@ just works - no remote to configure.
 cd ~/localhome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
+.venv/bin/pip install -e . -c constraints.txt
 ```
 
 78 MB of virtualenv, 108 MB for the whole checkout. The optional TP-Link
 driver is deliberately left out (it is GPL - see
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)); LocalHome logs one
 line about it at startup and carries on. Install it with
-`.venv/bin/pip install -e .[tplink]` if you need Kasa/Tapo devices.
+`.venv/bin/pip install -e .[tplink] -c constraints.txt` if you need Kasa/Tapo devices.
 
 ## 6. An empty configuration
 

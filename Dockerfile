@@ -8,9 +8,10 @@ WORKDIR /app
 # Installing the package itself (not just requirements.txt) is what sets
 # up the `localhome` entry point and bundles templates/static correctly -
 # see pyproject.toml's [tool.setuptools.package-data].
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE constraints.txt ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+# The versions the board runs - see constraints.txt.
+RUN pip install --no-cache-dir . -c constraints.txt
 
 EXPOSE 5000
 ENV LOCALHOME_CONFIG=/app/config/config.yaml

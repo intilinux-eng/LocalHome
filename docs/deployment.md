@@ -72,9 +72,9 @@ git clone <this-repo> ~/localhome
 cd ~/localhome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
+.venv/bin/pip install -e . -c constraints.txt
 #    Some drivers need an optional extra on top - only if you use them,
-#    e.g. TP-Link Kasa devices: .venv/bin/pip install -e .[tplink]
+#    e.g. TP-Link Kasa devices: .venv/bin/pip install -e .[tplink] -c constraints.txt
 #    (GPL-licensed, hence opt-in - see THIRD_PARTY_NOTICES.md). Step 5's
 #    doctor names any extra a configured device is missing.
 
@@ -185,8 +185,8 @@ your PC - always reinstall and restart afterwards:
 
 ```bash
 cd ~/localhome
-.venv/bin/pip install -e .           # picks up new or changed dependencies
-.venv/bin/localhome-cli doctor       # optional sanity check
+.venv/bin/pip install -e . -c constraints.txt   # picks up new or changed dependencies
+.venv/bin/localhome-cli doctor                  # optional sanity check
 sudo systemctl restart localhome
 ```
 
@@ -200,7 +200,26 @@ production web server: one process with several threads, so the
 thermostat and device polling run exactly once. Flask's own `app.run()`
 development server isn't used.
 
-## Tune the board for long unattended running
+### Pinned versions
+
+Every install uses `-c constraints.txt`: the exact version of every
+library, direct or not, that runs on the production board - so a board
+set up next year gets the same Flask, paho-mqtt and aiohttp as the one
+running today, not whatever came out in between. `pyproject.toml` also
+stops each library short of its next major version, for anyone who
+installs without the file.
+
+To move to newer versions, on a PC first:
+
+```bash
+python3 -m venv /tmp/lh-new && /tmp/lh-new/bin/pip install -U -e ".[dev,ui,tplink]"
+/tmp/lh-new/bin/pytest && /tmp/lh-new/bin/pytest -m ui
+/tmp/lh-new/bin/pip freeze --exclude-editable --exclude pip   # the new versions
+```
+
+Copy the versions into `constraints.txt` (its sections and the
+`python_version` markers stay as they are), update a test board with it
+and let it run for a day, then update the others. for long unattended running
 
 **Do this on every new board** (quick start step 7). An Arduino UNO Q
 stores everything on a soldered-in 32 GB eMMC - flash that wears out with
@@ -414,7 +433,7 @@ that does other things besides run LocalHome.
 sudo useradd --system --home /opt/localhome localhome
 sudo git clone <this-repo> /opt/localhome
 cd /opt/localhome
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e . -c constraints.txt
 
 cp config/config.example.yaml config/config.yaml
 # ...edit it and the *.example.json files you need

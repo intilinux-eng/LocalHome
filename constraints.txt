@@ -1,0 +1,72 @@
+# The exact versions LocalHome runs with - every dependency, direct or not.
+#
+# pyproject.toml says what LocalHome needs ("flask>=3.0,<4"); this file
+# says which versions were actually tested together: the ones running on
+# the production board (Arduino UNO Q, Debian 13, Python 3.13) when this
+# was last updated, plus the test tools. Install with it, always:
+#
+#     .venv/bin/pip install -e . -c constraints.txt
+#
+# A constraint only fixes a version; it never installs anything by itself
+# (python-kasa, listed below, still comes only with the `tplink` extra).
+#
+# Updating (see docs/deployment.md#pinned-versions): in a fresh venv,
+# `pip install -U -e ".[dev,ui,tplink]"`, run `pytest` and
+# `pytest -m ui`, try it on a test board, then write the new versions here
+# (`pip freeze`, without pip and localhome itself).
+
+# ------------------------------------------------------------ run time --
+aiodns==4.0.4
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.3
+aiosignal==1.4.0
+attrs==26.1.0
+backports.zstd==1.7.0; python_version < "3.14"
+blinker==1.9.0
+brotli==1.2.0
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+click==8.5.0
+colorama==0.4.6
+cryptography==50.0.1
+Flask==3.1.3
+frozenlist==1.8.0
+idna==3.20
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+mashumaro==3.22
+meross_iot==0.4.10.4
+msgpack==1.2.2
+multidict==6.9.0
+paho-mqtt==2.1.0
+propcache==0.5.4
+pycares==5.0.1
+pycparser==3.0
+pycryptodomex==3.23.0
+PyYAML==6.0.3
+requests==2.34.2
+tinytuya==1.20.0
+typing_extensions==4.16.0
+urllib3==2.8.0
+waitress==3.0.2
+Werkzeug==3.1.8
+yarl==1.25.1
+
+# --------------------------------------------- tplink extra (GPL, opt-in) --
+# Python 3.11 and later only: on 3.10 pip picks an older python-kasa.
+asyncclick==8.4.2.1; python_version >= "3.11"
+python-kasa==0.10.2; python_version >= "3.11"
+# Only on Windows (a dev PC), where python-kasa asks for it.
+tzdata==2026.4; sys_platform == "win32"
+
+# ---------------------------------------------------------------- tests --
+greenlet==3.5.6
+iniconfig==2.3.0
+packaging==26.3
+playwright==1.63.0
+pluggy==1.6.0
+pyee==13.0.1
+Pygments==2.21.0
+pytest==9.1.1

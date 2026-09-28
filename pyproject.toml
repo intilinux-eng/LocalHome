@@ -10,28 +10,31 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 
+# What LocalHome works with, up to the next major version - one that may
+# change what LocalHome relies on (0.x versions: the next minor). The
+# exact versions tested together are in constraints.txt; install with it.
 dependencies = [
-    "flask>=3.0",
-    "waitress>=3.0",
-    "tinytuya>=1.13",
-    "aiohttp>=3.9",
-    "meross-iot>=0.4",
-    "requests>=2.31",
-    "PyYAML>=6.0",
-    "paho-mqtt>=2.0",
+    "flask>=3.0,<4",
+    "waitress>=3.0,<4",
+    "tinytuya>=1.13,<2",
+    "aiohttp>=3.9,<4",
+    "meross-iot>=0.4,<0.5",
+    "requests>=2.31,<3",
+    "PyYAML>=6.0,<7",
+    "paho-mqtt>=2.0,<3",
     # arduino-router (the UNO Q's Linux-to-MCU bridge) speaks msgpack-RPC -
     # for the LED matrix, see services/led_matrix.py.
-    "msgpack>=1.0",
+    "msgpack>=1.0,<2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0,<10"]
 # The browser tests (tests/ui, `pytest -m ui`) - also needs
 # `python -m playwright install chromium` once.
-ui = ["playwright>=1.40"]
+ui = ["playwright>=1.40,<2"]
 # GPL-3.0-or-later, unlike every other dependency here - opt-in on
 # purpose, see THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically
-tplink = ["python-kasa>=0.7"]
+tplink = ["python-kasa>=0.7,<0.11"]
 
 [project.scripts]
 localhome = "localhome.web.app:main"
