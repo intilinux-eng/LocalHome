@@ -440,7 +440,7 @@ def test_the_page_gets_the_boot_time_on_the_corrected_clock(tmp_path, monkeypatc
 def test_the_write_rate_is_the_last_hours_not_since_boot():
     clock = {"t": 0.0}
     written = {"b": 0}
-    rate = system_status.WriteRate(read=lambda: written["b"], clock=lambda: clock["t"])
+    rate = system_status.WriteRate(read=lambda: written["b"], clock=lambda: clock["t"], keep_path=None)
     rate.sample()
     assert rate.per_day() is None
     written["b"], clock["t"] = 500_000_000, 60        # the start-up burst
@@ -455,6 +455,22 @@ def test_the_write_rate_is_the_last_hours_not_since_boot():
     written["b"] = 10                                   # a reboot resets the counter
     rate.sample()
     assert rate.per_day() is None
+
+
+def test_the_emmc_write_rate_survives_a_restart_of_localhome_not_a_reboot(tmp_path):
+    """An update restarts LocalHome: the hour measured so far is kept (in
+    RAM on the board), so the rate doesn't go back to "measuring"."""
+    keep = str(tmp_path / "write-rate.json")
+    written, clock = {"b": 1_000_000}, {"t": 1000.0}
+    first = system_status.WriteRate(read=lambda: written["b"], clock=lambda: clock["t"], keep_path=keep)
+    for minute in range(0, 20, 5):
+        clock["t"], written["b"] = 1000 + minute * 60, written["b"] + 1_000_000
+        first.sample()
+    restarted = system_status.WriteRate(read=lambda: written["b"], clock=lambda: clock["t"], keep_path=keep)
+    assert restarted.per_day() is not None
+    clock["t"] = 30.0                                     # a reboot: the clock starts over
+    restarted.sample()
+    assert restarted.per_day() is None
 
 
 def test_a_device_answering_with_an_error_after_a_boot_is_offline_not_waiting():

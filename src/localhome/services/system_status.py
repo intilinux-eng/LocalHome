@@ -7,6 +7,7 @@ can't be read on the current platform it's None, and the UI shows a dash.
 """
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -375,25 +376,51 @@ class WriteRate:
     """The eMMC's writes over the last hour. The average since boot looked
     alarming right after a restart or an update - 1.3 GB/day, 38 minutes
     in, on a board writing 0.26 - so it's sampled every 5 minutes, one
-    number read from /proc, and the last hour's rate is what's shown."""
+    number read from /proc, and the last hour's rate is what's shown.
+
+    The samples are kept in RAM (/dev/shm) across LocalHome's own
+    restarts - an update or a settings change used to start the 10
+    minutes over - and go with a reboot, like the counter they read and
+    the monotonic clock they're timed by. Never on the eMMC itself."""
 
     WINDOW = 3600
     MIN_SPAN = 600          # less than 10 minutes of samples: not a rate yet
+    KEEP_PATH = "/dev/shm/localhome-write-rate.json"
 
-    def __init__(self, read=emmc_written_bytes, clock=time.monotonic):
+    def __init__(self, read=emmc_written_bytes, clock=time.monotonic, keep_path: str | None = KEEP_PATH):
         self.read = read
         self.clock = clock
-        self.samples: list[tuple[float, int]] = []
+        self.keep_path = keep_path
+        self.samples: list[tuple[float, int]] = self._kept()
+
+    def _kept(self) -> list[tuple[float, int]]:
+        if not self.keep_path:
+            return []
+        try:
+            with open(self.keep_path, encoding="utf-8") as f:
+                return [(float(t), int(w)) for t, w in json.load(f)]
+        except (OSError, ValueError, TypeError):
+            return []
+
+    def _keep(self) -> None:
+        if not self.keep_path:
+            return
+        try:
+            with open(self.keep_path, "w", encoding="utf-8") as f:
+                json.dump(self.samples, f)
+        except OSError:
+            pass
 
     def sample(self) -> None:
         written = self.read()
         if written is None:
             return
         now = self.clock()
-        if self.samples and written < self.samples[-1][1]:
-            self.samples = []          # the counter went back: a reboot
+        if self.samples and (written < self.samples[-1][1] or now < self.samples[-1][0]):
+            self.samples = []          # the counter or the clock went back: a reboot
         self.samples.append((now, written))
         self.samples = [s for s in self.samples if now - s[0] <= self.WINDOW]
+        self._keep()
 
     def per_day(self) -> tuple[int, int] | None:
         """(bytes per day, minutes measured) over the window, or None."""
