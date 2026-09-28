@@ -714,6 +714,7 @@ def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
     cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
     protections: dict | None = None, lan_silent_seconds: float | None = None, battery_silent: bool = False,
+    shelly: list[dict] = (),
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -763,4 +764,7 @@ def problems(
             waiting = not device.get("error") or "received yet" in device["error"]
             code = "device_not_heard_yet" if (never_heard and just_booted and waiting) else "device_offline"
             found.append({"code": code, "subject": device["name"], "detail": device["error"]})
+    # What the Shellys say about themselves: too hot, a weak signal, battery
+    # reports that didn't get through - see services/shelly_health.py.
+    found += shelly
     return found

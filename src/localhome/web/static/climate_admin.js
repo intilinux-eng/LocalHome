@@ -2238,6 +2238,103 @@ document.addEventListener("click", event => {
   if (target && target.tagName === "DETAILS") target.open = true;
 });
 
+// ---------------------------------------------------------- Shelly health --
+// What each Shelly says about itself (services/shelly_health.py): its
+// Wi-Fi signal now and over the last day and week; for a battery sensor,
+// its battery and whether its reports come on time; for a mains one, its
+// own temperature, since when it's been on, and firmware updates.
+
+const SHELLY_HEALTH_EVERY_MS = 60000;
+
+// The usual Wi-Fi bands: below -85 dBm connections start to fail.
+function signalQuality(dbm) {
+  if (dbm >= -65) return "excellent";
+  if (dbm >= -75) return "good";
+  if (dbm >= -85) return "weak";
+  return "critical";
+}
+
+function signalText(dbm) {
+  return tr("climate_admin.shelly_signal_value", { value: Math.round(dbm), quality: tr(`climate_admin.shelly_quality_${signalQuality(dbm)}`) });
+}
+
+function signalRow(label, stats, weakDbm) {
+  if (!stats) return "";
+  return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }), stats.avg <= weakDbm);
+}
+
+function shellyDeviceHtml(d, data, now) {
+  const rows = [];
+  const s = d.stats || {};
+  if (d.battery) {
+    const age = d.last_report_at == null ? null : now - d.last_report_at;
+    rows.push(statRowHtml(tr("climate_admin.shelly_last_report"),
+      age == null ? tr("climate_admin.shelly_never") : tr("climate_admin.shelly_ago", { age: formatAge(Math.max(0, age)) }),
+      age != null && age > 2 * data.heartbeat_seconds));
+  } else {
+    const state = d.error ? "not_answering" : d.online === false ? "offline" : (d.online || d.polled_at) ? "online" : null;
+    if (state) rows.push(statRowHtml(tr("climate_admin.shelly_link"), tr(`climate_admin.shelly_${state}`), state !== "online"));
+  }
+  if (d.wifi_rssi_dbm != null) {
+    rows.push(statRowHtml(tr("climate_admin.shelly_signal_now"), signalText(d.wifi_rssi_dbm), d.wifi_rssi_dbm < data.weak_dbm));
+  }
+  rows.push(signalRow(tr("climate_admin.shelly_signal_24h"), s.signal_24h, data.weak_dbm));
+  rows.push(signalRow(tr("climate_admin.shelly_signal_7d"), s.signal_7d, data.weak_dbm));
+  if (d.battery) {
+    if (d.battery_pct != null) {
+      rows.push(statRowHtml(tr("fields.battery_pct"), d.battery_v != null
+        ? tr("climate_admin.shelly_battery_value", { pct: Math.round(d.battery_pct), volts: d.battery_v.toFixed(2) })
+        : `${Math.round(d.battery_pct)}%`, d.battery_pct <= LOW_BATTERY_PCT));
+    }
+    if (s.reports_24h != null) {
+      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"),
+        tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }), s.missed_24h >= 3));
+      // A sensor added (or first watched) this week has less than a week behind it.
+      const partial = s.counted_since && now - s.counted_since < 6.5 * 86400;
+      rows.push(statRowHtml(tr("climate_admin.shelly_missed_7d"), partial
+        ? tr("climate_admin.shelly_missed_since", { missed: s.missed_7d, since: formatWhen(s.counted_since) })
+        : String(s.missed_7d)));
+    }
+  } else {
+    if (d.device_temp_c != null) {
+      rows.push(statRowHtml(tr("climate_admin.shelly_temp"), `${d.device_temp_c.toFixed(1)}°C`, d.device_temp_c >= data.hot_c - 5));
+    }
+    if (d.voltage_v != null) rows.push(statRowHtml(tr("climate_admin.shelly_voltage"), `${Math.round(d.voltage_v)} V`));
+    if (d.booted_at != null) rows.push(statRowHtml(tr("climate_admin.shelly_on_since"), sinceText(d.booted_at, now - d.booted_at)));
+    if (s.restarts_7d != null) rows.push(statRowHtml(tr("climate_admin.shelly_restarts_7d"), String(s.restarts_7d), s.restarts_7d > 0));
+    if (d.errors.length) rows.push(statRowHtml(tr("climate_admin.shelly_errors"), d.errors.join(", "), true));
+  }
+  const firmware = [d.model, d.firmware].filter(Boolean).join(" · ");
+  const update = d.update ? tr("climate_admin.shelly_update", { version: d.update }) : (d.firmware ? tr("climate_admin.shelly_up_to_date") : "");
+  if (firmware || update) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), [firmware, update].filter(Boolean).join(" - ")));
+  if (d.restart_required) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), tr("climate_admin.shelly_restart_required"), true));
+  const power = `<span class="admin-pill">${tr(d.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`;
+  const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
+  return `<div class="admin-zone-card admin-stat-group"><h3>${escapeHtml(displayName(d.name))} ${power}</h3>`
+    + `${rows.join("")}${error}<p class="hint-text admin-path">${escapeHtml(d.id)}</p></div>`;
+}
+
+async function loadShellyHealth() {
+  const list = document.getElementById("shelly-health-list");
+  if (!list) return;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/shelly-health", { cache: "no-store" })).json();
+  } catch (e) {
+    return;   // offline: the connection banner says so already
+  }
+  if (!data.ok) return;
+  const now = Date.now() / 1000;
+  const devices = data.devices || [];
+  list.innerHTML = devices.length
+    ? devices.map(d => shellyDeviceHtml(d, data, now)).join("")
+    : `<p class="hint-text">${tr("climate_admin.shelly_none")}</p>`;
+  const attention = list.querySelectorAll(".admin-stat.bad").length;
+  setPill("shelly-health-summary", !devices.length ? ""
+    : attention ? pillHtml("bad", tr("climate_admin.shelly_attention", { count: devices.length }))
+    : pillHtml("ok", tr("climate_admin.shelly_count", { count: devices.length })));
+}
+
 rememberOpenSections();
 watchNav();
 loadMap();
@@ -2246,6 +2343,8 @@ loadExtraSwitches();
 loadSeasonRules();
 loadExtraSensor();
 loadVmc();
+loadShellyHealth();
+setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);
 loadMaintenance();
 loadSettings();
 watchLedMatrix();

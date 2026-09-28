@@ -250,6 +250,18 @@ class HistoryStore:
             conn.close()
         return [{"ts": row[0], "value": round(row[1], 2)} for row in rows]
 
+    def values_since(self, sensor: str, field: str, since_ts: int) -> list[tuple[int, float]]:
+        """Every recorded value, oldest first - no buckets: for the few,
+        sparse fields read whole (services/shelly_health.py)."""
+        conn = self._connect()
+        try:
+            return [(row[0], row[1]) for row in conn.execute(
+                "SELECT ts, value FROM readings WHERE sensor = ? AND field = ? AND ts >= ? ORDER BY ts ASC",
+                (sensor, field, since_ts),
+            )]
+        finally:
+            conn.close()
+
     def prune(self, older_than_ts: int) -> int:
         """Deletes readings older than older_than_ts. The dashboard only
         ever queries up to a 7-day window, but nothing removed rows past

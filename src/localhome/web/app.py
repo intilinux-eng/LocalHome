@@ -45,7 +45,8 @@ from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
-from localhome.drivers.mqtt import client as mqtt_client
+from localhome.drivers.mqtt import base as mqtt_base, client as mqtt_client
+from localhome.drivers.mqtt.rpc import ShellyRpcClient
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import (
     SEASON_ACTIONS,
@@ -58,6 +59,7 @@ from localhome.services.interlock import (
 )
 from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services.service_watchdog import ServiceWatchdog
+from localhome.services import shelly_health
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
@@ -334,6 +336,9 @@ def create_app(config_path: str | None = None) -> Flask:
     # The eMMC's writes over the last hour - see system_status.WriteRate.
     app.config["WRITE_RATE"] = system_status.WriteRate()
     app.config["WRITE_RATE"].start()
+    # What each Shelly says about itself - signal, temperature, restarts,
+    # battery reports on time: see services/shelly_health.py.
+    app.config["SHELLY_HEALTH"] = _start_shelly_health(config, store)
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
@@ -464,6 +469,29 @@ def _lan_signals(app: Flask, devices: list[dict], uptime_seconds: float | None) 
     }
 
 
+def _start_shelly_health(config: LocalHomeConfig, store: HistoryStore) -> shelly_health.ShellyHealth | None:
+    """None without a Shelly to watch, or without the broker they speak to."""
+    devices = shelly_health.shelly_devices(config.integrations)
+    broker_file = config.resolve("mqtt_broker.json")
+    if not devices or not os.path.exists(broker_file):
+        return None
+    try:
+        broker = mqtt_client.load_broker_config({"broker_file": broker_file})
+        connection = mqtt_base.get_connection(broker)
+    except Exception:
+        logger.exception("Shelly health: no broker - the devices' own status isn't watched")
+        return None
+    health = shelly_health.ShellyHealth(devices, store, subscribe=connection.subscribe,
+                                        rpc_for=lambda device_id: ShellyRpcClient(broker, device_id))
+    health.start()
+    return health
+
+
+def _shelly_problems(app: Flask) -> list[dict]:
+    health = app.config.get("SHELLY_HEALTH")
+    return health.problems() if health else []
+
+
 def _health(app: Flask) -> dict:
     """What the admin panel's system status is built from."""
     manager: DeviceManager = app.config["MANAGER"]
@@ -481,7 +509,8 @@ def _health(app: Flask) -> dict:
         "devices": devices, "failed": failed, "disk": disk, "loops": loops, "host": host,
         "storage": storage, "network": network, "protections": protections,
         "problems": system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host,
-                                           protections, **_lan_signals(app, devices, host.get("uptime_seconds"))),
+                                           protections, **_lan_signals(app, devices, host.get("uptime_seconds")),
+                                           shelly=_shelly_problems(app)),
     }
 
 
@@ -531,6 +560,8 @@ def _quick_problems(app: Flask) -> list[dict]:
         host={"uptime_seconds": uptime, "clock_synced": system_status.clock_synced_fast()},
         # RT: the devices can't reach the board - from /proc, no subprocess.
         **_lan_signals(app, devices, uptime),
+        # Worked out every 5 minutes by the Shelly health check, kept in memory.
+        shelly=_shelly_problems(app),
     )
 
 
@@ -676,6 +707,15 @@ def _register_routes(app: Flask) -> None:
         A device not heard from yet after a boot isn't counted."""
         found = [p for p in _quick_problems(app) if p["code"] != "device_not_heard_yet"]
         return jsonify(ok=True, problems=found)
+
+    @app.route("/api/climate-admin/shelly-health")
+    def api_shelly_health():
+        """Each Shelly's own status and its last day and week - see
+        services/shelly_health.py. An empty list without any Shelly."""
+        health = app.config.get("SHELLY_HEALTH")
+        return jsonify(ok=True, devices=health.devices() if health else [],
+                       hot_c=shelly_health.HOT_C, weak_dbm=shelly_health.WEAK_DBM,
+                       heartbeat_seconds=shelly_health.HEARTBEAT_SECONDS)
 
     @app.route("/api/climate-admin/led-matrix")
     def api_led_matrix():

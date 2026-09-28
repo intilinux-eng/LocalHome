@@ -1,0 +1,358 @@
+"""What every Shelly LocalHome uses says about itself: its Wi-Fi signal,
+its own temperature, when it last started, a firmware update waiting -
+and for a battery sensor, whether its reports come on time.
+
+Two ways in, one per kind of device:
+
+- A battery sensor (a Shelly H&T Gen3) sleeps, and can't be asked
+  anything: what it publishes when it wakes - `status/wifi`,
+  `status/devicepower:0`, `status/sys` - is listened to. Each wake is a
+  report; a missing one, when its 2-hour heartbeat was due, is a report
+  that couldn't get through (see missed_reports()).
+- A mains Shelly (a relay, the VMC's dimmer) is always connected, but
+  doesn't publish its signal or temperature by itself: it's asked, every
+  5 minutes, with one Shelly.GetStatus over MQTT.
+
+The devices come from the integrations themselves (shelly_devices()),
+whether written in config.yaml or built by the admin panel. What matters
+over time goes into the history database, under the device's id: the
+signal, the temperature, each battery report, each restart - so a week's
+trend survives LocalHome's own restarts. Nothing here ever changes a
+device; it only reads.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import threading
+import time
+from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
+
+# A battery H&T Gen3 reports at least every 2 hours (confirmed live: the
+# heartbeat lands within a minute or so of exactly 2 h). A gap longer
+# than that, less some slack, is a heartbeat that never arrived.
+HEARTBEAT_SECONDS = 7200
+HEARTBEAT_SLACK = 0.15
+# One wake publishes several topics within a second or two: one report.
+REPORT_SPAN_SECONDS = 60
+POLL_SECONDS = 300
+FIRST_POLL_SECONDS = 20
+# A Shelly switches its output off by itself at about 90°C.
+HOT_C = 80
+# The usual "weak" line for Wi-Fi: below it, connections start to fail.
+WEAK_DBM = -85
+MISSED_PER_DAY = 3
+# A device's start time, worked out from its uptime and our clock, moves
+# by a second or two between polls; a restart moves it by far more.
+RESTART_SLACK_SECONDS = 300
+DAY = 86400
+WEEK = 7 * DAY
+
+# Gen2/Gen3 ids end in the device's full MAC; Gen1 ids (6 hex digits)
+# don't speak the RPC this relies on.
+SHELLY_ID = re.compile(r"^shelly[a-z0-9]*-[0-9a-f]{12}$", re.IGNORECASE)
+# The components whose "temperature" is the device's own, not a reading
+# (a `temperature:N` component *is* a reading - an H&T's, an add-on's).
+POWERED_COMPONENTS = {"switch", "light", "cover", "rgb", "rgbw", "cct", "pm1", "em", "em1"}
+# Where the markers live in the history database - see missed_reports().
+LISTEN_SENSOR = "shelly_health"
+
+
+def shelly_devices(integrations) -> list[dict]:
+    """Every Shelly the integrations use: {"id", "names" (the integrations
+    backed by it), "battery"}. From an RPC `device_id` or the first part of
+    an MQTT topic; battery-powered if a topic is its `devicepower`."""
+    found: dict[str, dict] = {}
+    for integration in integrations:
+        options = integration.options or {}
+        topics = options.get("state_topic")
+        topics = topics if isinstance(topics, list) else [topics]
+        topics = [t for t in topics + [options.get("command_topic")] if isinstance(t, str)]
+        ids = [t.split("/", 1)[0] for t in topics]
+        if isinstance(options.get("device_id"), str):
+            ids.append(options["device_id"].strip())
+        battery = any("/status/devicepower" in t for t in topics)
+        for device_id in dict.fromkeys(ids):
+            if not SHELLY_ID.match(device_id):
+                continue
+            device = found.setdefault(device_id, {"id": device_id, "names": [], "battery": False})
+            name = options.get("name")
+            if name and name not in device["names"]:
+                device["names"].append(name)
+            device["battery"] = device["battery"] or battery
+    return sorted(found.values(), key=lambda d: (not d["battery"], (d["names"][0] if d["names"] else d["id"]).lower()))
+
+
+def missed_reports(reports: list[float], starts: list[float], since: float, now: float,
+                   heartbeat: float = HEARTBEAT_SECONDS) -> int:
+    """Heartbeats that never arrived between `since` and `now`: each gap
+    between two reports - or from the last one to now - longer than a
+    heartbeat (plus slack) counts the heartbeats that fit in it.
+
+    A gap that ends with LocalHome starting isn't counted: it was down,
+    or the board was off (unplugged, say), and the reports sent meanwhile
+    were lost here, not by the sensor. `starts` are those start times."""
+    events = sorted([(t, "report") for t in reports] + [(t, "start") for t in starts]) + [(now, "now")]
+    missed = 0
+    for (before, _), (at, kind) in zip(events, events[1:]):
+        if kind == "start" or at <= since:
+            continue
+        gap = at - max(before, since)
+        missed += max(0, int((gap - HEARTBEAT_SLACK * heartbeat) // heartbeat))
+    return missed
+
+
+def _dig(data: Any, *path: str) -> Any:
+    for key in path:
+        if not isinstance(data, dict):
+            return None
+        data = data.get(key)
+    return data
+
+
+def _number(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+class ShellyHealth:
+    def __init__(self, devices: list[dict], store=None, subscribe: Callable | None = None,
+                 rpc_for: Callable[[str], Any] | None = None, clock: Callable[[], float] = time.time):
+        self.store = store
+        self.clock = clock
+        self._lock = threading.Lock()
+        self._rpc_for = rpc_for
+        self._rpc: dict[str, Any] = {}
+        self._devices: dict[str, dict] = {}
+        self._problems: list[dict] = []
+        for device in devices:
+            state = {
+                "id": device["id"], "names": list(device["names"]), "battery": device["battery"],
+                "online": None, "error": None, "polled_at": None,
+                "wifi_rssi_dbm": None, "wifi_at": None, "ssid": None,
+                "device_temp_c": None, "voltage_v": None, "errors": [],
+                "booted_at": None, "update": None, "restart_required": False,
+                "model": None, "firmware": None,
+                "battery_pct": None, "battery_v": None, "external_power": None, "last_report_at": None,
+            }
+            self._devices[device["id"]] = state
+            self._seed_from_history(state)
+            if subscribe is not None:
+                self._subscribe(subscribe, state)
+        self._record(LISTEN_SENSOR, {"start": 1})
+
+    # --------------------------------------------------------- listening --
+
+    def _subscribe(self, subscribe: Callable, state: dict) -> None:
+        device_id = state["id"]
+        on = lambda handler: (lambda topic, payload: self._on_message(state, handler, payload))
+        subscribe(f"{device_id}/status/wifi", on(self._on_wifi))
+        subscribe(f"{device_id}/status/sys", on(self._on_sys))
+        if state["battery"]:
+            subscribe(f"{device_id}/status/devicepower:0", on(self._on_devicepower))
+        else:
+            # The broker's word for "connected" - a battery sensor's is
+            # "false" nearly all the time, asleep, so it's not listened to.
+            subscribe(f"{device_id}/online", on(self._on_online))
+
+    def _on_message(self, state: dict, handler: Callable, payload: bytes) -> None:
+        try:
+            text = payload.decode(errors="replace") if isinstance(payload, bytes) else str(payload)
+            try:
+                data = json.loads(text)
+            except ValueError:
+                data = text
+            with self._lock:
+                handler(state, data)
+        except Exception:
+            logger.exception("Shelly health: couldn't read a message from %s", state["id"])
+
+    def _on_wifi(self, state: dict, data: Any) -> None:
+        rssi = _number(_dig(data, "rssi"))
+        if rssi is None:
+            return
+        state["wifi_rssi_dbm"], state["wifi_at"], state["ssid"] = rssi, self.clock(), _dig(data, "ssid")
+        if state["battery"]:
+            self._note_report(state)
+            self._record(state["id"], {"wifi_rssi_dbm": rssi})
+
+    def _on_sys(self, state: dict, data: Any) -> None:
+        self._read_sys(state, data)
+        if state["battery"]:
+            self._note_report(state)
+
+    def _on_devicepower(self, state: dict, data: Any) -> None:
+        state["battery_pct"] = _number(_dig(data, "battery", "percent"))
+        state["battery_v"] = _number(_dig(data, "battery", "V"))
+        present = _dig(data, "external", "present")
+        state["external_power"] = present if isinstance(present, bool) else None
+        self._note_report(state)
+
+    def _on_online(self, state: dict, data: Any) -> None:
+        state["online"] = str(data).strip().lower() == "true"
+
+    def _note_report(self, state: dict) -> None:
+        now = self.clock()
+        if state["last_report_at"] is None or now - state["last_report_at"] > REPORT_SPAN_SECONDS:
+            self._record(state["id"], {"report": 1})
+        state["last_report_at"] = now
+
+    # ----------------------------------------------------------- asking --
+
+    def poll_once(self) -> None:
+        """Asks every mains Shelly for its status - one RPC each."""
+        for state in list(self._devices.values()):
+            if state["battery"] or self._rpc_for is None:
+                continue
+            try:
+                rpc = self._rpc.get(state["id"]) or self._rpc.setdefault(state["id"], self._rpc_for(state["id"]))
+                if state["model"] is None:
+                    info = rpc.call("Shelly.GetDeviceInfo")
+                    with self._lock:
+                        state["model"], state["firmware"] = info.get("model"), info.get("ver")
+                status = rpc.call("Shelly.GetStatus")
+            except Exception as exc:
+                with self._lock:
+                    state["error"] = str(exc)
+                continue
+            with self._lock:
+                self._read_status(state, status)
+        self.refresh_problems()
+
+    def _read_status(self, state: dict, status: dict) -> None:
+        now = self.clock()
+        state["error"], state["polled_at"] = None, now
+        rssi = _number(_dig(status, "wifi", "rssi"))
+        if rssi is not None:
+            state["wifi_rssi_dbm"], state["wifi_at"], state["ssid"] = rssi, now, _dig(status, "wifi", "ssid")
+        temps, errors, voltage = [], [], None
+        for key, component in status.items():
+            if key.split(":")[0] not in POWERED_COMPONENTS or not isinstance(component, dict):
+                continue
+            temp = _number(_dig(component, "temperature", "tC"))
+            if temp is not None:
+                temps.append(temp)
+            errors += [e for e in component.get("errors") or [] if isinstance(e, str)]
+            voltage = voltage if voltage is not None else _number(component.get("voltage"))
+        state["device_temp_c"] = max(temps) if temps else None
+        state["errors"], state["voltage_v"] = sorted(set(errors)), voltage
+        self._read_sys(state, status.get("sys"))
+        self._record(state["id"], {k: v for k, v in (("wifi_rssi_dbm", rssi), ("device_temp_c", state["device_temp_c"]))
+                                   if v is not None})
+
+    def _read_sys(self, state: dict, sys: Any) -> None:
+        if not isinstance(sys, dict):
+            return
+        update = _dig(sys, "available_updates", "stable", "version")
+        state["update"] = update if isinstance(update, str) else None
+        state["restart_required"] = bool(sys.get("restart_required"))
+        uptime = _number(sys.get("uptime"))
+        if uptime is None or state["battery"]:
+            return          # a sleeping sensor's uptime says nothing about power cuts
+        booted = self.clock() - uptime
+        known = state["booted_at"]
+        if known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
+            if known is not None and booted > known:
+                self._record(state["id"], {"restart": 1}, ts=booted)
+            self._record(state["id"], {"booted_at": booted})
+            state["booted_at"] = booted
+
+    # ---------------------------------------------------------- history --
+
+    def _record(self, sensor: str, fields: dict, ts: float | None = None) -> None:
+        if self.store is None or not fields:
+            return
+        try:
+            self.store.record(sensor, int(ts if ts is not None else self.clock()), fields)
+        except Exception:
+            logger.exception("Shelly health: couldn't record %s for %s", list(fields), sensor)
+
+    def _history(self, sensor: str, field: str, since: float) -> list[tuple[int, float]]:
+        if self.store is None:
+            return []
+        try:
+            return self.store.values_since(sensor, field, int(since))
+        except Exception:
+            logger.exception("Shelly health: couldn't read %s of %s", field, sensor)
+            return []
+
+    def _seed_from_history(self, state: dict) -> None:
+        """What was known before this start: the last report, signal and
+        start time - a battery sensor may not speak again for 2 hours."""
+        since = self.clock() - WEEK
+        for field, key in (("report", "last_report_at"), ("wifi_rssi_dbm", "wifi_at"), ("booted_at", None)):
+            rows = self._history(state["id"], field, since)
+            if not rows:
+                continue
+            ts, value = rows[-1]
+            if field == "booted_at":
+                state["booted_at"] = value
+            else:
+                state[key] = float(ts)
+                if field == "wifi_rssi_dbm":
+                    state["wifi_rssi_dbm"] = value
+
+    def _stats(self, state: dict, now: float) -> dict:
+        def signal(since):
+            values = [v for _, v in self._history(state["id"], "wifi_rssi_dbm", since)]
+            if not values:
+                return None
+            return {"avg": round(sum(values) / len(values)), "min": round(min(values)), "count": len(values)}
+
+        stats = {"signal_24h": signal(now - DAY), "signal_7d": signal(now - WEEK)}
+        if state["battery"]:
+            reports = [ts for ts, _ in self._history(state["id"], "report", now - WEEK)]
+            starts = [ts for ts, _ in self._history(LISTEN_SENSOR, "start", now - WEEK)]
+            stats["reports_24h"] = sum(1 for ts in reports if ts >= now - DAY)
+            stats["missed_24h"] = missed_reports(reports, starts, now - DAY, now)
+            stats["missed_7d"] = missed_reports(reports, starts, now - WEEK, now)
+            # Since when it's been counted: a sensor added this week has
+            # less than a week of reports behind it.
+            stats["counted_since"] = reports[0] if reports else None
+        else:
+            stats["restarts_7d"] = len(self._history(state["id"], "restart", now - WEEK))
+        return stats
+
+    # ----------------------------------------------------------- output --
+
+    def devices(self) -> list[dict]:
+        now = self.clock()
+        with self._lock:
+            states = [dict(s, errors=list(s["errors"])) for s in self._devices.values()]
+        for state in states:
+            state["stats"] = self._stats(state, now)
+            state["name"] = state["names"][0] if state["names"] else state["id"]
+        return states
+
+    def refresh_problems(self) -> None:
+        found = []
+        for device in self.devices():
+            name, stats = device["name"], device["stats"]
+            if device["device_temp_c"] is not None and device["device_temp_c"] >= HOT_C:
+                found.append({"code": "device_hot", "subject": name, "detail": f"{device['device_temp_c']:.0f}°C"})
+            signal = stats.get("signal_24h")
+            if signal and signal["count"] >= 3 and signal["avg"] <= WEAK_DBM:
+                found.append({"code": "device_signal_weak", "subject": name, "detail": f"{signal['avg']} dBm"})
+            if device["battery"] and stats.get("missed_24h", 0) >= MISSED_PER_DAY:
+                found.append({"code": "device_reports_missed", "subject": name, "detail": str(stats["missed_24h"])})
+        with self._lock:
+            self._problems = found
+
+    def problems(self) -> list[dict]:
+        """The last check's problems - worked out every 5 minutes, so the
+        LED matrix and the dashboard's badge can ask for them all day."""
+        with self._lock:
+            return list(self._problems)
+
+    def start(self, every: float = POLL_SECONDS, first: float = FIRST_POLL_SECONDS) -> None:
+        def loop():
+            time.sleep(first)
+            while True:
+                try:
+                    self.poll_once()
+                except Exception:
+                    logger.exception("Shelly health check failed")
+                time.sleep(every)
+        threading.Thread(target=loop, daemon=True, name="shelly-health").start()
