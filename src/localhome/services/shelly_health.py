@@ -8,16 +8,18 @@ Two ways in, one per kind of device:
   anything: what it publishes when it wakes - `status/wifi`,
   `status/devicepower:0`, `status/sys` - is listened to. Each wake is a
   report; a missing one, when its 2-hour heartbeat was due, is a report
-  that couldn't get through (see missed_reports()).
+  that couldn't get through (see missed_reports()). Its signal is
+  already in the history, recorded with its temperature (`wifi_rssi_dbm`
+  under the sensor's name) - that's what its day and week are read from.
 - A mains Shelly (a relay, the VMC's dimmer) is always connected, but
   doesn't publish its signal or temperature by itself: it's asked, every
   5 minutes, with one Shelly.GetStatus over MQTT.
 
 The devices come from the integrations themselves (shelly_devices()),
 whether written in config.yaml or built by the admin panel. What matters
-over time goes into the history database, under the device's id: the
-signal, the temperature, each battery report, each restart - so a week's
-trend survives LocalHome's own restarts. Nothing here ever changes a
+over time goes into the history database, under the device's id: a
+mains Shelly's signal and temperature, each battery report, each restart
+- so a week's trend survives LocalHome's own restarts. Nothing here ever changes a
 device; it only reads.
 """
 from __future__ import annotations
@@ -119,9 +121,13 @@ def _number(value: Any) -> float | None:
 
 class ShellyHealth:
     def __init__(self, devices: list[dict], store=None, subscribe: Callable | None = None,
-                 rpc_for: Callable[[str], Any] | None = None, clock: Callable[[], float] = time.time):
+                 rpc_for: Callable[[str], Any] | None = None, clock: Callable[[], float] = time.time,
+                 reading_of: Callable[[str], dict] | None = None):
         self.store = store
         self.clock = clock
+        # The sensor's own last reading (DeviceManager.sensor_reading): what
+        # a battery sensor said before this start, until it wakes again.
+        self._reading_of = reading_of
         self._lock = threading.Lock()
         self._rpc_for = rpc_for
         self._rpc: dict[str, Any] = {}
@@ -176,7 +182,6 @@ class ShellyHealth:
         state["wifi_rssi_dbm"], state["wifi_at"], state["ssid"] = rssi, self.clock(), _dig(data, "ssid")
         if state["battery"]:
             self._note_report(state)
-            self._record(state["id"], {"wifi_rssi_dbm": rssi})
 
     def _on_sys(self, state: dict, data: Any) -> None:
         self._read_sys(state, data)
@@ -283,6 +288,8 @@ class ShellyHealth:
         start time - a battery sensor may not speak again for 2 hours."""
         since = self.clock() - WEEK
         for field, key in (("report", "last_report_at"), ("wifi_rssi_dbm", "wifi_at"), ("booted_at", None)):
+            if state["battery"] and field != "report":
+                continue
             rows = self._history(state["id"], field, since)
             if not rows:
                 continue
@@ -295,8 +302,12 @@ class ShellyHealth:
                     state["wifi_rssi_dbm"] = value
 
     def _stats(self, state: dict, now: float) -> dict:
+        # A battery sensor's signal is recorded with its readings, under its
+        # name; a mains Shelly's by this check, under its id.
+        signal_sensor = state["names"][0] if state["battery"] and state["names"] else state["id"]
+
         def signal(since):
-            values = [v for _, v in self._history(state["id"], "wifi_rssi_dbm", since)]
+            values = [v for _, v in self._history(signal_sensor, "wifi_rssi_dbm", since)]
             if not values:
                 return None
             return {"avg": round(sum(values) / len(values)), "min": round(min(values)), "count": len(values)}
@@ -324,7 +335,25 @@ class ShellyHealth:
         for state in states:
             state["stats"] = self._stats(state, now)
             state["name"] = state["names"][0] if state["names"] else state["id"]
+            if state["battery"] and self._reading_of is not None:
+                self._fill_from_reading(state, now)
         return states
+
+    def _fill_from_reading(self, state: dict, now: float) -> None:
+        """Until a battery sensor wakes after this start, what its own
+        driver last had (kept across restarts - see drivers/mqtt/state_cache.py)."""
+        try:
+            reading = self._reading_of(state["name"]) or {}
+        except Exception:
+            return
+        for key, field in (("wifi_rssi_dbm", "wifi_rssi_dbm"), ("battery_pct", "battery_pct")):
+            if state[key] is None and _number(reading.get(field)) is not None:
+                state[key] = reading[field]
+        age = _number(reading.get("seconds_since_update"))
+        if age is None:
+            age = _number(reading.get("last_value_age_seconds"))
+        if state["last_report_at"] is None and age is not None:
+            state["last_report_at"] = now - age
 
     def refresh_problems(self) -> None:
         found = []

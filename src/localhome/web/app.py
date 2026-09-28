@@ -338,7 +338,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["WRITE_RATE"].start()
     # What each Shelly says about itself - signal, temperature, restarts,
     # battery reports on time: see services/shelly_health.py.
-    app.config["SHELLY_HEALTH"] = _start_shelly_health(config, store)
+    app.config["SHELLY_HEALTH"] = _start_shelly_health(config, store, manager)
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
@@ -469,7 +469,8 @@ def _lan_signals(app: Flask, devices: list[dict], uptime_seconds: float | None) 
     }
 
 
-def _start_shelly_health(config: LocalHomeConfig, store: HistoryStore) -> shelly_health.ShellyHealth | None:
+def _start_shelly_health(config: LocalHomeConfig, store: HistoryStore,
+                         manager: DeviceManager) -> shelly_health.ShellyHealth | None:
     """None without a Shelly to watch, or without the broker they speak to."""
     devices = shelly_health.shelly_devices(config.integrations)
     broker_file = config.resolve("mqtt_broker.json")
@@ -482,7 +483,8 @@ def _start_shelly_health(config: LocalHomeConfig, store: HistoryStore) -> shelly
         logger.exception("Shelly health: no broker - the devices' own status isn't watched")
         return None
     health = shelly_health.ShellyHealth(devices, store, subscribe=connection.subscribe,
-                                        rpc_for=lambda device_id: ShellyRpcClient(broker, device_id))
+                                        rpc_for=lambda device_id: ShellyRpcClient(broker, device_id),
+                                        reading_of=manager.sensor_reading)
     health.start()
     return health
 

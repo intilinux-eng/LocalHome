@@ -69,20 +69,23 @@ class Rpc:
         return json.loads(json.dumps(self.status))
 
 
-def health(tmp_path, integrations, rpc=None, clock=None, store=None):
+def health(tmp_path, integrations, rpc=None, clock=None, store=None, reading_of=None):
     clock = clock or Clock()
     store = store or HistoryStore(str(tmp_path / "history.db"))
     broker = Broker()
     watcher = ShellyHealth(shelly_devices(integrations), store, subscribe=broker.subscribe,
-                           rpc_for=lambda device_id: rpc, clock=clock)
+                           rpc_for=lambda device_id: rpc, clock=clock, reading_of=reading_of)
     return watcher, broker, clock, store
 
 
-def ht_wakes(broker, rssi=-70, battery=90):
+def ht_wakes(broker, rssi=-70, battery=90, store=None, clock=None):
     broker.publish(f"{HT}/status/devicepower:0", {"id": 0, "battery": {"V": 3.1, "percent": battery},
                                                   "external": {"present": False}})
     broker.publish(f"{HT}/status/wifi", {"ssid": "Casa", "rssi": rssi})
     broker.publish(f"{HT}/status/sys", {"available_updates": {}})
+    if store is not None:
+        # What HistoryRecorder records from the sensor's own reading.
+        store.record("Stanze Sensor", int(clock.t), {"temperature_c": 21.0, "wifi_rssi_dbm": rssi})
 
 
 def by_id(watcher, device_id):
@@ -136,7 +139,7 @@ def test_a_threshold_report_between_heartbeats_is_simply_one_more():
 
 def test_one_wake_is_one_report_with_its_signal_and_battery(tmp_path):
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
-    ht_wakes(broker, rssi=-76, battery=88)
+    ht_wakes(broker, rssi=-76, battery=88, store=store, clock=clock)
     device = by_id(watcher, HT)
     assert device["battery"] and device["name"] == "Stanze Sensor"
     assert (device["wifi_rssi_dbm"], device["battery_pct"], device["battery_v"]) == (-76, 88, 3.1)
@@ -150,9 +153,18 @@ def test_a_restart_of_localhome_remembers_the_last_report(tmp_path):
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
     ht_wakes(broker, rssi=-80)
     clock.t += 600
-    again, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
+    readings = {"Stanze Sensor": {"ok": True, "wifi_rssi_dbm": -80, "battery_pct": 91, "seconds_since_update": 600}}
+    again, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store, reading_of=readings.get)
     device = by_id(again, HT)
-    assert device["last_report_at"] == clock.t - 600 and device["wifi_rssi_dbm"] == -80
+    assert device["last_report_at"] == clock.t - 600
+    assert (device["wifi_rssi_dbm"], device["battery_pct"]) == (-80, 91), "the sensor's own last reading"
+
+
+def test_before_any_report_the_sensors_own_reading_says_what_it_last_knew(tmp_path):
+    readings = {"Stanze Sensor": {"ok": False, "wifi_rssi_dbm": -64, "last_value_age_seconds": 3000}}
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()], reading_of=readings.get)
+    device = by_id(watcher, HT)
+    assert device["wifi_rssi_dbm"] == -64 and device["last_report_at"] == clock.t - 3000
 
 
 def test_reports_that_dont_get_through_become_a_problem(tmp_path):
@@ -167,12 +179,12 @@ def test_reports_that_dont_get_through_become_a_problem(tmp_path):
 def test_a_weak_signal_all_day_is_a_problem_one_bad_moment_isnt(tmp_path):
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
     for rssi in (-70, -71, -95):
-        ht_wakes(broker, rssi=rssi)
+        ht_wakes(broker, rssi=rssi, store=store, clock=clock)
         clock.t += H
     watcher.refresh_problems()
     assert watcher.problems() == []
     for rssi in (-88, -90, -89, -91):
-        ht_wakes(broker, rssi=rssi)
+        ht_wakes(broker, rssi=rssi, store=store, clock=clock)
         clock.t += H
     watcher.refresh_problems()
     assert [p["code"] for p in watcher.problems()] == ["device_signal_weak"]
