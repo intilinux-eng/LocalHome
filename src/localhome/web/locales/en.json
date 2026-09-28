@@ -644,7 +644,12 @@
     "wd_healthy": "LocalHome fine again, no restart needed",
     "wd_restarted": "LocalHome restarted by the watchdog",
     "wd_killed": "LocalHome hung for 2 minutes: restarted by the watchdog",
-    "wd_boot_reconnect": "Wi-Fi reconnected after start-up (precaution)"
+    "wd_boot_reconnect": "Wi-Fi reconnected after start-up (precaution)",
+    "protection_power_saving_off": "No power saving",
+    "protection_services_restart": "Essential services always restarted",
+    "protection_wifi_24ghz": "Wi-Fi on 2.4 GHz",
+    "wd_band_24": "Wi-Fi network \"{all}\": 2.4 GHz only",
+    "wd_band_any": "No Wi-Fi for 20 min: any band until the next boot"
   },
   "vmc_presets": {
     "night": "Night",

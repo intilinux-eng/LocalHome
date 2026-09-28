@@ -95,10 +95,19 @@ def test_protections_are_read_from_what_tune_board_writes(tmp_path, monkeypatch)
     monkeypatch.setattr(system_status, "WIFI_WATCHDOG_ENABLED", str(tmp_path / "timer"))
     monkeypatch.setattr(system_status, "HARDWARE_WATCHDOG_CONF", str(tmp_path / "hw.conf"))
     monkeypatch.setattr(system_status, "HARDWARE_WATCHDOG_DEVICE", str(tmp_path / "no-watchdog-here"))
+    monkeypatch.setattr(system_status, "POWER_CONF", str(tmp_path / "power.conf"))
+    monkeypatch.setattr(system_status, "RESTART_DROPINS", [str(tmp_path / "restart.conf")])
+    monkeypatch.setattr(system_status, "ANY_BAND_FLAG", str(tmp_path / "any-band"))
     (tmp_path / "wifi.conf").write_text("[connection]\nwifi.powersave=2\n")
-    items = system_status.board_protections(env=SYSTEMD)["items"]
+    (tmp_path / "restart.conf").write_text("[Service]\nRestart=always\n")
+    network = {"wifi": {"band": "2.4 GHz"}}
+    items = system_status.board_protections(env=SYSTEMD, network=network)["items"]
     assert items == {"wifi_always_on": True, "wifi_watchdog": False, "hardware_watchdog": None,
-                     "service_watchdog": True}
+                     "service_watchdog": True, "power_saving_off": False, "services_restart": True,
+                     "wifi_24ghz": True}
+    items["power_saving_off"] = True
+    (tmp_path / "any-band").write_text("")
+    assert system_status.board_protections(env=SYSTEMD, network=network)["items"]["wifi_24ghz"] is None
     found = system_status.problems([], [], {}, protections={"items": items})
     assert [(p["code"], p["subject"]) for p in found] == [("protection_missing", "wifi_watchdog")]
 

@@ -453,7 +453,7 @@ def _health(app: Flask) -> dict:
     host = system_status.host_stats()
     storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
     network = system_status.network_status()
-    protections = system_status.board_protections()
+    protections = system_status.board_protections(network=network)
     return {
         "devices": devices, "failed": failed, "disk": disk, "loops": loops, "host": host,
         "storage": storage, "network": network, "protections": protections,

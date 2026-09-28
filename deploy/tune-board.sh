@@ -83,6 +83,12 @@ echo "== 5. Wi-Fi: never dozing, never giving up"
 # beacons - missed connections from phones and Shellys; and after a few
 # failed attempts NetworkManager stops trying a network. Both off, for
 # every Wi-Fi profile - and for any added later, by the watchdog in step 6.
+# And 2.4 GHz only, where the network is there on 2.4 GHz: steadier with
+# most routers, no radar channels that throw every device off, and the
+# Shellys' band anyway. (touch /etc/localhome/wifi-any-band beforehand to
+# leave the band alone; the watchdog frees it by itself if the board
+# can't connect for 20 minutes.) The band applies from the next
+# connection: reboot once at the end.
 if command -v nmcli >/dev/null 2>&1; then
     mkdir -p /etc/NetworkManager/conf.d
     cat > /etc/NetworkManager/conf.d/99-localhome-wifi.conf <<'EOF'
@@ -100,8 +106,18 @@ EOF
         nmcli connection modify "$name" connection.autoconnect yes connection.autoconnect-retries 0 \
             802-11-wireless.powersave 2
         echo "   profile '$name': reconnects for ever, power saving off (from its next connection)"
+        ssid=$(nmcli -g 802-11-wireless.ssid connection show "$name")
+        if [ -f /etc/localhome/wifi-any-band ]; then
+            echo "   profile '$name': band left alone (/etc/localhome/wifi-any-band)"
+        elif nmcli -t -f FREQ,SSID device wifi list 2>/dev/null | sed 's/\\:/:/g' \
+                | awk -v s="$ssid" '$0+0 < 3000 && substr($0, index($0, ":") + 1) == s {found = 1} END {exit !found}'; then
+            nmcli connection modify "$name" 802-11-wireless.band bg
+            echo "   profile '$name': 2.4 GHz only (from its next connection)"
+        else
+            echo "   profile '$name': not seen on 2.4 GHz here - band left alone"
+        fi
     done
-    echo "   undo: rm /etc/NetworkManager/conf.d/99-localhome-wifi.conf; nmcli connection modify <name> connection.autoconnect-retries -1 802-11-wireless.powersave 0"
+    echo "   undo: rm /etc/NetworkManager/conf.d/99-localhome-wifi.conf; nmcli connection modify <name> connection.autoconnect-retries -1 802-11-wireless.powersave 0 802-11-wireless.band ''"
 else
     echo "   no NetworkManager here - nothing to do"
 fi
@@ -155,8 +171,13 @@ if [ -f "$UNIT" ] && grep -q "WATCHDOG=1" "$HERE/../src/localhome/services/servi
 # LocalHome board: restarted when it stops saying it's alive - see
 # deploy/tune-board.sh and src/localhome/services/service_watchdog.py.
 # The stop hook notes a watchdog restart in the admin panel's history.
+[Unit]
+StartLimitIntervalSec=0
+
 [Service]
 ExecStopPost=+/bin/sh /usr/local/lib/localhome/localhome-service-stopped.sh
+; Short of memory, the kernel sacrifices anything else first.
+OOMScoreAdjust=-500
 Type=notify
 NotifyAccess=main
 WatchdogSec=120
@@ -174,8 +195,53 @@ else
     echo "   no localhome.service installed - nothing to do"
 fi
 
+echo "== 9. No power saving anywhere"
+# The board is plugged in, all year: working beats saving power. It can
+# never go to sleep; Bluetooth - unused, and sharing the radio with the
+# Wi-Fi on this chip - is off; USB devices and the eMMC controller never
+# doze. (The CPU still changes speed as needed: it's instant, and always
+# at full speed would only heat a closed cabinet.)
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
+if systemctl list-unit-files bluetooth.service >/dev/null 2>&1; then
+    systemctl disable --now bluetooth.service >/dev/null 2>&1 || true
+fi
+command -v rfkill >/dev/null 2>&1 && rfkill block bluetooth 2>/dev/null || true
+cat > /etc/tmpfiles.d/localhome-power.conf <<'EOF'
+# LocalHome board: no power saving on USB or the eMMC - see deploy/tune-board.sh.
+w /sys/module/usbcore/parameters/autosuspend - - - - -1
+w /sys/bus/usb/devices/*/power/control - - - - on
+w /sys/bus/mmc/devices/*/power/control - - - - on
+w /sys/class/mmc_host/*/device/power/control - - - - on
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/localhome-power.conf 2>/dev/null || true
+echo "   on: no sleep, Bluetooth off, USB and eMMC always powered"
+echo "   undo: systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target; rfkill unblock bluetooth; systemctl enable --now bluetooth; rm /etc/tmpfiles.d/localhome-power.conf"
+
+echo "== 10. The essential services always come back"
+# LocalHome is only as good as the broker the Shellys talk to, the name
+# service that makes <name>.local work and the network manager: each is
+# restarted whenever it stops, however it stopped, and never given up on.
+# Short of memory, the broker is sacrificed after almost everything else.
+for unit in mosquitto avahi-daemon NetworkManager; do
+    if systemctl list-unit-files "$unit.service" >/dev/null 2>&1; then
+        mkdir -p "/etc/systemd/system/$unit.service.d"
+        {
+            echo "# LocalHome board: always restarted - see deploy/tune-board.sh."
+            echo "[Unit]"
+            echo "StartLimitIntervalSec=0"
+            echo "[Service]"
+            echo "Restart=always"
+            echo "RestartSec=5"
+            [ "$unit" = mosquitto ] && echo "OOMScoreAdjust=-300"
+        } > "/etc/systemd/system/$unit.service.d/localhome-restart.conf"
+        echo "   $unit: always restarted"
+    fi
+done
+systemctl daemon-reload
+echo "   undo: rm /etc/systemd/system/{mosquitto,avahi-daemon,NetworkManager}.service.d/localhome-restart.conf && systemctl daemon-reload"
+
 if [ "$LEAN" = 1 ]; then
-    echo "== 9. Lean: remove what LocalHome doesn't use"
+    echo "== 11. Lean: remove what LocalHome doesn't use"
     if command -v docker >/dev/null 2>&1; then
         docker image prune -a -f >/dev/null 2>&1 || true   # App Lab's images, unused by LocalHome
     fi
@@ -201,3 +267,5 @@ for unit in localhome mosquitto avahi-daemon localhome-wifi-watchdog.timer; do
     echo "   $unit: $(systemctl is-active "$unit" 2>/dev/null || true)"
 done
 echo "   hardware watchdog: $(systemctl show -p RuntimeWatchdogUSec --value 2>/dev/null)"
+echo "   sleep: $(systemctl is-enabled sleep.target 2>/dev/null)   bluetooth: $(systemctl is-active bluetooth 2>/dev/null || true)"
+echo "   Reboot once now (sudo systemctl reboot): the Wi-Fi band and the watchdogs take effect from the next boot."

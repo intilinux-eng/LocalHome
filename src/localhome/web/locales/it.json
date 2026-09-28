@@ -644,7 +644,12 @@
     "wd_healthy": "LocalHome di nuovo a posto, senza riavvio",
     "wd_restarted": "LocalHome riavviato dal watchdog",
     "wd_killed": "LocalHome bloccato da 2 minuti: riavviato dal watchdog",
-    "wd_boot_reconnect": "Wi-Fi riconnesso dopo l'avvio (precauzione)"
+    "wd_boot_reconnect": "Wi-Fi riconnesso dopo l'avvio (precauzione)",
+    "protection_power_saving_off": "Nessun risparmio energetico",
+    "protection_services_restart": "Servizi essenziali sempre riavviati",
+    "protection_wifi_24ghz": "Wi-Fi a 2,4 GHz",
+    "wd_band_24": "Rete Wi-Fi \"{all}\": solo 2,4 GHz",
+    "wd_band_any": "Senza Wi-Fi da 20 min: qualsiasi banda fino al prossimo riavvio"
   },
   "vmc_presets": {
     "night": "Notte",

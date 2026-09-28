@@ -6,8 +6,13 @@
 #
 # Every run:
 #   - the Wi-Fi radio is on, and every Wi-Fi profile retries for ever with
-#     power saving off (a profile added later - a new access point - gets
-#     the same, the first minute it exists);
+#     power saving off, on 2.4 GHz when its network is there on 2.4 GHz
+#     (a profile added later - a new access point - gets the same, the
+#     first minute it exists). 2.4 GHz: steadier with most routers, never
+#     a radar channel that throws everyone off, and where the Shellys are
+#     anyway. After 20 min without Wi-Fi the band is freed until the next
+#     boot - in case the network isn't on 2.4 GHz any more. An
+#     installation that must stay on any band: touch /etc/localhome/wifi-any-band;
 #   - once per boot, two minutes in, the Wi-Fi is reconnected anyway: on
 #     both test boards a fresh boot sometimes left the router passing
 #     pings to the board but not connections (web page, SSH, MQTT) - a
@@ -38,7 +43,8 @@ mkdir -p "$STATE" "$DATA"
 
 # log <code> [values...] - codes: radio_on, profile_fixed <name>, boot_reconnect,
 # router_down <gateway>, back <seconds>, reconnect <minutes> <device>,
-# nm_restart <minutes>, reboot <minutes>, reboot_skipped <minutes>.
+# nm_restart <minutes>, reboot <minutes>, reboot_skipped <minutes>,
+# band_24 <name>, band_any.
 log() {
     echo "$*"
     echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
@@ -47,6 +53,19 @@ log() {
 }
 
 uptime_s=$(cut -d. -f1 /proc/uptime)
+ANY_BAND=/etc/localhome/wifi-any-band
+
+# Whether profile $1's network is seen on 2.4 GHz right now (from the
+# last scan - no new one).
+on_24ghz() {
+    ssid=$(nmcli -g 802-11-wireless.ssid connection show "$1" 2>/dev/null)
+    [ -n "$ssid" ] || return 1
+    nmcli -t -f FREQ,SSID device wifi list --rescan no 2>/dev/null | while IFS= read -r row; do
+        freq=${row%%:*}
+        seen=$(printf '%s' "${row#*:}" | sed 's/\\:/:/g')
+        if [ "$seen" = "$ssid" ] && [ "${freq%% *}" -lt 3000 ]; then echo yes; break; fi
+    done | grep -q yes
+}
 
 # --------------------------------------------------- Wi-Fi never off ----
 if command -v nmcli >/dev/null 2>&1; then
@@ -65,6 +84,10 @@ if command -v nmcli >/dev/null 2>&1; then
             nmcli connection modify "$name" connection.autoconnect yes connection.autoconnect-retries 0 \
                 802-11-wireless.powersave 2 \
                 && log profile_fixed "$name"
+        fi
+        band=$(nmcli -g 802-11-wireless.band connection show "$name" 2>/dev/null)
+        if [ "$band" != "bg" ] && [ ! -f "$ANY_BAND" ] && [ ! -f "$STATE/band_any" ] && on_24ghz "$name"; then
+            nmcli connection modify "$name" 802-11-wireless.band bg && log band_24 "$name"
         fi
     done
 fi
@@ -141,6 +164,17 @@ if [ "$down" -ge 1800 ]; then
         log reboot_skipped "$((down / 60))"
     fi
 elif [ "$down" -ge 1200 ] && first_time reconnect2; then
+    # Not even connected to the Wi-Fi: maybe its network isn't on 2.4 GHz
+    # any more. Any band, until the next boot.
+    if [ -n "$wifi_dev" ] && [ "$(nmcli -g GENERAL.STATE device show "$wifi_dev" 2>/dev/null | cut -d' ' -f1)" != "100" ]; then
+        touch "$STATE/band_any"
+        nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS= read -r line; do
+            [ "${line##*:}" = "802-11-wireless" ] || continue
+            name=$(printf '%s' "${line%:*}" | sed 's/\\:/:/g')
+            nmcli connection modify "$name" 802-11-wireless.band "" 2>/dev/null
+        done
+        log band_any
+    fi
     reconnect
 elif [ "$down" -ge 600 ] && first_time nm_restart; then
     log nm_restart "$((down / 60))"

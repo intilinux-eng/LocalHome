@@ -467,9 +467,14 @@ SERVICE_WATCHDOG_LOG = "/var/lib/localhome/service-watchdog.log"
 HARDWARE_WATCHDOG_CONF = "/etc/systemd/system.conf.d/localhome-watchdog.conf"
 HARDWARE_WATCHDOG_DEVICE = "/dev/watchdog"
 NETWORKMANAGER_DIR = "/etc/NetworkManager"
+POWER_CONF = "/etc/tmpfiles.d/localhome-power.conf"
+SLEEP_TARGET = "/etc/systemd/system/sleep.target"        # masked: a link to /dev/null
+RESTART_DROPINS = [f"/etc/systemd/system/{unit}.service.d/localhome-restart.conf"
+                   for unit in ("mosquitto", "avahi-daemon", "NetworkManager")]
+ANY_BAND_FLAG = "/etc/localhome/wifi-any-band"
 
 
-def board_protections(env=os.environ) -> dict | None:
+def board_protections(env=os.environ, network: dict | None = None) -> dict | None:
     """Which of tune-board.sh's protections are on - {"items": {key: True /
     False / None (doesn't apply here)}, "events": the Wi-Fi watchdog's last
     actions}. None where none of it applies: no NetworkManager (a PC,
@@ -482,6 +487,12 @@ def board_protections(env=os.environ) -> dict | None:
         "hardware_watchdog": os.path.exists(HARDWARE_WATCHDOG_CONF) if os.path.exists(HARDWARE_WATCHDOG_DEVICE) else None,
         # systemd sets it for a service with WatchdogSec - see service_watchdog.py.
         "service_watchdog": bool(env.get("WATCHDOG_USEC")),
+        "power_saving_off": os.path.exists(POWER_CONF) and os.path.realpath(SLEEP_TARGET) == "/dev/null",
+        "services_restart": all(os.path.exists(path) for path in RESTART_DROPINS),
+        # From the connection itself: on 2.4 GHz or not (None: not on Wi-Fi,
+        # or deliberately left on any band).
+        "wifi_24ghz": None if os.path.exists(ANY_BAND_FLAG) or not ((network or {}).get("wifi") or {}).get("band")
+        else network["wifi"]["band"].startswith("2.4"),
     }
     return {"items": items}
 
