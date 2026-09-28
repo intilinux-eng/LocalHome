@@ -455,3 +455,13 @@ def test_the_write_rate_is_the_last_hours_not_since_boot():
     written["b"] = 10                                   # a reboot resets the counter
     rate.sample()
     assert rate.per_day() is None
+
+
+def test_a_device_answering_with_an_error_after_a_boot_is_offline_not_waiting():
+    host = {"uptime_seconds": 60}
+    waiting = {"name": "Stanze Sensor", "ok": False, "seconds_since_update": None,
+               "error": "no MQTT message received yet on shellyhtg3-x/status/temperature:0"}
+    failing = {"name": "Divano", "ok": False, "seconds_since_update": None,
+               "error": "Timed out getting discovery response for 192.168.1.3"}
+    found = {p["subject"]: p["code"] for p in system_status.problems([waiting, failing], [], {}, host=host)}
+    assert found == {"Stanze Sensor": "device_not_heard_yet", "Divano": "device_offline"}

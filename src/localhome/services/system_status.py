@@ -728,7 +728,12 @@ def problems(
     just_booted = (host or {}).get("uptime_seconds") is not None and host["uptime_seconds"] < FRESH_BOOT_SECONDS
     for device in devices:
         if not device["ok"]:
+            # "Not yet" is for a device that simply hasn't spoken since the
+            # boot - a battery sensor waiting for its next report. One that
+            # answers with an error (a light strip timing out at an address
+            # it no longer has) is offline, and says why.
             never_heard = device.get("seconds_since_update") is None
-            code = "device_not_heard_yet" if (never_heard and just_booted) else "device_offline"
+            waiting = not device.get("error") or "received yet" in device["error"]
+            code = "device_not_heard_yet" if (never_heard and just_booted and waiting) else "device_offline"
             found.append({"code": code, "subject": device["name"], "detail": device["error"]})
     return found
