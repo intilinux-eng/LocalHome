@@ -1321,6 +1321,45 @@ function bootsHtml(boots) {
 
 // What deploy/tune-board.sh sets up for running all year on Wi-Fi - on,
 // missing, or not applicable on this board. Null off a board (a PC).
+// What the board's hardware says about itself (system_status.board_hardware):
+// read from files on every refresh, left out where a machine hasn't it.
+
+function boardText(hw) {
+  return [hw.model, hw.soc, hw.serial ? tr("climate_admin.system_board_serial", { serial: hw.serial }) : ""]
+    .filter(Boolean).join(" · ");
+}
+
+// "41°C (slows down at 90°C)": how far from the kernel cooling it by
+// lowering its speed.
+function cpuTempText(temp, throttle) {
+  if (typeof temp !== "number") return "--";
+  return throttle ? tr("climate_admin.system_cpu_temp_value", { value: temp.toFixed(0), throttle: Math.round(throttle) })
+    : `${temp.toFixed(0)}°C`;
+}
+
+function otherTempsText(temps) {
+  return ["wifi", "gpu", "modem"].filter(k => temps[k] != null)
+    .map(k => `${tr(`climate_admin.system_temp_${k}`)} ${Math.round(temps[k])}°C`).join(" · ");
+}
+
+function cpuFreqText(hw) {
+  const ghz = mhz => (mhz / 1000).toLocaleString(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (hw.cpu_capped) return tr("climate_admin.system_cpu_freq_capped", { max: ghz(hw.cpu_mhz_max) });
+  const text = tr("climate_admin.system_cpu_freq_value", { now: ghz(hw.cpu_mhz_now), max: ghz(hw.cpu_mhz_max) });
+  return hw.cpu_top_share == null ? text
+    : `${text} · ${tr("climate_admin.system_cpu_top_share", { share: Math.round(hw.cpu_top_share * 100) })}`;
+}
+
+// Errors are counted since boot, against every packet: a handful in a
+// hundred thousand is radio noise, more than 1 in 100 is a bad link.
+function wifiErrorsRow(hw) {
+  if (hw.wifi_packets == null) return "";
+  const share = hw.wifi_packets ? hw.wifi_errors / hw.wifi_packets : 0;
+  return statRowHtml(tr("climate_admin.system_wifi_errors"),
+    tr("climate_admin.system_wifi_errors_value", { errors: hw.wifi_errors.toLocaleString(LOCALE), packets: hw.wifi_packets.toLocaleString(LOCALE) }),
+    share > 0.01);
+}
+
 // The 5-minute load average as a share of the board's processors, in
 // words: "1.2 / 0.9 / 0.7 (4 CPU)" meant nothing to most people. At or
 // past 100% there's more work than the processors keep up with.
@@ -1388,6 +1427,7 @@ function systemStatusHtml(data) {
     : "--");
   const count = n => (typeof n === "number" ? n.toLocaleString(LOCALE) : "--");
 
+  const hw = h.hardware || {};
   const groups = [
     [tr("climate_admin.system_group_process"), [
       statRowHtml(tr("climate_admin.system_started"), sinceText(p.started_at, p.uptime_seconds)),
@@ -1398,10 +1438,14 @@ function systemStatusHtml(data) {
       loopRows,
     ].join("")],
     [tr("climate_admin.system_group_host"), [
+      hw.model ? statRowHtml(tr("climate_admin.system_board"), boardText(hw)) : "",
       statRowHtml(tr("climate_admin.system_host_ram"), freeOf(h.mem_available_bytes, h.mem_total_bytes)),
-      statRowHtml(tr("climate_admin.system_cpu_temp"),
-        typeof h.cpu_temp_c === "number" ? `${h.cpu_temp_c.toFixed(0)}°C` : "--", h.cpu_temp_c >= 80),
+      hw.swap_total_bytes ? statRowHtml(tr("climate_admin.system_swap"),
+        tr("climate_admin.system_swap_value", { used: formatBytes(hw.swap_used_bytes), total: formatBytes(hw.swap_total_bytes) })) : "",
+      statRowHtml(tr("climate_admin.system_cpu_temp"), cpuTempText(h.cpu_temp_c, hw.throttle_c), h.cpu_temp_c >= 80),
+      Object.keys(hw.temps || {}).length ? statRowHtml(tr("climate_admin.system_other_temps"), otherTempsText(hw.temps)) : "",
       loadRowHtml(h),
+      hw.cpu_mhz_max ? statRowHtml(tr("climate_admin.system_cpu_freq"), cpuFreqText(hw), hw.cpu_capped) : "",
       statRowHtml(tr("climate_admin.system_last_boot"), sinceText(h.booted_at, h.uptime_seconds)),
       statRowHtml(tr("climate_admin.system_clock"),
         h.clock_synced == null ? "--" : tr(h.clock_synced ? "climate_admin.system_clock_ok" : "climate_admin.system_clock_bad"),
@@ -1423,7 +1467,7 @@ function systemStatusHtml(data) {
             : tr("climate_admin.system_emmc_measuring")),
       ] : []),
     ].join("")],
-    [tr("climate_admin.system_group_network"), networkRows(data.network)],
+    [tr("climate_admin.system_group_network"), networkRows(data.network) + wifiErrorsRow(hw)],
     ...(data.protections ? [[tr("climate_admin.system_group_protections"), protectionRows(data.protections)]] : []),
     [tr("climate_admin.system_group_history"), [
       statRowHtml(tr("climate_admin.system_db_size"), formatBytes(db.file_bytes)),

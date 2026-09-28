@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Any
 
 # When this process started, as close to it as this module gets: it's
 # imported while create_app() builds everything else. Monotonic, never
@@ -137,13 +138,13 @@ def process_stats() -> dict:
     }
 
 
-def _meminfo() -> dict[str, int]:
+def _meminfo(keys=("MemTotal", "MemAvailable"), proc_root: str = "/proc") -> dict[str, int]:
     values: dict[str, int] = {}
     try:
-        with open("/proc/meminfo", encoding="ascii", errors="replace") as fh:
+        with open(os.path.join(proc_root, "meminfo"), encoding="ascii", errors="replace") as fh:
             for line in fh:
                 key, _, rest = line.partition(":")
-                if key in ("MemTotal", "MemAvailable"):
+                if key in keys:
                     values[key] = int(rest.split()[0]) * 1024
     except (OSError, ValueError, IndexError):
         pass
@@ -170,6 +171,128 @@ def cpu_temperature_c(sys_root: str = "/sys") -> float | None:
     cpu = [t for kind, t in readings if "cpu" in kind.lower()]
     values = cpu or [t for _, t in readings]
     return round(max(values), 1) if values else None
+
+
+# The zones worth naming on their own, by what the UNO Q calls them
+# ("wlan-thermal", "gpu-thermal", "mdm0-thermal") - the CPU has its own row.
+_NAMED_ZONES = {"wlan": "wifi", "gpu": "gpu", "mdm": "modem"}
+
+
+def board_hardware(sys_root: str = "/sys", proc_root: str = "/proc", base_root: str = "/") -> dict:
+    """What the board's hardware says about itself, all from files - no
+    subprocess, so the admin panel can ask on every refresh:
+
+    - which board: model, chip, serial number (from the device tree);
+    - how warm, beyond the CPU: the Wi-Fi chip, the GPU, the modem, and
+      where the kernel starts slowing the CPU down to cool it (its first
+      "passive" trip point - 90°C on the UNO Q);
+    - how fast the CPU runs, whether heat has capped it, and how much of
+      the time since boot it spent at full speed;
+    - the zram swap (compressed RAM, not the eMMC): in use means RAM ran
+      short at some point;
+    - the Wi-Fi's own error counters since boot.
+
+    Anything this machine doesn't have is simply left out (a PC)."""
+    tree = os.path.join(base_root, "proc", "device-tree")
+    soc = os.path.join(sys_root, "devices", "soc0")
+    found: dict[str, Any] = {
+        "model": _read_text(os.path.join(tree, "model")),
+        "serial": _read_text(os.path.join(tree, "serial-number")),
+        "soc": " ".join(v for v in (_read(os.path.join(soc, "family")), _read(os.path.join(soc, "machine"))) if v) or None,
+    }
+
+    thermal = os.path.join(sys_root, "class", "thermal")
+    temps: dict[str, float] = {}
+    throttle = []
+    try:
+        zones = sorted(z for z in os.listdir(thermal) if z.startswith("thermal_zone"))
+    except OSError:
+        zones = []
+    for zone in zones:
+        kind = (_read(os.path.join(thermal, zone, "type")) or "").lower()
+        try:
+            temp = int(_read(os.path.join(thermal, zone, "temp"))) / 1000
+        except (TypeError, ValueError):
+            continue
+        for prefix, name in _NAMED_ZONES.items():
+            if kind.startswith(prefix):
+                temps[name] = round(max(temp, temps.get(name, temp)), 1)
+        if "cpu" in kind:
+            for trip in range(8):
+                if _read(os.path.join(thermal, zone, f"trip_point_{trip}_type")) == "passive":
+                    try:
+                        throttle.append(int(_read(os.path.join(thermal, zone, f"trip_point_{trip}_temp"))) / 1000)
+                    except (TypeError, ValueError):
+                        pass
+    found["temps"] = temps
+    found["throttle_c"] = min(throttle) if throttle else None
+
+    cpu = os.path.join(sys_root, "devices", "system", "cpu")
+    now, top, capped = [], None, False
+    at_top = total = 0
+    try:
+        cores = sorted(c for c in os.listdir(cpu) if re.fullmatch(r"cpu\d+", c))
+    except OSError:
+        cores = []
+    seen_policies = set()
+    for core in cores:
+        freq = os.path.join(cpu, core, "cpufreq")
+        try:
+            now.append(int(_read(os.path.join(freq, "scaling_cur_freq"))) // 1000)
+            hardware_max = int(_read(os.path.join(freq, "cpuinfo_max_freq"))) // 1000
+            allowed_max = int(_read(os.path.join(freq, "scaling_max_freq"))) // 1000
+        except (TypeError, ValueError):
+            continue
+        top = max(top or 0, hardware_max)
+        capped = capped or allowed_max < hardware_max
+        # One table per group of cores that share a clock (all four, here).
+        policy = _read(os.path.join(freq, "related_cpus"))
+        if policy in seen_policies:
+            continue
+        seen_policies.add(policy)
+        for line in (_read(os.path.join(freq, "stats", "time_in_state")) or "").splitlines():
+            try:
+                khz, ticks = (int(v) for v in line.split())
+            except ValueError:
+                continue
+            total += ticks
+            at_top += ticks if khz // 1000 >= hardware_max else 0
+    if now:
+        found["cpu_mhz_now"] = max(now)
+        found["cpu_mhz_max"] = top
+        found["cpu_capped"] = capped
+        found["cpu_top_share"] = round(at_top / total, 3) if total else None
+
+    swap = _meminfo(("SwapTotal", "SwapFree"), proc_root)
+    if swap.get("SwapTotal"):
+        found["swap_total_bytes"] = swap["SwapTotal"]
+        found["swap_used_bytes"] = swap["SwapTotal"] - swap.get("SwapFree", 0)
+
+    net = os.path.join(sys_root, "class", "net")
+    try:
+        wifi = next((i for i in sorted(os.listdir(net)) if os.path.isdir(os.path.join(net, i, "wireless"))), None)
+    except OSError:
+        wifi = None
+    if wifi:
+        counters = {}
+        for name in ("rx_packets", "tx_packets", "rx_errors", "tx_errors"):
+            try:
+                counters[name] = int(_read(os.path.join(net, wifi, "statistics", name)))
+            except (TypeError, ValueError):
+                pass
+        if len(counters) == 4:
+            found["wifi_packets"] = counters["rx_packets"] + counters["tx_packets"]
+            found["wifi_errors"] = counters["rx_errors"] + counters["tx_errors"]
+    return found
+
+
+def _read_text(path: str) -> str | None:
+    """A device-tree string: NUL-terminated, sometimes not plain ASCII."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read().rstrip(b"\0").decode(errors="replace").strip() or None
+    except OSError:
+        return None
 
 
 def _uptime_seconds() -> float | None:
@@ -215,6 +338,7 @@ def host_stats() -> dict:
         "os": _os_name(),
         "kernel": platform.release(),
         "clock_synced": _clock_synced(),
+        "hardware": board_hardware(),
     }
 
 
@@ -746,6 +870,10 @@ def problems(
         found.append({"code": "wifi_weak", "subject": wifi.get("ssid") or "Wi-Fi", "detail": f"{wifi['signal_percent']}%"})
     if cpu_temp_c is not None and cpu_temp_c >= CPU_HOT_C:
         found.append({"code": "cpu_hot", "subject": f"{cpu_temp_c:.0f}°C", "detail": None})
+    hardware = (host or {}).get("hardware") or {}
+    if hardware.get("cpu_capped"):
+        # The kernel has lowered the CPU's top speed to cool it down.
+        found.append({"code": "cpu_throttled", "subject": f"{hardware.get('cpu_mhz_max')} MHz", "detail": None})
     if storage and (storage["pre_eol"] in ("warning", "urgent") or (storage["wear_percent_max"] or 0) >= 80):
         found.append({"code": "storage_wear", "subject": storage.get("name") or "eMMC",
                       "detail": f"{storage['wear_percent_max']}% - {storage['pre_eol']}"})

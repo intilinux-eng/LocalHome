@@ -496,3 +496,70 @@ def test_the_dashboards_problem_count_leaves_out_devices_not_heard_yet(tmp_path,
     finally:
         app.config["HISTORY"].close()
     assert body == {"ok": True, "problems": [{"code": "device_offline", "subject": "Stanze Valve", "detail": None}]}
+
+
+def _fake_uno_q(tmp_path, capped=False):
+    """The files board_hardware() reads, as found on a real UNO Q."""
+    root = tmp_path / "root"
+    tree = root / "proc" / "device-tree"
+    tree.mkdir(parents=True)
+    (tree / "model").write_bytes(b"Arduino UnoQ\0")
+    (tree / "serial-number").write_bytes(b"927cba3f\0")
+    sys_root = tmp_path / "sys"
+    soc = sys_root / "devices" / "soc0"
+    soc.mkdir(parents=True)
+    (soc / "family").write_text("Snapdragon\n")
+    (soc / "machine").write_text("QRB2210\n")
+    zones = [("cpuss0-thermal", 40400), ("cpuss1-thermal", 41200), ("wlan-thermal", 38500),
+             ("gpu-thermal", 39500), ("mdm0-thermal", 39500), ("mdm1-thermal", 39100)]
+    for i, (kind, millideg) in enumerate(zones):
+        zone = sys_root / "class" / "thermal" / f"thermal_zone{i}"
+        zone.mkdir(parents=True)
+        (zone / "type").write_text(kind + "\n")
+        (zone / "temp").write_text(f"{millideg}\n")
+        if kind.startswith("cpuss"):
+            for trip, (temp, kind_) in enumerate([(90000, "passive"), (95000, "passive"), (110000, "critical")]):
+                (zone / f"trip_point_{trip}_temp").write_text(f"{temp}\n")
+                (zone / f"trip_point_{trip}_type").write_text(f"{kind_}\n")
+    for n, cur in enumerate([1305600, 1305600, 1305600, 2016000]):
+        freq = sys_root / "devices" / "system" / "cpu" / f"cpu{n}" / "cpufreq"
+        (freq / "stats").mkdir(parents=True)
+        (freq / "scaling_cur_freq").write_text(f"{cur}\n")
+        (freq / "cpuinfo_max_freq").write_text("2016000\n")
+        (freq / "scaling_max_freq").write_text("1305600\n" if capped else "2016000\n")
+        (freq / "related_cpus").write_text("0 1 2 3\n")
+        (freq / "stats" / "time_in_state").write_text("300000 0\n614400 750\n2016000 250\n")
+    (sys_root / "devices" / "system" / "cpu" / "cpufreq").mkdir()      # not a core
+    wifi = sys_root / "class" / "net" / "wlan0"
+    (wifi / "wireless").mkdir(parents=True)
+    (wifi / "statistics").mkdir()
+    for name, value in (("rx_packets", 100238), ("tx_packets", 81353), ("rx_errors", 2), ("tx_errors", 1)):
+        (wifi / "statistics" / name).write_text(f"{value}\n")
+    (sys_root / "class" / "net" / "lo").mkdir()
+    proc_root = tmp_path / "proc"
+    proc_root.mkdir()
+    (proc_root / "meminfo").write_text("MemTotal: 3755008 kB\nSwapTotal: 1877576 kB\nSwapFree: 1873480 kB\n")
+    return str(sys_root), str(proc_root), str(root)
+
+
+def test_the_boards_hardware_as_the_uno_q_reports_it(tmp_path):
+    hardware = system_status.board_hardware(*_fake_uno_q(tmp_path))
+    assert (hardware["model"], hardware["serial"], hardware["soc"]) == ("Arduino UnoQ", "927cba3f", "Snapdragon QRB2210")
+    assert hardware["temps"] == {"wifi": 38.5, "gpu": 39.5, "modem": 39.5}
+    assert hardware["throttle_c"] == 90
+    assert (hardware["cpu_mhz_now"], hardware["cpu_mhz_max"], hardware["cpu_capped"]) == (2016, 2016, False)
+    assert hardware["cpu_top_share"] == 0.25, "one table for the four cores that share a clock"
+    assert (hardware["swap_total_bytes"], hardware["swap_used_bytes"]) == (1877576 * 1024, 4096 * 1024)
+    assert (hardware["wifi_packets"], hardware["wifi_errors"]) == (181591, 3)
+
+
+def test_a_cpu_slowed_down_by_heat_is_a_problem(tmp_path):
+    hardware = system_status.board_hardware(*_fake_uno_q(tmp_path, capped=True))
+    assert hardware["cpu_capped"] is True
+    found = system_status.problems([], [], {}, host={"hardware": hardware})
+    assert [p["code"] for p in found] == ["cpu_throttled"]
+
+
+def test_a_pc_without_any_of_it_gets_nothing_made_up(tmp_path):
+    hardware = system_status.board_hardware(str(tmp_path / "s"), str(tmp_path / "p"), str(tmp_path / "r"))
+    assert hardware == {"model": None, "serial": None, "soc": None, "temps": {}, "throttle_c": None}
