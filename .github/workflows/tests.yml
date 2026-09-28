@@ -36,3 +36,26 @@ jobs:
       - run: pip install -e ".[dev,ui]" -c constraints.txt
       - run: python -m playwright install --with-deps chromium
       - run: pytest -m ui
+
+  # The README's "try it in one minute": the demo image builds, starts with
+  # every device simulated, and shows two zones with their sample week.
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker-compose.demo.yml up -d --build
+      - run: |
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:5000/api/server-time > /dev/null && break
+            sleep 2
+          done
+          curl -fs http://localhost:5000/api/climate/zones | python3 -c "
+          import json, sys
+          zones = json.load(sys.stdin)['zones']
+          assert [z['name'] for z in zones] == ['Rooms', 'Bathrooms'], zones
+          assert zones[0]['target_c'] is not None, 'the sample week is loaded'
+          print('demo up:', [(z['name'], z['temperature_c']) for z in zones])"
+          curl -fs http://localhost:5000/climate-admin > /dev/null
+      - if: always()
+        run: docker compose -f docker-compose.demo.yml logs --tail 50
+      - run: docker compose -f docker-compose.demo.yml down -v

@@ -1,0 +1,22 @@
+# LocalHome with every device simulated - no hardware, no MQTT broker:
+#
+#     docker compose -f docker-compose.demo.yml up --build
+#     # -> http://localhost:5000  (admin panel: http://localhost:5000/climate-admin)
+#
+# The demo's configuration (demo/config/) is copied into a volume on the
+# first start, so what you change from the pages is kept across restarts
+# and the repository's files stay untouched. Start over with:
+#
+#     docker compose -f docker-compose.demo.yml down -v
+services:
+  localhome-demo:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./demo/config:/demo:ro
+      - demo-config:/app/config
+    command: ["sh", "-c", "cp -rn /demo/. /app/config/ && exec localhome"]
+
+volumes:
+  demo-config:

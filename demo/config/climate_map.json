@@ -1,0 +1,10 @@
+{
+  "zones": [
+    {"name": "Rooms", "sensor_mode": "simulated", "sensor_device_id": null,
+     "valve_mode": "simulated", "valve_device_id": null, "cool_enabled": true},
+    {"name": "Bathrooms", "sensor_mode": "simulated", "sensor_device_id": null,
+     "valve_mode": "simulated", "valve_device_id": null, "cool_enabled": false}
+  ],
+  "extra_sensors": {"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": null},
+  "extra_dimmers": {"vmc_mode": "simulated", "vmc_device_id": null}
+}

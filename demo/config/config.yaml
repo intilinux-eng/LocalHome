@@ -1,0 +1,41 @@
+# The demo: the whole climate installation LocalHome runs in a real
+# apartment - two zones, an outdoor sensor, the ventilation (VMC), a
+# bathroom bypass valve and a dehumidifier - with every device simulated.
+# No hardware, no MQTT broker, nothing on the network. See
+# docker-compose.demo.yml; the admin panel (/climate-admin) switches any
+# device to a real Shelly id once you have one.
+
+web:
+  host: "0.0.0.0"
+  port: 5000
+  language: "en"
+  site_name: "LocalHome demo"
+
+integrations:
+  - kind: switch
+    type: simulated
+    name: "Dehumidifier"
+    dashboard_tab: climate
+    visible_in_mode: "cool"
+  - kind: switch
+    type: simulated
+    name: "Bathroom Bypass Valve"
+    dashboard_tab: climate
+    visible_in_mode: "cool"
+
+thermostat:
+  mode: "heat"
+  hysteresis_c: 0.5
+  schedules_file: "schedules.json"
+  poll_interval_seconds: 60
+  mode_switches:
+    - switch: "Bathroom Bypass Valve"
+      active_in_mode: "cool"
+  mode_limited_switches:
+    - switch: "Dehumidifier"
+      only_in_mode: "cool"
+
+history:
+  db_file: "data/history.db"
+  poll_interval_seconds: 30
+  retention_days: 30
