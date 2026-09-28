@@ -243,9 +243,28 @@ everything - Shellys, phones, the clock - so:
   restarts the network manager, at 20 reconnects again, at 30 reboots the
   board - at most once every 6 hours, so a router switched off for the
   night doesn't reboot it all night.
+- *2.4 GHz only*, where the network is there on 2.4 GHz: steadier with
+  most routers, never a radar channel (5 GHz channels 52-144) that
+  throws every device off, and the band the Shellys use anyway. Measured
+  on the production board: on 5 GHz, phones and PCs lost it for a day and
+  a half while the Shellys - on 2.4 GHz - reached it the whole time; on
+  2.4 GHz it answered at once. The watchdog frees the band by itself if
+  the board can't connect for 20 minutes (a network no longer on 2.4
+  GHz); `sudo touch /etc/localhome/wifi-any-band` before this step leaves
+  the band alone.
+- *No power saving anywhere*: the board can't go to sleep, Bluetooth
+  (unused, and sharing the radio with the Wi-Fi) is off, USB and the
+  eMMC never doze. The CPU still changes speed as needed.
+- *The essential services always come back*: the MQTT broker, the name
+  service (`<name>.local`) and the network manager are restarted
+  whenever they stop, and never given up on; short of memory, LocalHome
+  and the broker are the last to go.
 - *The hardware watchdog*: if the whole system freezes, the chip resets
   the board by itself (off on a stock UNO Q image).
 - *LocalHome restarted if it hangs* - see step 7.
+
+Then reboot once (`sudo systemctl reboot`): the Wi-Fi band applies from
+the next connection.
 
 ```bash
 sudo sh /home/arduino/localhome/deploy/tune-board.sh
@@ -290,8 +309,8 @@ The dashboard answered again 40 seconds after the reboot on this board,
 with no intervention.
 
 And check the protections from step 8: **System status → Protections for
-running all year** must show all four on (or "not available" for a
-hardware watchdog on a board without one).
+running all year** must show them all on (or "not available" for a
+hardware watchdog on a board without one), and the Wi-Fi row "2.4 GHz".
 
 To see the Wi-Fi watchdog act without touching the router, point it at
 an address that doesn't answer for one run - it logs "the router isn't
