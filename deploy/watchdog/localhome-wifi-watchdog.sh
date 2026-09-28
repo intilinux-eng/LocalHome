@@ -6,13 +6,11 @@
 #
 # Every run:
 #   - the Wi-Fi radio is on, and every Wi-Fi profile retries for ever with
-#     power saving off, on 2.4 GHz when its network is there on 2.4 GHz
-#     (a profile added later - a new access point - gets the same, the
-#     first minute it exists). 2.4 GHz: steadier with most routers, never
-#     a radar channel that throws everyone off, and where the Shellys are
-#     anyway. After 20 min without Wi-Fi the band is freed until the next
-#     boot - in case the network isn't on 2.4 GHz any more. An
-#     installation that must stay on any band: touch /etc/localhome/wifi-any-band;
+#     power saving off (a profile added later - a new access point - gets
+#     the same, the first minute it exists). Any band: the board joins
+#     whichever the router offers, like any other device - pinning it to
+#     2.4 GHz once cut the Shellys off on a router that wouldn't pass
+#     connections between two devices on the same radio;
 #   - once per boot, two minutes in, the Wi-Fi is reconnected anyway: on
 #     both test boards a fresh boot sometimes left the router passing
 #     pings to the board but not connections (web page, SSH, MQTT) - a
@@ -22,7 +20,11 @@
 #     up: 3 min -> reconnect the Wi-Fi, 10 min -> restart NetworkManager,
 #     20 min -> reconnect again, 30 min -> reboot the board (not in its
 #     first 30 min of uptime, at most once every 6 hours: a router that's
-#     switched off doesn't make the board reboot all night).
+#     switched off doesn't make the board reboot all night);
+#   - the router answering, the Shellys connected to the board's broker are
+#     counted: some were, none are for 10 min -> reconnect the Wi-Fi, again
+#     at 30. The router has stopped passing their connections (LocalHome
+#     shows RT and asks for the router to be restarted).
 #
 # What it does goes to the journal and, being rare, to a small log on disk
 # that survives the reboot it may cause: one line per action, a date, a
@@ -30,9 +32,9 @@
 # LocalHome's admin panel, which words each code in the page's language
 # (system status -> watchdog history, and the diagnostics download).
 #
-# It can't see everything: today's router answering while phones and PCs
-# can't reach the board is invisible from here - a fixed IP (a DHCP
-# reservation) for the board in the router is still worth having.
+# It can't see everything: a router that blocks phones and PCs but still
+# passes the Shellys looks fine from here. A fixed IP (a DHCP reservation)
+# for the board and 5 GHz on a non-radar channel (36-48) help.
 
 STATE=/run/localhome-wifi-watchdog
 DATA=/var/lib/localhome
@@ -44,7 +46,7 @@ mkdir -p "$STATE" "$DATA"
 # log <code> [values...] - codes: radio_on, profile_fixed <name>, boot_reconnect,
 # router_down <gateway>, back <seconds>, reconnect <minutes> <device>,
 # nm_restart <minutes>, reboot <minutes>, reboot_skipped <minutes>,
-# band_24 <name>, band_any.
+# lan_silent <minutes>, lan_back <seconds>.
 log() {
     echo "$*"
     echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
@@ -53,19 +55,6 @@ log() {
 }
 
 uptime_s=$(cut -d. -f1 /proc/uptime)
-ANY_BAND=/etc/localhome/wifi-any-band
-
-# Whether profile $1's network is seen on 2.4 GHz right now (from the
-# last scan - no new one).
-on_24ghz() {
-    ssid=$(nmcli -g 802-11-wireless.ssid connection show "$1" 2>/dev/null)
-    [ -n "$ssid" ] || return 1
-    nmcli -t -f FREQ,SSID device wifi list --rescan no 2>/dev/null | while IFS= read -r row; do
-        freq=${row%%:*}
-        seen=$(printf '%s' "${row#*:}" | sed 's/\\:/:/g')
-        if [ "$seen" = "$ssid" ] && [ "${freq%% *}" -lt 3000 ]; then echo yes; break; fi
-    done | grep -q yes
-}
 
 # --------------------------------------------------- Wi-Fi never off ----
 if command -v nmcli >/dev/null 2>&1; then
@@ -84,10 +73,6 @@ if command -v nmcli >/dev/null 2>&1; then
             nmcli connection modify "$name" connection.autoconnect yes connection.autoconnect-retries 0 \
                 802-11-wireless.powersave 2 \
                 && log profile_fixed "$name"
-        fi
-        band=$(nmcli -g 802-11-wireless.band connection show "$name" 2>/dev/null)
-        if [ "$band" != "bg" ] && [ ! -f "$ANY_BAND" ] && [ ! -f "$STATE/band_any" ] && on_24ghz "$name"; then
-            nmcli connection modify "$name" 802-11-wireless.band bg && log band_24 "$name"
         fi
     done
 fi
@@ -132,6 +117,37 @@ if [ "$up" = 1 ]; then
         rm -f "$STATE/down_since" "$STATE/reconnect1" "$STATE/reconnect2" "$STATE/nm_restart" \
             "$STATE/reboot_skipped"
     fi
+
+    # -------------------------- the router answers: do the devices? ----
+    # Mains-powered Shellys stay connected to the board's MQTT broker all
+    # the time. Some were, none are, and the router still answers: the
+    # router has stopped passing their connections to the board (seen on
+    # the production board: it passed pings, not connections, between two
+    # devices on the same radio, until it was restarted). Re-activating
+    # the Wi-Fi is all the board can do - at 10 and 30 minutes; LocalHome
+    # shows it as "RT" and asks for the router to be restarted.
+    lan=$(ss -Htn state established '( sport = :1883 )' 2>/dev/null \
+        | awk '$4 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/' | wc -l)
+    if [ "$lan" -gt 0 ]; then
+        touch "$STATE/lan_seen"
+        if [ -f "$STATE/lan_silent_since" ]; then
+            log lan_back "$((uptime_s - $(cat "$STATE/lan_silent_since")))"
+            rm -f "$STATE/lan_silent_since" "$STATE/lan_reconnect1" "$STATE/lan_reconnect2"
+        fi
+    elif [ -f "$STATE/lan_seen" ]; then
+        [ -f "$STATE/lan_silent_since" ] || echo "$uptime_s" > "$STATE/lan_silent_since"
+        silent=$((uptime_s - $(cat "$STATE/lan_silent_since")))
+        for step in "1800 lan_reconnect2" "600 lan_reconnect1"; do
+            limit=${step% *}
+            flag=$STATE/${step#* }
+            if [ "$silent" -ge "$limit" ] && [ ! -f "$flag" ]; then
+                touch "$STATE/lan_reconnect1" "$flag"
+                log lan_silent "$((silent / 60))"
+                wifi_up
+                break
+            fi
+        done
+    fi
     exit 0
 fi
 
@@ -164,17 +180,6 @@ if [ "$down" -ge 1800 ]; then
         log reboot_skipped "$((down / 60))"
     fi
 elif [ "$down" -ge 1200 ] && first_time reconnect2; then
-    # Not even connected to the Wi-Fi: maybe its network isn't on 2.4 GHz
-    # any more. Any band, until the next boot.
-    if [ -n "$wifi_dev" ] && [ "$(nmcli -g GENERAL.STATE device show "$wifi_dev" 2>/dev/null | cut -d' ' -f1)" != "100" ]; then
-        touch "$STATE/band_any"
-        nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS= read -r line; do
-            [ "${line##*:}" = "802-11-wireless" ] || continue
-            name=$(printf '%s' "${line%:*}" | sed 's/\\:/:/g')
-            nmcli connection modify "$name" 802-11-wireless.band "" 2>/dev/null
-        done
-        log band_any
-    fi
     reconnect
 elif [ "$down" -ge 600 ] && first_time nm_restart; then
     log nm_restart "$((down / 60))"

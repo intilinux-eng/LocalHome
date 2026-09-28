@@ -647,9 +647,13 @@
     "wd_boot_reconnect": "Wi-Fi reconnected after start-up (precaution)",
     "protection_power_saving_off": "No power saving",
     "protection_services_restart": "Essential services always restarted",
-    "protection_wifi_24ghz": "Wi-Fi on 2.4 GHz",
-    "wd_band_24": "Wi-Fi network \"{all}\": 2.4 GHz only",
-    "wd_band_any": "No Wi-Fi for 20 min: any band until the next boot"
+    "system_problem_lan_unreachable": "The Shelly devices haven't reached the board for {subject}, although the board is on and connected to the Wi-Fi: almost certainly the router. Restart the router.",
+    "led_code_RT": "the devices can't reach the board although it's on the Wi-Fi: restart the router",
+    "how_network_title": "Wi-Fi and the router",
+    "how_network": "The board stays on the Wi-Fi day and night: power saving is off, it never stops trying to connect, and a watchdog checks every minute that the router answers - when it doesn't, it reconnects the Wi-Fi (3 minutes), restarts the network manager (10), tries again (20) and finally reboots the board (30, at most every 6 hours). All it does goes in the Watchdog history, under System status. The page and the Shellys use the board's name (name.local), not its address: when the router hands out new addresses nothing changes.",
+    "how_network_router": "One thing the board can't see by itself: the router answering it but no longer passing it the other devices' connections. It happened on the home board: pings got through, the page and the sensors didn't, until the router was restarted. When the Shellys all stop arriving at once while the Wi-Fi is connected, LocalHome says so here in System status and with RT on the LED matrix, and the watchdog reconnects the Wi-Fi; if that's not enough, restart the router. To prevent it: in the router, 5 GHz on a fixed channel between 36 and 48 (channels 52-144 are \"radar\" ones the router may leave by itself), the board and the Shellys on the main network, never the guest one, and a fixed address for the board if possible. If the page won't open but the LED matrix draws normally, the board is fine: it's the network.",
+    "wd_lan_silent": "No Shelly connected for {a} min although the router answers: Wi-Fi reconnected (if that's not enough, restart the router)",
+    "wd_lan_back": "The Shellys reach the board again"
   },
   "vmc_presets": {
     "night": "Night",

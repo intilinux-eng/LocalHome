@@ -97,17 +97,12 @@ def test_protections_are_read_from_what_tune_board_writes(tmp_path, monkeypatch)
     monkeypatch.setattr(system_status, "HARDWARE_WATCHDOG_DEVICE", str(tmp_path / "no-watchdog-here"))
     monkeypatch.setattr(system_status, "POWER_CONF", str(tmp_path / "power.conf"))
     monkeypatch.setattr(system_status, "RESTART_DROPINS", [str(tmp_path / "restart.conf")])
-    monkeypatch.setattr(system_status, "ANY_BAND_FLAG", str(tmp_path / "any-band"))
     (tmp_path / "wifi.conf").write_text("[connection]\nwifi.powersave=2\n")
     (tmp_path / "restart.conf").write_text("[Service]\nRestart=always\n")
-    network = {"wifi": {"band": "2.4 GHz"}}
-    items = system_status.board_protections(env=SYSTEMD, network=network)["items"]
+    items = system_status.board_protections(env=SYSTEMD)["items"]
     assert items == {"wifi_always_on": True, "wifi_watchdog": False, "hardware_watchdog": None,
-                     "service_watchdog": True, "power_saving_off": False, "services_restart": True,
-                     "wifi_24ghz": True}
+                     "service_watchdog": True, "power_saving_off": False, "services_restart": True}
     items["power_saving_off"] = True
-    (tmp_path / "any-band").write_text("")
-    assert system_status.board_protections(env=SYSTEMD, network=network)["items"]["wifi_24ghz"] is None
     found = system_status.problems([], [], {}, protections={"items": items})
     assert [(p["code"], p["subject"]) for p in found] == [("protection_missing", "wifi_watchdog")]
 
@@ -146,3 +141,49 @@ def test_the_diagnostics_route_sends_a_zip_without_secrets(tmp_path):
     assert "config.yaml" in backup.namelist()
     assert not any("secrets_" in name for name in backup.namelist())
     assert b"top-secret" not in res.data
+
+
+# ------------------------------------------ the devices reach the board --
+
+TCP = """  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000:075B 00000000:0000 0A 00000000:00000000 00:00000000 00000000   107        0 1 1
+   1: 1C01A8C0:075B 0B01A8C0:C0FF 01 00000000:00000000 02:00000000 00000000   107        0 2 1
+   2: 0100007F:075B 0100007F:BF93 01 00000000:00000000 02:00000000 00000000   107        0 3 1
+   3: 1C01A8C0:1388 1501A8C0:E9FA 01 00000000:00000000 02:00000000 00000000  1000        0 4 1
+"""
+
+
+def test_the_shellys_connected_to_the_broker_are_counted_from_proc(tmp_path):
+    (tmp_path / "tcp").write_text(TCP)
+    # the listening socket, the board's own client and a web visitor don't count
+    assert system_status.lan_mqtt_clients(paths=[str(tmp_path / "tcp")]) == 1
+    assert system_status.lan_mqtt_clients(paths=[str(tmp_path / "none")]) is None
+
+
+def test_silence_counts_only_after_devices_were_there():
+    watch = system_status.LanWatch()
+    assert watch.update(0, now=0) is None, "battery-only installation: nobody stays connected"
+    assert watch.update(2, now=10) is None
+    assert watch.update(0, now=20) == 0
+    assert watch.update(0, now=620) == 600
+    assert watch.update(1, now=630) is None
+    assert watch.update(None, now=640) is None, "no /proc: nothing claimed"
+
+
+def test_every_battery_sensor_silent_at_once_is_the_network():
+    names = {"Stanze Sensor", "Bagni Sensor"}
+    late = [{"name": "Stanze Sensor", "seconds_since_update": 9000}, {"name": "Bagni Sensor", "seconds_since_update": 8200}]
+    assert system_status.battery_sensors_silent(late, names, uptime_seconds=20000)
+    one_fine = [late[0], {"name": "Bagni Sensor", "seconds_since_update": 600}]
+    assert not system_status.battery_sensors_silent(one_fine, names, uptime_seconds=20000)
+    assert not system_status.battery_sensors_silent(late, names, uptime_seconds=3000), "just booted"
+    assert not system_status.battery_sensors_silent(late, set(), uptime_seconds=20000)
+
+
+def test_devices_not_reaching_the_board_is_a_problem_and_rt_on_the_matrix():
+    from localhome.services import led_matrix
+    found = system_status.problems([], [], {}, lan_silent_seconds=900)
+    assert [(p["code"], p["subject"]) for p in found] == [("lan_unreachable", "15 min")]
+    assert system_status.problems([], [], {}, lan_silent_seconds=300) == [], "10 minutes' grace"
+    assert led_matrix.problem_codes(found, [])[0]["code"] == "RT"
+    assert all(c in led_matrix.FONT for c in "RT")

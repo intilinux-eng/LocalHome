@@ -183,6 +183,8 @@ PROBLEM_CODES = {
     "loop_stalled": "LP",
     "disk_low": "DK",
     "clock_unsynced": "CK",
+    # The devices can't reach the board, though it's on the Wi-Fi: the router.
+    "lan_unreachable": "RT",
 }
 # "Not heard from yet" right after a boot is normal for a battery sensor -
 # the system status says so itself; a blinking "!" for it would teach

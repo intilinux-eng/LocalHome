@@ -243,15 +243,6 @@ everything - Shellys, phones, the clock - so:
   restarts the network manager, at 20 reconnects again, at 30 reboots the
   board - at most once every 6 hours, so a router switched off for the
   night doesn't reboot it all night.
-- *2.4 GHz only*, where the network is there on 2.4 GHz: steadier with
-  most routers, never a radar channel (5 GHz channels 52-144) that
-  throws every device off, and the band the Shellys use anyway. Measured
-  on the production board: on 5 GHz, phones and PCs lost it for a day and
-  a half while the Shellys - on 2.4 GHz - reached it the whole time; on
-  2.4 GHz it answered at once. The watchdog frees the band by itself if
-  the board can't connect for 20 minutes (a network no longer on 2.4
-  GHz); `sudo touch /etc/localhome/wifi-any-band` before this step leaves
-  the band alone.
 - *No power saving anywhere*: the board can't go to sleep, Bluetooth
   (unused, and sharing the radio with the Wi-Fi) is off, USB and the
   eMMC never doze. The CPU still changes speed as needed.
@@ -263,8 +254,8 @@ everything - Shellys, phones, the clock - so:
   the board by itself (off on a stock UNO Q image).
 - *LocalHome restarted if it hangs* - see step 7.
 
-Then reboot once (`sudo systemctl reboot`): the Wi-Fi band applies from
-the next connection.
+Then reboot once (`sudo systemctl reboot`): Wi-Fi power saving applies
+from the next connection.
 
 ```bash
 sudo sh /home/arduino/localhome/deploy/tune-board.sh
@@ -275,14 +266,26 @@ The admin panel's **System status** shows whether each of these is on
 problem) and the **Watchdog history**: every reconnect, restart and
 reboot they did, with the time - it survives reboots.
 
-What no check from the board can see: the router passing pings to the
-board but not connections - the page, SSH, MQTT - after a fresh boot. It
-happened on both test boards (two boots out of three), and re-activating
-the Wi-Fi cleared it every time, so the watchdog does that once, two
-minutes after every boot, as a precaution: a few seconds without Wi-Fi,
-logged in the watchdog history, and the Shellys reconnect by themselves.
-Give each board a **fixed IP in the router** too (a DHCP reservation on
-its MAC address): the board is always at the same address.
+**The router.** One thing the board can't fix: a router that answers it
+but stops passing it the other devices' connections - pings get through,
+the page, SSH and the Shellys' MQTT don't. It happened on the home router
+(5 GHz on radar channel 100 at the time), between devices on the same
+radio, in both bands, until the router was restarted. So:
+
+- The watchdog re-activates the Wi-Fi once two minutes after every boot,
+  and whenever the Shellys that stay connected to the broker all drop
+  off while the router still answers (at 10 and 30 minutes). LocalHome
+  then shows **RT** on the LED matrix and a problem in System status:
+  restart the router.
+- Put the board and the Shellys on the **main network**, never the guest
+  one (guest networks keep devices apart on purpose).
+- If the router allows it, 5 GHz on a **fixed channel between 36 and
+  48**: channels 52-144 are radar channels the router may have to leave
+  by itself.
+- A **fixed IP** for the board (a DHCP reservation on its MAC address) is
+  worth having; everything uses the board's name, so it isn't required.
+- Leave the Wi-Fi band alone: the board joins whichever band the router
+  offers. Pinning it to 2.4 GHz cut the Shellys off on that router.
 
 Every step prints how to undo it. Add `--lean` to also turn off Arduino
 App Lab, its Docker runtime and the firmware updater: ~270 MB of RAM and
@@ -310,7 +313,7 @@ with no intervention.
 
 And check the protections from step 8: **System status → Protections for
 running all year** must show them all on (or "not available" for a
-hardware watchdog on a board without one), and the Wi-Fi row "2.4 GHz".
+hardware watchdog on a board without one).
 
 To see the Wi-Fi watchdog act without touching the router, point it at
 an address that doesn't answer for one run - it logs "the router isn't

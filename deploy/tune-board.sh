@@ -83,12 +83,9 @@ echo "== 5. Wi-Fi: never dozing, never giving up"
 # beacons - missed connections from phones and Shellys; and after a few
 # failed attempts NetworkManager stops trying a network. Both off, for
 # every Wi-Fi profile - and for any added later, by the watchdog in step 6.
-# And 2.4 GHz only, where the network is there on 2.4 GHz: steadier with
-# most routers, no radar channels that throw every device off, and the
-# Shellys' band anyway. (touch /etc/localhome/wifi-any-band beforehand to
-# leave the band alone; the watchdog frees it by itself if the board
-# can't connect for 20 minutes.) The band applies from the next
-# connection: reboot once at the end.
+# Any band: the board joins whichever the router offers, like any other
+# device. (Pinning it to 2.4 GHz once cut the Shellys off, on a router
+# that wouldn't pass connections between two devices on the same radio.)
 if command -v nmcli >/dev/null 2>&1; then
     mkdir -p /etc/NetworkManager/conf.d
     cat > /etc/NetworkManager/conf.d/99-localhome-wifi.conf <<'EOF'
@@ -106,18 +103,8 @@ EOF
         nmcli connection modify "$name" connection.autoconnect yes connection.autoconnect-retries 0 \
             802-11-wireless.powersave 2
         echo "   profile '$name': reconnects for ever, power saving off (from its next connection)"
-        ssid=$(nmcli -g 802-11-wireless.ssid connection show "$name")
-        if [ -f /etc/localhome/wifi-any-band ]; then
-            echo "   profile '$name': band left alone (/etc/localhome/wifi-any-band)"
-        elif nmcli -t -f FREQ,SSID device wifi list 2>/dev/null | sed 's/\\:/:/g' \
-                | awk -v s="$ssid" '$0+0 < 3000 && substr($0, index($0, ":") + 1) == s {found = 1} END {exit !found}'; then
-            nmcli connection modify "$name" 802-11-wireless.band bg
-            echo "   profile '$name': 2.4 GHz only (from its next connection)"
-        else
-            echo "   profile '$name': not seen on 2.4 GHz here - band left alone"
-        fi
     done
-    echo "   undo: rm /etc/NetworkManager/conf.d/99-localhome-wifi.conf; nmcli connection modify <name> connection.autoconnect-retries -1 802-11-wireless.powersave 0 802-11-wireless.band ''"
+    echo "   undo: rm /etc/NetworkManager/conf.d/99-localhome-wifi.conf; nmcli connection modify <name> connection.autoconnect-retries -1 802-11-wireless.powersave 0"
 else
     echo "   no NetworkManager here - nothing to do"
 fi
@@ -268,4 +255,4 @@ for unit in localhome mosquitto avahi-daemon localhome-wifi-watchdog.timer; do
 done
 echo "   hardware watchdog: $(systemctl show -p RuntimeWatchdogUSec --value 2>/dev/null)"
 echo "   sleep: $(systemctl is-enabled sleep.target 2>/dev/null)   bluetooth: $(systemctl is-active bluetooth 2>/dev/null || true)"
-echo "   Reboot once now (sudo systemctl reboot): the Wi-Fi band and the watchdogs take effect from the next boot."
+echo "   Reboot once now (sudo systemctl reboot): Wi-Fi power saving and the watchdogs take effect from the next boot."

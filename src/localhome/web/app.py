@@ -329,6 +329,8 @@ def create_app(config_path: str | None = None) -> Flask:
     # What each cover's last read said - covers are read on demand, not
     # polled, so this is where the system status learns about them.
     app.config["COVER_READS"] = {}
+    # Whether the Shellys still reach the board - see system_status.LanWatch.
+    app.config["LAN_WATCH"] = system_status.LanWatch()
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
@@ -442,6 +444,19 @@ def _loops(app: Flask) -> list[dict]:
     return loops
 
 
+def _lan_signals(app: Flask, devices: list[dict], uptime_seconds: float | None) -> dict:
+    """Whether the devices still reach the board - see
+    system_status.LanWatch. From /proc and memory only: the LED matrix
+    asks for it all day too."""
+    manager: DeviceManager = app.config["MANAGER"]
+    battery = {name for name, kind in manager.sensor_kinds.items()
+               if kind == "climate" and manager.driver_types.get(name) == "mqtt_json"}
+    return {
+        "lan_silent_seconds": app.config["LAN_WATCH"].update(system_status.lan_mqtt_clients()),
+        "battery_silent": system_status.battery_sensors_silent(devices, battery, uptime_seconds),
+    }
+
+
 def _health(app: Flask) -> dict:
     """What the admin panel's system status is built from."""
     manager: DeviceManager = app.config["MANAGER"]
@@ -453,12 +468,12 @@ def _health(app: Flask) -> dict:
     host = system_status.host_stats()
     storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"))
     network = system_status.network_status()
-    protections = system_status.board_protections(network=network)
+    protections = system_status.board_protections()
     return {
         "devices": devices, "failed": failed, "disk": disk, "loops": loops, "host": host,
         "storage": storage, "network": network, "protections": protections,
         "problems": system_status.problems(devices, failed, disk, loops, storage, host.get("cpu_temp_c"), network, host,
-                                           protections),
+                                           protections, **_lan_signals(app, devices, host.get("uptime_seconds"))),
     }
 
 
@@ -474,15 +489,18 @@ def _matrix_state(app: Flask) -> led_matrix.MatrixState:
     store: HistoryStore = app.config["HISTORY"]
     thermostat: ThermostatController | None = app.config["THERMOSTAT"]
     zones = thermostat.zones if thermostat else []
+    devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
+    uptime = system_status._uptime_seconds()
     problems = system_status.problems(
-        system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"]),
+        devices,
         manager.failed_integrations,
         system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path))),
         _loops(app),
         # "not heard yet" after a boot isn't a fault; an unsynchronized
         # clock is (CK) - both read without a subprocess.
-        host={"uptime_seconds": system_status._uptime_seconds(),
-              "clock_synced": system_status.clock_synced_fast()},
+        host={"uptime_seconds": uptime, "clock_synced": system_status.clock_synced_fast()},
+        # RT: the devices can't reach the board - from /proc, no subprocess.
+        **_lan_signals(app, devices, uptime),
     )
     state = led_matrix.MatrixState(
         thermostat=thermostat is not None,

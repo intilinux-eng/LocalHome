@@ -471,10 +471,9 @@ POWER_CONF = "/etc/tmpfiles.d/localhome-power.conf"
 SLEEP_TARGET = "/etc/systemd/system/sleep.target"        # masked: a link to /dev/null
 RESTART_DROPINS = [f"/etc/systemd/system/{unit}.service.d/localhome-restart.conf"
                    for unit in ("mosquitto", "avahi-daemon", "NetworkManager")]
-ANY_BAND_FLAG = "/etc/localhome/wifi-any-band"
 
 
-def board_protections(env=os.environ, network: dict | None = None) -> dict | None:
+def board_protections(env=os.environ) -> dict | None:
     """Which of tune-board.sh's protections are on - {"items": {key: True /
     False / None (doesn't apply here)}, "events": the Wi-Fi watchdog's last
     actions}. None where none of it applies: no NetworkManager (a PC,
@@ -489,10 +488,6 @@ def board_protections(env=os.environ, network: dict | None = None) -> dict | Non
         "service_watchdog": bool(env.get("WATCHDOG_USEC")),
         "power_saving_off": os.path.exists(POWER_CONF) and os.path.realpath(SLEEP_TARGET) == "/dev/null",
         "services_restart": all(os.path.exists(path) for path in RESTART_DROPINS),
-        # From the connection itself: on 2.4 GHz or not (None: not on Wi-Fi,
-        # or deliberately left on any band).
-        "wifi_24ghz": None if os.path.exists(ANY_BAND_FLAG) or not ((network or {}).get("wifi") or {}).get("band")
-        else network["wifi"]["band"].startswith("2.4"),
     }
     return {"items": items}
 
@@ -539,6 +534,77 @@ def watchdog_history(localhome_log: str, wifi_log: str = WIFI_WATCHDOG_LOG,
     return sorted(events, key=lambda e: e["when"], reverse=True)[:limit]
 
 
+# ------------------------------------ can the devices reach the board --
+# Seen on the production board: the router passing pings but not
+# connections to the board, while the board itself was on the Wi-Fi and
+# fine - nothing in its own view of the network was wrong. What was: the
+# Shellys had stopped reaching its MQTT broker.
+MQTT_PORT = 1883
+LAN_SILENT_SECONDS = 600          # no mains Shelly connected for 10 min, when some were
+BATTERY_SILENT_SECONDS = 8100     # every battery sensor past its 2 h report, and then some
+
+
+def lan_mqtt_clients(port: int = MQTT_PORT, paths=("/proc/net/tcp", "/proc/net/tcp6")) -> int | None:
+    """Devices on the LAN connected to this board's MQTT broker right now:
+    established connections to `port` from anything but the board itself.
+    From /proc - no command run. None where there's no /proc (not Linux)."""
+    count = None
+    for path in paths:
+        try:
+            with open(path, encoding="ascii", errors="replace") as f:
+                lines = f.read().splitlines()[1:]
+        except OSError:
+            continue
+        count = count or 0
+        for line in lines:
+            parts = line.split()
+            if len(parts) < 4 or parts[3] != "01":        # 01: ESTABLISHED
+                continue
+            local, remote = parts[1], parts[2]
+            if int(local.rsplit(":", 1)[1], 16) != port:
+                continue
+            host = remote.rsplit(":", 1)[0]
+            # 127.x (also as ::ffff:127.x) and ::1: the board talking to itself.
+            if host.endswith("7F") or host == "00000000000000000000000001000000":
+                continue
+            count += 1
+    return count
+
+
+class LanWatch:
+    """How long every LAN device has been gone from the broker - having
+    been there: an installation whose Shellys all run on batteries never
+    keeps one connected, and that isn't a fault."""
+
+    def __init__(self):
+        self.seen = False
+        self.silent_since = None
+
+    def update(self, clients: int | None, now: float | None = None) -> float | None:
+        now = time.monotonic() if now is None else now
+        if clients is None:
+            return None
+        if clients > 0:
+            self.seen, self.silent_since = True, None
+            return None
+        if not self.seen:
+            return None
+        if self.silent_since is None:
+            self.silent_since = now
+        return now - self.silent_since
+
+
+def battery_sensors_silent(devices: list[dict], battery_names: set[str], uptime_seconds: float | None) -> bool:
+    """Every battery sensor past its 2-hour report, by a margin - they all
+    report on their own, so all of them silent at once is the network,
+    not the sensors. Not in the first 2 h 15 min after a boot."""
+    sensors = [d for d in devices if d["name"] in battery_names]
+    if not sensors or (uptime_seconds is not None and uptime_seconds < BATTERY_SILENT_SECONDS):
+        return False
+    return all(d.get("seconds_since_update") is None or d["seconds_since_update"] > BATTERY_SILENT_SECONDS
+               for d in sensors)
+
+
 def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, now: float | None = None) -> dict:
     """Whether a background loop is still completing its cycles. Stalled
     after three missed intervals - but not during the first ones after
@@ -565,7 +631,7 @@ def _short_error(error: str) -> str:
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
     cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
-    protections: dict | None = None,
+    protections: dict | None = None, lan_silent_seconds: float | None = None, battery_silent: bool = False,
 ) -> list[dict]:
     """The things worth a technician's attention, most serious first.
     `code` keys the UI's own translated wording; the rest is detail.
@@ -578,6 +644,10 @@ def problems(
     for item in failed:
         found.append({"code": "integration_failed", "subject": item.get("name") or f"{item['kind']}/{item['type']}",
                       "detail": _short_error(item["error"])})
+    if (lan_silent_seconds or 0) >= LAN_SILENT_SECONDS or battery_silent:
+        minutes = int(lan_silent_seconds // 60) if lan_silent_seconds else None
+        found.append({"code": "lan_unreachable", "subject": f"{minutes} min" if minutes else "2 h",
+                      "detail": "the router answers the board, but the devices' connections don't reach it"})
     for loop in loops:
         if loop["stalled"]:
             found.append({"code": "loop_stalled", "subject": loop["name"], "detail": None})
