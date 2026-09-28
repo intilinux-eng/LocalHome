@@ -1,74 +1,105 @@
 # LocalHome
 
-**Heating, cooling and a home dashboard on an
-[Arduino UNO Q](https://www.arduino.cc/product-uno-q)** - local-first: no
-hub, no subscription, no cloud between you and your radiators. The
-board's Linux side runs everything; its microcontroller turns the LED
-matrix on the board into a status display you can read without a phone.
+[![Tests](https://github.com/intilinux-eng/LocalHome/actions/workflows/tests.yml/badge.svg)](https://github.com/intilinux-eng/LocalHome/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)
 
-![What LocalHome shows on the Arduino UNO Q's LED matrix: heating, cooling, away, diagnostic mode, no zones, a problem code, the IP address at start-up, LocalHome stopped, waiting for LocalHome](docs/screenshots/led-matrix.svg)
+**Heating, cooling and ventilation for Shelly Gen3 devices - entirely
+local, over MQTT.** No Shelly cloud, no hub, no subscription: the
+sensors and relays talk to a Mosquitto broker on a small board in the
+apartment, and LocalHome runs the thermostat, the schedules and the
+dashboard next to it. It runs on an
+[Arduino UNO Q](https://www.arduino.cc/product-uno-q), in real
+apartments, every day.
 
-## Built on the Arduino UNO Q
+It's also a reference for anyone using **Shelly H&T Gen3 sensors on
+batteries** over local MQTT: how they really report, how to tell a
+sleeping sensor from a dead one, and what the network under them needs
+- measured on real devices, written up in
+**[docs/shelly-gen3.md](docs/shelly-gen3.md)**.
 
-LocalHome is developed on, and runs on, the Arduino UNO Q - and uses both
-of its halves:
+## Try it in one minute
 
-| Side of the board | What runs there |
-|---|---|
-| **Linux** - Qualcomm QRB2210, Debian 13 | LocalHome itself: the dashboard, the admin panel, the thermostat and its schedules, statistics, the SQLite history. Next to it, the Mosquitto MQTT broker the Shelly devices report to, and avahi, which makes the board reachable as `<name>.local`. |
-| **Microcontroller** - STM32U585 | A small sketch ([deploy/led-matrix](deploy/led-matrix/localhome_matrix/localhome_matrix.ino)) that draws LocalHome's status on the 13x8 LED matrix, fed through the board's own Linux-to-MCU bridge, `arduino-router`. |
+Every device simulated - no hardware, no broker:
 
-The climate devices are Shelly: H&T Gen3 temperature/humidity sensors,
-Plus 1 relays on the valves, a 0/1-10V Dimmer Gen3 for the ventilation
-(VMC). They talk MQTT to the broker on the board, by the board's name -
-nothing depends on an IP address, so the router is free to move it.
+```bash
+git clone https://github.com/intilinux-eng/LocalHome.git && cd LocalHome
+docker compose -f docker-compose.demo.yml up --build
+```
 
-What it costs the board, measured on a 2 GB UNO Q:
+Then open **http://localhost:5000** - two zones with a sample week
+painted, an outdoor sensor, the ventilation, a bathroom bypass valve and
+a dehumidifier - and **http://localhost:5000/climate-admin**, where each
+of them can be switched to a real Shelly id. `docker compose -f
+docker-compose.demo.yml down -v` starts it over.
 
-| | |
-|---|---|
-| LocalHome's memory | about 73 MB, flat once warmed up |
-| CPU | about 0.5% of one core, LED matrix included |
-| eMMC writes | about 0.4 GB/day, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
-| Power-on to dashboard | about 40 seconds |
+Without Docker (Python 3.10 or later):
 
-Two boards run it today: one controlling an apartment's radiant heating
-and cooling, a second going into field testing in another apartment.
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e . -c constraints.txt
+cp -r demo/config /tmp/localhome-demo
+LOCALHOME_CONFIG=/tmp/localhome-demo/config.yaml .venv/bin/localhome
+```
 
-## The LED matrix
+## Shelly Gen3, local, over MQTT
 
-The dashboard shows everything to someone with a phone. The matrix is
-for whoever is standing in front of the board without one - and above
-all for when the network or LocalHome itself is down, which is exactly
-when the dashboard can't help. So it shows health, not data:
+| Device | Role here | In the field |
+|---|---|---|
+| **Shelly H&T Gen3**, on batteries | each zone's temperature and humidity; the outdoor sensor | two units, daily |
+| **Shelly Dimmer 0/1-10V PM Gen3** | the ventilation unit's (VMC) speed, through its 0-10 V input | one unit, daily |
+| Shelly Plus 1 | zone valves, bathroom bypass valve, dehumidifier | supported, not yet in the field |
 
-- **Normal** - the season (flame or snowflake), or away (a house) or
-  diagnostic mode (a wrench), and one bar per zone: bright while its
-  valve is open, dim while it's closed.
-- **A problem** - a blinking `!` and a two-character code, taking turns
-  with the normal screen: `S1` zone 1's sensor is silent, `V2` zone 2's
-  valve isn't answering, `MQ` the MQTT broker is down, `DK` the disk is
-  nearly full, and a few more.
-- **Start-up** - the board's IP address scrolls past once, for the day
-  `<name>.local` doesn't resolve.
-- **Heartbeat** - the top-right pixel blinks with every frame: LocalHome
-  is alive.
-- **Drawn by the microcontroller on its own** - a dot running along the
-  bottom until LocalHome starts, and a blinking X if LocalHome stops
-  sending for 20 seconds: stopped, crashed or hung.
+A few of the things learned on the way - each explained in
+[docs/shelly-gen3.md](docs/shelly-gen3.md):
 
-It's built to cost nothing that matters: one frame a second over a
-single connection to the bridge, its state read from memory every 30
-seconds, and nothing at all on a machine without a matrix. The admin
-panel's **LED matrix** section has a live mirror of it, a legend drawn by
-the same code that drives the LEDs, and every problem code explained.
-Setting it up is step 11 of the
-[quick installation guide](docs/quick-installation-arduino-uno-q.md).
+- An H&T Gen3 on batteries reports **at once on a change** past its
+  thresholds (0.5 °C and 1% at the tightest) and **every 2 hours
+  regardless** - to within about a minute. Each report carries the exact
+  reading, to 0.1 °C.
+- Its status topics are **not retained**, and its `online` topic reads
+  `false` nearly all the time, because it sleeps. Keep the last reading
+  across restarts; judge the sensor by its heartbeat, never by `online`.
+- A **weak signal isn't a fault** in itself: a sensor at -85/-90 dBm has
+  kept every report on time for weeks. Lost reports are what to act on -
+  counted without blaming the sensor for time the board was off.
+- The dimmer publishes its state only on change: it's **asked**, over
+  RPC on MQTT - and it silently ignores a fractional brightness.
+- The router matters more than the devices: Wi-Fi clients must reach
+  each other, and 5 GHz belongs on a fixed non-radar channel.
+
+The admin panel shows what every Shelly says about itself: signal now
+and over a day and a week, battery, reports lost, internal temperature,
+mains voltage, restarts and firmware updates.
+
+## What it does
+
+- **A thermostat per zone** - valves driven by a weekly schedule painted
+  with a drag, separate winter and summer weeks, a temporary target
+  ("22° for two hours") from the zone's card, away mode, and a zone that
+  can sit out the summer. A silent sensor closes its valve after a day
+  instead of leaving it open forever.
+- **The rest of the plant** - a bathroom bypass valve and a dehumidifier
+  following per-season rules, the ventilation's speed on a day/night
+  program, an outdoor sensor.
+- **Statistics** - every run of the last day or week, with what the
+  temperature and humidity did meanwhile, in a SQLite history on the
+  board.
+- **An admin panel for installers** (`/climate-admin`) - map the zones
+  and roles onto the Shelly ids of *this* apartment from the browser,
+  every device simulated until its hardware is in, plain-language status
+  and problems, the board's health, and a diagnostics download.
+- **Built to run for years unattended** - watchdogs for the Wi-Fi, the
+  service and the hardware, a budget on writes to the board's soldered
+  eMMC, history paused until the clock is right, dependencies pinned to
+  the versions tested together.
+- **A status display on the board itself** - the UNO Q's LED matrix, for
+  whoever stands in front of it without a phone.
+
+English and Italian UI; optional HTTP Basic Auth.
 
 ## Screenshots
 
-All of them captured against the `simulated` driver and example device
-ids - no real hardware needed to see this for yourself.
+Captured against the simulated devices - what the demo shows.
 
 | Home | Heating & Cooling |
 |---|---|
@@ -78,7 +109,40 @@ ids - no real hardware needed to see this for yourself.
 *A zone's statistics: when the system ran, and what it did.*
 
 ![Admin panel: an overview of the whole installation, the zones mapped onto Shelly device ids with their live status, and every other section folded with its state in its header](docs/screenshots/climate-admin.png)
-*Admin panel - see [below](#the-shelly-climate-admin-panel).*
+*The admin panel.*
+
+## Built on the Arduino UNO Q
+
+LocalHome uses both halves of the board:
+
+| Side of the board | What runs there |
+|---|---|
+| **Linux** - Qualcomm QRB2210, Debian 13 | LocalHome itself: dashboard, admin panel, thermostat, schedules, the SQLite history. Next to it the Mosquitto broker the Shellys report to, and avahi, which makes the board reachable as `<name>.local`. |
+| **Microcontroller** - STM32U585 | A small sketch ([deploy/led-matrix](deploy/led-matrix/localhome_matrix/localhome_matrix.ino)) drawing LocalHome's status on the 13×8 LED matrix, fed through the board's own Linux-to-MCU bridge. |
+
+What it costs the board, measured on a UNO Q in daily use:
+
+| | |
+|---|---|
+| LocalHome's memory | about 100 MB of 4 GB |
+| Load | about 0.2 on 4 cores |
+| eMMC writes | about 0.25-0.4 GB a day, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
+| Power-on to dashboard | about 40 seconds |
+
+Any other Linux board (a Raspberry Pi, ...) runs it too - the LED matrix
+just stays off.
+
+![What LocalHome shows on the LED matrix: heating, cooling, away, diagnostic mode, no zones, a problem code, the IP address at start-up, LocalHome stopped, waiting for LocalHome](docs/screenshots/led-matrix.svg)
+
+The matrix shows health, not data: the season and one bar per zone
+(bright while its valve is open); a blinking `!` with a two-letter code
+when something's wrong (`S1` zone 1's sensor is silent, `MQ` the broker
+is down, `RT` the router isn't passing the devices' traffic...); the
+board's IP address at start-up and the page's name every few minutes.
+The microcontroller also draws on its own - a
+blinking X if LocalHome stops sending for 20 seconds - so it still says
+something when the network or LocalHome is down. The admin panel
+mirrors it live and explains every code.
 
 ## Install on an Arduino UNO Q
 
@@ -101,7 +165,7 @@ sudo apt-get install -y mosquitto python3.13-venv libnss-mdns
 printf 'listener 1883\nallow_anonymous true\n' | sudo tee /etc/mosquitto/conf.d/localhome.conf
 sudo systemctl restart mosquitto
 
-# 4. LocalHome
+# 4. LocalHome, with the dependency versions it was tested with
 git clone https://github.com/intilinux-eng/LocalHome.git ~/localhome && cd ~/localhome
 python3 -m venv .venv && .venv/bin/pip install -e . -c constraints.txt
 
@@ -124,176 +188,107 @@ arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_
 ```
 
 Then open `http://<name>.local:5000/climate-admin`: name the page, set
-up the two zones - they start simulated, so the whole system can be
-tried before any hardware is installed - and switch each device to its
-Shelly id as it goes in. On each Shelly: MQTT server `<name>.local:1883`,
-"Generic status update over MQTT" on. Limits, tuning and what to expect
-over years of unattended running:
-[docs/arduino-uno-q.md](docs/arduino-uno-q.md).
-
-## Try it on a PC
-
-The generic steps, to try LocalHome on any computer with the example
-devices:
-
-```bash
-git clone https://github.com/intilinux-eng/LocalHome.git && cd LocalHome
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e . -c constraints.txt
-
-cp config/config.example.yaml config/config.yaml
-# ...and the *.example.json files you need - see docs/configuration.md
-# and docs/integrations/ for each device's own ids/keys/credentials.
-
-.venv/bin/localhome-cli doctor   # sanity-checks config.yaml
-.venv/bin/localhome
-# -> dashboard at http://localhost:5000
-```
-
-Not on a UNO Q? Any other Linux board (a Raspberry Pi, ...) runs it too -
-the LED matrix just stays off. See
-[docs/deployment.md](docs/deployment.md) for the full walkthrough,
-including mosquitto, systemd (so it survives a reboot), and a Docker
-alternative. Hit `externally-managed-environment` or "ensurepip is not
-available"? See [docs/troubleshooting.md](docs/troubleshooting.md) -
-both are one-line fixes.
-
-**Using Shelly devices?** Skip editing `config.yaml` by hand and use
-`/climate-admin` from the dashboard instead - see
-[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel).
+up the zones - they start simulated, so the whole system can be tried
+before any hardware is installed - and switch each device to its Shelly
+id as it goes in. On each Shelly: MQTT server `<name>.local:1883`,
+"Generic status update over MQTT" and "RPC over MQTT" on - see
+[docs/shelly-gen3.md](docs/shelly-gen3.md#mqtt-settings-that-work).
+Limits, tuning and what to expect over years of unattended running:
+[docs/arduino-uno-q.md](docs/arduino-uno-q.md). Docker and plain
+systemd on any Linux: [docs/deployment.md](docs/deployment.md).
 
 Nothing under `config/` other than the `*.example.*` files is ever
-meant to be committed - see [.gitignore](.gitignore). That's what keeps
-your own device inventory, API keys and account passwords out of git
-while this framework itself stays fully public.
+committed - see [.gitignore](.gitignore): your device ids, keys and
+passwords stay out of git.
 
-## What's included
+## Beyond Shelly
 
-| Kind          | Driver                | Talks to                          | Local? |
-|---------------|------------------------|------------------------------------|--------|
-| `cover`       | `tuya_curtain_switch`  | Tuya-based curtain switches (e.g. LoraTap WiFi roller shutter modules) | Yes (LAN) |
-| `climate`     | `tuya_air_quality`     | Tuya 9-in-1/12-in-1 air-quality sensors | Yes (LAN) |
-| `power_meter` | `ewelink_powct`        | Sonoff POWCT power-monitoring relay | No - eWeLink cloud only, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
-| `switch`      | `meross_plug`          | Meross smartplugs                  | No - Meross cloud (MQTT), see [docs/integrations/meross.md](docs/integrations/meross.md) |
-| `switch` / `number` | `tplink_led_strip` | TP-Link Kasa/Tapo LED strips (on/off + brightness) | Yes (LAN) - see [docs/integrations/tplink.md](docs/integrations/tplink.md) |
-| `cover` / `climate` / `power_meter` / `switch` / `number` | `mqtt_json` | **Generic** - any device that publishes JSON (or plain-string) state over MQTT: Shelly, Tasmota, Zigbee2MQTT, ESPHome, DIY sketches... | Yes (LAN, to your own broker) - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
-| `climate` / `switch` | `simulated`       | **No hardware required** - a fake sensor/switch for trying out the dashboard (or a whole thermostat setup) before you own the real thing | N/A - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
-| `notifier`    | `telegram`             | Telegram bot API                   | Cloud by nature (push notifications) |
+The climate side is Shelly-first, but the drivers underneath are
+generic, and a few other devices run in the same apartment:
 
-`number` is a controllable analog value - a dimmer, a fan speed, a 0-10V
-output - for anything set to a level rather than toggled or driven
-open/closed.
+| Kind | Driver | Talks to | Local? |
+|---|---|---|---|
+| `cover` / `climate` / `power_meter` / `switch` / `number` | `mqtt_json` | **Anything publishing JSON over MQTT** - Shelly, Tasmota, Zigbee2MQTT, ESPHome, your own sketch | Yes - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
+| `switch` / `number` | `shelly_light` | Shelly Gen2/Gen3 dimmers, over RPC on MQTT | Yes |
+| `cover` | `tuya_curtain_switch` | Tuya curtain switches (e.g. LoraTap roller shutter modules) | Yes (LAN) |
+| `climate` | `tuya_air_quality` | Tuya 9-in-1/12-in-1 air-quality sensors | Yes (LAN) |
+| `switch` / `number` | `tplink_led_strip` | TP-Link Kasa/Tapo LED strips, found again by MAC when their IP changes | Yes (LAN) - see [docs/integrations/tplink.md](docs/integrations/tplink.md) |
+| `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
+| `switch` | `meross_plug` | Meross smartplugs | No - Meross cloud, see [docs/integrations/meross.md](docs/integrations/meross.md) |
+| `climate` / `switch` / `number` | `simulated` | **No hardware** - try a whole setup before owning it | - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
+| `notifier` | `telegram` | Telegram bot API | Cloud by nature |
 
-The dashboard has two tabs: **Home** (your enabled devices, estimated
-cover position, sqlite-backed history/charts, an optional power-budget
-alert) and **Heating & Cooling** (a multi-zone valve thermostat - a
-click-and-drag weekly schedule, run statistics, a one-tap away mode, a
-zone that can opt out of one mode entirely, and switch-follows-switch
-interlocks - see
-[docs/configuration.md#thermostat-heatingcooling-zones](docs/configuration.md#thermostat-heatingcooling-zones)).
-Both support optional HTTP Basic Auth and a switchable UI language
-(English and Italian ship today - see
-[docs/configuration.md#language](docs/configuration.md#language)).
-
-Don't own any of the devices above? Adding your own driver is a
-self-contained, half-hour change - see
+Adding a driver is a self-contained change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).
-
-## The Shelly climate admin panel
-
-A dedicated `/climate-admin` page for redeploying the same two-zone
-thermostat to a new home that standardizes on the
-[Shelly](https://www.shelly.com/) device family - map each zone's
-sensor/valve, the MQTT broker, and an outdoor sensor to that home's own
-device ids from the browser, no `config.yaml` editing. Simulated/manual
-test modes let the whole control loop be verified before any relay is
-wired, and a live status view gives plain-language guidance instead of
-raw error codes. See
-[docs/configuration.md#the-shelly-climate-admin-panel](docs/configuration.md#the-shelly-climate-admin-panel)
-for the full picture.
-
-## Tested hardware
-
-Driver *code* should work with any device of the right product
-category/protocol version, but here's specifically what this project
-runs against day to day:
-
-| Device | Driver | Details |
-|--------|--------|---------|
-| **Arduino UNO Q** (2 GB and 4 GB) | the platform itself | Debian 13 on the Linux side, the `arduino:zephyr` 1.0.0 core on the microcontroller (the LED matrix sketch). Two boards running continuously. |
-| LoraTap WiFi Roller Shutter Switch | `tuya_curtain_switch` | Tuya "Curtain switch" product (`product_id nnfrmb3val45av1n`, model `qcsc500wv2n2`), category `clkg`, tinytuya protocol v3.4. Several units running continuously. |
-| A Tuya 9-in-1 air-quality/climate sensor | `tuya_air_quality` | Product family "9in1/12in1/14in1" (model `QTF-A+C`, `product_id b7alv1ety7u19i9d`), category `hjjcy`, tinytuya protocol v3.5. |
-| Sonoff POWCT power-monitoring relay | `ewelink_powct` | Via the eWeLink cloud v2 API - see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) for why this one isn't local. |
-| Meross MSS310 smartplug (energy monitoring) | `meross_plug` | Via the official `meross-iot` library (HTTP login + MQTT), using its `ElectricityMixin` for live power/voltage/current. |
-| Shelly H&T Gen3 (battery temperature/humidity sensor) | `mqtt_json` | Two topics (`status/temperature:0`, `status/humidity:0`) merged into one reading via a list `state_topic`, plus its `status/devicepower:0` (battery %) and `status/wifi` (signal strength) components - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md). |
-| Shelly Plus 1 (relay, mains-powered) | `mqtt_json` | The generic Gen2+ JSON-boolean shape (`status/switch:0`/`command/switch:0`) - used for both zone valves and the climate admin panel's two extra switches. |
-| Shelly 0/1-10V Dimmer Gen3 | `shelly_light` | Doesn't publish a retained status topic like the devices above - actively polled via RPC (`Light.GetStatus`/`Light.Set`) instead; see "Shelly components without a retained status topic" in [docs/integrations/mqtt.md](docs/integrations/mqtt.md). |
-
-If you run a driver against different hardware in the same product
-family and it works (or doesn't), a PR adding a row here - or opening an
-issue with the model/product_id - is genuinely useful to the next
-person.
 
 ## How it's organized
 
 ```
-config/            Your device inventories, secrets and config.yaml (gitignored, except *.example.*)
+config/            Your config.yaml, device inventories and secrets (gitignored, except *.example.*)
+demo/config/       The demo: every device simulated
 src/localhome/
   core/            Driver interfaces, the plugin registry, background pollers
-  drivers/         One subpackage per brand/protocol (tuya, ewelink, meross, mqtt, simulated, notifiers, ...)
-  services/        Cross-driver logic: cover position estimation, sqlite history + alerting, the heating/cooling thermostat, and its switch-follows-switch interlock
-  web/             Flask app (+ optional Basic Auth), dashboard templates/static files, and locales/ (UI language files, see docs/configuration.md#language)
-  config.py        Loads config.yaml and resolves its relative paths
-  cli.py           Command-line cover control
-docs/              Full documentation (see below)
-tests/             Hardware-independent unit tests
-deploy/            systemd unit, board tuning, the LED matrix sketch, the resource log; see also Dockerfile/docker-compose.yml at the repo root
+  drivers/         One subpackage per brand/protocol (mqtt, tuya, tplink, meross, ewelink, simulated, ...)
+  services/        Thermostat, schedules, interlocks, history, Shelly health, system status, LED matrix
+  web/             Flask app, templates, static files, locales/
+tests/             Unit tests (no hardware, no network) and browser tests (tests/ui)
+deploy/            systemd unit, board tuning, watchdogs, the LED matrix sketch, the resource log
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how these pieces fit together
-and why they're split this way.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 
 ## Documentation
 
-- [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation, LED matrix included, step by step
-- [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: Arduino UNO Q, Shelly-only climate control, limits, tuning, updating
-- [ARCHITECTURE.md](ARCHITECTURE.md) - the driver/registry/manager design and why it looks like this
-- [docs/configuration.md](docs/configuration.md) - full config.yaml reference, including optional web auth
-- [docs/adding-a-driver.md](docs/adding-a-driver.md) - how to add a new brand or device kind
-- [docs/integrations/](docs/integrations/) - per-brand setup guides (Tuya, eWeLink, Meross, MQTT, Telegram, Simulated)
-- [docs/deployment.md](docs/deployment.md) - Docker / systemd for running this unattended
+- [docs/shelly-gen3.md](docs/shelly-gen3.md) - **Shelly Gen3 over local MQTT: field notes** (H&T on batteries, the dimmer, the network)
+- [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation
+- [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: limits, tuning, updating
+- [docs/configuration.md](docs/configuration.md) - every `config.yaml` option, and the admin panel
+- [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, TP-Link, Meross, eWeLink, Telegram, simulated)
+- [docs/deployment.md](docs/deployment.md) - Docker, systemd, addressing by name, pinned versions
 - [docs/troubleshooting.md](docs/troubleshooting.md) - known error messages and fixes
-- [CONTRIBUTING.md](CONTRIBUTING.md) - how to propose changes, coding conventions
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) - dependency licenses and a note on the eWeLink driver
+- [ARCHITECTURE.md](ARCHITECTURE.md), [docs/adding-a-driver.md](docs/adding-a-driver.md), [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CHANGELOG.md](CHANGELOG.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
+## How it was built
+
+LocalHome was built by one person directing an AI coding agent
+([Claude Code](https://claude.com/claude-code)) - which is why nearly
+every commit carries a `Co-Authored-By: Claude` line. The code was
+written in conversation; the decisions, the installation and the
+testing in two real apartments were not:
+
+- **Every change is tested.** Over 650 unit tests, with no hardware and
+  no network, and browser tests driving a real Chromium at phone and
+  desktop widths - all run by CI on every push.
+- **Nothing is claimed that wasn't measured on the board.** Memory,
+  eMMC writes, report timings, signal levels: the numbers in these
+  docs come from the devices, and the docs say where they don't.
+- **The field decides.** Most of the robustness in here - watchdogs,
+  lost-report counting, finding strips by MAC, the router checks -
+  exists because something went wrong in a real apartment first, and
+  was then reproduced, fixed, tested and written down.
+- **Small commits, written for a reader.** Each says what changed and
+  why; [CHANGELOG.md](CHANGELOG.md) tells the story at a higher level.
 
 ## Why this exists
 
 Cloud-dependent smart-home apps break when the vendor's server has a bad
-day, get discontinued when the vendor loses interest, and generally cost
-more (subscriptions, hub hardware) than the gadgets they control. Most
-cheap WiFi devices already speak a local protocol under the hood -
-projects like [tinytuya](https://github.com/jasonacox/tinytuya) simply
-expose it. LocalHome is the smallest structure that lets several such
-devices, from different brands, show up on one dashboard and share one
-history/alerting story, while staying easy enough to read that adding
-"one more sensor" stays a small change instead of a rewrite.
+day, get discontinued when the vendor loses interest, and cost more
+(subscriptions, hubs) than the gadgets they control. Shelly devices
+already speak MQTT on the LAN; LocalHome is the smallest thing that
+turns a handful of them into a heating and cooling system someone can
+live with - and hand over to the next apartment.
 
 ## Legal & licensing
 
 LocalHome is [MIT licensed](LICENSE). Its dependencies are permissive
-(MIT/BSD/Apache) except `python-kasa` (GPL-3.0-or-later) - it's only
-pulled in if you opt into the `tplink_led_strip` driver's own
-`[tplink]` extra, never by a plain install - see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically)
-for what that means in practice. The `ewelink_powct` driver separately
-relies on unofficial, reverse-engineered eWeLink app credentials (the
-same pattern [AlexxIT/SonoffLAN](https://github.com/AlexxIT/SonoffLAN)
-uses) - not sanctioned by Coolkit/eWeLink; skip that one integration if
-that's not a tradeoff you want. See
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically)
-for the full explanation either way.
+(MIT/BSD/Apache) except `python-kasa` (GPL-3.0-or-later), pulled in only
+by the opt-in `[tplink]` extra - see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
+The `ewelink_powct` driver relies on unofficial eWeLink app credentials,
+not sanctioned by Coolkit/eWeLink - see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically).
 
-This project is not affiliated with, endorsed by, or sponsored by Tuya,
-LoraTap, Sonoff, Coolkit/eWeLink, Meross, or Telegram. All trademarks
-belong to their respective owners.
+This project is not affiliated with, endorsed by, or sponsored by Shelly
+(Allterco), Arduino, Tuya, LoraTap, Sonoff, Coolkit/eWeLink, Meross,
+TP-Link or Telegram. All trademarks belong to their respective owners.

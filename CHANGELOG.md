@@ -40,6 +40,32 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **A demo that runs in a minute**: `docker compose -f
+  docker-compose.demo.yml up --build` starts LocalHome with every device
+  simulated - two zones with a sample week, the outdoor sensor, the VMC,
+  the bypass valve and the dehumidifier - and no hardware or broker. CI
+  builds and starts it on every push.
+- **Field notes for Shelly Gen3 over local MQTT**
+  ([docs/shelly-gen3.md](docs/shelly-gen3.md)): how an H&T Gen3 on
+  batteries really reports, telling a sleeping sensor from a dead one,
+  the Dimmer 0/1-10V PM Gen3's quirks, and what the network under them
+  needs.
+- **Shelly device health in the admin panel.** Each Shelly's own Wi-Fi
+  signal, now and over a day and a week; for a battery H&T, its battery
+  and its reports lost (reports sent while LocalHome was off aren't held
+  against it); for a mains Shelly, asked every 5 minutes, its internal
+  temperature, mains voltage, since when it's been on, its restarts and
+  any firmware update waiting. A Shelly too hot, or losing reports,
+  reaches the problems badge; a weak signal alone doesn't - a sensor at
+  -88 dBm can get every report through.
+- **More of the board's hardware in the system status**: which board it
+  is, the Wi-Fi chip's, GPU's and modem's temperatures, the CPU's speed
+  and whether heat has capped it, the zram swap, and the Wi-Fi's errors
+  since boot.
+- **Every dependency pinned** to the versions the production board runs
+  (`constraints.txt`), used by every documented install, the CI and the
+  Docker image; `pyproject.toml` stops each library short of its next
+  major version.
 - **Copy a whole weekly schedule onto another zone.** Two zones usually
   run the same way in winter, and painting 168 cells twice is work the
   dashboard should take off you: under "Copy Monday to" there's now
