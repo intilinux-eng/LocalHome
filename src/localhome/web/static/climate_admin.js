@@ -353,6 +353,13 @@ async function loadBroker() {
   document.getElementById("broker-password-field").hidden = true;
   document.getElementById("broker-password-toggle-label").textContent =
     data.has_password ? tr("climate_admin.broker_change_password_label") : tr("climate_admin.broker_set_password_label");
+  // A user or password in use is worth seeing without unfolding anything.
+  const auth = data.username || data.has_password;
+  if (auth) document.getElementById("broker-auth").open = true;
+  document.getElementById("broker-current").textContent = data.host
+    ? tr(auth ? "climate_admin.broker_current_auth" : "climate_admin.broker_current",
+      { address: `${data.host}:${data.port || 1883}`, user: data.username || "-" })
+    : tr("climate_admin.broker_not_configured");
 }
 
 function onChangePasswordToggle(checkbox) {

@@ -183,35 +183,45 @@
   <details class="admin-details" id="broker" data-nav="group-devices">
     <summary>{{ icon("broker") }}<span class="sec-title">{{ t.climate_admin.broker_heading }}</span><span class="sec-pills" id="broker-status"></span></summary>
     <p class="hint-text admin-error" id="broker-down-hint" hidden>{{ t.climate_admin.broker_down_hint }}</p>
-    <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
-    <div class="admin-zone-card" id="broker-form">
-      <div class="admin-field">
-        <label for="broker-host">{{ t.climate_admin.broker_host_label }}</label>
-        <input type="text" id="broker-host" placeholder="localhost">
+    <!-- Set once, at installation, and almost always the board itself
+         with no user: one line says what it is, the form is folded away,
+         and user/password are folded once more - see loadBroker(). -->
+    <p class="hint-text" id="broker-current"></p>
+    <details class="admin-more" id="broker-edit">
+      <summary>{{ t.climate_admin.broker_edit }}</summary>
+      <p class="hint-text">{{ t.climate_admin.broker_note }}</p>
+      <div class="admin-zone-card" id="broker-form">
+        <div class="admin-field">
+          <label for="broker-host">{{ t.climate_admin.broker_host_label }}</label>
+          <input type="text" id="broker-host" placeholder="localhost">
+        </div>
+        <div class="admin-field">
+          <label for="broker-port">{{ t.climate_admin.broker_port_label }}</label>
+          <input type="number" id="broker-port" placeholder="1883">
+        </div>
+        <details class="admin-more" id="broker-auth">
+          <summary>{{ t.climate_admin.broker_auth }}</summary>
+          <div class="admin-field">
+            <label for="broker-username">{{ t.climate_admin.broker_username_label }}</label>
+            <input type="text" id="broker-username" placeholder="{{ t.climate_admin.broker_optional }}">
+          </div>
+          <label class="admin-checkbox">
+            <input type="checkbox" id="broker-change-password" onchange="onChangePasswordToggle(this)">
+            <span id="broker-password-toggle-label">{{ t.climate_admin.broker_set_password_label }}</span>
+          </label>
+          <div class="admin-field" id="broker-password-field" hidden>
+            <label for="broker-password">{{ t.climate_admin.broker_password_label }}</label>
+            <input type="password" id="broker-password" autocomplete="new-password">
+          </div>
+        </details>
+        <div class="toolbar">
+          <button class="range-btn" onclick="testBroker(this)">{{ t.climate_admin.broker_test_button }}</button>
+          <button class="tbtn open" onclick="saveBroker(this)">{{ t.climate_admin.broker_save_button }}</button>
+        </div>
+        <p class="hint-text" id="broker-test-result"></p>
+        <p class="hint-text" id="broker-save-result"></p>
       </div>
-      <div class="admin-field">
-        <label for="broker-port">{{ t.climate_admin.broker_port_label }}</label>
-        <input type="number" id="broker-port" placeholder="1883">
-      </div>
-      <div class="admin-field">
-        <label for="broker-username">{{ t.climate_admin.broker_username_label }}</label>
-        <input type="text" id="broker-username" placeholder="{{ t.climate_admin.broker_optional }}">
-      </div>
-      <label class="admin-checkbox">
-        <input type="checkbox" id="broker-change-password" onchange="onChangePasswordToggle(this)">
-        <span id="broker-password-toggle-label">{{ t.climate_admin.broker_set_password_label }}</span>
-      </label>
-      <div class="admin-field" id="broker-password-field" hidden>
-        <label for="broker-password">{{ t.climate_admin.broker_password_label }}</label>
-        <input type="password" id="broker-password" autocomplete="new-password">
-      </div>
-      <div class="toolbar">
-        <button class="range-btn" onclick="testBroker(this)">{{ t.climate_admin.broker_test_button }}</button>
-        <button class="tbtn open" onclick="saveBroker(this)">{{ t.climate_admin.broker_save_button }}</button>
-      </div>
-      <p class="hint-text" id="broker-test-result"></p>
-      <p class="hint-text" id="broker-save-result"></p>
-    </div>
+    </details>
   </details>
 
   <details class="admin-details" id="extra-switches" data-nav="group-devices">
