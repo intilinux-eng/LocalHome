@@ -308,3 +308,29 @@ def test_on_hours_reports_hours_and_starts(tmp_path):
     assert body["today"] == pytest.approx(round(2 * interval / 3600, 2))
     assert body["starts"]["today"] == 1
     assert set(body["starts"]) == {"today", "week", "month"}
+
+
+# ------------------------------------------------ temporary targets ----------
+
+def test_a_temporary_target_from_the_dashboard(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+    name = app.config["THERMOSTAT"].zones[0].name
+    res = client.post(f"/api/climate/zones/{name}/override", json={"target": 22.5, "hours": 2}).get_json()
+    assert res["ok"] and res["override"]["target"] == 22.5
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
+    assert zone["target_c"] == 22.5 and zone["override"]["target"] == 22.5
+    assert "scheduled_target_c" in zone
+    res = client.post(f"/api/climate/zones/{name}/override", json={"target": None, "until": "next_change"}).get_json()
+    assert res["ok"] and res["override"]["target"] is None
+    assert client.post(f"/api/climate/zones/{name}/override/cancel").get_json() == {"ok": True}
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
+    assert zone["override"] is None
+    for body, code in (({"target": 90, "hours": 1}, "override_target_range"),
+                       ({"target": True, "hours": 1}, "override_target_range"),
+                       ({"target": 21, "hours": 48}, "override_hours_invalid"),
+                       ({"target": 21}, "override_hours_invalid")):
+        assert client.post(f"/api/climate/zones/{name}/override", json=body).get_json()["code"] == code
+    assert client.post("/api/climate/zones/Nowhere/override", json={"target": 21, "hours": 1}).status_code == 404

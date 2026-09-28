@@ -704,6 +704,10 @@
     "manual_humidity_range": "The humidity must be between 0 and 100 %.",
     "away_hours_invalid": "Invalid length of absence.",
     "switch_mode_controlled": "“{name}” is switched automatically by the thermostat's season.",
-    "season_rule_invalid": "Invalid season rule: for winter and summer choose always on, always off or your choice."
+    "season_rule_invalid": "Invalid season rule: for winter and summer choose always on, always off or your choice.",
+    "zone_unknown": "No zone is called \"{zone}\".",
+    "override_zone_excluded": "\"{zone}\" is left out of cooling: no temporary changes in summer.",
+    "override_target_range": "The temperature must be between {min} and {max} °C, or off.",
+    "override_hours_invalid": "The duration must be above zero and at most {max} hours."
   }
 }

@@ -17,7 +17,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
@@ -168,6 +168,9 @@ class ScheduleStore:
         with self._lock:
             data = self._load()
             data["mode"] = mode
+            # A temporary target belongs to the season it was set in: 22°
+            # asked for while heating means nothing once cooling.
+            data.pop("overrides", None)
             self._save(data)
 
     @staticmethod
@@ -280,6 +283,64 @@ class ScheduleStore:
                 zone_name, value, DAYS[when.weekday()], when.hour,
             )
             return None
+
+    # ---------------------------------------------- temporary targets --
+    # "22° for the next 2 hours", "off until the next change": a zone's
+    # schedule set aside for a while, from the dashboard, without touching
+    # the weekly grid - and gone by itself once its time is up. Kept here,
+    # beside away mode, so it survives a restart. {zone: {"target": number
+    # or None (off), "until": iso time}}.
+
+    def get_overrides(self, now: datetime | None = None) -> dict[str, dict]:
+        """Every zone's temporary target still in force: {zone: {"target",
+        "until" (datetime)}}."""
+        now = now or datetime.now()
+        active = {}
+        for zone, entry in (self._load().get("overrides") or {}).items():
+            try:
+                until = datetime.fromisoformat(entry["until"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if now < until:
+                active[zone] = {"target": entry.get("target"), "until": until}
+        return active
+
+    def set_override(self, zone_name: str, target: float | None, until: datetime) -> None:
+        with self._lock:
+            data = self._load()
+            data.setdefault("overrides", {})[zone_name] = {"target": target, "until": until.isoformat()}
+            self._save(data)
+
+    def clear_override(self, zone_name: str) -> None:
+        with self._lock:
+            data = self._load()
+            if zone_name in (data.get("overrides") or {}):
+                del data["overrides"][zone_name]
+                self._save(data)
+
+    def drop_expired_overrides(self, now: datetime) -> None:
+        """Written only when one has actually run out - see the away
+        deadline's own self-healing expiry in ThermostatController."""
+        with self._lock:
+            data = self._load()
+            overrides = data.get("overrides") or {}
+            keep = {zone: entry for zone, entry in overrides.items()
+                    if datetime.fromisoformat(entry["until"]) > now}
+            if len(keep) != len(overrides):
+                data["overrides"] = keep
+                self._save(data)
+
+    def next_change(self, zone_name: str, now: datetime, mode: str | None = None) -> datetime | None:
+        """When this zone's scheduled target next differs from this hour's,
+        within a week - "until the next change" of a temporary target."""
+        week = self.get_week(zone_name, mode)
+        current = week[DAYS[now.weekday()]][now.hour]
+        start = now.replace(minute=0, second=0, microsecond=0)
+        for step in range(1, 7 * HOURS_PER_DAY):
+            at = start + timedelta(hours=step)
+            if week[DAYS[at.weekday()]][at.hour] != current:
+                return at
+        return None
 
     def get_away_until(self) -> datetime | None:
         """Away mode is a temporary override, separate from the weekly
@@ -456,8 +517,15 @@ class ThermostatController:
             self.schedule_store.set_away_until(None)
             away_until = None
         away = away_until is not None
+        # A temporary target set from the dashboard beats both the schedule
+        # and away mode for its zone: 22° asked for now, while "away" still
+        # runs, is someone coming home early. Not an excluded zone's, nor
+        # while diagnostic mode is on (returned above).
+        self.schedule_store.drop_expired_overrides(now)
+        overrides = self.schedule_store.get_overrides(now)
         for zone in self.zones:
-            if away:
+            override = overrides.get(zone.name)
+            if away and override is None:
                 # Same exception as the cooling branch below: a valve an
                 # interlock owns (a dehumidifier's water circuit) is that
                 # interlock's to open and close. Forcing it closed here
@@ -490,7 +558,7 @@ class ThermostatController:
             # The same `mode` this tick already decided with, not a fresh
             # read - a season switch landing mid-tick must not pair one
             # season's grid with the other season's heat/cool decision.
-            target = self.schedule_store.get_target(zone.name, now, mode)
+            target = override["target"] if override else self.schedule_store.get_target(zone.name, now, mode)
             if target is not None:
                 applied[zone.name] = target
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)

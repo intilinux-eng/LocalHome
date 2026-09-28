@@ -1005,3 +1005,70 @@ def test_a_bad_cell_is_refused_and_nothing_is_written(tmp_path, cells):
     with pytest.raises(ValueError):
         store.set_cells("Rooms", cells)
     assert store.get_week("Rooms")["mon"][1] == 20.0
+
+
+# ------------------------------------------------ temporary targets ----------
+
+def _room(tmp_path, temperature=18.0, scheduled=20.0):
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    manager = FakeManager(readings={"Rooms Temp": {"ok": True, "temperature_c": temperature}}, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode("heat")
+    week = ScheduleStore.empty_week()
+    for day in week:
+        week[day] = [scheduled] * 24
+    store.set_week("Rooms", week)
+    return ThermostatController(manager, store, zones, hysteresis_c=0.3), store, switch
+
+
+def test_a_temporary_target_beats_the_schedule_until_its_time_is_up(tmp_path):
+    controller, store, switch = _room(tmp_path, temperature=18.0, scheduled=16.0)
+    now = datetime(2026, 10, 5, 18, 0)
+    controller.tick(now=now)
+    assert switch.calls == ["off"]                  # 18 vs 16: closed
+    store.set_override("Rooms", 22.0, now + timedelta(hours=2))
+    controller.tick(now=now + timedelta(minutes=5))
+    assert switch.calls == ["off", "on"] and controller.applied_target("Rooms") == 22.0
+    controller.tick(now=now + timedelta(hours=2, minutes=1))
+    assert switch.calls == ["off", "on", "off"], "back to the schedule's 16"
+    assert store.get_overrides(now + timedelta(hours=3)) == {}
+    assert "Rooms" not in json.loads((tmp_path / "schedules.json").read_text())["overrides"], "expired, dropped"
+
+
+def test_a_temporary_off_holds_the_valve_closed(tmp_path):
+    controller, store, switch = _room(tmp_path, temperature=15.0, scheduled=21.0)
+    now = datetime(2026, 10, 5, 18, 0)
+    store.set_override("Rooms", None, now + timedelta(hours=1))
+    controller.tick(now=now)
+    assert switch.calls == ["off"] and controller.applied_target("Rooms") is None
+
+
+def test_a_temporary_target_beats_away_mode(tmp_path):
+    """Asked for from the dashboard while "away" still runs: someone is
+    coming home early."""
+    controller, store, switch = _room(tmp_path, temperature=15.0, scheduled=21.0)
+    now = datetime(2026, 10, 5, 18, 0)
+    store.set_away_until(now + timedelta(days=2))
+    store.set_override("Rooms", 22.0, now + timedelta(hours=2))
+    controller.tick(now=now)
+    assert switch.calls == ["on"]
+
+
+def test_a_season_change_drops_the_temporary_targets(tmp_path):
+    _, store, _ = _room(tmp_path)
+    now = datetime(2026, 10, 5, 18, 0)
+    store.set_override("Rooms", 22.0, now + timedelta(hours=2))
+    store.set_mode("cool")
+    assert store.get_overrides(now) == {}
+
+
+def test_the_next_change_is_the_next_hour_with_a_different_target(tmp_path):
+    _, store, _ = _room(tmp_path, scheduled=20.0)
+    week = store.get_week("Rooms")
+    week["mon"][21] = 17.0                            # Monday 21:00 goes down
+    store.set_week("Rooms", week)
+    monday_18_30 = datetime(2026, 10, 5, 18, 30)       # a Monday
+    assert store.next_change("Rooms", monday_18_30) == datetime(2026, 10, 5, 21, 0)
+    flat = ScheduleStore(str(tmp_path / "flat.json"))
+    assert flat.next_change("Rooms", monday_18_30) is None

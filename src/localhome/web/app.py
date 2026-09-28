@@ -405,6 +405,10 @@ def _valve_driver(manager: DeviceManager, link) -> dict | None:
 
 
 AWAY_MAX_HOURS = 24 * 366
+# A zone's temporary target (see api_climate_set_override): what the
+# dashboard offers - a few hours, or until the schedule's next change.
+OVERRIDE_MAX_HOURS = 24
+OVERRIDE_MIN_C, OVERRIDE_MAX_C = 5, 35
 
 
 def _fail(code: str, message: str, status: int = 400, **params):
@@ -905,8 +909,11 @@ def _register_routes(app: Flask) -> None:
             if link.active_in_mode in (None, mode)
         }
         zones = []
+        overrides = thermostat.schedule_store.get_overrides(now)
         for zone in thermostat.zones:
             sensor_reading = manager.sensor_reading(zone.sensor)
+            override = overrides.get(zone.name)
+            scheduled = thermostat.schedule_store.get_target(zone.name, now)
             valve_reading = manager.sensor_reading(zone.valve)
             temperature_c = sensor_reading.get("temperature_c")
             humidity_pct = sensor_reading.get("humidity_pct")
@@ -940,7 +947,11 @@ def _register_routes(app: Flask) -> None:
                 "valve_ok": valve_reading.get("ok", False),
                 "valve_seconds_since_update": valve_reading.get("seconds_since_update"),
                 "valve_error": valve_reading.get("error"),
-                "target_c": thermostat.schedule_store.get_target(zone.name, now),
+                # What the zone is heading for now: a temporary target
+                # set from the dashboard if there is one, else the schedule's.
+                "target_c": override["target"] if override else scheduled,
+                "scheduled_target_c": scheduled,
+                "override": {"target": override["target"], "until": override["until"].isoformat()} if override else None,
                 "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
                 "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
                 "sensor_failsafe_hours": thermostat.sensor_failsafe_hours,
@@ -1001,6 +1012,50 @@ def _register_routes(app: Flask) -> None:
         thermostat.schedule_store.set_away_until(until)
         thermostat.tick()
         return jsonify(ok=True, away_until=until.isoformat())
+
+    @app.route("/api/climate/zones/<name>/override", methods=["POST"])
+    def api_climate_set_override(name):
+        """A zone's schedule set aside for a while - {"target": number or
+        null (off), "hours": 0.5-24} or {"target": ..., "until":
+        "next_change"}. Gone by itself when the time is up; see
+        ScheduleStore's temporary targets."""
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return _fail("no_thermostat", "no thermostat configured", 404)
+        zone = next((z for z in thermostat.zones if z.name == name), None)
+        if zone is None:
+            return _fail("zone_unknown", f"no zone named {name!r}", 404, zone=name)
+        mode = thermostat.schedule_store.get_mode()
+        if mode == "cool" and not zone.cool_enabled:
+            return _fail("override_zone_excluded", f"{name!r} is left out of cooling", 409, zone=name)
+        data = _json_body()
+        target = data.get("target")
+        if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float))
+                                   or not math.isfinite(target) or not OVERRIDE_MIN_C <= target <= OVERRIDE_MAX_C):
+            return _fail("override_target_range", f"target must be off (null) or {OVERRIDE_MIN_C}-{OVERRIDE_MAX_C}",
+                         min=OVERRIDE_MIN_C, max=OVERRIDE_MAX_C)
+        now = datetime.now()
+        if data.get("until") == "next_change":
+            # A schedule that never changes: a day, like the longest duration.
+            until = thermostat.schedule_store.next_change(name, now) or now + timedelta(hours=OVERRIDE_MAX_HOURS)
+        else:
+            hours = data.get("hours")
+            if isinstance(hours, bool) or not isinstance(hours, (int, float)) or not 0 < hours <= OVERRIDE_MAX_HOURS:
+                return _fail("override_hours_invalid", f"hours must be above 0 and at most {OVERRIDE_MAX_HOURS}",
+                             max=OVERRIDE_MAX_HOURS)
+            until = now + timedelta(hours=hours)
+        thermostat.schedule_store.set_override(name, float(target) if target is not None else None, until)
+        thermostat.tick()
+        return jsonify(ok=True, override={"target": target, "until": until.isoformat()})
+
+    @app.route("/api/climate/zones/<name>/override/cancel", methods=["POST"])
+    def api_climate_cancel_override(name):
+        thermostat: ThermostatController | None = app.config["THERMOSTAT"]
+        if thermostat is None:
+            return _fail("no_thermostat", "no thermostat configured", 404)
+        thermostat.schedule_store.clear_override(name)
+        thermostat.tick()
+        return jsonify(ok=True)
 
     @app.route("/api/climate/away/cancel", methods=["POST"])
     def api_climate_cancel_away():

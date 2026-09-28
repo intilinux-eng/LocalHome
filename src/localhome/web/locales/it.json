@@ -704,6 +704,10 @@
     "manual_humidity_range": "L'umidità deve essere tra 0 e 100 %.",
     "away_hours_invalid": "Durata dell'assenza non valida.",
     "switch_mode_controlled": "«{name}» è comandato automaticamente dalla stagione del termostato.",
-    "season_rule_invalid": "Regola stagionale non valida: per inverno ed estate scegli sempre acceso, sempre spento o a scelta."
+    "season_rule_invalid": "Regola stagionale non valida: per inverno ed estate scegli sempre acceso, sempre spento o a scelta.",
+    "zone_unknown": "Nessuna zona si chiama «{zone}».",
+    "override_zone_excluded": "«{zone}» è esclusa dal raffrescamento: niente cambi temporanei in estate.",
+    "override_target_range": "La temperatura deve essere tra {min} e {max} °C, oppure spento.",
+    "override_hours_invalid": "La durata deve essere tra pochi minuti e {max} ore."
   }
 }
