@@ -1852,3 +1852,15 @@ textarea {
 .problems-badge[hidden] {
   display: none;
 }
+
+/* A select's list opens on the system's own background: a see-through
+   field's light text lands on white there (Chrome on Windows). Give the
+   options a solid dark background of their own. */
+select option,
+select optgroup {
+  background: #1b1f2a;
+  color: var(--text);
+}
+select option:disabled {
+  color: var(--text-dim);
+}
