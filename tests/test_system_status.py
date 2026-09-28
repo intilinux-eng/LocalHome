@@ -465,3 +465,18 @@ def test_a_device_answering_with_an_error_after_a_boot_is_offline_not_waiting():
                "error": "Timed out getting discovery response for 192.168.1.3"}
     found = {p["subject"]: p["code"] for p in system_status.problems([waiting, failing], [], {}, host=host)}
     assert found == {"Stanze Sensor": "device_not_heard_yet", "Divano": "device_offline"}
+
+
+def test_the_dashboards_problem_count_leaves_out_devices_not_heard_yet(tmp_path, monkeypatch):
+    from localhome.web.app import create_app
+    (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
+    app = create_app(str(tmp_path / "config.yaml"))
+    try:
+        monkeypatch.setattr(system_status, "problems", lambda *a, **k: [
+            {"code": "device_offline", "subject": "Stanze Valve", "detail": None},
+            {"code": "device_not_heard_yet", "subject": "Bagni Sensor", "detail": None},
+        ])
+        body = app.test_client().get("/api/problems").get_json()
+    finally:
+        app.config["HISTORY"].close()
+    assert body == {"ok": True, "problems": [{"code": "device_offline", "subject": "Stanze Valve", "detail": None}]}

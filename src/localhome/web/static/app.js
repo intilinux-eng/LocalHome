@@ -2533,6 +2533,42 @@ function updateZoneNext(zone) {
     : tr("climate.next_change", { when, target: formatTarget(next.value, true) });
 }
 
+// -------------------------------------------------------- problems badge --
+// What the admin panel's system status lists as wrong, counted on the
+// admin link: a sensor gone quiet, a valve not answering, the router not
+// passing the devices (RT) - seen without opening the admin panel. The
+// cheap /api/problems, once a minute.
+
+const PROBLEMS_EVERY_MS = 60000;
+
+function problemText(problem) {
+  const subject = problem.code === "protection_missing"
+    ? tr(`climate_admin.protection_${problem.subject}`) : displayName(problem.subject);
+  const text = tr(`climate_admin.system_problem_${problem.code}`, { subject });
+  return text.startsWith("climate_admin.") ? `${problem.code}: ${problem.subject}` : text;
+}
+
+async function refreshProblemsBadge() {
+  const badge = document.getElementById("problems-badge");
+  const link = document.getElementById("admin-link");
+  if (!badge || !link) return;
+  let problems;
+  try {
+    const data = await (await fetch("/api/problems", { cache: "no-store" })).json();
+    if (!data.ok) return;
+    problems = data.problems;
+  } catch (e) {
+    return;   // offline: the connection banner says so already
+  }
+  badge.hidden = !problems.length;
+  badge.textContent = problems.length > 9 ? "9+" : String(problems.length);
+  link.classList.toggle("has-problems", problems.length > 0);
+  link.href = problems.length ? "/climate-admin#system-status" : "/climate-admin";
+  link.title = problems.length
+    ? [tr("climate_admin.system_problems_count", { count: problems.length }), ...problems.slice(0, 5).map(problemText)].join("\n")
+    : tr("climate_admin.link_title");
+}
+
 // ------------------------------------------------------ temporary target --
 // "22° for 2 hours", "off until the next change": the zone's schedule set
 // aside for a while from its card, without touching the weekly grid - the
@@ -2781,6 +2817,9 @@ async function rerenderClimateForSeason(zonesData) {
 
 
 // ---------------------------------------------------------------- boot -----
+refreshProblemsBadge();
+setInterval(refreshProblemsBadge, PROBLEMS_EVERY_MS);
+
 
 async function boot() {
   try {

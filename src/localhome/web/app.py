@@ -493,13 +493,35 @@ def _matrix_state(app: Flask) -> led_matrix.MatrixState:
     timestamps, one statvfs, the MQTT client's own connection state -
     never the system status's subprocesses (nmcli, timedatectl) or a
     probe of the broker: this runs all day, every day, for a nicety."""
-    manager: DeviceManager = app.config["MANAGER"]
-    store: HistoryStore = app.config["HISTORY"]
     thermostat: ThermostatController | None = app.config["THERMOSTAT"]
     zones = thermostat.zones if thermostat else []
+    state = led_matrix.MatrixState(
+        thermostat=thermostat is not None,
+        problems=led_matrix.problem_codes(_quick_problems(app), zones,
+                                          mqtt_client.broker_down_for() > led_matrix.BROKER_GRACE_SECONDS),
+    )
+    if thermostat is not None:
+        store = thermostat.schedule_store
+        state.mode = store.get_mode()
+        state.away = store.get_away_until() is not None
+        state.diagnostic = store.get_diagnostic_mode()
+        manager: DeviceManager = app.config["MANAGER"]
+        for zone in zones:
+            reading = manager.sensor_reading(zone.valve)
+            state.zones.append(bool(reading["is_on"]) if reading.get("ok") and "is_on" in reading else None)
+            state.zone_names.append(zone.name)
+    return state
+
+
+def _quick_problems(app: Flask) -> list[dict]:
+    """The system status's problems from memory, /proc and one statvfs -
+    no subprocess, no broker probe: what the LED matrix and the
+    dashboard's badge ask for all day."""
+    manager: DeviceManager = app.config["MANAGER"]
+    store: HistoryStore = app.config["HISTORY"]
     devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
     uptime = system_status._uptime_seconds()
-    problems = system_status.problems(
+    return system_status.problems(
         devices,
         manager.failed_integrations,
         system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path))),
@@ -510,20 +532,6 @@ def _matrix_state(app: Flask) -> led_matrix.MatrixState:
         # RT: the devices can't reach the board - from /proc, no subprocess.
         **_lan_signals(app, devices, uptime),
     )
-    state = led_matrix.MatrixState(
-        thermostat=thermostat is not None,
-        problems=led_matrix.problem_codes(problems, zones, mqtt_client.broker_down_for() > led_matrix.BROKER_GRACE_SECONDS),
-    )
-    if thermostat is not None:
-        store = thermostat.schedule_store
-        state.mode = store.get_mode()
-        state.away = store.get_away_until() is not None
-        state.diagnostic = store.get_diagnostic_mode()
-        for zone in zones:
-            reading = manager.sensor_reading(zone.valve)
-            state.zones.append(bool(reading["is_on"]) if reading.get("ok") and "is_on" in reading else None)
-            state.zone_names.append(zone.name)
-    return state
 
 
 def _lan_ip() -> str | None:
@@ -661,6 +669,13 @@ def _register_routes(app: Flask) -> None:
             database=_database_stats(),
             config_path=str(config.path),
         )
+
+    @app.route("/api/problems")
+    def api_problems():
+        """What's wrong right now, cheaply - the dashboard's badge polls it.
+        A device not heard from yet after a boot isn't counted."""
+        found = [p for p in _quick_problems(app) if p["code"] != "device_not_heard_yet"]
+        return jsonify(ok=True, problems=found)
 
     @app.route("/api/climate-admin/led-matrix")
     def api_led_matrix():
