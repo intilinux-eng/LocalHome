@@ -2246,7 +2246,9 @@ document.addEventListener("click", event => {
 
 const SHELLY_HEALTH_EVERY_MS = 60000;
 
-// The usual Wi-Fi bands: below -85 dBm connections start to fail.
+// The usual Wi-Fi bands. Information, never a fault on its own: a weak
+// signal that gets every report through is fine - lost reports are what
+// turn red.
 function signalQuality(dbm) {
   if (dbm >= -65) return "excellent";
   if (dbm >= -75) return "good";
@@ -2258,9 +2260,9 @@ function signalText(dbm) {
   return tr("climate_admin.shelly_signal_value", { value: Math.round(dbm), quality: tr(`climate_admin.shelly_quality_${signalQuality(dbm)}`) });
 }
 
-function signalRow(label, stats, weakDbm) {
+function signalRow(label, stats) {
   if (!stats) return "";
-  return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }), stats.avg <= weakDbm);
+  return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }));
 }
 
 function shellyDeviceHtml(d, data, now) {
@@ -2276,17 +2278,20 @@ function shellyDeviceHtml(d, data, now) {
     if (state) rows.push(statRowHtml(tr("climate_admin.shelly_link"), tr(`climate_admin.shelly_${state}`), state !== "online"));
   }
   if (d.wifi_rssi_dbm != null) {
-    rows.push(statRowHtml(tr("climate_admin.shelly_signal_now"), signalText(d.wifi_rssi_dbm), d.wifi_rssi_dbm < data.weak_dbm));
+    rows.push(statRowHtml(tr("climate_admin.shelly_signal_now"), signalText(d.wifi_rssi_dbm)));
   }
-  rows.push(signalRow(tr("climate_admin.shelly_signal_24h"), s.signal_24h, data.weak_dbm));
-  rows.push(signalRow(tr("climate_admin.shelly_signal_7d"), s.signal_7d, data.weak_dbm));
+  rows.push(signalRow(tr("climate_admin.shelly_signal_24h"), s.signal_24h));
+  rows.push(signalRow(tr("climate_admin.shelly_signal_7d"), s.signal_7d));
   if (d.battery) {
     if (d.battery_pct != null) {
       rows.push(statRowHtml(tr("fields.battery_pct"), d.battery_v != null
         ? tr("climate_admin.shelly_battery_value", { pct: Math.round(d.battery_pct), volts: d.battery_v.toFixed(2) })
         : `${Math.round(d.battery_pct)}%`, d.battery_pct <= LOW_BATTERY_PCT));
     }
-    if (s.reports_24h != null) {
+    if (s.reports_24h != null && !s.counted_since) {
+      // Nothing counted yet: the count starts at the sensor's next report.
+      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), tr("climate_admin.shelly_reports_waiting")));
+    } else if (s.reports_24h != null) {
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"),
         tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }), s.missed_24h >= 3));
       // A sensor added (or first watched) this week has less than a week behind it.

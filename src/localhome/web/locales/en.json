@@ -700,6 +700,7 @@
     "shelly_battery_value": "{pct}% ({volts} V)",
     "shelly_reports_24h": "Reports, last 24 hours",
     "shelly_reports_value": "{count} · lost {missed}",
+    "shelly_reports_waiting": "counted from the next report",
     "shelly_missed_7d": "Reports lost, 7 days",
     "shelly_missed_since": "{missed} (counted since {since})",
     "shelly_temp": "Internal temperature",
@@ -712,7 +713,6 @@
     "shelly_up_to_date": "up to date",
     "shelly_restart_required": "asks for a restart",
     "system_problem_device_hot": "{subject} very hot: check its box isn't sealed or near a heat source",
-    "system_problem_device_signal_weak": "{subject}: weak Wi-Fi signal over the last 24 hours - move the router closer or add a repeater",
     "system_problem_device_reports_missed": "{subject}: reports lost over the last 24 hours (weak signal or battery)"
   },
   "vmc_presets": {

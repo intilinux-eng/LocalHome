@@ -176,7 +176,9 @@ def test_reports_that_dont_get_through_become_a_problem(tmp_path):
     assert by_id(watcher, HT)["stats"]["missed_24h"] == 4
 
 
-def test_a_weak_signal_all_day_is_a_problem_one_bad_moment_isnt(tmp_path):
+def test_a_weak_signal_isnt_a_problem_as_long_as_the_reports_arrive(tmp_path):
+    """The bathroom sensor sits at -88/-90 dBm and has got every report
+    through for weeks: its signal is shown, never counted as a fault."""
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
     for rssi in (-70, -71, -95):
         ht_wakes(broker, rssi=rssi, store=store, clock=clock)
@@ -187,7 +189,8 @@ def test_a_weak_signal_all_day_is_a_problem_one_bad_moment_isnt(tmp_path):
         ht_wakes(broker, rssi=rssi, store=store, clock=clock)
         clock.t += H
     watcher.refresh_problems()
-    assert [p["code"] for p in watcher.problems()] == ["device_signal_weak"]
+    assert watcher.problems() == []
+    assert by_id(watcher, HT)["stats"]["signal_24h"]["avg"] <= -85
 
 
 # ------------------------------------------------------------------ mains --

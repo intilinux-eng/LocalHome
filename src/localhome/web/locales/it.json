@@ -700,6 +700,7 @@
     "shelly_battery_value": "{pct}% ({volts} V)",
     "shelly_reports_24h": "Invii ultime 24 ore",
     "shelly_reports_value": "{count} · persi {missed}",
+    "shelly_reports_waiting": "conteggio dal prossimo invio",
     "shelly_missed_7d": "Invii persi 7 giorni",
     "shelly_missed_since": "{missed} (contati dal {since})",
     "shelly_temp": "Temperatura interna",
@@ -712,7 +713,6 @@
     "shelly_up_to_date": "aggiornato",
     "shelly_restart_required": "chiede un riavvio",
     "system_problem_device_hot": "{subject} molto caldo: controlla che la scatola non sia chiusa o vicina a fonti di calore",
-    "system_problem_device_signal_weak": "{subject}: segnale Wi-Fi debole nelle ultime 24 ore - avvicina il router o aggiungi un ripetitore",
     "system_problem_device_reports_missed": "{subject}: invii persi nelle ultime 24 ore (segnale debole o batteria)"
   },
   "vmc_presets": {

@@ -44,8 +44,6 @@ POLL_SECONDS = 300
 FIRST_POLL_SECONDS = 20
 # A Shelly switches its output off by itself at about 90°C.
 HOT_C = 80
-# The usual "weak" line for Wi-Fi: below it, connections start to fail.
-WEAK_DBM = -85
 MISSED_PER_DAY = 3
 # A device's start time, worked out from its uptime and our clock, moves
 # by a second or two between polls; a restart moves it by far more.
@@ -361,9 +359,8 @@ class ShellyHealth:
             name, stats = device["name"], device["stats"]
             if device["device_temp_c"] is not None and device["device_temp_c"] >= HOT_C:
                 found.append({"code": "device_hot", "subject": name, "detail": f"{device['device_temp_c']:.0f}°C"})
-            signal = stats.get("signal_24h")
-            if signal and signal["count"] >= 3 and signal["avg"] <= WEAK_DBM:
-                found.append({"code": "device_signal_weak", "subject": name, "detail": f"{signal['avg']} dBm"})
+            # A weak signal alone isn't one: a sensor at -88 dBm can get
+            # every report through for weeks. Reports that don't arrive are.
             if device["battery"] and stats.get("missed_24h", 0) >= MISSED_PER_DAY:
                 found.append({"code": "device_reports_missed", "subject": name, "detail": str(stats["missed_24h"])})
         with self._lock:
