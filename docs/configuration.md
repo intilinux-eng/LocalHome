@@ -358,9 +358,9 @@ keeps that one, and the panel shows it read-only.
 
 For a switch you control by hand, but that only makes sense in one mode -
 a dehumidifier, used only while cooling. Outside that mode it's forced
-off; inside it, it's left entirely to you. Pair it with the integration's
-`visible_in_mode` so its card is hidden when it can't be used (the card
-also says "Can only be switched on in summer"):
+off; inside it, it's left entirely to you. Its card is hidden in the
+season that forces it off, and says under its name what it does in each
+season ("Winter: always off · Summer: your choice"):
 
 ```yaml
 thermostat:
@@ -394,7 +394,8 @@ it alone" case to protect - outside `active_in_mode` it's actively
 forced *off*, not left in whatever state it was. If you need a switch
 that's sometimes owned by something else and sometimes forced to follow
 another switch, that's `interlocks`, not this. On the dashboard its card
-says so: "Automatic: on in summer, off in winter".
+says so ("Winter: always off · Summer: always on") and offers no switch
+while its season drives it.
 
 ### The ventilation unit's day/night program
 
@@ -576,8 +577,10 @@ kept there instead of a push notification, so it's always visible
 alongside the state it's explaining rather than depending on a
 Telegram bot token or a phone being nearby:
 
-- **A rock-stable reading isn't stale.** The sensor only sends on a
-  ≥0.5°C/5% change, or unconditionally every 2 hours regardless - so a
+- **A rock-stable reading isn't stale.** The sensor sends at once on a
+  change past the thresholds set in the Shelly app (0.5°C and 1% are the
+  tightest it offers), and unconditionally every 2 hours regardless -
+  each report carrying the exact value, to 0.1°C - so a
   reading's age creeping toward 2h is normal, not a fault, and
   `stale_after_seconds` (4h - just under double the heartbeat) only
   trips on an actually-missed device (two heartbeats in a row), not a
