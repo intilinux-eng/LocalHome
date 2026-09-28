@@ -2028,9 +2028,10 @@ function zoneTileHtml(zone) {
       </div>`;
   }
   const state = zoneState(zone);
+  const clock = zone.override ? `<span class="zt-override" title="${escapeAttr(tr("climate.override_tile"))}">${ICON_CLOCK}</span>` : "";
   return `
     <button class="zone-tile state-${state.cls}${id === selectedZoneId ? " selected" : ""}" data-zone="${id}" onclick="selectZone('${id}')">
-      <span class="zt-name">${escapeHtml(zone.name)}${simulatedTagHtml(zone.sensor_simulated)}</span>
+      <span class="zt-name">${escapeHtml(zone.name)}${simulatedTagHtml(zone.sensor_simulated)}${clock}</span>
       ${values}${stale}
       <span class="zt-status"><span class="zt-dot"></span>${state.short}</span>
     </button>`;
@@ -2075,6 +2076,7 @@ function buildZoneCard(zone) {
         </div>
         <div class="zone-detail" id="zone-detail-${id}">${state.detail}</div>
         <div class="zone-next" id="zone-next-${id}" hidden></div>
+        <div class="zone-override" id="zone-override-${id}">${overrideHtml(zone)}</div>
         <div class="zone-meta" id="zone-meta-${id}">${zoneMetaHtml(zone)}</div>
       </div>
 
@@ -2141,6 +2143,7 @@ function updateZoneCard(zone) {
   document.getElementById(`zone-detail-${id}`).textContent = state.detail;
   document.getElementById(`zone-meta-${id}`).innerHTML = zoneMetaHtml(zone);
   updateZoneNext(zone);
+  updateZoneOverride(zone);
 }
 
 function renderClimateZones() {
@@ -2453,7 +2456,7 @@ function formatTarget(value, withTier) {
 
 function zoneState(zone) {
   const off = tr("climate.system_off");
-  if (climateAwayUntil) {
+  if (climateAwayUntil && !zone.override) {
     return { cls: "away", label: off, short: tr("climate.tile_away"), detail: tr("climate.detail_away", { until: formatAwayUntil(climateAwayUntil) }) };
   }
   if (zone.sensor_failsafe_active) {
@@ -2517,7 +2520,8 @@ function nextScheduleChange(zoneName) {
 function updateZoneNext(zone) {
   const el = document.getElementById(`zone-next-${slug(zone.name)}`);
   if (!el) return;
-  const next = climateAwayUntil || zone.sensor_failsafe_active ? null : nextScheduleChange(zone.name);
+  // A temporary target says itself when the schedule takes over again.
+  const next = climateAwayUntil || zone.sensor_failsafe_active || zone.override ? null : nextScheduleChange(zone.name);
   el.hidden = !next;
   if (!next) return;
   const time = `${String(next.hour).padStart(2, "0")}:00`;
@@ -2527,6 +2531,125 @@ function updateZoneNext(zone) {
   el.textContent = next.value == null
     ? tr("climate.next_off", { when })
     : tr("climate.next_change", { when, target: formatTarget(next.value, true) });
+}
+
+// ------------------------------------------------------ temporary target --
+// "22° for 2 hours", "off until the next change": the zone's schedule set
+// aside for a while from its card, without touching the weekly grid - the
+// backend drops it by itself when the time is up (see ScheduleStore's
+// temporary targets). One panel open at a time; the 5s refresh leaves an
+// open one alone, so a choice isn't wiped under the finger.
+
+const ICON_CLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>`;
+let overridePanelZone = null;   // the zone whose panel is open
+let overrideChoice = null;       // the temperature picked in it (null = off)
+
+function formatUntil(iso) {
+  const until = new Date(iso);
+  const time = until.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
+  const days = Math.round((new Date(until).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return tr("climate.override_until_today", { time });
+  if (days === 1) return tr("climate.override_until_tomorrow", { time });
+  return tr("climate.override_until_day", { day: tr("climate.days")[(until.getDay() + 6) % 7], time });
+}
+
+function overrideHtml(zone) {
+  const name = jsArg(zone.name);
+  if (zone.override) {
+    const target = zone.override.target;
+    const text = target == null
+      ? tr("climate.override_active_off", { until: formatUntil(zone.override.until) })
+      : tr("climate.override_active", { target: formatTarget(target, true), until: formatUntil(zone.override.until) });
+    return `<div class="ovr-active"><span class="ovr-icon">${ICON_CLOCK}</span><span>${escapeHtml(text)}</span>
+      <button class="range-btn" onclick="cancelOverride(${name})">${tr("climate.override_cancel")}</button></div>`;
+  }
+  if (overridePanelZone !== zone.name) {
+    return `<button class="range-btn ovr-open" onclick="openOverride(${name})">${ICON_CLOCK}${tr("climate.override_button")}</button>`;
+  }
+  const temps = schedulePresets().map(v => `
+      <button class="sched-swatch${v === overrideChoice ? " active" : ""}" style="${v == null ? "" : `background:${tempColor(v)}`}"
+              onclick="pickOverrideTemp(${name}, ${v == null ? "null" : v})">${v == null ? "✕" : v}</button>`).join("");
+  const times = [["1", "override_1h"], ["2", "override_2h"], ["4", "override_4h"], ["next", "override_next"]].map(([h, key]) => `
+      <button class="range-btn" onclick="applyOverride(${name}, '${h}')">${tr(`climate.${key}`)}</button>`).join("");
+  return `
+    <div class="ovr-panel">
+      <div class="ovr-row"><span class="ovr-label">${tr("climate.override_temp")}</span><div class="ovr-temps">${temps}</div></div>
+      <div class="ovr-row"><span class="ovr-label">${tr("climate.override_time")}</span><div class="ovr-times">${times}</div></div>
+      <p class="hint-text">${tr("climate.override_hint")}</p>
+      <button class="range-btn ovr-close" onclick="closeOverride(${name})">${tr("climate.override_close")}</button>
+    </div>`;
+}
+
+function updateZoneOverride(zone) {
+  const el = document.getElementById(`zone-override-${slug(zone.name)}`);
+  if (!el) return;
+  if (overridePanelZone === zone.name && !zone.override) return;   // leave an open panel alone
+  const html = overrideHtml(zone);
+  if (el.dataset.html !== html) {
+    el.innerHTML = html;
+    el.dataset.html = html;
+  }
+}
+
+function redrawOverride(zoneName) {
+  const zone = climateZones.find(z => z.name === zoneName);
+  const el = zone && document.getElementById(`zone-override-${slug(zone.name)}`);
+  if (el) {
+    el.innerHTML = overrideHtml(zone);
+    el.dataset.html = el.innerHTML;
+  }
+}
+
+function openOverride(zoneName) {
+  const zone = climateZones.find(z => z.name === zoneName);
+  const previous = overridePanelZone;
+  overridePanelZone = zoneName;
+  // Starts from what the zone is heading for now, or the season's usual.
+  overrideChoice = zone && zone.target_c != null ? zone.target_c : DEFAULT_PAINT_VALUE[climateMode];
+  if (previous && previous !== zoneName) redrawOverride(previous);
+  redrawOverride(zoneName);
+}
+
+function closeOverride(zoneName) {
+  overridePanelZone = null;
+  redrawOverride(zoneName);
+}
+
+function pickOverrideTemp(zoneName, value) {
+  overrideChoice = value;
+  redrawOverride(zoneName);
+}
+
+async function applyOverride(zoneName, hours) {
+  const body = hours === "next" ? { target: overrideChoice, until: "next_change" } : { target: overrideChoice, hours: Number(hours) };
+  try {
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/override`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      notify(`${tr("climate.save_failed")}: ${apiError(data)}`);
+      return;
+    }
+  } catch (e) {
+    notify(tr("climate.save_failed"));
+    return;
+  }
+  overridePanelZone = null;
+  await refreshClimateZonesLive();
+}
+
+async function cancelOverride(zoneName) {
+  try {
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/override/cancel`, { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) notify(`${tr("climate.save_failed")}: ${apiError(data)}`);
+  } catch (e) {
+    notify(tr("climate.save_failed"));
+  }
+  await refreshClimateZonesLive();
 }
 
 // A device tagged `visible_in_mode: "heat"/"cool"` in config.yaml (e.g. a

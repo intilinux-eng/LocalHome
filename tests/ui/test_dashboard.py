@@ -123,3 +123,23 @@ def test_two_phones_editing_one_schedule_both_keep_their_change(open_page, api):
     assert monday[8] is not None, "phone B's save wiped phone A's change"
     shown = phone_b.locator(f"{grid}[data-hour='8']").get_attribute("data-value")
     assert shown not in (None, ""), "phone B shows phone A's change once it has saved"
+
+
+def test_a_zone_can_be_set_aside_for_a_while_and_back(open_page, api):
+    """The temporary target: from the card, a temperature and a duration;
+    the card and the tile say so; "back to the schedule" ends it."""
+    opened = open_climate(open_page, 390, ZONE_A)
+    page = opened.page
+    box = f"#zone-override-{slug(ZONE_A)}"
+    page.wait_for_selector(f"{box} .ovr-open", timeout=20000)
+    page.click(f"{box} .ovr-open")
+    page.locator(f"{box} .ovr-temps button", has_text="24").click()
+    page.locator(f"{box} .ovr-times button").nth(1).click()          # 2 hours
+    page.wait_for_selector(f"{box} .ovr-active", timeout=10000)
+    zone = next(z for z in api("/api/climate/zones")["zones"] if z["name"] == ZONE_A)
+    assert zone["override"]["target"] == 24 and zone["target_c"] == 24
+    assert page.locator(f".zone-tile[data-zone='{slug(ZONE_A)}'] .zt-override").count() == 1
+    page.locator(f"{box} .ovr-active button").click()
+    page.wait_for_selector(f"{box} .ovr-open", timeout=10000)
+    assert next(z for z in api("/api/climate/zones")["zones"] if z["name"] == ZONE_A)["override"] is None
+    assert opened.errors == []
