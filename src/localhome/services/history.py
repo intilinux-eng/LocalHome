@@ -85,6 +85,11 @@ class HistoryStore:
                 # file - the right trade for a board meant to run for years
                 # on eMMC/SD, where every fsync is flash wear.
                 conn.execute("PRAGMA synchronous=NORMAL")
+                # SQLite never shrinks the -wal file by itself: one large
+                # transaction (a retention prune) left it at 25 MB on the
+                # board, bigger than the database. Truncated back to this
+                # after each checkpoint.
+                conn.execute("PRAGMA journal_size_limit=8388608")
                 self._conn = conn
             return _Borrowed(self._conn, self._lock)
         except BaseException:

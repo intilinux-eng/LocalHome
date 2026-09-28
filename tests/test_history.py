@@ -473,3 +473,15 @@ def test_nothing_is_recorded_while_the_clock_is_not_synchronized(tmp_path):
         assert recorder.paused_for_clock is False
     finally:
         store.close()
+
+
+def test_the_wal_file_is_kept_from_staying_large(tmp_path):
+    """SQLite never shrinks the -wal file by itself; with a limit, a
+    checkpoint cuts it back after one big transaction."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    conn = store._connect()
+    try:
+        assert conn.execute("PRAGMA journal_size_limit").fetchone()[0] == 8388608
+    finally:
+        conn.close()
+        store.close()
