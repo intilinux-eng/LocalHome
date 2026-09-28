@@ -162,3 +162,68 @@ def test_context_manager_yields_an_updated_device(fake_kasa):
 
     device = asyncio.run(_use())
     assert device.disconnect_calls == 1
+
+
+# ------------------------------------------ a strip the router has moved --
+
+def _moving_kasa(monkeypatch, where):
+    """discover_single answers only at `where["ip"]`, with MAC AA:BB:..."""
+    created = []
+
+    async def _discover_single(host, username=None, password=None, timeout=None):
+        if host != where["ip"]:
+            raise TimeoutError(f"Timed out getting discovery response for {host}")
+        device = FakeDevice()
+        device.mac = "AA:BB:CC:DD:EE:01"
+        created.append(device)
+        return device
+
+    monkeypatch.setattr(led_strip.Discover, "discover_single", _discover_single)
+    return created
+
+
+def test_a_strip_that_moved_is_found_by_its_mac_and_remembered(monkeypatch, tmp_path):
+    where = {"ip": "10.0.0.5"}
+    _moving_kasa(monkeypatch, where)
+    scans = []
+    book = led_strip.TplinkAddressBook(str(tmp_path / "tplink_addresses.json"),
+                                       scanner=lambda u, p: scans.append(1) or {"AABBCCDDEE01": where["ip"]})
+    driver = led_strip.TplinkLedStripDriver(name="Strip", host="10.0.0.5", addresses=book)
+    assert driver.read()["ok"]                      # learns the MAC at the configured address
+    assert book.mac_for("10.0.0.5") == "AABBCCDDEE01"
+
+    where["ip"] = "10.0.0.9"                          # the router restarts, the strip moves
+    assert driver.read()["ok"]
+    assert scans == [1] and book.ip_for("10.0.0.5") == "10.0.0.9"
+    assert driver.read()["ok"] and scans == [1], "straight to the new address, no second scan"
+
+    again = led_strip.TplinkAddressBook(str(tmp_path / "tplink_addresses.json"))
+    assert again.ip_for("10.0.0.5") == "10.0.0.9", "remembered across restarts"
+
+
+def test_a_strip_that_is_off_is_not_scanned_for_on_every_poll(monkeypatch):
+    _moving_kasa(monkeypatch, {"ip": "nowhere"})
+    scans = []
+    book = led_strip.TplinkAddressBook(None, scanner=lambda u, p: scans.append(1) or {})
+    driver = led_strip.TplinkLedStripDriver(name="Strip", host="10.0.0.5", mac="aa-bb-cc-dd-ee-01", addresses=book)
+    for _ in range(3):
+        with pytest.raises(TimeoutError):
+            driver.read()
+    assert scans == [1], "one scan per 5 minutes"
+
+
+def test_without_a_known_mac_there_is_nothing_to_look_for(monkeypatch):
+    _moving_kasa(monkeypatch, {"ip": "nowhere"})
+    book = led_strip.TplinkAddressBook(None, scanner=lambda u, p: pytest.fail("no MAC, no scan"))
+    with pytest.raises(TimeoutError):
+        led_strip.TplinkLedStripDriver(name="Strip", host="10.0.0.5", addresses=book).read()
+
+
+def test_the_address_book_writes_only_when_something_changes(tmp_path):
+    path = tmp_path / "tplink_addresses.json"
+    book = led_strip.TplinkAddressBook(str(path))
+    book.learn("10.0.0.5", "10.0.0.5", "AA:BB:CC:DD:EE:01")
+    stamp = path.stat().st_mtime_ns
+    for _ in range(5):
+        book.learn("10.0.0.5", "10.0.0.5", "AA:BB:CC:DD:EE:01")
+    assert path.stat().st_mtime_ns == stamp

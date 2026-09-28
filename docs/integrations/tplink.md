@@ -113,6 +113,26 @@ integrations:
 Without the `number` entry, current brightness still shows up read-only
 as an extra field on the switch's card.
 
+## When the router gives a strip a new address
+
+You don't need a fixed IP (a DHCP reservation) for the strips. `host` is
+only where LocalHome looks first: every time a strip answers, its MAC -
+which never changes - is remembered with the address that worked
+(`config/tplink_addresses.json`). When it stops answering there - a
+restarted router hands out new addresses - LocalHome asks the LAN where
+that MAC is now (at most every 5 minutes, so a strip that's switched off
+doesn't cause a scan per poll), uses the new address and remembers it
+across restarts. `config.yaml` itself is never rewritten.
+
+That needs the strip to have answered once. For a strip that may move
+before LocalHome first reaches it, give its MAC too (on the box, or in
+the Tapo app under Device info):
+
+```yaml
+    host: "192.168.1.60"
+    mac: "78:20:51:53:B5:CD"
+```
+
 ## Notes
 
 - Each read/command is a fresh short LAN request (no persistent
