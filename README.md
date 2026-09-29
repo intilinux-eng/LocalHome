@@ -124,9 +124,9 @@ What it costs the board, measured on a UNO Q in daily use:
 
 | | |
 |---|---|
-| LocalHome's memory | about 100 MB of 4 GB |
-| Load | about 0.2 on 4 cores |
-| eMMC writes | about 0.25-0.4 GB a day, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
+| LocalHome's memory | about 110-120 MB of 4 GB (capped at 512 MB) |
+| CPU | under 2% of one core |
+| eMMC writes | about 0.25-0.6 GB a day, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
 | Power-on to dashboard | about 40 seconds |
 
 Any other Linux board (a Raspberry Pi, ...) runs it too - the LED matrix
