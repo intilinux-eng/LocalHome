@@ -677,6 +677,26 @@ POWER_CONF = "/etc/tmpfiles.d/localhome-power.conf"
 SLEEP_TARGET = "/etc/systemd/system/sleep.target"        # masked: a link to /dev/null
 RESTART_DROPINS = [f"/etc/systemd/system/{unit}.service.d/localhome-restart.conf"
                    for unit in ("mosquitto", "avahi-daemon", "NetworkManager")]
+# The cgroup systemd runs LocalHome in: its memory.max is the MemoryMax set
+# by tune-board.sh ("max" when there's none).
+CGROUP_ROOT = "/sys/fs/cgroup"
+OWN_CGROUP = "/proc/self/cgroup"
+
+
+def memory_limit_bytes(own_cgroup: str | None = None, root: str | None = None) -> int | None:
+    """This process's memory limit, in bytes - 0 when there's none, None
+    where it can't be told (no cgroup v2)."""
+    own_cgroup, root = own_cgroup or OWN_CGROUP, root or CGROUP_ROOT
+    try:
+        with open(own_cgroup, encoding="ascii") as f:
+            path = next((line.strip().split("::", 1)[1] for line in f if line.startswith("0::")), None)
+        if path is None:
+            return None
+        with open(os.path.join(root, path.lstrip("/"), "memory.max"), encoding="ascii") as f:
+            value = f.read().strip()
+    except (OSError, IndexError):
+        return None
+    return 0 if value == "max" else int(value) if value.isdigit() else None
 
 
 def board_protections(env=os.environ) -> dict | None:
@@ -694,6 +714,8 @@ def board_protections(env=os.environ) -> dict | None:
         "service_watchdog": bool(env.get("WATCHDOG_USEC")),
         "power_saving_off": os.path.exists(POWER_CONF) and os.path.realpath(SLEEP_TARGET) == "/dev/null",
         "services_restart": all(os.path.exists(path) for path in RESTART_DROPINS),
+        # Only for LocalHome run by systemd: by hand, there's no service to limit.
+        "memory_limit": (memory_limit_bytes() or 0) > 0 if env.get("INVOCATION_ID") else None,
     }
     return {"items": items}
 

@@ -252,7 +252,9 @@ everything - Shellys, phones, the clock - so:
   and the broker are the last to go.
 - *The hardware watchdog*: if the whole system freezes, the chip resets
   the board by itself (off on a stock UNO Q image).
-- *LocalHome restarted if it hangs* - see step 7.
+- *LocalHome restarted if it hangs* - see step 7 - *or if it grows past
+  512 MB of memory*: about four times what it uses, so only a leak gets
+  there, and LocalHome alone is restarted, not the board.
 
 Then reboot once (`sudo systemctl reboot`): Wi-Fi power saving applies
 from the next connection.

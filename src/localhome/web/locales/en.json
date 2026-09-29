@@ -658,6 +658,8 @@
     "protection_wifi_watchdog": "Wi-Fi watchdog",
     "protection_hardware_watchdog": "Hardware watchdog",
     "protection_service_watchdog": "Restart if LocalHome hangs",
+    "protection_memory_limit": "Restarted if LocalHome grows past 512 MB",
+    "wd_memory": "LocalHome past its memory limit: restarted",
     "protection_on": "on",
     "protection_off": "missing",
     "protection_na": "not available",

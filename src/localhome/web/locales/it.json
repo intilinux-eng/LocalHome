@@ -658,6 +658,8 @@
     "protection_wifi_watchdog": "Watchdog del Wi-Fi",
     "protection_hardware_watchdog": "Watchdog hardware",
     "protection_service_watchdog": "Riavvio se LocalHome si blocca",
+    "protection_memory_limit": "Riavvio se LocalHome supera 512 MB di memoria",
+    "wd_memory": "LocalHome oltre il limite di memoria: riavviato",
     "protection_on": "attiva",
     "protection_off": "manca",
     "protection_na": "non disponibile",

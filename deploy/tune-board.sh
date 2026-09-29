@@ -146,18 +146,21 @@ else
     echo "   no /dev/watchdog on this board - nothing to do"
 fi
 
-echo "== 8. LocalHome restarted if it hangs"
+echo "== 8. LocalHome restarted if it hangs, or grows past its memory"
 # LocalHome tells systemd it's alive while its web page answers and its
 # control loops run (see services/service_watchdog.py); two minutes of
-# silence and systemd restarts it - a hang, not only a crash.
+# silence and systemd restarts it - a hang, not only a crash. And a slow
+# leak can't take the board with it: past MemoryMax (about four times what
+# it uses) LocalHome alone is stopped and started again.
 UNIT=/etc/systemd/system/localhome.service
 if [ -f "$UNIT" ] && grep -q "WATCHDOG=1" "$HERE/../src/localhome/services/service_watchdog.py" 2>/dev/null; then
     install -D -m 755 "$HERE/watchdog/localhome-service-stopped.sh" /usr/local/lib/localhome/localhome-service-stopped.sh
     mkdir -p /etc/systemd/system/localhome.service.d
     cat > /etc/systemd/system/localhome.service.d/localhome-watchdog.conf <<'EOF'
-# LocalHome board: restarted when it stops saying it's alive - see
-# deploy/tune-board.sh and src/localhome/services/service_watchdog.py.
-# The stop hook notes a watchdog restart in the admin panel's history.
+# LocalHome board: restarted when it stops saying it's alive, or when it
+# outgrows MemoryMax - see deploy/tune-board.sh and
+# src/localhome/services/service_watchdog.py. The stop hook notes either
+# restart in the admin panel's history.
 [Unit]
 StartLimitIntervalSec=0
 
@@ -165,6 +168,8 @@ StartLimitIntervalSec=0
 ExecStopPost=+/bin/sh /usr/local/lib/localhome/localhome-service-stopped.sh
 ; Short of memory, the kernel sacrifices anything else first.
 OOMScoreAdjust=-500
+; LocalHome runs in about 120 MB; four times that is a leak, not work.
+MemoryMax=512M
 Type=notify
 NotifyAccess=main
 WatchdogSec=120
@@ -174,7 +179,7 @@ RestartSec=5
 EOF
     systemctl daemon-reload
     systemctl restart localhome
-    echo "   on: restarted after 2 min without a sign of life"
+    echo "   on: restarted after 2 min without a sign of life, or past 512 MB of memory"
     echo "   undo: rm -r /etc/systemd/system/localhome.service.d && systemctl daemon-reload && systemctl restart localhome"
 elif [ -f "$UNIT" ]; then
     echo "   this LocalHome is too old to say it's alive - update it, then run this again"

@@ -8,7 +8,7 @@ from localhome.services import diagnostics, system_status
 from localhome.services.service_watchdog import ServiceWatchdog
 from localhome.web.app import create_app
 
-SYSTEMD = {"NOTIFY_SOCKET": "/run/systemd/notify", "WATCHDOG_USEC": "120000000"}
+SYSTEMD = {"NOTIFY_SOCKET": "/run/systemd/notify", "WATCHDOG_USEC": "120000000", "INVOCATION_ID": "abc"}
 
 
 def _watchdog(tmp_path, answers=True, stalled=(), env=SYSTEMD):
@@ -99,12 +99,41 @@ def test_protections_are_read_from_what_tune_board_writes(tmp_path, monkeypatch)
     monkeypatch.setattr(system_status, "RESTART_DROPINS", [str(tmp_path / "restart.conf")])
     (tmp_path / "wifi.conf").write_text("[connection]\nwifi.powersave=2\n")
     (tmp_path / "restart.conf").write_text("[Service]\nRestart=always\n")
+    _fake_cgroup(tmp_path, monkeypatch, "536870912")
     items = system_status.board_protections(env=SYSTEMD)["items"]
     assert items == {"wifi_always_on": True, "wifi_watchdog": False, "hardware_watchdog": None,
-                     "service_watchdog": True, "power_saving_off": False, "services_restart": True}
+                     "service_watchdog": True, "power_saving_off": False, "services_restart": True,
+                     "memory_limit": True}
     items["power_saving_off"] = True
     found = system_status.problems([], [], {}, protections={"items": items})
     assert [(p["code"], p["subject"]) for p in found] == [("protection_missing", "wifi_watchdog")]
+
+
+def _fake_cgroup(tmp_path, monkeypatch, memory_max):
+    """/proc/self/cgroup and the service's memory.max, as systemd sets them."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    own = tmp_path / "self-cgroup"
+    own.write_text("0::/system.slice/localhome.service\n")
+    unit = tmp_path / "cgroup" / "system.slice" / "localhome.service"
+    unit.mkdir(parents=True)
+    (unit / "memory.max").write_text(memory_max + "\n")
+    monkeypatch.setattr(system_status, "OWN_CGROUP", str(own))
+    monkeypatch.setattr(system_status, "CGROUP_ROOT", str(tmp_path / "cgroup"))
+
+
+def test_the_memory_limit_is_read_from_the_services_own_cgroup(tmp_path, monkeypatch):
+    _fake_cgroup(tmp_path, monkeypatch, "536870912")
+    assert system_status.memory_limit_bytes(system_status.OWN_CGROUP, system_status.CGROUP_ROOT) == 512 * 1024 ** 2
+    _fake_cgroup(tmp_path / "none", monkeypatch, "max")
+    assert system_status.memory_limit_bytes(system_status.OWN_CGROUP, system_status.CGROUP_ROOT) == 0
+    assert system_status.memory_limit_bytes(str(tmp_path / "missing"), str(tmp_path)) is None
+
+
+def test_the_memory_limit_counts_only_for_the_service(tmp_path, monkeypatch):
+    monkeypatch.setattr(system_status, "NETWORKMANAGER_DIR", str(tmp_path))
+    _fake_cgroup(tmp_path, monkeypatch, "max")
+    assert system_status.board_protections(env=SYSTEMD)["items"]["memory_limit"] is False
+    assert system_status.board_protections(env={})["items"]["memory_limit"] is None, "run by hand"
 
 
 def test_no_protections_off_a_board(monkeypatch, tmp_path):
