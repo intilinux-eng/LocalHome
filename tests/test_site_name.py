@@ -75,7 +75,7 @@ def test_blank_means_the_default_name():
 # -------------------------------------------------------------- page ----
 
 def test_the_default_name_is_localhome(client):
-    page = client.get("/").get_data(as_text=True)
+    page = client.get("/classic").get_data(as_text=True)
     assert "<h1>LocalHome</h1>" in page
 
 
@@ -84,7 +84,7 @@ def test_a_saved_name_is_on_the_page_without_a_restart(client):
 
     assert res.status_code == 200
     assert res.get_json()["restart_required"] is False, "the name is live, don't ask for a restart"
-    page = client.get("/").get_data(as_text=True)
+    page = client.get("/classic").get_data(as_text=True)
     assert "<h1>Casa Rossi</h1>" in page
     assert "<title>Casa Rossi</title>" in page
     assert '<meta name="apple-mobile-web-app-title" content="Casa Rossi">' in page
@@ -106,7 +106,7 @@ def test_clearing_it_brings_localhome_back(client):
 
     _save(client, "")
 
-    assert "<h1>LocalHome</h1>" in client.get("/").get_data(as_text=True)
+    assert "<h1>LocalHome</h1>" in client.get("/classic").get_data(as_text=True)
     assert client.get("/site.webmanifest").get_json()["name"] == "LocalHome"
 
 
@@ -116,13 +116,13 @@ def test_a_name_that_is_too_long_is_refused_and_nothing_changes(client, tmp_path
     assert res.status_code == 400
     assert "24" in res.get_json()["error"]
     assert not (tmp_path / "panel_settings.json").exists()
-    assert "<h1>LocalHome</h1>" in client.get("/").get_data(as_text=True)
+    assert "<h1>LocalHome</h1>" in client.get("/classic").get_data(as_text=True)
 
 
 def test_a_name_cannot_smuggle_markup_into_the_page(client):
     _save(client, "<script>x</script>")
 
-    page = client.get("/").get_data(as_text=True)
+    page = client.get("/classic").get_data(as_text=True)
     assert "<script>x</script>" not in page
     assert "&lt;script&gt;" in page
 
@@ -141,7 +141,7 @@ def test_a_name_in_config_yaml_is_shown_as_such(tmp_path):
                     encoding="utf-8")
     app = create_app(str(path))
     try:
-        assert "<h1>Casa di prova</h1>" in app.test_client().get("/").get_data(as_text=True)
+        assert "<h1>Casa di prova</h1>" in app.test_client().get("/classic").get_data(as_text=True)
         row = next(r for r in app.test_client().get("/api/climate-admin/settings").get_json()["settings"]
                    if r["key"] == "site_name")
         assert (row["value"], row["source"]) == ("Casa di prova", "config")
@@ -159,3 +159,10 @@ def test_the_name_does_not_make_the_panel_ask_for_a_restart(client):
     client.post("/api/climate-admin/settings", json={
         "values": {"site_name": "Casa Rossi", "history_retention_days": 14}})
     assert client.get("/api/climate-admin/settings").get_json()["restart_pending"] is True
+
+
+def test_the_home_page_shows_the_name_in_its_top_bar_and_title(client):
+    _save(client, "Casa Rossi")
+    page = client.get("/").get_data(as_text=True)
+    assert '<span class="brand-name">Casa Rossi</span>' in page
+    assert "<title>Casa Rossi</title>" in page

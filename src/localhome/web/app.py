@@ -619,6 +619,13 @@ def _register_routes(app: Flask) -> None:
         )
 
     @app.route("/")
+    def home():
+        # The redesigned home page - glance, tweak, plan; see static/home.js.
+        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
+        return render_template("home.html", site_name=site_name(), t=app.config["TRANSLATIONS"],
+                               lang=config.web_language)
+
+    @app.route("/classic")
     def index():
         manager: DeviceManager = app.config["MANAGER"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]

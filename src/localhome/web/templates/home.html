@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="{{ t.app.description }}">
+  <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="{{ site_name }}">
+  <title>{{ site_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+</head>
+<!-- The home page, redesigned: glance, tweak, plan. What the house is
+     doing reads in a sentence; each zone is one card with today's story
+     (plan, temperature, when it ran) in one strip; changing it for a
+     while is a tap; the weekly plan waits behind a button. See home.js. -->
+<body data-season="heat">
+  <div class="page">
+    <header class="top">
+      <div class="brand">
+        <span class="brand-name">{{ site_name }}</span>
+        <span class="brand-clock" id="clock">--:--</span>
+      </div>
+      <a class="health" id="health" href="/climate-admin#system-status" data-state="unknown">
+        <span class="health-dot" aria-hidden="true"></span>
+        <span id="health-text">{{ t.home.health_checking }}</span>
+      </a>
+    </header>
+
+    <div class="offline" id="offline" role="status" aria-live="polite" hidden></div>
+
+    <section class="hero" aria-live="polite">
+      <p class="hero-season" id="hero-season"></p>
+      <h1 class="hero-title" id="hero-title">{{ t.home.loading }}</h1>
+      <p class="hero-detail" id="hero-detail"></p>
+      <div class="hero-actions">
+        <a class="chip chip-season" id="season-chip" href="/climate-admin#season" title="{{ t.home.season_hint }}"></a>
+        <button class="chip" id="outdoor-chip" type="button" hidden></button>
+        <button class="chip chip-away" id="away-chip" type="button"></button>
+      </div>
+    </section>
+
+    <main>
+      <div class="zones" id="zones"></div>
+
+      <section class="block" id="plant" hidden>
+        <h2 class="block-title">{{ t.home.plant_heading }}</h2>
+        <div class="plant" id="plant-body"></div>
+      </section>
+
+      <section class="block" id="house" hidden>
+        <h2 class="block-title">{{ t.home.house_heading }}</h2>
+        <div class="tiles" id="house-body"></div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <a href="/climate-admin">{{ t.home.admin_link }}</a>
+      <span aria-hidden="true">·</span>
+      <a href="/classic">{{ t.home.classic_link }}</a>
+    </footer>
+  </div>
+
+  <!-- One sheet for everything that isn't a glance: the week's plan,
+       going away. A bottom sheet on a phone, a side panel on a desk. -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <aside class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <h2 id="sheet-title"></h2>
+      <button class="icon-btn" type="button" id="sheet-close" aria-label="{{ t.settings.close }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body" id="sheet-body"></div>
+  </aside>
+
+  <script>
+    window.I18N = {{ t | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='toast.js') }}"></script>
+  <script src="{{ url_for('static', filename='home.js') }}"></script>
+</body>
+</html>

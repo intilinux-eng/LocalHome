@@ -26,7 +26,7 @@ def _set_week(api, zone, week):
 
 
 def open_climate(open_page, width, zone=None, pane="schedule"):
-    opened = open_page("/", width)
+    opened = open_page("/classic", width)
     page = opened.page
     if zone:
         page.evaluate(f"""() => {{ try {{
@@ -52,12 +52,12 @@ def test_the_climate_tab_lays_out_and_says_everything_in_italian(open_page, widt
 
 def test_names_are_shown_as_text_never_run_as_html(open_page):
     dialogs = []
-    for path in ("/", "/climate-admin"):
+    for path in ("/classic", "/climate-admin"):
         opened = open_page(path, 1280)
         page = opened.page
         page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
         page.reload()
-        if path == "/":
+        if path == "/classic":
             page.evaluate("switchTab('climate')")
         page.wait_for_timeout(2500)
         assert ZONE_B in page.inner_text("body") or page.locator("input.zone-name").evaluate_all(

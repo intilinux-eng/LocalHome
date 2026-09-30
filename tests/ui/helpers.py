@@ -29,7 +29,7 @@ def eventually(page, predicate, timeout_ms=10000, step_ms=250):
 
 UNTRANSLATED_JS = r"""() => {
   const text = document.body.innerText + ' ' + [...document.querySelectorAll('[title]')].map(e => e.title).join(' ');
-  return [...new Set(text.match(/\b(app|climate|climate_admin|sensors|fields|settings|clock|errors|vmc_presets)\.[a-z_0-9]+/g) || [])];
+  return [...new Set(text.match(/\b(app|climate|climate_admin|sensors|fields|settings|clock|errors|vmc_presets|home|covers)\.[a-z_0-9]+/g) || [])];
 }"""
 
 OVERFLOW_JS = "document.documentElement.scrollWidth - document.documentElement.clientWidth"

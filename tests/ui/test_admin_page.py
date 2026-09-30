@@ -107,7 +107,7 @@ def test_a_refusal_is_explained_in_the_page_language(open_page, api):
 
 
 def test_both_pages_say_when_the_board_stops_answering(open_page):
-    pages = [open_page("/climate-admin", 390).page, open_page("/", 390).page]
+    pages = [open_page("/climate-admin", 390).page, open_page("/classic", 390).page]
     for page in pages:
         page.wait_for_timeout(1500)
         assert page.locator("#connection-banner").is_hidden()
