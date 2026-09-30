@@ -24,14 +24,17 @@
     <header class="top">
       <div class="brand">
         <span class="brand-name">{{ site_name }}</span>
-        <span class="brand-clock" id="clock">--:--</span>
       </div>
+      <!-- The board's own date, time and time zone, with a warning when it
+           disagrees with this phone - the classic page's clock, as it is. -->
+      {% include "_server_clock.html" %}
       <a class="health" id="health" href="/climate-admin#system-status" data-state="unknown">
         <span class="health-dot" aria-hidden="true"></span>
         <span id="health-text">{{ t.home.health_checking }}</span>
       </a>
     </header>
 
+    <div class="server-clock-warning" id="server-clock-warning" hidden></div>
     <div class="offline" id="offline" role="status" aria-live="polite" hidden></div>
 
     <section class="hero" aria-live="polite">
@@ -84,6 +87,7 @@
     window.I18N = {{ t | tojson }};
   </script>
   <script src="{{ url_for('static', filename='toast.js') }}"></script>
+  <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
   <script src="{{ url_for('static', filename='schedule_grid.js') }}"></script>
   <script src="{{ url_for('static', filename='home.js') }}"></script>
 </body>

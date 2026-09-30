@@ -40,8 +40,6 @@ const DISPLAY_NAMES = {
 };
 
 const state = {
-  offsetMs: 0,            // board wall clock minus this device's clock
-  utcOffsetMin: 0,
   climate: null,
   devices: null,
   readings: {},
@@ -139,9 +137,6 @@ function updateZoneNext(zone) {
   if (card && current) fillZone(card, current, state.climate);
 }
 
-// The grid marks "now" by the board's clock (scheduleNow() reads this).
-window.ServerClock = { now: () => boardNow() };
-
 function updateNowHighlight() {
   const { dayKey, hour } = scheduleNow();
   document.querySelectorAll(".sched-cell.now, .sched-day-label.now, .sched-hour-axis span.now").forEach(c => c.classList.remove("now"));
@@ -154,14 +149,20 @@ function updateNowHighlight() {
 
 // ----------------------------------------------------------- the clock --
 // The board's wall clock as a Date read with getUTC*(): its local time,
-// whatever this phone's own time zone.
+// whatever this phone's own time zone - from static/server_clock.js, the
+// same clock the top bar shows (this device's own until its first sync).
+
+function boardOffsetMin() {
+  const offset = window.ServerClock && window.ServerClock.offsetMinutes();
+  return offset == null ? -new Date().getTimezoneOffset() : offset;
+}
 
 function boardNow() {
-  return new Date(Date.now() + state.offsetMs);
+  return (window.ServerClock && window.ServerClock.now()) || new Date(Date.now() + boardOffsetMin() * 60000);
 }
 
 function wall(epochMs) {
-  return new Date(epochMs + state.utcOffsetMin * 60000);
+  return new Date(epochMs + boardOffsetMin() * 60000);
 }
 
 // "2026-09-30T21:30:00" from the server is the board's own local time.
@@ -170,7 +171,7 @@ function boardDate(iso) {
 }
 
 function wallToEpoch(wallDate) {
-  return wallDate.getTime() - state.utcOffsetMin * 60000;
+  return wallDate.getTime() - boardOffsetMin() * 60000;
 }
 
 function hhmm(date) {
@@ -200,19 +201,6 @@ function untilText(date) {
   return tr("home.until_day", { day: tr(`home.day_long.${DAYS[dayIndex(date)]}`), time: hhmm(date) });
 }
 
-async function syncClock() {
-  try {
-    const t0 = Date.now();
-    const data = await api("/api/server-time");
-    const rtt = Date.now() - t0;
-    state.utcOffsetMin = data.utc_offset_minutes || 0;
-    state.offsetMs = data.epoch_ms + state.utcOffsetMin * 60000 + rtt / 2 - Date.now();
-  } catch (e) { /* the refresh says so */ }
-}
-
-function tickClock() {
-  document.getElementById("clock").textContent = hhmm(boardNow());
-}
 
 // --------------------------------------------------------------- numbers --
 
@@ -495,7 +483,7 @@ function wireRibbon(card, zone, week, history, mode) {
     const ts = start + hour * 3600;
     const time = hhmm(wall(ts * 1000));
     const bits = [time];
-    const nowTs = Date.now() / 1000 + state.offsetMs / 1000 - state.utcOffsetMin * 60;
+    const nowTs = wallToEpoch(boardNow()) / 1000;
     if (ts <= nowTs) {
       const near = history.temps.reduce((best, p) => (!best || Math.abs(p.ts - ts) < Math.abs(best.ts - ts) ? p : best), null);
       if (near && Math.abs(near.ts - ts) < 1800) bits.push(`${fmt(near.value)}°`);
@@ -1014,10 +1002,10 @@ document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.sheet) closeSheet(); });
 
 (async function start() {
-  await syncClock();
-  tickClock();
-  setInterval(tickClock, 1000);
-  setInterval(syncClock, 5 * 60000);
+  // Until the board's clock has answered, "now" would be this phone's.
+  for (let i = 0; i < 30 && !(window.ServerClock && window.ServerClock.now()); i++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   await refreshClimate();
   await Promise.all([refreshHistory(), refreshDevices(), refreshProblems()]);
   setInterval(refreshClimate, REFRESH_MS);

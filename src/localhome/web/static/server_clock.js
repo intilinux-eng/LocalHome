@@ -16,6 +16,7 @@
 //   now()   -> a Date whose *UTC* fields are the server's local wall-clock
 //              (read it with getUTCHours()/getUTCDay() only), or null
 //              before the first sync
+//   offsetMinutes() -> the server's offset from UTC, or null before then
 // and fires a "serverclock:minute" event on document whenever the
 // displayed minute changes, so a page can re-highlight "now" on time.
 (function () {
@@ -206,7 +207,7 @@
     };
   }
 
-  window.ServerClock = { now: serverWallClock, upFor };
+  window.ServerClock = { now: serverWallClock, upFor, offsetMinutes: () => (state ? state.offsetMin : null) };
 
   sync();
   setInterval(sync, RESYNC_MS);

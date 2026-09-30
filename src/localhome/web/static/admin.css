@@ -36,28 +36,6 @@
 }
 .icon-btn-sm svg { width: 20px; height: 20px; }
 
-.server-clock {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-}
-.server-clock.is-warning { border-color: var(--warn); }
-.server-clock-time { font-weight: 650; font-variant-numeric: tabular-nums; }
-.server-clock-meta { display: flex; flex-direction: column; line-height: 1.15; font-size: 0.7rem; color: var(--text-3); }
-.server-clock-date::first-letter, .server-clock-date-short::first-letter { text-transform: uppercase; }
-.server-clock-date-short { display: none; }
-@media (max-width: 560px) {
-  .server-clock-date { display: none; }
-  .server-clock-date-short { display: block; }
-  .server-clock-zone { display: none; }
-}
-
 .server-clock-warning, .offline-banner {
   margin: -6px 0 16px;
   padding: 12px 14px;
