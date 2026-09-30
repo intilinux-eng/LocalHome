@@ -33,6 +33,9 @@ def test_the_bar_follows_the_scroll(open_page):
     page.wait_for_timeout(1500)
     current = lambda: page.locator("#admin-nav a.current").all_inner_texts()
     assert eventually(page, lambda: current() == ["Panoramica"])
+    # Sections start closed; one open gives the page room to scroll past the group.
+    page.evaluate("document.getElementById('system-status').open = true")
+    page.wait_for_timeout(500)
     page.evaluate("document.getElementById('group-board').scrollIntoView()")
     assert eventually(page, lambda: current() == ["Stato sistema"])
     assert abs(page.locator("#admin-nav").bounding_box()["y"]) < 1, "the bar stays at the top"
@@ -95,6 +98,7 @@ def test_a_save_waiting_for_a_restart_is_named_at_the_top(open_page, api):
 
 def test_a_refusal_is_explained_in_the_page_language(open_page, api):
     page = open_page("/climate-admin", 1280).page
+    page.locator("#zones > summary").click()          # closed until needed
     card = page.locator("#zone-forms .admin-zone-card").first
     assert eventually(page, lambda: card.count() == 1)
     card.locator(".zone-sensor-mode").select_option("shelly")    # and no device id typed

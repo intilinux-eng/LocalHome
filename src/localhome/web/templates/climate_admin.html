@@ -2,9 +2,10 @@
 <html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="{{ t.app.description }}">
-  <meta name="theme-color" content="#0b0d13">
+  <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
@@ -13,10 +14,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="{{ site_name }}">
   <title>{{ site_name }} · {{ t.climate_admin.page_title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='climate_admin.css') }}">
+  <!-- The home page's design (tokens, themes, buttons), then this page's own. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 </head>
-<body>
+<body data-season="heat">
+  <div class="page admin-page">
   {#- One line-icon per section, same stroke style as the rest of the UI. -#}
   {%- set ICONS = {
     "guide": '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
@@ -38,13 +41,16 @@
     <svg class="sec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name] | safe }}</svg>
   {%- endmacro %}
 
-  <header>
-    <h1>{{ t.climate_admin.page_title }}</h1>
+  <header class="admin-top">
+    <a class="icon-btn-sm" href="/" title="{{ t.climate_admin.back_to_dashboard }}" aria-label="{{ t.climate_admin.back_to_dashboard }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    </a>
+    <div class="admin-top-text">
+      <span class="admin-top-site">{{ site_name }}</span>
+      <h1>{{ t.climate_admin.page_title }}</h1>
+    </div>
     <div class="header-right">
       {% with clock_zone_full = true %}{% include "_server_clock.html" %}{% endwith %}
-      <a class="icon-btn-sm" href="/" title="{{ t.climate_admin.back_to_dashboard }}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-      </a>
     </div>
   </header>
   <div class="server-clock-warning" id="server-clock-warning" hidden></div>
@@ -136,7 +142,7 @@
   <!-- The heating/cooling season: seasonal, changed twice a year, so it
        lives here (not on the dashboard) and needs the new season's name
        typed to switch - see climate_admin.js's season section. -->
-  <details class="admin-details" id="season" data-nav="season" open>
+  <details class="admin-details" id="season" data-nav="season">
     <summary>{{ icon("season") }}<span class="sec-title">{{ t.climate_admin.season_heading }}</span><span class="sec-pills" id="season-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.season_note }}</p>
     <div class="season-cards" id="season-cards"></div>
@@ -150,7 +156,7 @@
     <p class="hint-text" id="season-result"></p>
   </details>
 
-  <details class="admin-details" id="zones" data-nav="zones" open>
+  <details class="admin-details" id="zones" data-nav="zones">
     <summary>{{ icon("zones") }}<span class="sec-title">{{ t.climate_admin.zones_heading }}</span><span class="sec-pills" id="zones-summary"></span></summary>
     <!-- Which formula every valve below follows, and whether "away" is
          overriding the schedule - the cards only say open/closed. -->
@@ -320,7 +326,7 @@
   </div>
 
   <!-- Open by default: this is what someone diagnosing the board came for. -->
-  <details class="admin-details" id="system-status" data-nav="system-status" open>
+  <details class="admin-details" id="system-status" data-nav="system-status">
     <summary>{{ icon("system") }}<span class="sec-title">{{ t.climate_admin.system_heading }}</span><span class="sec-pills" id="system-status-summary"></span></summary>
     <!-- Only shown when something is wrong with the installation itself
          (a driver that didn't load, a device gone quiet, a stalled loop,
@@ -481,8 +487,16 @@
     <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
   </details>
 
+  </div>
+
   <script>
     window.I18N = {{ t | tojson }};
+    // The season's accent, as on the home page.
+    (function season() {
+      fetch("/api/climate/zones", { cache: "no-store" }).then(r => r.json())
+        .then(d => { if (d.mode) document.body.dataset.season = d.mode; }).catch(() => {});
+      setTimeout(season, 60000);
+    })();
   </script>
   <script src="{{ url_for('static', filename='toast.js') }}"></script>
   <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
