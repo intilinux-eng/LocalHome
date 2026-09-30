@@ -67,6 +67,24 @@ The 2-hour heartbeat is precise: over several nights on two sensors,
 with different firmware and very different Wi-Fi signals, every
 heartbeat arrived within about a minute of exactly 2 hours.
 
+**A change report doesn't move the heartbeat.** The heartbeat keeps its
+own clock: after an extra report at 12:14, the next heartbeat still came
+at 12:53 - two hours after the 10:52 one, not after 12:14. And the
+thresholds are measured from the **last value sent**, heartbeat or not.
+
+A real day, two sensors with the thresholds at 0.5 °C and 1%, a stable
+apartment at the end of September:
+
+| | Reports in 24 h | Heartbeats | Change reports | Temperature range |
+|---|---|---|---|---|
+| Rooms | 15 | 12 | 3 - all humidity (-1.1%, -1.0%, -1.1%) | 25.6-26.0 °C |
+| Bathrooms | 14 | 12 | 2 - both humidity (+1.0%, -1.0%) | 24.9-25.2 °C |
+
+The temperature never moved 0.5 °C away from the last value sent, so it
+never triggered a report on its own: in a steady house the sensor speaks
+on its heartbeat, and now and then for humidity. Each heartbeat still
+carries the exact temperature, so the chart follows every 0.1 °C.
+
 Each report carries the exact reading of that moment, to 0.1 °C - the
 thresholds decide *when* it speaks, not how precisely. That's why a
 night chart falls in 0.1 °C steps about 2 hours apart, and why
