@@ -220,7 +220,7 @@ a { color: inherit; }
 .zone-facts { display: grid; gap: 3px; padding-bottom: 6px; min-width: 0; }
 .fact { font-size: 0.9rem; color: var(--text-2); }
 .fact b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-.fact-eta { color: var(--accent); font-weight: 600; }
+.fact-rule { color: var(--accent); font-weight: 600; }
 .trend { font-size: 0.85rem; color: var(--text-3); margin-left: 6px; white-space: nowrap; }
 
 /* today's strip */

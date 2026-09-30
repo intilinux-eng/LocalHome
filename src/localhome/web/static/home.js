@@ -269,39 +269,31 @@ function bands(day) {
   return out;
 }
 
-// ---------------------------------------------------------- the trend --
-// Radiant floors are slow: how fast the room is moving tells when it
-// will get there. From the last three hours of readings, least squares.
+// ------------------------------------------------ what the valve does --
+// No forecasts: the sensors report every couple of hours, too seldom to
+// tell when a room will get there. What is certain is the thermostat's
+// own rule (services/thermostat.py's decide()): while heating it opens
+// below target - hysteresis and closes above target + hysteresis, and in
+// between keeps doing what it was doing; cooling is the mirror image.
 
-function trend(temps) {
-  const now = Date.now() / 1000 + state.offsetMs / 1000 - state.utcOffsetMin * 60;
-  const recent = temps.filter(p => p.ts >= now - 3 * 3600);
-  if (recent.length < 6) return null;
-  const xs = recent.map(p => (p.ts - now) / 3600), ys = recent.map(p => p.value);
-  const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
-  let num = 0, den = 0;
-  xs.forEach((x, i) => { num += (x - mx) * (ys[i] - my); den += (x - mx) ** 2; });
-  return den ? num / den : null;        // °C per hour
+function valveRule(zone, climate) {
+  const h = climate.hysteresis_c;
+  if (zone.target_c == null || zone.temperature_c == null || h == null || !zone.sensor_ok) return null;
+  const cool = climate.mode === "cool";
+  if (zone.valve_on) {
+    return tr(cool ? "home.runs_until_cool" : "home.runs_until_heat",
+      { value: fmt(cool ? zone.target_c - h : zone.target_c + h) });
+  }
+  return tr(cool ? "home.restarts_above" : "home.restarts_below",
+    { value: fmt(cool ? zone.target_c + h : zone.target_c - h) });
 }
 
-// When the room will reach its target at the pace it's moving - only if
-// that's before the target changes: "gets there at 23:06" means nothing
-// for a target that ends at 22:05.
-function eta(zone, slope, mode) {
-  if (slope == null || zone.target_c == null || zone.temperature_c == null || !zone.valve_on) return null;
-  const gap = zone.target_c - zone.temperature_c;
-  const rate = mode === "cool" ? -slope : slope;
-  const need = mode === "cool" ? -gap : gap;
-  if (need <= 0.05 || rate < 0.05) return null;
-  const at = new Date(boardNow().getTime() + (need / rate) * 3600000);
-  const ends = targetEnds(zone, mode);
-  return ends && at > ends ? null : at;
-}
-
-function targetEnds(zone, mode) {
-  if (zone.override) return boardDate(zone.override.until);
-  const change = nextChange((state.weeks[zone.name] || {})[mode], boardNow());
-  return change ? change.at : null;
+// "0.8° below target", "at target" - to the tenth the sensor reports.
+function gapText(zone) {
+  if (zone.target_c == null || zone.temperature_c == null) return "";
+  const gap = Math.round((zone.temperature_c - zone.target_c) * 10) / 10;
+  if (gap === 0) return tr("home.at_target");
+  return tr(gap < 0 ? "home.gap_below" : "home.gap_above", { value: fmt(Math.abs(gap)) });
 }
 
 // ----------------------------------------------------------- the zones --
@@ -353,8 +345,6 @@ function fillZone(card, zone, climate) {
   const status = zoneStatus(zone, climate);
   const week = (state.weeks[zone.name] || {})[mode];
   const history = state.history[zone.name] || { temps: [], runs: [] };
-  const slope = trend(history.temps);
-  const arrival = eta(zone, slope, mode);
   const now = boardNow();
   const change = nextChange(week, now);
   card.dataset.active = status.active ? "true" : "false";
@@ -363,18 +353,15 @@ function fillZone(card, zone, climate) {
   const temp = zone.temperature_c != null
     ? `<span class="now-value">${fmt(zone.temperature_c)}</span><span class="now-unit">°</span>`
     : `<span class="now-missing">--</span>`;
-  const trendText = slope == null || zone.temperature_c == null ? ""
-    : Math.abs(slope) < 0.1 ? tr("home.trend_steady")
-    : tr(slope > 0 ? "home.trend_up" : "home.trend_down", { rate: fmt(Math.abs(slope)) });
-
   const facts = [];
-  if (zone.target_c != null && !(mode === "cool" && !zone.cool_enabled)) {
-    facts.push(`<div class="fact">${tr("home.target")} <b>${fmtTarget(zone.target_c)}</b>${trendText ? `<span class="trend">${esc(trendText)}</span>` : ""}</div>`);
-  } else if (trendText) {
-    facts.push(`<div class="fact"><span class="trend">${esc(trendText)}</span></div>`);
+  const excluded = mode === "cool" && !zone.cool_enabled;
+  if (zone.target_c != null && !excluded) {
+    const gap = zone.sensor_ok ? gapText(zone) : "";
+    facts.push(`<div class="fact">${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}</div>`);
+    const rule = climate.away_until && !zone.override ? "" : valveRule(zone, climate);
+    if (rule) facts.push(`<div class="fact fact-rule">${esc(rule)}</div>`);
   }
-  if (arrival) facts.push(`<div class="fact fact-eta">${esc(tr("home.eta", { time: hhmm(arrival) }))}</div>`);
-  else if (change && !zone.override && !climate.away_until) {
+  if (change && !zone.override && !climate.away_until && !excluded) {
     facts.push(`<div class="fact">${esc(tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }))}</div>`);
   }
   if (zone.humidity_pct != null) {
@@ -656,11 +643,9 @@ function renderHero() {
     detail = tr("home.hero_away_detail");
   } else if (active.length) {
     title = tr(mode === "cool" ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
-    const arrivals = active.map(z => {
-      const at = eta(z, trend((state.history[z.name] || { temps: [] }).temps), mode);
-      return at ? tr("home.hero_eta", { zone: z.name, target: fmtTarget(z.target_c), time: hhmm(at) }) : null;
-    }).filter(Boolean);
-    detail = arrivals.join(" ");
+    detail = active.filter(z => z.temperature_c != null && z.target_c != null)
+      .map(z => tr("home.hero_zone", { zone: z.name, temp: `${fmt(z.temperature_c)}°`, target: fmtTarget(z.target_c) }))
+      .join(" · ");
   } else if (zones.length) {
     title = tr("home.hero_calm");
     const next = zones.map(z => ({ zone: z, change: nextChange((state.weeks[z.name] || {})[mode], boardNow()) }))
