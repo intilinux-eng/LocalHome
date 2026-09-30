@@ -167,10 +167,16 @@ a { color: inherit; }
 
 /* -------------------------------------------------------------- zones -- */
 
+/* One zone per row: its day on the left, its week on the right when
+   there's room, one under the other on a phone. */
 .zones {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 16px;
+}
+.zone-plan { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+@media (min-width: 960px) {
+  .zone { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  .zone-plan { margin-top: 0; padding-top: 0; border-top: 0; padding-left: 28px; border-left: 1px solid var(--line); min-height: 100%; }
 }
 
 .zone {
@@ -477,7 +483,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* The weekly grid (static/schedule_grid.js) - the classic page's own grid
    and palette, in this page's colours: pick a temperature, then tap or
    drag across the hours; it saves by itself. */
-.plan .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 6px 0 12px; }
+.zone-plan .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 6px 0 12px; }
 .sched-season-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 12px; }
 .sched-palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .sched-palette:has(.sched-tier) { align-items: flex-end; gap: 18px 10px; margin-top: 12px; margin-bottom: 8px; }
@@ -552,7 +558,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .range-btn:active { transform: scale(0.97); }
 
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; align-items: center; }
-.sheet-sticky { position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); margin: 16px -18px 0; padding: 12px 18px max(14px, env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+
 .sheet-section { margin-top: 20px; }
 .sheet-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin: 0 0 8px; }
 

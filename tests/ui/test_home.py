@@ -58,10 +58,10 @@ def test_names_stay_text_on_the_home_page_and_in_the_plan(open_page):
     opened = _open_home(open_page, 1280)
     page = opened.page
     page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    _open_plan(page, ZONE_A)
     assert ZONE_B in page.inner_text("#zones")
-    _card(page, ZONE_B).locator("button[data-action=plan]").click()
-    page.wait_for_selector("#sheet:not([hidden])")
-    assert ZONE_B in page.inner_text("#sheet-title")
+    # The other zone's name, as the grid's "copy to" button, stays text too.
+    assert _card(page, ZONE_A).locator(".zone-actions button", has_text="Bagno").count() == 1
     assert page.locator("img[src='x']").count() == 0
     assert dialogs == [] and opened.errors == []
 
@@ -81,23 +81,40 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
 
 
 def _open_plan(page, name):
-    _card(page, name).locator("button[data-action=plan]").click()
-    page.wait_for_selector("#sheet:not([hidden]) .sched-cell", timeout=20000)
+    """The week is on the card itself - waits for its grid to be filled."""
+    page.wait_for_selector(f".zone[data-zone={_css_string(name)}] .sched-cell", timeout=20000)
     page.wait_for_timeout(800)
 
 
 def test_the_plan_is_the_classic_grid_and_one_click_paints_one_cell(open_page, api):
-    """The same grid as the classic page (static/schedule_grid.js), in the
-    sheet: the empty-week note mustn't move it under the pointer."""
+    """The same grid as the classic page (static/schedule_grid.js), on the
+    zone's card: the empty-week note mustn't move it under the pointer."""
     _set_week(api, ZONE_A, EMPTY_WEEK)
     opened = _open_home(open_page)
     page = opened.page
     _open_plan(page, ZONE_A)
-    page.locator("#sheet .sched-cell[data-day='mon'][data-hour='8']").click()
+    _card(page, ZONE_A).locator(".sched-cell[data-day='mon'][data-hour='8']").click()
     assert eventually(page, lambda: _week(api, ZONE_A)["mon"][8] is not None)
     page.wait_for_timeout(1000)
     painted = [(d, h) for d, hours in _week(api, ZONE_A).items() for h, v in enumerate(hours) if v is not None]
     assert painted == [("mon", 8)]
+    assert opened.errors == []
+
+
+def test_the_cards_refresh_never_rebuilds_the_grid_under_a_stroke(open_page, api):
+    """The live part of a card is refilled every 20 s; the week under it
+    must be the very same grid before and after - a stroke keeps going."""
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    opened = _open_home(open_page)
+    page = opened.page
+    _open_plan(page, ZONE_A)
+    grid = _card(page, ZONE_A).locator(".sched-grid")
+    grid.evaluate("g => { g.dataset.marker = 'same'; }")
+    page.evaluate("refreshClimate()")
+    page.wait_for_timeout(1500)
+    assert grid.evaluate("g => g.dataset.marker") == "same"
+    _card(page, ZONE_A).locator(".sched-cell[data-day='tue'][data-hour='9']").click()
+    assert eventually(page, lambda: _week(api, ZONE_A)["tue"][9] is not None)
     assert opened.errors == []
 
 
@@ -106,8 +123,8 @@ def test_monday_is_copied_to_the_weekdays_from_the_plan(open_page, api):
     opened = _open_home(open_page)
     page = opened.page
     _open_plan(page, ZONE_A)
-    page.locator("#sheet .sched-cell[data-day='mon'][data-hour='8']").click()
-    page.locator("#sheet button", has_text="Lun–Ven").click()
+    _card(page, ZONE_A).locator(".sched-cell[data-day='mon'][data-hour='8']").click()
+    _card(page, ZONE_A).locator("button", has_text="Lun–Ven").click()
     assert eventually(page, lambda: _week(api, ZONE_A)["fri"][8] is not None)
     week = _week(api, ZONE_A)
     assert [week[d][8] is not None for d in ("tue", "wed", "thu", "fri", "sat")] == [True] * 4 + [False]

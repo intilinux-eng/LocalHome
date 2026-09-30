@@ -333,9 +333,11 @@ function renderZones() {
       card = document.createElement("article");
       card.className = "zone";
       card.id = id;
+      card.innerHTML = `<div class="zone-live"></div><section class="zone-plan"></section>`;
       host.appendChild(card);
     }
     fillZone(card, zone, climate);
+    fillPlan(card, zone);
   });
   [...host.children].forEach(child => { if (!seen.has(child.id)) child.remove(); });
 }
@@ -376,7 +378,7 @@ function fillZone(card, zone, climate) {
   const hoursToday = (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
-  card.innerHTML = `
+  card.querySelector(".zone-live").innerHTML = `
     <div class="zone-head">
       <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}</h2>
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
@@ -391,8 +393,7 @@ function fillZone(card, zone, climate) {
       <div class="ribbon-readout">${legendHtml()}</div>
     </div>
     <div class="quick">${quickHtml(zone, climate, change)}</div>
-    <div class="zone-foot">${foot.join(" · ")}<span class="spacer"></span>
-      <button class="link-btn" type="button" data-action="plan">${esc(tr("home.plan_button"))}</button></div>`;
+    <div class="zone-foot">${foot.join(" · ")}</div>`;
   wireRibbon(card, zone, week, history, mode);
 }
 
@@ -614,9 +615,6 @@ async function onZoneClick(event) {
       notify(errorText(e));
       button.disabled = false;
     }
-  } else if (action === "plan") {
-    openPlan(zone.name);
-    return;
   } else {
     return;
   }
@@ -731,14 +729,19 @@ function closeSheet() {
 }
 
 // ---------------------------------------------------------- the plan --
-// The week's grid - painted with a drag, copied to the week or to another
-// zone - is static/schedule_grid.js, the classic page's own: it saves as
-// it's painted, only the hours that changed.
+// Each card's week, right under its day: the classic page's own grid
+// (static/schedule_grid.js) - painted with a drag, copied to the week or
+// to another zone, saved as it's painted, only the hours that changed.
+// Built once per season and left alone: the card's live part above it is
+// refilled every refresh, the grid never is, so a stroke is never cut.
 
-function openPlan(zoneName) {
-  const zone = state.climate.zones.find(z => z.name === zoneName);
-  if (!zone) return;
-  openSheet(tr("home.plan_title", { zone: zoneName }), `<div class="plan">${schedulePaneHtml(zone, slug(zone.name))}</div>`, null);
+function fillPlan(card, zone) {
+  const plan = card.querySelector(".zone-plan");
+  const excluded = zoneExcluded(zone);
+  plan.hidden = excluded;
+  if (excluded || plan.dataset.mode === climateMode) return;
+  plan.dataset.mode = climateMode;
+  plan.innerHTML = schedulePaneHtml(zone, slug(zone.name));
   loadZoneSchedule(zone.name);
 }
 
