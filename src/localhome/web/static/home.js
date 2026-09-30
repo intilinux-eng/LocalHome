@@ -863,9 +863,10 @@ function rangeHtml(device, reading) {
     <input type="range" min="${range.min}" max="${range.max}" value="${value}" data-level="${esc(device.name)}"></label>`;
 }
 
+// A device whose last read failed says so - the reading comes back as
+// {ok: false, error} or, through api(), as a failed request.
 function readingNote(reading) {
-  if (reading.ok === false && reading.error) return `<div class="tile-note">${esc(tr("home.not_answering"))}</div>`;
-  return "";
+  return reading.ok === false ? `<div class="tile-note">${esc(tr("home.not_answering"))}</div>` : "";
 }
 
 async function onHouseClick(event) {
