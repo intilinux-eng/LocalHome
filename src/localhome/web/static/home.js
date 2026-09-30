@@ -750,7 +750,7 @@ function renderPlan() {
         <button class="btn" type="button" data-plan="copy" data-to="all">${esc(tr("home.copy_all"))}</button>
       </div>
     </div>
-    <div class="sheet-actions">
+    <div class="sheet-actions sheet-sticky">
       <span class="quick-spacer"></span>
       <button class="btn" type="button" data-plan="discard" ${plan.dirty ? "" : "disabled"}>${esc(tr("home.discard"))}</button>
       <button class="btn btn-primary" type="button" data-plan="save" ${plan.dirty ? "" : "disabled"}>${esc(tr("home.save_plan"))}</button>

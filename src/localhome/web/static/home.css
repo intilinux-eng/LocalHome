@@ -98,7 +98,8 @@ a { color: inherit; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
+  min-height: 44px;
+  padding: 7px 14px;
   border-radius: 999px;
   background: var(--surface);
   box-shadow: var(--shadow);
@@ -149,7 +150,7 @@ a { color: inherit; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -271,8 +272,8 @@ a { color: inherit; }
   padding: 3px;
 }
 .stepper button {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 0;
   background: var(--surface);
@@ -284,7 +285,7 @@ a { color: inherit; }
 .stepper button:active { transform: scale(0.94); }
 .stepper-value { min-width: 64px; text-align: center; font-weight: 650; font-variant-numeric: tabular-nums; }
 .btn {
-  min-height: 42px;
+  min-height: 44px;
   padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -309,7 +310,7 @@ a { color: inherit; }
 .pending .stepper { justify-self: start; background: var(--surface); }
 .segmented { display: flex; flex-wrap: wrap; gap: 6px; }
 .segmented button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 7px 13px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -343,9 +344,12 @@ a { color: inherit; }
 }
 .zone-foot .spacer { flex: 1; }
 .link-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   border: 0;
   background: none;
-  padding: 6px 0;
+  padding: 0 2px;
   color: var(--accent);
   font-weight: 600;
   font-size: 0.88rem;
@@ -388,19 +392,25 @@ a { color: inherit; }
 
 .switch {
   position: relative;
-  width: 50px;
-  height: 30px;
-  border-radius: 999px;
+  width: 58px;
+  height: 44px;
   border: 0;
-  background: var(--surface-3);
+  background: none;
   flex: none;
+}
+.switch::before {
+  content: "";
+  position: absolute;
+  inset: 7px 2px;
+  border-radius: 999px;
+  background: var(--surface-3);
   transition: background 0.2s;
 }
 .switch::after {
   content: "";
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 10px;
+  left: 5px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -408,8 +418,8 @@ a { color: inherit; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.2s;
 }
-.switch[aria-checked="true"] { background: var(--ok); }
-.switch[aria-checked="true"]::after { transform: translateX(20px); }
+.switch[aria-checked="true"]::before { background: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(24px); }
 .switch:disabled { opacity: 0.5; }
 
 .dot-state { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-2); }
@@ -459,7 +469,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   @keyframes slide { from { transform: translateX(30px); opacity: 0; } }
 }
 
-.icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--surface-2); display: grid; place-items: center; }
+.icon-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--surface-2); display: grid; place-items: center; }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 .sheet-note { color: var(--text-2); font-size: 0.9rem; margin: 4px 0 14px; }
@@ -467,6 +477,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* the week, as seven strips */
 .week { display: grid; gap: 8px; margin: 12px 0 18px; }
 .day-row {
+  min-height: 44px;
   display: grid;
   grid-template-columns: 44px 1fr;
   align-items: center;
@@ -502,21 +513,22 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .band-swatch.off { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--text-3) 3px 4px); }
 .band-time { font-weight: 600; font-variant-numeric: tabular-nums; }
 .band-temp { display: flex; align-items: center; gap: 6px; }
-.band-temp .mini { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); line-height: 1; }
+.band-temp .mini { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); line-height: 1; }
 .band-temp b { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
 .band-actions { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; grid-column: 2 / -1; }
-.band-actions button { border: 0; background: none; color: var(--accent); font-size: 0.84rem; font-weight: 600; padding: 4px 0; }
+.band-actions button { min-height: 44px; border: 0; background: none; color: var(--accent); font-size: 0.88rem; font-weight: 600; padding: 0 2px; }
 .band-end { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82rem; color: var(--text-3); }
-.band-end button { border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; background: var(--surface-2); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.band-end button { min-height: 44px; min-width: 56px; border: 1px solid var(--line); border-radius: 999px; padding: 0 12px; background: var(--surface-2); color: var(--text-2); font-variant-numeric: tabular-nums; }
 
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; align-items: center; }
+.sheet-sticky { position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); margin: 16px -18px 0; padding: 12px 18px max(14px, env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
 .sheet-section { margin-top: 20px; }
 .sheet-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin: 0 0 8px; }
 
 /* ------------------------------------------------------------- footer -- */
 
 .foot { margin-top: 36px; display: flex; gap: 10px; justify-content: center; font-size: 0.85rem; color: var(--text-3); }
-.foot a { color: var(--text-3); }
+.foot a { color: var(--text-3); display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
 
 /* ------------------------------------------- toasts and confirmations -- */
 
