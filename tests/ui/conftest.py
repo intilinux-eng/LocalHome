@@ -36,6 +36,16 @@ web:
   language: "it"
 
 integrations:
+  # A light with its own level, listed before the VMC's speed - as on the
+  # real board, where the Tapo strips come first (see test_home.py).
+  - kind: switch
+    type: simulated
+    name: "Lampada"
+  - kind: number
+    type: simulated
+    name: "Lampada Livello"
+    paired_switch: "Lampada"
+    initial_value: 80
   - kind: switch
     type: simulated
     name: "Dehumidifier"

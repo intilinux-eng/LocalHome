@@ -766,7 +766,9 @@ function vmcTile(speed) {
   const reading = state.readings[speed.name] || {};
   const value = reading.value;
   const current = (speed.presets || []).find(p => p.value === value);
-  const buttons = speed.presets.map(p => `<button type="button" data-vmc="${p.value}" aria-pressed="${value === p.value}">${esc(tr(`vmc_presets.${p.key}`))}</button>`).join("");
+  // Each button names the device it sets: with light strips on the Home
+  // tab there's more than one level paired with a switch.
+  const buttons = speed.presets.map(p => `<button type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${value === p.value}">${esc(tr(`vmc_presets.${p.key}`))}</button>`).join("");
   const program = state.vmc && state.vmc.schedule;
   const programNote = program && program.enabled
     ? tr("home.vmc_program_on", { day: program.day.at, night: program.night.at })
@@ -785,9 +787,8 @@ async function onPlantClick(event) {
   if (!target) return;
   target.disabled = true;
   try {
-    if (target.dataset.vmc) {
-      const speed = (state.devices.sensors).find(d => d.kind === "number" && d.paired_switch);
-      await api(`/api/sensors/${encodeURIComponent(speed.name)}/set-value`, { value: Number(target.dataset.vmc) });
+    if (target.dataset.vmc && target.dataset.device) {
+      await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/set-value`, { value: Number(target.dataset.vmc) });
     } else if (target.hasAttribute("data-vmc-program")) {
       const schedule = Object.assign({}, state.vmc.schedule, { enabled: !state.vmc.schedule.enabled });
       await api("/api/vmc-schedule", schedule);

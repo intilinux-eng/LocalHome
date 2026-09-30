@@ -134,6 +134,24 @@ def test_monday_is_copied_to_the_weekdays_from_the_plan(open_page, api):
     assert opened.errors == []
 
 
+def _value(api, name):
+    return api(f"/api/sensors/{urllib.parse.quote(name, safe='')}")["value"]
+
+
+def test_the_vmc_buttons_set_the_vmc_not_the_first_level_on_the_page(open_page, api):
+    """On the real board the Tapo strips' levels come before the VMC's
+    speed; the VMC's buttons used to set the first one they found - the
+    sofa strip went to 50%, the VMC didn't move."""
+    lamp_before = _value(api, "Lampada Livello")
+    page = _open_home(open_page).page
+    vmc = page.locator("#plant-body button[data-vmc]", has_text="Massimo")
+    speed = vmc.get_attribute("data-device")
+    assert speed != "Lampada Livello"
+    vmc.click()
+    assert eventually(page, lambda: _value(api, speed) == 100)
+    assert _value(api, "Lampada Livello") == lamp_before, "the lamp's level didn't move"
+
+
 def test_away_is_set_from_the_hero_and_ended(open_page, api):
     page = _open_home(open_page).page
     page.click("#away-chip")
