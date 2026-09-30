@@ -654,7 +654,11 @@ function zoneLine(zone, climate) {
     return until ? tr("home.line_off_until", { zone: zone.name, until: untilText(until) }) : tr("home.line_off", { zone: zone.name });
   }
   if (zoneStatus(zone, climate).active) return tr("home.line_on", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
-  return tr("home.line_ok", { zone: zone.name, temp });
+  // Resting: within the hysteresis of its target, or past it - 26° with a
+  // 20° heating target isn't "at temperature", it's well above.
+  const diff = zone.temperature_c != null ? zone.temperature_c - zone.target_c : 0;
+  if (Math.abs(diff) <= (climate.hysteresis_c || 0.5)) return tr("home.line_ok", { zone: zone.name, temp });
+  return tr(diff > 0 ? "home.line_above" : "home.line_below", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
 }
 
 function listNames(names) {
