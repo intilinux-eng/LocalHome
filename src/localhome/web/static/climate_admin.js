@@ -2343,8 +2343,15 @@ function shellyDeviceHtml(d, data, now) {
       // Nothing counted yet: the count starts at the sensor's next report.
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), tr("climate_admin.shelly_reports_waiting")));
     } else if (s.reports_24h != null) {
-      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"),
-        tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }), s.missed_24h >= 3));
+      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), s.heartbeats_24h != null
+        ? tr("climate_admin.shelly_reports_split", { count: s.reports_24h, beats: s.heartbeats_24h, changes: s.changes_24h, missed: s.missed_24h })
+        : tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }), s.missed_24h >= 3));
+      // When to expect it - the heartbeat keeps its own 2-hour clock.
+      if (s.next_heartbeat_at) {
+        rows.push(statRowHtml(tr("climate_admin.shelly_next_heartbeat"), tr("climate_admin.shelly_next_heartbeat_value", {
+          time: new Date(s.next_heartbeat_at * 1000).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
+        })));
+      }
       // A sensor added (or first watched) this week has less than a week behind it.
       const partial = s.counted_since && now - s.counted_since < 6.5 * 86400;
       rows.push(statRowHtml(tr("climate_admin.shelly_missed_7d"), partial

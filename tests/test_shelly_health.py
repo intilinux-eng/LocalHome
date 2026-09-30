@@ -9,7 +9,9 @@ import json
 from localhome.config import Integration
 from localhome.services import shelly_health
 from localhome.services.history import HistoryStore
-from localhome.services.shelly_health import HEARTBEAT_SECONDS as H, ShellyHealth, missed_reports, shelly_devices
+from localhome.services.shelly_health import (
+    HEARTBEAT_SECONDS as H, ShellyHealth, missed_reports, next_heartbeat, shelly_devices, split_reports,
+)
 
 HT = "shellyhtg3-c0ffee000002"
 DIMMER = "shelly0110dimg3-c0ffee000003"
@@ -133,6 +135,42 @@ def test_reports_lost_while_localhome_was_off_arent_the_sensors_fault():
 
 def test_a_threshold_report_between_heartbeats_is_simply_one_more():
     assert missed_reports([0, 0.4 * H, H, 2 * H], [], since=0, now=2.5 * H) == 0
+
+
+# ------------------------------------------------ heartbeats and changes --
+
+def _clock(hhmmss):
+    h, m, s = (int(v) for v in hhmmss.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+# The rooms' sensor over a real day (30 Sep 2026): twelve heartbeats 121
+# minutes apart and three reports for a humidity change - one of them four
+# minutes before a heartbeat.
+ROOMS_DAY = ["18:45:00", "20:46:00", "22:41:59", "22:46:03", "24:47:00", "26:48:00", "28:49:01",
+             "30:50:01", "32:51:01", "34:52:01", "36:14:01", "36:53:03", "38:23:02", "38:54:01", "40:54:59"]
+
+
+def test_a_real_day_splits_into_heartbeats_and_change_reports():
+    beats, changes = split_reports([_clock(t) for t in ROOMS_DAY])
+    assert [t for t in ROOMS_DAY if _clock(t) in changes] == ["22:41:59", "36:14:01", "38:23:02"]
+    assert len(beats) == 12
+
+
+def test_a_change_report_doesnt_move_the_heartbeat_and_a_lost_one_keeps_the_rhythm():
+    beats, changes = split_reports([0, 0.4 * H, H + 60, 3 * H + 120])      # the one at 2 H is lost
+    assert (beats, changes) == ([0, H + 60, 3 * H + 120], [0.4 * H])
+
+
+def test_a_new_rhythm_after_a_battery_change_starts_from_its_first_report():
+    beats, changes = split_reports([0, H, 2 * H, 3.5 * H, 4.5 * H, 5.5 * H])
+    assert changes == [] and beats[-3:] == [3.5 * H, 4.5 * H, 5.5 * H]
+
+
+def test_the_next_heartbeat_is_the_next_slot_after_now():
+    assert next_heartbeat([0, H], now=H + 600) == 2 * H
+    assert next_heartbeat([0, H], now=3.5 * H) == 4 * H, "overdue: the next slot, lost ones are counted apart"
+    assert next_heartbeat([], now=0) is None
 
 
 # ---------------------------------------------------------------- battery --

@@ -40,6 +40,9 @@ HEARTBEAT_SECONDS = 7200
 HEARTBEAT_SLACK = 0.15
 # One wake publishes several topics within a second or two: one report.
 REPORT_SPAN_SECONDS = 60
+# How far a heartbeat may land from its 2-hour slot: they come within a
+# minute or so (measured: 121 minutes apart, drifting a minute a cycle).
+HEARTBEAT_TOLERANCE_SECONDS = 180
 POLL_SECONDS = 300
 FIRST_POLL_SECONDS = 20
 # A Shelly switches its output off by itself at about 90°C.
@@ -103,6 +106,43 @@ def missed_reports(reports: list[float], starts: list[float], since: float, now:
         gap = at - max(before, since)
         missed += max(0, int((gap - HEARTBEAT_SLACK * heartbeat) // heartbeat))
     return missed
+
+
+def split_reports(reports: list[float], heartbeat: float = HEARTBEAT_SECONDS,
+                  tolerance: float = HEARTBEAT_TOLERANCE_SECONDS) -> tuple[list[float], list[float]]:
+    """(heartbeats, change reports): which reports were the sensor's
+    regular 2-hour heartbeat and which came in between, for a change past
+    its thresholds.
+
+    The heartbeat keeps its own clock - a change report doesn't move it
+    (measured: an extra report at 12:14, the next heartbeat still at 12:53,
+    two hours after 10:52). So each report is set against the last
+    heartbeat: a whole number of heartbeats later (give or take a few
+    minutes; a lost one in between keeps the rhythm) is a heartbeat, sooner
+    is a change. Later and off the rhythm, the rhythm itself has changed -
+    a new battery, a restart - and that report starts it again."""
+    beats: list[float] = []
+    changes: list[float] = []
+    for ts in sorted(reports):
+        if not beats:
+            beats.append(ts)
+            continue
+        since = ts - beats[-1]
+        slots = max(1, round(since / heartbeat))
+        if abs(since - slots * heartbeat) <= tolerance or since > heartbeat + tolerance:
+            beats.append(ts)
+        else:
+            changes.append(ts)
+    return beats, changes
+
+
+def next_heartbeat(beats: list[float], now: float, heartbeat: float = HEARTBEAT_SECONDS) -> float | None:
+    """When the next heartbeat is due: the first 2-hour slot after `now`
+    counted from the last one heard."""
+    if not beats:
+        return None
+    slots = max(1, int((now - beats[-1]) // heartbeat) + 1)
+    return beats[-1] + slots * heartbeat
 
 
 def _dig(data: Any, *path: str) -> Any:
@@ -315,6 +355,12 @@ class ShellyHealth:
             reports = [ts for ts, _ in self._history(state["id"], "report", now - WEEK)]
             starts = [ts for ts, _ in self._history(LISTEN_SENSOR, "start", now - WEEK)]
             stats["reports_24h"] = sum(1 for ts in reports if ts >= now - DAY)
+            # Classified over the week, counted over the day: the rhythm is
+            # found from reports older than the day, too.
+            beats, changes = split_reports(reports)
+            stats["heartbeats_24h"] = sum(1 for ts in beats if ts >= now - DAY)
+            stats["changes_24h"] = sum(1 for ts in changes if ts >= now - DAY)
+            stats["next_heartbeat_at"] = next_heartbeat(beats, now)
             stats["missed_24h"] = missed_reports(reports, starts, now - DAY, now)
             stats["missed_7d"] = missed_reports(reports, starts, now - WEEK, now)
             # Since when it's been counted: a sensor added this week has
