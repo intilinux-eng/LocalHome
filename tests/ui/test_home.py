@@ -80,22 +80,37 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
 
 
-def test_the_week_is_edited_in_bands_and_saved_only_on_save(open_page, api):
-    week = {d: [24.0] * 8 + [26.0] * 16 for d in EMPTY_WEEK}
-    _set_week(api, ZONE_A, week)
+def _open_plan(page, name):
+    _card(page, name).locator("button[data-action=plan]").click()
+    page.wait_for_selector("#sheet:not([hidden]) .sched-cell", timeout=20000)
+    page.wait_for_timeout(800)
+
+
+def test_the_plan_is_the_classic_grid_and_one_click_paints_one_cell(open_page, api):
+    """The same grid as the classic page (static/schedule_grid.js), in the
+    sheet: the empty-week note mustn't move it under the pointer."""
+    _set_week(api, ZONE_A, EMPTY_WEEK)
     opened = _open_home(open_page)
     page = opened.page
-    _card(page, ZONE_A).locator("button[data-action=plan]").click()
-    page.wait_for_selector("#sheet:not([hidden]) .band")
-    page.locator("#sheet button[data-plan=day][data-day='0']").click()          # Monday
-    first = page.locator("#sheet .band").first
-    first.locator("button[data-plan=temp][data-delta='0.5']").click()
-    first = page.locator("#sheet .band").first
-    first.locator("button[data-plan=end][data-delta='1']").click()
-    assert _week(api, ZONE_A)["mon"][0] == 24.0, "nothing is saved before Save"
-    page.locator("#sheet button[data-plan=save]").click()
-    assert eventually(page, lambda: _week(api, ZONE_A)["mon"][:10] == [24.5] * 9 + [26.0])
-    assert _week(api, ZONE_A)["tue"][0] == 24.0, "only Monday changed"
+    _open_plan(page, ZONE_A)
+    page.locator("#sheet .sched-cell[data-day='mon'][data-hour='8']").click()
+    assert eventually(page, lambda: _week(api, ZONE_A)["mon"][8] is not None)
+    page.wait_for_timeout(1000)
+    painted = [(d, h) for d, hours in _week(api, ZONE_A).items() for h, v in enumerate(hours) if v is not None]
+    assert painted == [("mon", 8)]
+    assert opened.errors == []
+
+
+def test_monday_is_copied_to_the_weekdays_from_the_plan(open_page, api):
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    opened = _open_home(open_page)
+    page = opened.page
+    _open_plan(page, ZONE_A)
+    page.locator("#sheet .sched-cell[data-day='mon'][data-hour='8']").click()
+    page.locator("#sheet button", has_text="Lun–Ven").click()
+    assert eventually(page, lambda: _week(api, ZONE_A)["fri"][8] is not None)
+    week = _week(api, ZONE_A)
+    assert [week[d][8] is not None for d in ("tue", "wed", "thu", "fri", "sat")] == [True] * 4 + [False]
     assert opened.errors == []
 
 

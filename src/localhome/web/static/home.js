@@ -76,13 +76,80 @@ async function api(path, body) {
   return data;
 }
 
-function apiError(error) {
-  const data = error.data || {};
-  if (data.code) {
-    const text = tr(`errors.${data.code}`, data.params || {});
-    if (!text.startsWith("errors.")) return text;
+function errorText(error) {
+  return apiError(error.data) || error.message || tr("home.request_failed");
+}
+
+// ------------------------------------------- what the shared grid needs --
+// static/schedule_grid.js - the weekly grid, the same as the classic
+// page's - relies on these, defined the way app.js defines them.
+
+let climateZones = [];
+let climateMode = "heat";
+
+function slug(name) {
+  return name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+}
+
+function escapeAttr(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function escapeHtml(text) {
+  return String(text == null ? "" : text).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function jsArg(value) {
+  return escapeAttr(JSON.stringify(String(value)));
+}
+
+// The server's refusal in this page's language (same as app.js's).
+function apiError(data) {
+  if (!data) return "";
+  const params = Object.assign({}, data.params || {});
+  if (params.key) {
+    const label = tr(`climate_admin.setting_${params.key}`);
+    params.label = label.startsWith("climate_admin.") ? params.key : label;
   }
-  return error.message || tr("home.request_failed");
+  if (params.period) {
+    const period = tr(`errors.period_${params.period}`);
+    if (!period.startsWith("errors.")) params.period = period;
+  }
+  if (typeof data.code === "string") {
+    const text = tr(`errors.${data.code}`, params);
+    if (text !== `errors.${data.code}`) return text;
+  }
+  return data.error || "";
+}
+
+function zoneExcluded(zone) {
+  return climateMode === "cool" && zone.cool_enabled === false;
+}
+
+// A painted hour changes what the card says comes next: the card reads
+// the grid being edited.
+function updateZoneNext(zone) {
+  const week = scheduleWeeks[zone.name];
+  const mode = scheduleWeekModes[zone.name];
+  if (week && mode) state.weeks[zone.name] = Object.assign({}, state.weeks[zone.name], { [mode]: week });
+  const card = document.getElementById(zoneId(zone.name));
+  const current = state.climate && state.climate.zones.find(z => z.name === zone.name);
+  if (card && current) fillZone(card, current, state.climate);
+}
+
+// The grid marks "now" by the board's clock (scheduleNow() reads this).
+window.ServerClock = { now: () => boardNow() };
+
+function updateNowHighlight() {
+  const { dayKey, hour } = scheduleNow();
+  document.querySelectorAll(".sched-cell.now, .sched-day-label.now, .sched-hour-axis span.now").forEach(c => c.classList.remove("now"));
+  document.querySelectorAll(".sched-day-label").forEach((label, i) => {
+    if (DAY_KEYS[i % 7] === dayKey) label.classList.add("now");
+  });
+  document.querySelectorAll(`.sched-cell[data-day="${dayKey}"][data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
+  document.querySelectorAll(`.sched-hour-axis span[data-hour="${hour}"]`).forEach(c => c.classList.add("now"));
 }
 
 // ----------------------------------------------------------- the clock --
@@ -175,19 +242,6 @@ function humidityWord(rh) {
   if (rh < 30) return tr("home.rh_dry");
   if (rh > 60) return tr("home.rh_humid");
   return tr("home.rh_ok");
-}
-
-// One hue per season, deeper the more it asks of the plant: a warmer
-// target in winter, a cooler one in summer. It reads as "how much" at a
-// glance, where a rainbow of hues had to be decoded.
-function tempColor(target, mode) {
-  if (target == null) return null;
-  const k = mode === "cool"
-    ? Math.max(0, Math.min(1, (28 - target) / 6))
-    : Math.max(0, Math.min(1, (target - 16) / 8));
-  return mode === "cool"
-    ? `hsl(208 78% ${Math.round(80 - 30 * k)}%)`
-    : `hsl(${Math.round(38 - 14 * k)} 88% ${Math.round(78 - 26 * k)}%)`;
 }
 
 // ------------------------------------------------------------ schedules --
@@ -388,7 +442,7 @@ function ribbonSvg(zone, week, history, mode) {
   for (const h of [6, 12, 18]) parts.push(`<line class="rb-grid" x1="${x(h)}" x2="${x(h)}" y1="0" y2="${RB.bottom}" vector-effect="non-scaling-stroke"/>`);
   if (scale) {
     bands(scale.today).forEach(b => {
-      const color = tempColor(b.value, mode);
+      const color = b.value == null ? null : tempColor(b.value);   // the grid's colours
       if (color) parts.push(`<rect class="rb-block" x="${x(b.start)}" y="0" width="${x(b.end) - x(b.start)}" height="${RB.bottom}" fill="${color}"/>`);
     });
     let d = "";
@@ -560,7 +614,7 @@ async function onZoneClick(event) {
       await refreshClimate();
       return;
     } catch (e) {
-      notify(apiError(e));
+      notify(errorText(e));
       button.disabled = false;
     }
   } else if (action === "resume") {
@@ -570,7 +624,7 @@ async function onZoneClick(event) {
       await refreshClimate();
       return;
     } catch (e) {
-      notify(apiError(e));
+      notify(errorText(e));
       button.disabled = false;
     }
   } else if (action === "plan") {
@@ -665,7 +719,7 @@ function openAway() {
         closeSheet();
         await refreshClimate();
       } catch (e) {
-        notify(apiError(e));
+        notify(errorText(e));
         button.disabled = false;
       }
     });
@@ -684,6 +738,7 @@ function openSheet(title, html, onClick) {
 }
 
 function closeSheet() {
+  flushPendingScheduleSaves();
   state.sheet = null;
   document.getElementById("sheet").hidden = true;
   document.getElementById("sheet-backdrop").hidden = true;
@@ -691,168 +746,15 @@ function closeSheet() {
 }
 
 // ---------------------------------------------------------- the plan --
-// The week as seven strips; pick a day, and it opens as a list of time
-// bands - "06:00-09:00 21°" - each one moved, changed, split or merged.
-// Nothing is saved until "Save": a plan is edited, then committed.
+// The week's grid - painted with a drag, copied to the week or to another
+// zone - is static/schedule_grid.js, the classic page's own: it saves as
+// it's painted, only the hours that changed.
 
 function openPlan(zoneName) {
   const zone = state.climate.zones.find(z => z.name === zoneName);
-  const modes = zone.cool_enabled ? ["heat", "cool"] : ["heat"];
-  const plan = {
-    zone: zoneName,
-    modes,
-    mode: modes.includes(state.climate.mode) ? state.climate.mode : "heat",
-    weeks: JSON.parse(JSON.stringify(state.weeks[zoneName] || {})),
-    day: dayIndex(boardNow()),
-    dirty: false,
-  };
-  state.plan = plan;
-  openSheet(tr("home.plan_title", { zone: zoneName }), "", onPlanClick);
-  renderPlan();
-}
-
-function planWeek() {
-  const plan = state.plan;
-  if (!plan.weeks[plan.mode]) plan.weeks[plan.mode] = Object.fromEntries(DAYS.map(d => [d, Array(24).fill(null)]));
-  return plan.weeks[plan.mode];
-}
-
-function renderPlan() {
-  const plan = state.plan;
-  const week = planWeek();
-  const tabs = plan.modes.length > 1 ? `<div class="segmented">${plan.modes.map(m =>
-    `<button type="button" data-plan="mode" data-mode="${m}" aria-pressed="${plan.mode === m}">${esc(tr(m === "cool" ? "home.summer" : "home.winter"))}</button>`).join("")}</div>` : "";
-  const rows = DAYS.map((day, i) => {
-    const segs = bands(week[day]).map(b => {
-      const color = tempColor(b.value, plan.mode);
-      const width = ((b.end - b.start) / 24) * 100;
-      const label = b.end - b.start >= 3 ? fmtTarget(b.value) : "";
-      return `<span class="day-seg${color ? "" : " off"}" style="width:${width}%;${color ? `background:${color}` : ""}">${esc(label)}</span>`;
-    }).join("");
-    return `<button class="day-row" type="button" data-plan="day" data-day="${i}" aria-pressed="${plan.day === i}">
-      <span class="day-name">${esc(tr(`home.day_short.${day}`))}</span><span class="day-bar">${segs}</span></button>`;
-  }).join("");
-  const day = DAYS[plan.day];
-  const list = bands(week[day]).map((b, i, all) => bandHtml(b, i, all)).join("");
-  document.getElementById("sheet-body").innerHTML = `
-    <p class="sheet-note">${esc(tr("home.plan_note"))}</p>
-    ${tabs}
-    <div class="week">${rows}
-      <div class="week-hours"><span></span><span><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></span></div>
-    </div>
-    <div class="sheet-section">
-      <h3>${esc(tr(`home.day_long.${day}`))}</h3>
-      <div class="bands">${list}</div>
-      <div class="sheet-actions">
-        <span class="tile-note">${esc(tr("home.copy_to"))}</span>
-        <button class="btn" type="button" data-plan="copy" data-to="weekdays">${esc(tr("home.copy_weekdays"))}</button>
-        <button class="btn" type="button" data-plan="copy" data-to="weekend">${esc(tr("home.copy_weekend"))}</button>
-        <button class="btn" type="button" data-plan="copy" data-to="all">${esc(tr("home.copy_all"))}</button>
-      </div>
-    </div>
-    <div class="sheet-actions sheet-sticky">
-      <span class="quick-spacer"></span>
-      <button class="btn" type="button" data-plan="discard" ${plan.dirty ? "" : "disabled"}>${esc(tr("home.discard"))}</button>
-      <button class="btn btn-primary" type="button" data-plan="save" ${plan.dirty ? "" : "disabled"}>${esc(tr("home.save_plan"))}</button>
-    </div>`;
-}
-
-function bandHtml(band, i, all) {
-  const plan = state.plan;
-  const color = tempColor(band.value, plan.mode);
-  const last = i === all.length - 1;
-  const two = h => `${String(h).padStart(2, "0")}:00`;
-  const actions = [];
-  if (!last) {
-    actions.push(`<span class="band-end">${esc(tr("home.band_end"))}
-      <button type="button" data-plan="end" data-band="${i}" data-delta="-1" aria-label="${esc(tr("home.earlier"))}">‹ 1 h</button>
-      <button type="button" data-plan="end" data-band="${i}" data-delta="1" aria-label="${esc(tr("home.later"))}">1 h ›</button></span>`);
-  }
-  if (band.end - band.start >= 2) actions.push(`<button type="button" data-plan="split" data-band="${i}">${esc(tr("home.split"))}</button>`);
-  if (i > 0) actions.push(`<button type="button" data-plan="merge" data-band="${i}">${esc(tr("home.merge"))}</button>`);
-  actions.push(`<button type="button" data-plan="toggle" data-band="${i}">${esc(tr(band.value == null ? "home.turn_on" : "home.turn_off"))}</button>`);
-  return `<div class="band">
-    <span class="band-swatch${color ? "" : " off"}" style="${color ? `background:${color}` : ""}"></span>
-    <div class="band-time">${two(band.start)} → ${two(band.end)}</div>
-    <div class="band-temp">${band.value == null ? `<b>${esc(tr("home.off"))}</b>` : `
-      <button class="mini" type="button" data-plan="temp" data-band="${i}" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
-      <b>${fmtTarget(band.value)}</b>
-      <button class="mini" type="button" data-plan="temp" data-band="${i}" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>`}</div>
-    <div class="band-actions">${actions.join("")}</div>
-  </div>`;
-}
-
-async function onPlanClick(event) {
-  const button = event.target.closest("button[data-plan]");
-  if (!button || !state.plan) return;
-  const plan = state.plan;
-  const week = planWeek();
-  const dayKey = DAYS[plan.day];
-  const hours = week[dayKey];
-  const all = bands(hours);
-  const band = all[Number(button.dataset.band)];
-  const fill = (from, to, value) => { for (let h = from; h < to; h++) hours[h] = value; };
-  switch (button.dataset.plan) {
-    case "mode": plan.mode = button.dataset.mode; break;
-    case "day": plan.day = Number(button.dataset.day); break;
-    case "temp":
-      fill(band.start, band.end, clampTarget(band.value + Number(button.dataset.delta)));
-      plan.dirty = true;
-      break;
-    case "end": {
-      const next = all[Number(button.dataset.band) + 1];
-      const end = band.end + Number(button.dataset.delta);
-      if (end <= band.start || end >= next.end) return;
-      if (end > band.end) fill(band.end, end, band.value); else fill(end, band.end, next.value);
-      plan.dirty = true;
-      break;
-    }
-    case "split": {
-      const mid = band.start + Math.floor((band.end - band.start) / 2);
-      const value = band.value == null ? DEFAULT_TARGET[plan.mode] : clampTarget(band.value - 2);
-      fill(mid, band.end, value);
-      plan.dirty = true;
-      break;
-    }
-    case "merge": {
-      const previous = all[Number(button.dataset.band) - 1];
-      fill(band.start, band.end, previous.value);
-      plan.dirty = true;
-      break;
-    }
-    case "toggle":
-      fill(band.start, band.end, band.value == null ? DEFAULT_TARGET[plan.mode] : null);
-      plan.dirty = true;
-      break;
-    case "copy": {
-      const targets = { weekdays: DAYS.slice(0, 5), weekend: DAYS.slice(5), all: DAYS }[button.dataset.to];
-      targets.forEach(d => { week[d] = hours.slice(); });
-      plan.dirty = true;
-      notify(tr("home.copied", { day: tr(`home.day_long.${dayKey}`) }), "ok");
-      break;
-    }
-    case "discard":
-      plan.weeks = JSON.parse(JSON.stringify(state.weeks[plan.zone] || {}));
-      plan.dirty = false;
-      break;
-    case "save":
-      button.disabled = true;
-      try {
-        for (const mode of plan.modes) {
-          if (!plan.weeks[mode]) continue;
-          await api(`/api/climate/zones/${encodeURIComponent(plan.zone)}/schedule`, { week: plan.weeks[mode], mode });
-        }
-        state.weeks[plan.zone] = JSON.parse(JSON.stringify(plan.weeks));
-        plan.dirty = false;
-        notify(tr("home.plan_saved"), "ok");
-        await refreshClimate();
-      } catch (e) {
-        notify(apiError(e));
-      }
-      break;
-    default: return;
-  }
-  renderPlan();
+  if (!zone) return;
+  openSheet(tr("home.plan_title", { zone: zoneName }), `<div class="plan">${schedulePaneHtml(zone, slug(zone.name))}</div>`, null);
+  loadZoneSchedule(zone.name);
 }
 
 // --------------------------------------------------------- the plant --
@@ -921,7 +823,7 @@ async function onPlantClick(event) {
     }
     await refreshDevices();
   } catch (e) {
-    notify(apiError(e));
+    notify(errorText(e));
   } finally {
     target.disabled = false;
   }
@@ -1003,7 +905,7 @@ async function onHouseClick(event) {
       await api(`/api/covers/${encodeURIComponent(button.dataset.cover)}/action/${button.dataset.coverAction}`, {});
     }
   } catch (e) {
-    notify(apiError(e));
+    notify(errorText(e));
   } finally {
     button.disabled = false;
   }
@@ -1016,7 +918,7 @@ async function onHouseChange(event) {
     await api(`/api/sensors/${encodeURIComponent(input.dataset.level)}/set-value`, { value: Number(input.value) });
     await refreshDevices();
   } catch (e) {
-    notify(apiError(e));
+    notify(errorText(e));
   }
 }
 
@@ -1025,6 +927,11 @@ async function onHouseChange(event) {
 async function refreshClimate() {
   try {
     state.climate = await api("/api/climate/zones");
+    climateZones = state.climate.zones || [];
+    if (state.climate.mode && state.climate.mode !== climateMode) {
+      climateMode = state.climate.mode;
+      ensurePaintValueForMode();
+    }
     state.failures = 0;
     document.getElementById("offline").hidden = true;
     const missing = state.climate.zones.filter(z => !state.weeks[z.name]);
@@ -1129,4 +1036,5 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && state.shee
   setInterval(refreshDevices, REFRESH_MS);
   setInterval(refreshHistory, HISTORY_MS);
   setInterval(refreshProblems, PROBLEMS_MS);
+  setInterval(updateNowHighlight, 60000);
 })();
