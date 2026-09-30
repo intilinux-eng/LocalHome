@@ -56,6 +56,17 @@ def test_the_home_page_lays_out_and_says_everything_in_italian(open_page, width,
     assert opened.errors == []
 
 
+def test_the_top_says_what_the_plant_is_doing_in_words_a_reading_backs(open_page, api):
+    """No vague "all calm": with no zone scheduled, it says cooling is off
+    for that reason, and the line under it says where each zone stands."""
+    for name in (ZONE_A, ZONE_B):
+        _set_week(api, name, EMPTY_WEEK)
+    page = _open_home(open_page).page
+    assert eventually(page, lambda: page.inner_text("#hero-title") == "Raffrescamento spento: nessuna zona programmata adesso")
+    detail = page.inner_text("#hero-detail")
+    assert f"{ZONE_A} spenta" in detail and f"{ZONE_B} spenta" in detail
+
+
 def test_names_stay_text_on_the_home_page_and_in_the_plan(open_page):
     dialogs = []
     opened = _open_home(open_page, 1280)

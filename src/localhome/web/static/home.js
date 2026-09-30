@@ -620,33 +620,41 @@ function renderHero() {
   const season = document.getElementById("season-chip");
   season.innerHTML = `${mode === "cool" ? ICONS.snow : ICONS.sun}<span>${esc(tr(mode === "cool" ? "home.summer" : "home.winter"))}</span>`;
 
+  // The title says what the plant is doing as a whole, the line under it
+  // where each zone stands - nothing a reading can't back up.
   const zones = climate.zones || [];
-  const active = zones.filter(z => zoneStatus(z, climate).active);
-  const waiting = zones.filter(z => zoneStatus(z, climate).tone === "warn");
-  let title, detail = "";
-  if (climate.away_until) {
-    title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
-    detail = tr("home.hero_away_detail");
-  } else if (active.length) {
-    title = tr(mode === "cool" ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
-    detail = active.filter(z => z.temperature_c != null && z.target_c != null)
-      .map(z => tr("home.hero_zone", { zone: z.name, temp: `${fmt(z.temperature_c)}°`, target: fmtTarget(z.target_c) }))
-      .join(" · ");
-  } else if (zones.length) {
-    title = tr("home.hero_calm");
-    const next = zones.map(z => ({ zone: z, change: nextChange((state.weeks[z.name] || {})[mode], boardNow()) }))
-      .filter(n => n.change).sort((a, b) => a.change.at - b.change.at)[0];
-    if (next) detail = tr("home.hero_next", { zone: next.zone.name, target: fmtTarget(next.change.target), when: whenText(next.change.at) });
-  } else {
-    title = tr("home.no_zones");
-  }
-  if (waiting.length) detail = `${detail} ${tr("home.hero_waiting", { zones: listNames(waiting.map(z => z.name)) })}`.trim();
+  const cool = mode === "cool";
+  const running = zones.filter(z => !zoneExcluded(z));
+  const active = running.filter(z => zoneStatus(z, climate).active);
+  const off = running.filter(z => z.target_c == null);
+  let title;
+  if (!zones.length) title = tr("home.no_zones");
+  else if (climate.away_until) title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
+  else if (active.length) title = tr(cool ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
+  else if (running.length && off.length === running.length) title = tr(cool ? "home.hero_all_off_cool" : "home.hero_all_off_heat");
+  else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).tone === "ok")) title = tr("home.hero_all_ok");
+  else title = tr(cool ? "home.hero_idle_cool" : "home.hero_idle_heat");
+  const detail = climate.away_until ? tr("home.hero_away_detail") : zones.map(z => zoneLine(z, climate)).join(" · ");
   document.getElementById("hero-title").textContent = title;
   document.getElementById("hero-detail").textContent = detail;
 
   const away = document.getElementById("away-chip");
   away.setAttribute("aria-pressed", climate.away_until ? "true" : "false");
   away.innerHTML = `${ICONS.suitcase}<span>${esc(climate.away_until ? tr("home.away_on") : tr("home.away_off"))}</span>`;
+}
+
+// One zone's state in a few words, for the line under the title.
+function zoneLine(zone, climate) {
+  const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
+  if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
+  if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
+  if (zone.target_c == null) {
+    const change = zone.override ? null : nextChange((state.weeks[zone.name] || {})[climate.mode], boardNow());
+    const until = zone.override ? boardDate(zone.override.until) : change && change.at;
+    return until ? tr("home.line_off_until", { zone: zone.name, until: untilText(until) }) : tr("home.line_off", { zone: zone.name });
+  }
+  if (zoneStatus(zone, climate).active) return tr("home.line_on", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
+  return tr("home.line_ok", { zone: zone.name, temp });
 }
 
 function listNames(names) {
