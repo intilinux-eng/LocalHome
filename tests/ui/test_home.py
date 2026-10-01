@@ -163,6 +163,21 @@ def test_the_vmc_buttons_set_the_vmc_not_the_first_level_on_the_page(open_page, 
     assert _value(api, "Lampada Livello") == lamp_before, "the lamp's level didn't move"
 
 
+def test_the_vmc_program_is_turned_on_for_this_vmc_and_off(open_page, api):
+    """A program never turned on has no device yet: the switch has to say
+    which one, as the classic card does, or the board refuses it."""
+    api("/api/vmc-schedule", dict(api("/api/vmc-schedule")["schedule"], enabled=False, target=None))
+    page = _open_home(open_page).page
+    switch = page.locator("#plant-body button[data-vmc-program]")
+    speed = switch.get_attribute("data-device")
+    switch.click()
+    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["enabled"] is True)
+    assert api("/api/vmc-schedule")["schedule"]["target"] == speed
+    assert eventually(page, lambda: switch.get_attribute("aria-checked") == "true")
+    switch.click()
+    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["enabled"] is False)
+
+
 def test_away_is_set_from_the_hero_and_ended(open_page, api):
     page = _open_home(open_page).page
     page.click("#away-chip")

@@ -680,6 +680,10 @@ const ICONS = {
   snow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6L4 18M9 3l3 3 3-3M9 21l3-3 3 3"/></svg>`,
   suitcase: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`,
   leaf: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20c0-9 6-15 16-16-1 10-7 16-16 16z"/><path d="M4 20l8-8"/></svg>`,
+  moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>`,
+  wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+  fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
 };
 
 // ---------------------------------------------------------- away sheet --
@@ -774,23 +778,48 @@ function renderPlant() {
   document.getElementById("plant-body").innerHTML = tiles.join("");
 }
 
+const VMC_ICONS = { night: "moon", day: "sun", boost: "wind" };
+
 function vmcTile(speed) {
   const reading = state.readings[speed.name] || {};
   const value = reading.value;
+  const on = (state.readings[speed.paired_switch] || {}).is_on !== false;
   const current = (speed.presets || []).find(p => p.value === value);
   // Each button names the device it sets: with light strips on the Home
   // tab there's more than one level paired with a switch.
-  const buttons = speed.presets.map(p => `<button type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${value === p.value}">${esc(tr(`vmc_presets.${p.key}`))}</button>`).join("");
+  const buttons = speed.presets.map(p => `<button class="vmc-preset" type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${on && value === p.value}">
+      ${ICONS[VMC_ICONS[p.key]] || ""}<span class="vmc-preset-name">${esc(tr(`vmc_presets.${p.key}`))}</span><span class="vmc-preset-value">${fmt(p.value, 0)}%</span></button>`).join("");
   const program = state.vmc && state.vmc.schedule;
-  const programNote = program && program.enabled
-    ? tr("home.vmc_program_on", { day: program.day.at, night: program.night.at })
-    : tr("home.vmc_program_off");
-  return `<div class="tile tile-wide">
-    <div class="tile-head"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
-      <span class="tile-value">${value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span></div>
-    <div class="segmented" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
-    <div class="tile-head"><span class="tile-note">${esc(current ? tr("home.vmc_preset", { preset: tr(`vmc_presets.${current.key}`) }) : "")} ${esc(programNote)}</span>
-      ${program ? `<button class="switch" type="button" role="switch" data-vmc-program aria-checked="${!!program.enabled}" aria-label="${esc(tr("home.vmc_program"))}"></button>` : ""}</div>
+  // The saved program drives one device: it's on for this card only if
+  // it's this VMC's (static/app.js does the same).
+  const programOn = !!(program && program.enabled && program.target === speed.name);
+  const running = programOn && state.vmc.status && state.vmc.status.enabled ? state.vmc.status : null;
+  const nextPeriod = running && (running.period === "day" ? "night" : "day");
+  const programNote = running
+    ? tr("home.vmc_program_now", { period: tr(`vmc_presets.${running.period}`), until: running.until,
+        next: tr(`vmc_presets.${nextPeriod}`).toLowerCase(), value: program[nextPeriod].value })
+    : programOn ? tr("home.vmc_program_hours", { day: program.day.at, night: program.night.at })
+    : tr("home.vmc_program_manual");
+  const status = !on ? tr("home.vmc_off")
+    : current ? tr(`vmc_presets.${current.key}`)
+    : value != null ? tr("home.vmc_custom") : "";
+  // The fan turns faster as the speed goes up; its phase comes from the
+  // clock, so a refresh that redraws the card doesn't make it jump.
+  const turn = on && value > 0 ? Math.max(0.8, 90 / value) : 0;
+  const spin = turn ? ` style="--turn: ${turn.toFixed(2)}s; --phase: -${((Date.now() / 1000) % turn).toFixed(2)}s"` : "";
+  return `<div class="tile tile-wide vmc" data-on="${on}">
+    <div class="vmc-head">
+      <span class="vmc-fan" data-spin="${!!turn}"${spin}>${ICONS.fan}</span>
+      <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
+        <span class="tile-note">${esc(status)}</span></span>
+      <span class="tile-value">${on && value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
+    </div>
+    <div class="vmc-presets" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
+    ${program ? `<div class="vmc-program">${ICONS.clock}
+      <span class="vmc-title"><span class="vmc-program-name">${esc(tr("home.vmc_program"))}</span>
+        <span class="tile-note">${esc(programNote)}</span></span>
+      <button class="switch" type="button" role="switch" data-vmc-program data-device="${esc(speed.name)}" aria-checked="${programOn}" aria-label="${esc(tr("home.vmc_program"))}"></button>
+    </div>` : ""}
   </div>`;
 }
 
@@ -802,8 +831,10 @@ async function onPlantClick(event) {
     if (target.dataset.vmc && target.dataset.device) {
       await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/set-value`, { value: Number(target.dataset.vmc) });
     } else if (target.hasAttribute("data-vmc-program")) {
-      const schedule = Object.assign({}, state.vmc.schedule, { enabled: !state.vmc.schedule.enabled });
-      await api("/api/vmc-schedule", schedule);
+      // Turning it on from this card is what picks the device it drives -
+      // without a target the board refuses it (vmc_no_target).
+      const enabled = target.getAttribute("aria-checked") !== "true";
+      await api("/api/vmc-schedule", Object.assign({}, state.vmc.schedule, { enabled, target: target.dataset.device }));
     } else if (target.dataset.switch) {
       const on = target.getAttribute("aria-checked") !== "true";
       await api(`/api/sensors/${encodeURIComponent(target.dataset.switch)}/${on ? "on" : "off"}`, {});

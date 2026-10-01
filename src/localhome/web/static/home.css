@@ -441,6 +441,66 @@ a { color: inherit; }
 .tile-note { font-size: 0.82rem; color: var(--text-3); }
 .tile-wide { grid-column: 1 / -1; }
 
+/* The VMC: a card like a zone's, three big speeds with their icon and
+   level, a fan that turns as fast as it runs (home.js vmcTile). */
+.vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }
+.vmc svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vmc-head, .vmc-program { display: flex; align-items: center; gap: 12px; }
+.vmc-title { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.vmc-head .tile-name { font-size: 1.12rem; font-weight: 650; }
+.vmc-head .tile-value { font-size: 2rem; font-weight: 300; }
+.vmc-fan {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.vmc-fan svg { width: 30px; height: 30px; fill: currentColor; stroke: none; }
+.vmc-fan[data-spin="true"] .fan-blades {
+  transform-origin: 12px 12px;
+  animation: turn var(--turn, 2s) linear var(--phase, 0s) infinite;
+}
+@keyframes turn { to { transform: rotate(360deg); } }
+.vmc[data-on="false"] .vmc-fan { background: var(--surface-2); color: var(--text-3); }
+
+.vmc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.vmc-preset {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 96px;
+  padding: 14px 6px 12px;
+  border-radius: var(--radius-s);
+  border: 1.5px solid transparent;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: inherit;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.vmc-preset svg { width: 28px; height: 28px; margin-bottom: 2px; }
+.vmc-preset-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.vmc-preset-value { font-size: 0.8rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.vmc-preset:hover { border-color: var(--line); }
+.vmc-preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.vmc-preset[aria-pressed="true"] .vmc-preset-name,
+.vmc-preset[aria-pressed="true"] .vmc-preset-value { color: var(--accent); }
+.vmc-preset:disabled { opacity: 0.6; }
+
+.vmc-program { padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-3); }
+.vmc-program > svg { flex: none; width: 22px; height: 22px; }
+.vmc-program-name { font-weight: 600; color: var(--text); font-size: 0.92rem; }
+
+@media (min-width: 760px) {
+  .vmc { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "program presets"; column-gap: 28px; align-items: center; }
+  .vmc-head { grid-area: head; }
+  .vmc-presets { grid-area: presets; }
+  .vmc-program { grid-area: program; align-self: end; }
+}
+
 .switch {
   position: relative;
   width: 58px;
