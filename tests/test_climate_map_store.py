@@ -403,7 +403,8 @@ def test_build_climate_integrations_simulated_mode_shape():
 
     assert sensor.kind == "climate"
     assert sensor.type == "simulated"
-    assert sensor.options == {"name": "Rooms Sensor", "dashboard_tab": "climate"}
+    assert sensor.options == {"name": "Rooms Sensor", "dashboard_tab": "climate", "mimic_ht_gen3": True,
+                              "influenced_by": "Rooms Valve"}
 
 
 def test_build_climate_integrations_simulated_valve_shape():

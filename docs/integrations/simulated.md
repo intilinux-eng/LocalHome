@@ -29,6 +29,27 @@ dashboard and watch the temperature actually follow over the next few
 reads, the same way flipping a real valve would (just faster, since
 there's no real water/air mass to heat).
 
+## A simulated Shelly H&T Gen3
+
+With `mimic_ht_gen3: true` the climate driver stands in for a Shelly
+H&T Gen3 on batteries - what the admin panel builds for a zone whose
+sensor is set to *Simulated*, so a test bench or a demo runs like the
+real installation:
+
+- **The same fields**: temperature and humidity to a tenth, `battery_pct`
+  and `wifi_rssi_dbm` (each sensor its own, steady from one start to the
+  next), all recorded in the history like a real sensor's.
+- **The same rhythm**: a report when the temperature moves 0.5° or the
+  humidity 1% since the last one, and a heartbeat every 2 hours on its
+  own clock - so the dashboard says "updated 40 min ago", as it does for
+  the real ones. See [shelly-gen3.md](../shelly-gen3.md).
+- **A room that behaves**: with the zone's valve (`influenced_by`) open it
+  warms in winter or cools in summer at about 0.6° an hour, like a
+  radiant floor - heating never cools a room, cooling never warms it -
+  and with the valve closed it drifts back toward the season's resting
+  temperature (19.5° in winter, 27° in summer). The season is read from
+  `season_file`, the thermostat's `schedules.json`.
+
 ## Options
 
 **`climate`**
@@ -42,6 +63,8 @@ there's no real water/air mass to heat).
 | `influence_target_c` | 26.0 | where it drifts to while that switch is on |
 | `drift_rate_c_per_min` | 0.15 | how fast it moves toward whichever target applies |
 | `poll_interval_seconds` | 10.0 | how often a new reading is generated |
+| `mimic_ht_gen3` | false | behave like a Shelly H&T Gen3 - see above (the other drift options are then unused) |
+| `season_file` | none | with `mimic_ht_gen3`: the `schedules.json` whose `mode` says the season |
 
 **`switch`**
 

@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from localhome.config import load_config  # noqa: E402
+from localhome.drivers.simulated.climate import HT_REST_C  # noqa: E402
 from localhome.services.history import HistoryStore  # noqa: E402
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -29,9 +30,9 @@ STEP = 300                      # one sample every 5 minutes
 HEAT_RATE = 0.45 / 3600         # °C per second with the valve open
 LOSS = 0.06 / 3600              # °C per second per °C above outdoors
 HYSTERESIS = 0.25
-# Where the demo's simulated sensors rest (drivers/simulated/climate.py):
-# the last hours ease into it, so the chart meets the live reading.
-LIVE_C = 20.0
+# The last hours ease into where the demo's simulated sensors start - the
+# season's resting temperature (drivers/simulated/climate.py) - so the
+# chart meets the live reading.
 EASE_HOURS = 3
 
 
@@ -55,6 +56,7 @@ def main() -> None:
     store = HistoryStore(str(config.resolve(history.get("db_file", "data/history.db"))))
     schedules = json.loads(Path(config.resolve("schedules.json")).read_text(encoding="utf-8"))
     weeks = schedules.get("zones", {})
+    live_c = HT_REST_C.get(schedules.get("mode"), HT_REST_C["heat"])
     rnd = random.Random(7)
     now = time.time()
     start = now - args.hours * 3600
@@ -89,7 +91,7 @@ def main() -> None:
         k = max(0.0, 1 - (now - ts) / (EASE_HOURS * 3600))
         for name in zones:
             reading = batch[f"{name} Sensor"]
-            reading["temperature_c"] = round(reading["temperature_c"] + k * k * (LIVE_C - last[name]), 1)
+            reading["temperature_c"] = round(reading["temperature_c"] + k * k * (live_c - last[name]), 1)
         store.record_many(int(ts), batch)
     print(f"{args.hours:.0f} h of demo history written to {store.db_path}")
 

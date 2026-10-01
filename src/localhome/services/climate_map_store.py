@@ -433,16 +433,22 @@ def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) ->
     }
 
 
-def _sensor_integration(zone: dict, sensor_name: str, broker_file: str, manual_store_path: str) -> Integration:
+def _sensor_integration(zone: dict, sensor_name: str, broker_file: str, manual_store_path: str,
+                        valve_name: str | None = None, season_file: str | None = None) -> Integration:
     mode = zone.get("sensor_mode", "shelly")
     if mode == "shelly":
         return Integration("climate", "mqtt_json", _shelly_sensor_options(zone, sensor_name, broker_file))
     if mode == "simulated":
-        # Deliberately the driver's own flat defaults, no influenced_by
-        # wiring to the zone's valve - a boring, obviously-fake value is
-        # exactly right for "hardware isn't installed yet", not a
-        # believable drift.
-        return Integration("climate", "simulated", {"name": sensor_name, "dashboard_tab": "climate"})
+        # A stand-in for the Shelly H&T Gen3 that will go there: its
+        # fields, its reporting rhythm, a room that follows the zone's
+        # valve and the season - so a test bench or a demo runs like the
+        # real thing (drivers/simulated/climate.py's mimic_ht_gen3).
+        options = {"name": sensor_name, "dashboard_tab": "climate", "mimic_ht_gen3": True}
+        if valve_name:
+            options["influenced_by"] = valve_name
+        if season_file:
+            options["season_file"] = season_file
+        return Integration("climate", "simulated", options)
     if mode == "manual":
         return Integration(
             "climate", "manual_override",
@@ -464,7 +470,8 @@ def _valve_integration(zone: dict, valve_name: str, broker_file: str) -> Integra
     raise ValueError(f"unknown valve_mode {mode!r}")
 
 
-def build_climate_integrations(zones: list[dict], broker_file: str, manual_store_path: str) -> list[Integration]:
+def build_climate_integrations(zones: list[dict], broker_file: str, manual_store_path: str,
+                               season_file: str | None = None) -> list[Integration]:
     """The Integrations DeviceManager needs to build every zone's sensor
     + valve - concatenated onto config.integrations before DeviceManager
     construction (see web/app.py's create_app()), the same "additive,
@@ -474,7 +481,8 @@ def build_climate_integrations(zones: list[dict], broker_file: str, manual_store
     for zone in zones:
         sensor_name = f"{zone['name']} Sensor"
         valve_name = f"{zone['name']} Valve"
-        integrations.append(_sensor_integration(zone, sensor_name, broker_file, manual_store_path))
+        integrations.append(_sensor_integration(zone, sensor_name, broker_file, manual_store_path,
+                                                valve_name, season_file))
         integrations.append(_valve_integration(zone, valve_name, broker_file))
     return integrations
 
@@ -674,7 +682,9 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
 
     new_integrations: list[Integration] = []
     if panel_zones is not None:
-        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path)
+        # The season, for a simulated sensor to know which way an open valve takes its room.
+        schedules = config.resolve((config.raw.get("thermostat") or {}).get("schedules_file", "schedules.json"))
+        new_integrations += build_climate_integrations(panel_zones, broker_file, manual_override_path, str(schedules))
     new_integrations += build_extra_switch_integrations(extra_switches, broker_file)
     new_integrations += build_extra_sensor_integrations(extra_sensors, broker_file, roles["outdoor"]["mode"])
     new_integrations += build_extra_dimmer_integrations(extra_dimmers, broker_file, roles["vmc"]["mode"])
