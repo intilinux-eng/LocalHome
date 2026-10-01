@@ -132,6 +132,8 @@ def test_the_simulated_vmc_has_the_real_ones_card():
     assert (speed.kind, speed.type, speed.options["name"]) == ("number", "simulated", "VMC Speed")
     assert speed.options["paired_switch"] == "VMC"
     assert [p["key"] for p in speed.options["presets"]] == ["night", "day", "boost"]
+    # Like the real dimmer: picking a speed starts it.
+    assert speed.options["on_with_value"] is True
 
 
 def test_none_builds_nothing():

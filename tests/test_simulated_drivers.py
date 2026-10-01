@@ -150,3 +150,19 @@ def test_the_plain_simulator_is_unchanged(tmp_path, monkeypatch):
     reading = driver.read()
     assert set(reading) == {"ok", "name", "temperature_c", "humidity_pct"}
     assert driver.last_update_ts is None and driver.history_fields == ("temperature_c", "humidity_pct")
+
+
+from localhome.drivers.simulated.number import SimulatedNumberDriver
+
+
+def test_picking_a_speed_starts_a_simulated_vmc_like_the_real_dimmer():
+    vmc = SimulatedSwitchDriver("Sim VMC", initial_on=False)
+    speed = SimulatedNumberDriver("Sim VMC Speed", value=50, on_with_value=True, paired_switch="Sim VMC")
+    speed.set_value(20)
+    assert speed.read()["value"] == 20 and vmc.read()["is_on"] is True
+
+
+def test_a_plain_simulated_number_leaves_its_switch_alone():
+    lamp = SimulatedSwitchDriver("Sim Lamp", initial_on=False)
+    SimulatedNumberDriver("Sim Lamp Level", paired_switch="Sim Lamp").set_value(80)
+    assert lamp.read()["is_on"] is False

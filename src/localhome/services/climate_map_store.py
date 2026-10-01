@@ -545,6 +545,7 @@ def build_extra_dimmer_integrations(extra_dimmers: dict, broker_file: str, mode:
             Integration("number", "simulated", {
                 "name": VMC_NAME + DIMMER_SPEED_SUFFIX, "paired_switch": VMC_NAME,
                 "presets": VMC_PRESETS, "initial_value": 50, "min": 0, "max": 100, "unit": "%",
+                "on_with_value": True,
             }),
         ]
     integrations: list[Integration] = []
