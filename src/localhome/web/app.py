@@ -309,6 +309,12 @@ def create_app(config_path: str | None = None) -> Flask:
     vmc_schedule = VmcScheduleStore(config.resolve("vmc_schedule.json"))
     vmc = VmcScheduleController(manager, vmc_schedule)
 
+    # What each Shelly says about itself - signal, temperature, restarts,
+    # battery reports on time: see services/shelly_health.py. Listening
+    # before the devices start, so a simulated sensor's first report
+    # (sent on its first read) isn't missed.
+    shelly_watch = _start_shelly_health(config, store, manager)
+
     manager.start()
     recorder.start()
     if thermostat:
@@ -337,9 +343,7 @@ def create_app(config_path: str | None = None) -> Flask:
     # The eMMC's writes over the last hour - see system_status.WriteRate.
     app.config["WRITE_RATE"] = system_status.WriteRate()
     app.config["WRITE_RATE"].start()
-    # What each Shelly says about itself - signal, temperature, restarts,
-    # battery reports on time: see services/shelly_health.py.
-    app.config["SHELLY_HEALTH"] = _start_shelly_health(config, store, manager)
+    app.config["SHELLY_HEALTH"] = shelly_watch
     # Constant while the process lives, so it's read once, not per request.
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links

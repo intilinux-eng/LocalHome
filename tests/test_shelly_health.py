@@ -321,3 +321,11 @@ def test_the_admin_api_lists_a_bench_with_simulated_sensors_and_no_broker(tmp_pa
     client = create_app(str(tmp_path / "config.yaml")).test_client()
     data = client.get("/api/climate-admin/shelly-health").get_json()
     assert [(d["id"], d["simulated"], d["battery"]) for d in data["devices"]] == [("simulated:Banco Sensor", True, True)]
+    # Listening before the sensor starts: its first report, on its first
+    # read, is counted - it used to go unheard until the heartbeat.
+    import time
+    deadline = time.time() + 10
+    while not client.get("/api/sensors/Banco%20Sensor").get_json().get("ok") and time.time() < deadline:
+        time.sleep(0.1)
+    device = client.get("/api/climate-admin/shelly-health").get_json()["devices"][0]
+    assert device["stats"]["reports_24h"] == 1
