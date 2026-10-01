@@ -468,6 +468,10 @@ a { color: inherit; }
 .vmc[data-on="false"] .vmc-fan { background: var(--surface-2); color: var(--text-3); }
 
 .vmc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.vmc-presets[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 359px) {
+  .vmc-presets[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .vmc-preset {
   display: grid;
   justify-items: center;
@@ -489,6 +493,10 @@ a { color: inherit; }
 .vmc-preset[aria-pressed="true"] .vmc-preset-name,
 .vmc-preset[aria-pressed="true"] .vmc-preset-value { color: var(--accent); }
 .vmc-preset:disabled { opacity: 0.6; }
+/* Off, chosen: plain, not the season's colour - nothing is running. */
+.vmc-off[aria-pressed="true"] { background: var(--surface-3); border-color: var(--text-3); color: var(--text); }
+.vmc-off[aria-pressed="true"] .vmc-preset-name,
+.vmc-off[aria-pressed="true"] .vmc-preset-value { color: var(--text); }
 
 .vmc-program { padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-3); }
 .vmc-program > svg { flex: none; width: 22px; height: 22px; }

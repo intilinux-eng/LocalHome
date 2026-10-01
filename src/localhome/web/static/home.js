@@ -683,6 +683,7 @@ const ICONS = {
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>`,
   wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+  power: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>`,
   fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
 };
 
@@ -787,7 +788,14 @@ function vmcTile(speed) {
   const current = (speed.presets || []).find(p => p.value === value);
   // Each button names the device it sets: with light strips on the Home
   // tab there's more than one level paired with a switch.
-  const buttons = speed.presets.map(p => `<button class="vmc-preset" type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${on && value === p.value}">
+  // Off first, as on a fan's dial; a speed switches it back on (the
+  // dimmer's on_with_value).
+  const power = deviceByName(speed.paired_switch);
+  const offButton = power && power.controllable
+    ? `<button class="vmc-preset vmc-off" type="button" data-vmc-off data-device="${esc(speed.paired_switch)}" aria-pressed="${!on}">
+      ${ICONS.power}<span class="vmc-preset-name">${esc(tr("home.vmc_off"))}</span><span class="vmc-preset-value">OFF</span></button>`
+    : "";
+  const buttons = offButton + speed.presets.map(p => `<button class="vmc-preset" type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${on && value === p.value}">
       ${ICONS[VMC_ICONS[p.key]] || ""}<span class="vmc-preset-name">${esc(tr(`vmc_presets.${p.key}`))}</span><span class="vmc-preset-value">${fmt(p.value, 0)}%</span></button>`).join("");
   const program = state.vmc && state.vmc.schedule;
   // The saved program drives one device: it's on for this card only if
@@ -800,7 +808,8 @@ function vmcTile(speed) {
         next: tr(`vmc_presets.${nextPeriod}`).toLowerCase(), value: program[nextPeriod].value })
     : programOn ? tr("home.vmc_program_hours", { day: program.day.at, night: program.night.at })
     : tr("home.vmc_program_manual");
-  const status = !on ? tr("home.vmc_off")
+  // Off with the program on: the next period's speed starts it again.
+  const status = !on ? (running ? tr("home.vmc_off_until", { until: running.until }) : tr("home.vmc_off"))
     : current ? tr(`vmc_presets.${current.key}`)
     : value != null ? tr("home.vmc_custom") : "";
   // The fan turns faster as the speed goes up; its phase comes from the
@@ -812,9 +821,9 @@ function vmcTile(speed) {
       <span class="vmc-fan" data-spin="${!!turn}"${spin}>${ICONS.fan}</span>
       <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
         <span class="tile-note">${esc(status)}</span></span>
-      <span class="tile-value">${on && value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
+      <span class="tile-value">${!on ? "" : value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
     </div>
-    <div class="vmc-presets" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
+    <div class="vmc-presets" data-count="${speed.presets.length + (offButton ? 1 : 0)}" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
     ${program ? `<div class="vmc-program">${ICONS.clock}
       <span class="vmc-title"><span class="vmc-program-name">${esc(tr("home.vmc_program"))}</span>
         <span class="tile-note">${esc(programNote)}</span></span>
@@ -828,7 +837,9 @@ async function onPlantClick(event) {
   if (!target) return;
   target.disabled = true;
   try {
-    if (target.dataset.vmc && target.dataset.device) {
+    if (target.hasAttribute("data-vmc-off") && target.dataset.device) {
+      await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/off`, {});
+    } else if (target.dataset.vmc && target.dataset.device) {
       await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/set-value`, { value: Number(target.dataset.vmc) });
     } else if (target.hasAttribute("data-vmc-program")) {
       // Turning it on from this card is what picks the device it drives -

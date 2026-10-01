@@ -928,6 +928,7 @@
     "rule_manual_cool": "D'estate si accende a mano, quando serve",
     "vmc_speed": "Velocità della ventilazione",
     "vmc_off": "Spenta",
+    "vmc_off_until": "Spenta: il programma la riaccende alle {until}",
     "vmc_custom": "Velocità personalizzata",
     "vmc_program": "Programma giorno/notte",
     "vmc_program_hours": "Giorno dalle {day}, notte dalle {night}",

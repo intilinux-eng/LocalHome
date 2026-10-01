@@ -163,6 +163,18 @@ def test_the_vmc_buttons_set_the_vmc_not_the_first_level_on_the_page(open_page, 
     assert _value(api, "Lampada Livello") == lamp_before, "the lamp's level didn't move"
 
 
+def test_the_vmc_is_turned_off_from_its_card_and_a_speed_starts_it_again(open_page, api):
+    page = _open_home(open_page).page
+    off = page.locator("#plant-body button[data-vmc-off]")
+    power = off.get_attribute("data-device")
+    off.click()
+    assert eventually(page, lambda: api(f"/api/sensors/{urllib.parse.quote(power, safe='')}")["is_on"] is False)
+    assert eventually(page, lambda: off.get_attribute("aria-pressed") == "true")
+    page.locator("#plant-body button[data-vmc]", has_text="Notte").click()
+    assert eventually(page, lambda: api(f"/api/sensors/{urllib.parse.quote(power, safe='')}")["is_on"] is True)
+    assert eventually(page, lambda: off.get_attribute("aria-pressed") == "false")
+
+
 def test_the_vmc_program_is_turned_on_for_this_vmc_and_off(open_page, api):
     """A program never turned on has no device yet: the switch has to say
     which one, as the classic card does, or the board refuses it."""

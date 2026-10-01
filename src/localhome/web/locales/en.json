@@ -928,6 +928,7 @@
     "rule_manual_cool": "In summer you switch it on when needed",
     "vmc_speed": "Ventilation speed",
     "vmc_off": "Off",
+    "vmc_off_until": "Off: the program starts it again at {until}",
     "vmc_custom": "Custom speed",
     "vmc_program": "Day/night program",
     "vmc_program_hours": "Day from {day}, night from {night}",
