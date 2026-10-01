@@ -452,7 +452,7 @@ def _set_roles(roles: dict) -> dict:
 def _loops(app: Flask) -> list[dict]:
     recorder: HistoryRecorder = app.config["RECORDER"]
     thermostat: ThermostatController | None = app.config["THERMOSTAT"]
-    now = time.time()
+    now = time.monotonic()
     loops = [system_status.loop_health("history", recorder.last_write_ok_ts, recorder.poll_interval_seconds, now)]
     if thermostat is not None:
         loops.append(

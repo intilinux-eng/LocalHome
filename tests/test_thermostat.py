@@ -134,6 +134,20 @@ def _controller(tmp_path, hysteresis_c=0.3):
     return ThermostatController(manager, store, zones, hysteresis_c=hysteresis_c), manager
 
 
+def test_the_clock_being_set_at_boot_isnt_a_stalled_loop(tmp_path, monkeypatch):
+    """No clock battery: switched back on, the board starts on the last
+    time it saved and jumps hours ahead once synchronized. The loop that
+    just ticked isn't stalled for that - the service watchdog used to
+    restart LocalHome for it on every power-up."""
+    from localhome.services import system_status
+    controller, _ = _controller(tmp_path)
+    controller.tick()
+    assert controller.last_tick_ok_ts is not None
+    real_time = tm.time
+    monkeypatch.setattr(tm, "time", lambda: real_time() + 6 * 3600)
+    assert not system_status.loop_health("thermostat", controller.last_tick_ok_ts, 60)["stalled"]
+
+
 def test_heat_mode_opens_below_target_minus_hysteresis(tmp_path):
     controller, _ = _controller(tmp_path, hysteresis_c=0.3)
     assert controller.decide("Rooms", current_c=19.5, target_c=20.0, mode="heat") is True

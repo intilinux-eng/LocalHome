@@ -837,8 +837,9 @@ def loop_health(name: str, last_ok_ts: float | None, interval_seconds: float, no
     """Whether a background loop is still completing its cycles. Stalled
     after three missed intervals - but not during the first ones after
     startup, when a loop that hasn't finished its first cycle yet is
-    normal."""
-    now = time.time() if now is None else now
+    normal. `last_ok_ts` and `now` on the monotonic clock, which the
+    board's clock being set (hours at once, after a power cut) can't move."""
+    now = time.monotonic() if now is None else now
     grace = 3 * interval_seconds
     if last_ok_ts is None:
         stalled = process_age_seconds() > grace

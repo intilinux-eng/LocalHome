@@ -455,8 +455,8 @@ class HistoryRecorder:
         # applied per-zone target, set by create_app() once the thermostat
         # exists (it's built after this recorder).
         self.extra_samples = None
-        # When the last cycle's samples were written - see
-        # ThermostatController.last_tick_ok_ts for why this is tracked.
+        # When the last cycle's samples were written, on the monotonic
+        # clock - see ThermostatController.last_tick_ok_ts for why.
         self.last_write_ok_ts: float | None = None
         # Optional callable -> False while the board's clock can't be
         # trusted (not synchronized yet after a power-on, or no internet):
@@ -515,13 +515,13 @@ class HistoryRecorder:
                 logger.warning("History paused: the board's clock isn't synchronized yet - "
                                "readings would be stamped with the wrong time")
                 self.paused_for_clock = True
-            self.last_write_ok_ts = time.time()   # paused on purpose, not stalled
+            self.last_write_ok_ts = time.monotonic()   # paused on purpose, not stalled
             return
         if self.paused_for_clock:
             logger.info("History resumed: the clock is synchronized")
             self.paused_for_clock = False
         self.store.record_many(now, batch)
-        self.last_write_ok_ts = time.time()
+        self.last_write_ok_ts = time.monotonic()
         self._maybe_prune(now)
 
     def _maybe_prune(self, now: int) -> None:

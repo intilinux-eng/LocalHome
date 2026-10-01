@@ -432,9 +432,13 @@ class ThermostatController:
         # listening, not time the sensor stayed quiet.
         self._max_silence_step = max(2 * poll_interval_seconds, 120)
         self._last_tick_ts: float | None = None
-        # Wall-clock time of the last tick that finished without raising -
-        # the admin panel's system status flags a control loop that has
-        # stopped completing, which nothing else on the dashboard would show.
+        # When the last tick finished without raising - the admin panel's
+        # system status flags a control loop that has stopped completing,
+        # which nothing else on the dashboard would show. On the monotonic
+        # clock: the board has no clock battery, so after being switched
+        # off it starts on the last time it saved and jumps hours ahead
+        # once synchronized - on the wall clock that read as a loop stalled
+        # for hours, and the service watchdog restarted LocalHome for it.
         self.last_tick_ok_ts: float | None = None
         # valve name -> the mode an interlock owns it in (None = every
         # mode), set by create_app() once interlocks are parsed. A zone
@@ -483,7 +487,7 @@ class ThermostatController:
             self._last_tick_ts = tick_ts
             try:
                 self._tick(now, applied, elapsed)
-                self.last_tick_ok_ts = time.time()
+                self.last_tick_ok_ts = time.monotonic()
             finally:
                 self._applied_targets = applied
 

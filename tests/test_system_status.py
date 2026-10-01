@@ -131,13 +131,13 @@ def test_doctor_flags_diagnostic_mode(tmp_path, capsys):
 
 
 def test_loop_is_stalled_after_three_missed_intervals():
-    now = time.time()
+    now = time.monotonic()
     assert not system_status.loop_health("history", now - 80, 30, now)["stalled"]
     assert system_status.loop_health("history", now - 100, 30, now)["stalled"]
 
 
 def test_loop_that_never_finished_is_only_stalled_once_past_the_startup_grace(monkeypatch):
-    now = time.time()
+    now = time.monotonic()
     monkeypatch.setattr(system_status, "PROCESS_STARTED_MONO", time.monotonic() - 10)
     assert not system_status.loop_health("thermostat", None, 60, now)["stalled"]
     monkeypatch.setattr(system_status, "PROCESS_STARTED_MONO", time.monotonic() - 600)
