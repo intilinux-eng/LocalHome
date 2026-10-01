@@ -47,6 +47,7 @@ from localhome.services.mqtt_broker_config import get_broker, set_broker
 from localhome.services.mqtt_broker_status import check_broker, check_host_port
 from localhome.drivers.mqtt import base as mqtt_base, client as mqtt_client
 from localhome.drivers.mqtt.rpc import ShellyRpcClient
+from localhome.drivers.simulated import world as simulated_world
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import (
     SEASON_ACTIONS,
@@ -471,19 +472,31 @@ def _lan_signals(app: Flask, devices: list[dict], uptime_seconds: float | None) 
 
 def _start_shelly_health(config: LocalHomeConfig, store: HistoryStore,
                          manager: DeviceManager) -> shelly_health.ShellyHealth | None:
-    """None without a Shelly to watch, or without the broker they speak to."""
+    """None without a Shelly to watch - real ones through the broker they
+    speak to, simulated H&Ts through the simulated world."""
     devices = shelly_health.shelly_devices(config.integrations)
+    simulated = shelly_health.simulated_devices(config.integrations)
     broker_file = config.resolve("mqtt_broker.json")
-    if not devices or not os.path.exists(broker_file):
+    broker = connection = None
+    if devices and os.path.exists(broker_file):
+        try:
+            broker = mqtt_client.load_broker_config({"broker_file": broker_file})
+            connection = mqtt_base.get_connection(broker)
+        except Exception:
+            logger.exception("Shelly health: no broker - the devices' own status isn't watched")
+    if connection is None:
+        devices = []
+    if not devices and not simulated:
         return None
-    try:
-        broker = mqtt_client.load_broker_config({"broker_file": broker_file})
-        connection = mqtt_base.get_connection(broker)
-    except Exception:
-        logger.exception("Shelly health: no broker - the devices' own status isn't watched")
-        return None
-    health = shelly_health.ShellyHealth(devices, store, subscribe=connection.subscribe,
-                                        rpc_for=lambda device_id: ShellyRpcClient(broker, device_id),
+
+    def subscribe(topic, handler):
+        if topic.startswith(shelly_health.SIMULATED_PREFIX):
+            simulated_world.subscribe(topic[len(shelly_health.SIMULATED_PREFIX):], handler)
+        else:
+            connection.subscribe(topic, handler)
+
+    health = shelly_health.ShellyHealth(devices + simulated, store, subscribe=subscribe,
+                                        rpc_for=(lambda device_id: ShellyRpcClient(broker, device_id)) if broker else None,
                                         reading_of=manager.sensor_reading)
     health.start()
     return health

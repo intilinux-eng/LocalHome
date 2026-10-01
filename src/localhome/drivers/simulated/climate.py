@@ -12,13 +12,19 @@ report when the temperature moves 0.5 degrees or the humidity 1% since
 the last one, and a heartbeat every 2 hours on its own clock - and a
 room that warms or cools at a radiant floor's pace while its zone's
 valve is open, depending on the season, and drifts back when it closes.
-See docs/shelly-gen3.md for the real device it copies.
+Each report is also published in the simulated world on the real one's
+topics (status/devicepower:0, status/wifi), so the admin panel's Shelly
+health watches it like a real one; and with a `state_file` the room, the
+last report and the heartbeat's clock carry over a restart. See
+docs/shelly-gen3.md for the real device it copies.
 """
 from __future__ import annotations
 
 import json
+import logging
 import math
 import random
+import threading
 import time
 import zlib
 from datetime import datetime
@@ -27,7 +33,9 @@ from typing import Any
 from localhome.core.interfaces import PollingDriver
 from localhome.core.registry import register_driver
 from localhome.drivers.simulated import world
+from localhome.util.jsonfile import load_json, save_json_atomic
 
+logger = logging.getLogger(__name__)
 
 # The H&T Gen3 it copies (docs/shelly-gen3.md): thresholds, heartbeat.
 HT_TEMP_STEP_C = 0.5
@@ -40,6 +48,15 @@ HT_DRIFT_C_PER_H = 0.3
 # Where a room rests, and where an open valve takes it, by season.
 HT_REST_C = {"heat": 19.5, "cool": 27.0}
 HT_VALVE_TARGET_C = {"heat": 24.0, "cool": 22.0}
+# A lived-in room's humidity wanders about 0.4% per root-hour and is
+# pulled back toward 52% over a day: two or three 1% reports in a quiet
+# day, as the real ones send (docs/shelly-gen3.md).
+HT_HUMIDITY_WANDER = 0.4
+HT_HUMIDITY_MEAN = 52.0
+HT_HUMIDITY_PULL_H = 24.0
+
+# One state file for every simulated sensor - see _save().
+_state_lock = threading.Lock()
 
 
 class SimulatedClimateDriver(PollingDriver):
@@ -58,6 +75,7 @@ class SimulatedClimateDriver(PollingDriver):
         daily_swing_c: float = 0.0,
         mimic_ht_gen3: bool = False,
         season_file: str | None = None,
+        state_file: str | None = None,
     ):
         self.name = name
         self._mimic = bool(mimic_ht_gen3)
@@ -88,6 +106,68 @@ class SimulatedClimateDriver(PollingDriver):
             self._reported: dict[str, Any] | None = None
             self._reported_at: float | None = None
             self._next_heartbeat = 0.0
+            self._state_file = state_file
+            self._restore()
+
+    def _restore(self) -> None:
+        """Where it was before the restart: the room, the last report -
+        shown with its real age, as a real sensor's is - and the
+        heartbeat's own clock, which kept running meanwhile."""
+        if not self._state_file:
+            return
+        try:
+            saved = load_json(self._state_file)
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError):
+            saved = None
+        saved = saved.get(self.name, {}) if isinstance(saved, dict) else None
+        if saved == {}:
+            return          # a sensor new to the file
+        try:
+            room, reported = saved["room"], saved["reported"]
+            temperature, humidity = float(room["temperature"]), float(room["humidity"])
+            battery, at = float(room["battery"]), float(room["at"])
+            reported = {key: reported[key] for key in self.history_fields}
+            reported_at, next_heartbeat = float(saved["reported_at"]), float(saved["next_heartbeat"])
+        except (ValueError, TypeError, KeyError):
+            logger.warning("Simulated sensor '%s': its saved state is unreadable, starting afresh", self.name)
+            return
+        self._temperature, self._humidity, self._battery, self._last_tick = temperature, humidity, battery, at
+        self._reported, self._reported_at, self._next_heartbeat = reported, reported_at, next_heartbeat
+        now = time.time()
+        while self._next_heartbeat <= now:
+            self._next_heartbeat += HT_HEARTBEAT_SECONDS
+
+    def _save(self) -> None:
+        """At each report - a few times an hour at most, so the board's
+        storage barely notices."""
+        if not self._state_file:
+            return
+        entry = {
+            "room": {"temperature": self._temperature, "humidity": self._humidity,
+                     "battery": self._battery, "at": self._last_tick},
+            "reported": self._reported, "reported_at": self._reported_at,
+            "next_heartbeat": self._next_heartbeat,
+        }
+        with _state_lock:
+            try:
+                try:
+                    data = load_json(self._state_file)
+                except (OSError, ValueError):
+                    data = {}
+                data = data if isinstance(data, dict) else {}
+                data[self.name] = entry
+                save_json_atomic(self._state_file, data)
+            except OSError:
+                logger.exception("Simulated sensor '%s': couldn't save its state", self.name)
+
+    def _publish(self) -> None:
+        """What a real H&T Gen3 sends its broker on each wake."""
+        report = self._reported
+        world.publish(f"{self.name}/status/devicepower:0", json.dumps(
+            {"id": 0, "battery": {"percent": report["battery_pct"]}, "external": {"present": False}}))
+        world.publish(f"{self.name}/status/wifi", json.dumps({"rssi": report["wifi_rssi_dbm"]}))
 
     @property
     def last_update_ts(self) -> float | None:
@@ -147,8 +227,9 @@ class SimulatedClimateDriver(PollingDriver):
             self._temperature = min(goal, self._temperature + step)
         else:
             self._temperature = max(goal, self._temperature - step)
-        drift = random.uniform(-0.15, 0.15) + (52.0 - self._humidity) * 0.002
-        self._humidity = max(35.0, min(70.0, self._humidity + drift))
+        pull = (HT_HUMIDITY_MEAN - self._humidity) * (1 - math.exp(-hours / HT_HUMIDITY_PULL_H))
+        wander = random.gauss(0.0, HT_HUMIDITY_WANDER * math.sqrt(hours)) if hours else 0.0
+        self._humidity = max(35.0, min(70.0, self._humidity + pull + wander))
         self._battery = max(5.0, self._battery - hours / 720.0)      # about 1% a month
 
         temperature, humidity = round(self._temperature, 1), round(self._humidity, 1)
@@ -169,6 +250,8 @@ class SimulatedClimateDriver(PollingDriver):
                 "wifi_rssi_dbm": round(self._rssi_base + random.uniform(-2, 2)),
             }
             self._reported_at = now
+            self._save()
+            self._publish()
         return {"ok": True, "name": self.name, **self._reported}
 
     def _resting(self, when: datetime) -> float:
@@ -192,4 +275,5 @@ def _create(options: dict) -> SimulatedClimateDriver:
         daily_swing_c=options.get("daily_swing_c", 0.0),
         mimic_ht_gen3=bool(options.get("mimic_ht_gen3", False)),
         season_file=options.get("season_file"),
+        state_file=options.get("state_file"),
     )

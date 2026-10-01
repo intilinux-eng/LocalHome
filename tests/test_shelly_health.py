@@ -288,3 +288,36 @@ def test_the_admin_api_lists_nothing_without_a_shelly(tmp_path):
     client = create_app(str(tmp_path / "config.yaml")).test_client()
     data = client.get("/api/climate-admin/shelly-health").get_json()
     assert data["ok"] and data["devices"] == [] and data["hot_c"] == shelly_health.HOT_C
+
+
+# ---------------------------------------------------- a simulated H&T --
+
+def test_a_simulated_ht_is_watched_like_a_real_one(tmp_path):
+    """No sensor on a test bench: the simulated H&T's reports reach this
+    panel through the simulated world, on the real one's topics."""
+    from localhome.drivers.simulated import world
+    from localhome.drivers.simulated.climate import SimulatedClimateDriver
+    from localhome.services.shelly_health import SIMULATED_PREFIX, simulated_devices
+
+    integrations = [Integration("climate", "simulated", {"name": "Banco Sensor", "mimic_ht_gen3": True}),
+                    Integration("climate", "simulated", {"name": "Outdoor Sensor"})]
+    devices = simulated_devices(integrations)
+    assert devices == [{"id": "simulated:Banco Sensor", "names": ["Banco Sensor"], "battery": True, "simulated": True}]
+    clock = Clock()
+    watcher = ShellyHealth(devices, HistoryStore(str(tmp_path / "history.db")), clock=clock,
+                           subscribe=lambda topic, handler: world.subscribe(topic[len(SIMULATED_PREFIX):], handler))
+    reading = SimulatedClimateDriver(name="Banco Sensor", mimic_ht_gen3=True).read()
+    device = by_id(watcher, "simulated:Banco Sensor")
+    assert device["simulated"] and device["last_report_at"] == clock.t
+    assert (device["battery_pct"], device["wifi_rssi_dbm"]) == (reading["battery_pct"], reading["wifi_rssi_dbm"])
+    assert device["stats"]["reports_24h"] == 1 and device["stats"]["missed_24h"] == 0
+
+
+def test_the_admin_api_lists_a_bench_with_simulated_sensors_and_no_broker(tmp_path):
+    from localhome.web.app import create_app
+    (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations:\n"
+                                          "  - kind: climate\n    type: simulated\n    name: Banco Sensor\n"
+                                          "    mimic_ht_gen3: true\n", encoding="utf-8")
+    client = create_app(str(tmp_path / "config.yaml")).test_client()
+    data = client.get("/api/climate-admin/shelly-health").get_json()
+    assert [(d["id"], d["simulated"], d["battery"]) for d in data["devices"]] == [("simulated:Banco Sensor", True, True)]

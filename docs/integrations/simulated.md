@@ -2,7 +2,9 @@
 
 Covers `type: simulated`, registered for `climate`, `switch` and
 `number` (a dimmer or fan speed: `initial_value`, `min`, `max`, `unit`
-- enough to try a VMC and its day/night program with no hardware). It
+- enough to try a VMC and its day/night program with no hardware; with
+`paired_switch` and `on_with_value: true`, picking a speed also switches
+the paired simulated switch on, as the real VMC dimmer does). It
 fakes a device with nothing real behind it - for trying out the
 dashboard, or a whole feature like the [thermostat](../configuration.md#thermostat-heatingcooling-zones),
 before you own the actual hardware. Also handy for demoing LocalHome to
@@ -48,7 +50,19 @@ real installation:
   radiant floor - heating never cools a room, cooling never warms it -
   and with the valve closed it drifts back toward the season's resting
   temperature (19.5° in winter, 27° in summer). The season is read from
-  `season_file`, the thermostat's `schedules.json`.
+  `season_file`, the thermostat's `schedules.json`. Its humidity wanders
+  like a lived-in room's - about two or three 1% reports a day on top of
+  the 12 heartbeats, as the real ones send, however often it's polled.
+- **The same health panel**: each report is also published, on the real
+  one's topics (`status/devicepower:0`, `status/wifi`), in the simulated
+  world instead of the broker - so the admin panel's *Shelly health*
+  lists it, marked simulated, with its reports, heartbeats, signal and
+  battery like a real one.
+- **The same after a restart**: with a `state_file` (the admin panel uses
+  `config/simulated_sensors.json`) it carries on where it was - the room
+  as warm as it had got, the last report shown with its real age, the
+  heartbeat on its own clock - instead of starting over. It's written at
+  each report only: a few times an hour at most.
 
 ## Options
 
@@ -65,6 +79,7 @@ real installation:
 | `poll_interval_seconds` | 10.0 | how often a new reading is generated |
 | `mimic_ht_gen3` | false | behave like a Shelly H&T Gen3 - see above (the other drift options are then unused) |
 | `season_file` | none | with `mimic_ht_gen3`: the `schedules.json` whose `mode` says the season |
+| `state_file` | none | with `mimic_ht_gen3`: a JSON file where it keeps its room and last report across restarts (one file can hold several sensors) |
 
 **`switch`**
 

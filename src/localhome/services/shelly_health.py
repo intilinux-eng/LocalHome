@@ -16,7 +16,10 @@ Two ways in, one per kind of device:
   5 minutes, with one Shelly.GetStatus over MQTT.
 
 The devices come from the integrations themselves (shelly_devices()),
-whether written in config.yaml or built by the admin panel. What matters
+whether written in config.yaml or built by the admin panel - and a
+simulated H&T Gen3 (simulated_devices()) is watched the same way, its
+reports heard in the simulated world instead of the broker, so a test
+bench with no sensor shows this panel as a real one would. What matters
 over time goes into the history database, under the device's id: a
 mains Shelly's signal and temperature, each battery report, each restart
 - so a week's trend survives LocalHome's own restarts. Nothing here ever changes a
@@ -62,6 +65,8 @@ SHELLY_ID = re.compile(r"^shelly[a-z0-9]*-[0-9a-f]{12}$", re.IGNORECASE)
 POWERED_COMPONENTS = {"switch", "light", "cover", "rgb", "rgbw", "cct", "pm1", "em", "em1"}
 # Where the markers live in the history database - see missed_reports().
 LISTEN_SENSOR = "shelly_health"
+# A simulated sensor's id here: its name, marked - see simulated_devices().
+SIMULATED_PREFIX = "simulated:"
 
 
 def shelly_devices(integrations) -> list[dict]:
@@ -87,6 +92,20 @@ def shelly_devices(integrations) -> list[dict]:
                 device["names"].append(name)
             device["battery"] = device["battery"] or battery
     return sorted(found.values(), key=lambda d: (not d["battery"], (d["names"][0] if d["names"] else d["id"]).lower()))
+
+
+def simulated_devices(integrations) -> list[dict]:
+    """Every simulated H&T Gen3 (drivers/simulated/climate.py's
+    mimic_ht_gen3), as a battery device: its id is its name with
+    SIMULATED_PREFIX, the topics it publishes under in the simulated
+    world are its name's."""
+    found = []
+    for integration in integrations:
+        options = integration.options or {}
+        if (integration.kind, integration.type) == ("climate", "simulated") and options.get("mimic_ht_gen3")                 and options.get("name"):
+            found.append({"id": SIMULATED_PREFIX + options["name"], "names": [options["name"]],
+                          "battery": True, "simulated": True})
+    return sorted(found, key=lambda d: d["names"][0].lower())
 
 
 def missed_reports(reports: list[float], starts: list[float], since: float, now: float,
@@ -174,6 +193,7 @@ class ShellyHealth:
         for device in devices:
             state = {
                 "id": device["id"], "names": list(device["names"]), "battery": device["battery"],
+                "simulated": bool(device.get("simulated")),
                 "online": None, "error": None, "polled_at": None,
                 "wifi_rssi_dbm": None, "wifi_at": None, "ssid": None,
                 "device_temp_c": None, "voltage_v": None, "errors": [],

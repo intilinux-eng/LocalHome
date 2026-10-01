@@ -2372,9 +2372,11 @@ function shellyDeviceHtml(d, data, now) {
   if (firmware || update) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), [firmware, update].filter(Boolean).join(" - ")));
   if (d.restart_required) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), tr("climate_admin.shelly_restart_required"), true));
   const power = `<span class="admin-pill">${tr(d.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`;
+  // A simulated H&T is watched like a real one, but has no device id.
+  const simulated = d.simulated ? ` <span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "";
   const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
-  return `<div class="admin-zone-card admin-stat-group"><h3>${escapeHtml(displayName(d.name))} ${power}</h3>`
-    + `${rows.join("")}${error}<p class="hint-text admin-path">${escapeHtml(d.id)}</p></div>`;
+  return `<div class="admin-zone-card admin-stat-group"><h3>${escapeHtml(displayName(d.name))} ${power}${simulated}</h3>`
+    + `${rows.join("")}${error}${d.simulated ? "" : `<p class="hint-text admin-path">${escapeHtml(d.id)}</p>`}</div>`;
 }
 
 async function loadShellyHealth() {
