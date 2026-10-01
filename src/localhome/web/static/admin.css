@@ -364,8 +364,14 @@
 .admin-zone-status { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 0.9rem; }
 .admin-zone-status:empty { display: none; }
 .admin-restart-pending-inline { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--text); font-weight: 600; font-size: 0.86rem; }
-.admin-manual-box { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.admin-manual-box input { width: 130px !important; }
+.admin-manual-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; align-items: end; padding: 12px; border-radius: 12px; background: var(--accent-soft); }
+.admin-manual-box .admin-manual-title, .admin-manual-box .hint-text { grid-column: 1 / -1; margin: 0; }
+.admin-manual-title { font-weight: 650; color: var(--text); }
+.admin-manual-box label { display: grid; gap: 4px; font-size: 0.82rem; color: var(--text-2); }
+.admin-manual-box input { width: 100% !important; }
+/* A long state ("no value yet: write one below") wraps instead of
+   running off a phone's edge. */
+.admin-zone-status .admin-status { white-space: normal; max-width: 100%; }
 .admin-valve-test { min-height: 44px; padding: 6px 14px; font-size: 0.84rem; margin-left: 4px; }
 .admin-valve-test-hint { font-size: 0.8rem; margin: 0; }
 

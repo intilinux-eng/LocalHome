@@ -1016,6 +1016,9 @@ def _register_routes(app: Flask) -> None:
                 "sensor_ok": sensor_reading.get("ok", False),
                 # Tagged on the tile - see simulatedTagHtml() in app.js.
                 "sensor_simulated": manager.driver_types.get(zone.sensor) == "simulated",
+                # A value typed by hand (the admin panel's "manual" mode):
+                # the home page lets it be set from the zone's card.
+                "sensor_manual": manager.driver_types.get(zone.sensor) == "manual_override",
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),
                 # Set only for the "every MQTT topic went stale, but at

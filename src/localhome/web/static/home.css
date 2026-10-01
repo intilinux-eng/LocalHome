@@ -358,6 +358,26 @@ a { color: inherit; }
   background: var(--accent-soft);
 }
 .pending-title { font-weight: 600; }
+
+/* A zone in manual mode: the temperature it reads is written here
+   (home.js manualHtml). */
+.manual-set { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border-radius: var(--radius-s); background: var(--accent-soft); }
+.manual-set label { font-weight: 600; font-size: 0.92rem; }
+.manual-row { display: flex; align-items: center; gap: 8px; }
+.manual-input {
+  width: 6.5em;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.manual-unit { color: var(--text-2); margin-right: auto; }
+.manual-note { margin: 0; font-size: 0.8rem; color: var(--text-2); }
 .pending .stepper { justify-self: start; background: var(--surface); }
 .segmented { display: flex; flex-wrap: wrap; gap: 6px; }
 .segmented button {

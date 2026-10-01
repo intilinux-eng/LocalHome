@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from .helpers import ZONE_A, ZONE_B, Opened
+from .helpers import SIMULATED_ZONE, ZONE_A, ZONE_B, Opened
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -81,16 +81,11 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-@pytest.fixture(scope="session")
-def server(tmp_path_factory):
-    """The base URL of a LocalHome started for this session."""
-    home = tmp_path_factory.mktemp("localhome")
+def _launch(home: Path, zones: list[dict]):
+    """Starts LocalHome in `home` with these zones: (base URL, process)."""
     port = _free_port()
     (home / "config.yaml").write_text(CONFIG.format(port=port), encoding="utf-8")
-    zone = {"sensor_mode": "simulated", "sensor_device_id": None,
-            "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True}
-    (home / "climate_map.json").write_text(
-        json.dumps({"zones": [dict(zone, name=ZONE_A), dict(zone, name=ZONE_B)]}), encoding="utf-8")
+    (home / "climate_map.json").write_text(json.dumps({"zones": zones}), encoding="utf-8")
     log_path = home / "server.log"
     env = dict(os.environ, LOCALHOME_CONFIG=str(home / "config.yaml"), PYTHONUNBUFFERED="1")
     with open(log_path, "w", encoding="utf-8") as log:
@@ -100,18 +95,38 @@ def server(tmp_path_factory):
     while True:
         try:
             urllib.request.urlopen(base + "/api/server-time", timeout=2)
-            break
+            return base, proc
         except OSError:
             if proc.poll() is not None or time.time() > deadline:
                 proc.kill()
                 pytest.fail("LocalHome didn't start:\n" + log_path.read_text(encoding="utf-8")[-3000:])
             time.sleep(0.3)
-    yield base
-    proc.terminate()
-    try:
-        proc.wait(10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+
+
+@pytest.fixture(scope="session")
+def start_server(tmp_path_factory):
+    """start_server(zones) -> the base URL of another LocalHome with these
+    zones; all of them stopped when the session ends."""
+    procs = []
+
+    def _start(zones):
+        base, proc = _launch(tmp_path_factory.mktemp("localhome"), zones)
+        procs.append(proc)
+        return base
+
+    yield _start
+    for proc in procs:
+        proc.terminate()
+        try:
+            proc.wait(10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+@pytest.fixture(scope="session")
+def server(start_server):
+    """The base URL of a LocalHome started for this session."""
+    return start_server([dict(SIMULATED_ZONE, name=ZONE_A), dict(SIMULATED_ZONE, name=ZONE_B)])
 
 
 @pytest.fixture(scope="session")

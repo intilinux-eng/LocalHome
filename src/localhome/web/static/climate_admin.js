@@ -864,21 +864,28 @@ function failsafeNoticeHtml(zone) {
 function zoneStatusInnerHtml(zone, mapEntry, mode) {
   const sensorMode = mapEntry ? mapEntry.sensor_mode : "shelly";
   const valveMode = mapEntry ? (mapEntry.valve_mode || "shelly") : "shelly";
+  // Right under the sensor's line, titled: it *is* the sensor while the
+  // zone is in manual mode. Prefilled with the value in use.
+  const manualValue = value => (zone.sensor_ok && value != null ? String(value) : "");
   const manualBoxHtml = sensorMode === "manual" ? `
     <div class="admin-manual-box">
-      <input type="number" step="0.1" min="-30" max="60" class="manual-temp-input" placeholder="${tr("climate_admin.manual_temp_label")}">
-      <input type="number" step="0.1" min="0" max="100" class="manual-humidity-input" placeholder="${tr("climate_admin.manual_humidity_label")}">
+      <p class="admin-manual-title">${tr("climate_admin.manual_box_title")}</p>
+      <label>${tr("climate_admin.manual_temp_label")}
+        <input type="number" step="0.1" min="-30" max="60" class="manual-temp-input" value="${manualValue(zone.temperature_c)}"></label>
+      <label>${tr("climate_admin.manual_humidity_label")}
+        <input type="number" step="0.1" min="0" max="100" class="manual-humidity-input" value="${manualValue(zone.humidity_pct)}"></label>
       <button class="range-btn" onclick="setManualValue(${jsArg(zone.name)}, this)">${tr("climate_admin.manual_set_button")}</button>
+      <p class="hint-text">${tr("climate_admin.manual_box_note")}</p>
     </div>` : "";
 
   return `
     <div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zone, sensorMode)}</div>
+    ${manualBoxHtml}
     ${failsafeNoticeHtml(zone)}
     <div>${targetHtml(zone)}</div>
     <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
     <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
     ${modeExclusionNoticeHtml(zone, mode)}
-    ${manualBoxHtml}
   `;
 }
 

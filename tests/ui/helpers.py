@@ -5,6 +5,10 @@
 ZONE_A = "Camera dell'ospite"
 ZONE_B = 'Bagno <img src=x onerror=alert(1)> "2"'
 
+# A zone as the admin panel saves it: everything simulated.
+SIMULATED_ZONE = {"sensor_mode": "simulated", "sensor_device_id": None,
+                  "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True}
+
 
 class Opened:
     """A page plus the script errors it has logged so far."""

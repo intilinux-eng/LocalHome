@@ -290,6 +290,7 @@ function zoneStatus(zone, climate) {
   const mode = climate.mode;
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
   if (zone.sensor_failsafe_active) return { tone: "warn", text: tr("home.st_failsafe") };
+  if (zone.sensor_manual && !zone.sensor_ok) return { tone: "warn", text: tr("home.st_manual_waiting") };
   if (!zone.sensor_ok && zone.temperature_c == null) return { tone: "warn", text: tr("home.st_waiting") };
   if (!zone.sensor_ok) return { tone: "warn", text: tr("home.st_stale") };
   if (climate.away_until && !zone.override) return { tone: "off", text: tr("home.st_away") };
@@ -331,6 +332,10 @@ function renderZones() {
 }
 
 function fillZone(card, zone, climate) {
+  // Not under someone typing a manual temperature: the refresh would
+  // wipe what they're writing.
+  const typing = document.activeElement;
+  if (typing && typing.matches(".manual-input") && card.contains(typing)) return;
   const mode = climate.mode;
   const status = zoneStatus(zone, climate);
   const week = (state.weeks[zone.name] || {})[mode];
@@ -360,7 +365,8 @@ function fillZone(card, zone, climate) {
   }
 
   const foot = [];
-  const age = fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
+  // A typed value isn't a reading: no "updated a moment ago" under it.
+  const age = zone.sensor_manual ? "" : fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
   if (age) foot.push(esc(tr("home.updated", { age })));
   if (zone.battery_pct != null) foot.push(esc(tr("home.battery", { pct: Math.round(zone.battery_pct) })));
   const hoursToday = (state.onHours[zone.name] || {}).today;
@@ -368,7 +374,7 @@ function fillZone(card, zone, climate) {
 
   card.querySelector(".zone-live").innerHTML = `
     <div class="zone-head">
-      <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}</h2>
+      <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
     </div>
     <div class="zone-main">
@@ -381,8 +387,54 @@ function fillZone(card, zone, climate) {
       <div class="ribbon-readout">${legendHtml()}</div>
     </div>
     <div class="quick">${quickHtml(zone, climate, change)}</div>
+    ${zone.sensor_manual ? manualHtml(zone) : ""}
     <div class="zone-foot">${foot.join(" · ")}</div>`;
   wireRibbon(card, zone, week, history, mode);
+}
+
+// A zone whose sensor is set to "manual" in the admin panel: the
+// temperature it reads is the one written here, to try the thermostat
+// without a sensor - the valve reacts at once.
+function manualHtml(zone) {
+  const id = `manual-${zoneId(zone.name)}`;
+  const value = zone.sensor_ok && zone.temperature_c != null ? fmt(zone.temperature_c) : "";
+  return `<form class="manual-set" data-zone="${esc(zone.name)}" novalidate>
+    <label for="${id}">${esc(tr("home.manual_label"))}</label>
+    <div class="manual-row">
+      <input id="${id}" class="manual-input" type="text" inputmode="decimal" autocomplete="off" value="${esc(value)}" placeholder="20,0">
+      <span class="manual-unit">°C</span>
+      <button class="btn btn-primary" type="submit">${esc(tr("home.manual_set"))}</button>
+    </div>
+    <p class="manual-note">${esc(tr("home.manual_note"))}</p>
+  </form>`;
+}
+
+async function onManualSubmit(event) {
+  const form = event.target.closest("form.manual-set");
+  if (!form) return;
+  event.preventDefault();
+  const input = form.querySelector(".manual-input");
+  const temperature = Number(input.value.trim().replace(",", "."));
+  if (input.value.trim() === "" || !Number.isFinite(temperature) || temperature < -30 || temperature > 60) {
+    notify(tr("home.manual_invalid"));
+    input.focus();
+    return;
+  }
+  const zone = (state.climate ? state.climate.zones : []).find(z => z.name === form.dataset.zone);
+  // The humidity it had stays: only the temperature is written here.
+  const body = { temperature_c: temperature };
+  if (zone && zone.sensor_ok && zone.humidity_pct != null) body.humidity_pct = zone.humidity_pct;
+  const button = form.querySelector("button");
+  button.disabled = true;
+  try {
+    await api(`/api/climate-admin/zones/${encodeURIComponent(form.dataset.zone)}/manual-value`, body);
+    input.blur();
+    await refreshClimate();
+  } catch (e) {
+    notify(errorText(e));
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // ------------------------------------------------------- today's strip --
@@ -1044,6 +1096,7 @@ async function refreshProblems() {
 // ---------------------------------------------------------------- start --
 
 document.getElementById("zones").addEventListener("click", onZoneClick);
+document.getElementById("zones").addEventListener("submit", onManualSubmit);
 document.getElementById("plant-body").addEventListener("click", onPlantClick);
 document.getElementById("house-body").addEventListener("click", onHouseClick);
 document.getElementById("house-body").addEventListener("change", onHouseChange);

@@ -364,6 +364,29 @@ def test_manual_value_route_rejects_a_zone_not_in_manual_mode(tmp_path):
     assert res.get_json()["ok"] is False
 
 
+def test_the_valve_follows_a_manual_value_at_once(tmp_path):
+    """What manual mode is for: a temperature written by hand, and the
+    thermostat deciding on it straight away - open below the target,
+    closed above it - with the zone marked manual for the dashboard."""
+    zones = [dict(VALID_ZONES[0], valve_mode="simulated", valve_device_id=None),
+             dict(VALID_ZONES[1], valve_mode="simulated", valve_device_id=None)]
+    ClimateMapStore(str(tmp_path / "climate_map.json")).set_zones(zones)
+    schedules = ScheduleStore(str(tmp_path / "schedules.json"))
+    schedules.set_mode("heat")
+    schedules.set_week("Bathrooms", {d: [21.0] * 24 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}, mode="heat")
+    app = _app(tmp_path, CONFIG_NO_THERMOSTAT)
+    client = app.test_client()
+    manager = app.config["MANAGER"]
+
+    client.post("/api/climate-admin/zones/Bathrooms/manual-value", json={"temperature_c": 18.0})
+    assert manager.sensor_reading("Bathrooms Valve")["is_on"] is True
+    client.post("/api/climate-admin/zones/Bathrooms/manual-value", json={"temperature_c": 23.0})
+    assert manager.sensor_reading("Bathrooms Valve")["is_on"] is False
+
+    flags = {z["name"]: z["sensor_manual"] for z in client.get("/api/climate/zones").get_json()["zones"]}
+    assert flags == {"Rooms": False, "Bathrooms": True}
+
+
 def test_manual_value_route_404s_when_no_mapping_is_saved_at_all(tmp_path):
     app = _app(tmp_path)
     client = app.test_client()
