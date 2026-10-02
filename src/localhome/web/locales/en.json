@@ -239,7 +239,12 @@
     "override_until_tomorrow": "until tomorrow {time}",
     "override_until_day": "until {day} {time}",
     "override_cancel": "Back to the schedule",
-    "override_tile": "Temporary change running"
+    "override_tile": "Temporary change running",
+    "rule_action_on_no": "always closed (Shelly on)",
+    "rule_action_off_no": "always open (Shelly off)",
+    "rule_action_manual_no": "your choice",
+    "valve_closed": "Closed",
+    "valve_open": "Open"
   },
   "climate_admin": {
     "link_title": "Climate admin panel",
@@ -748,7 +753,24 @@
     "vmc_speeds_title": "Speeds",
     "vmc_speeds_note": "The percentages of Night, Day and Boost: of the home page's buttons, of the programs and of \"Boost for\". In use at once, no restart; a running program follows them.",
     "vmc_speeds_save": "Save speeds",
-    "vmc_speeds_saved": "Saved: in use from now."
+    "vmc_speeds_saved": "Saved: in use from now.",
+    "extra_bypass_normally_open": "Normally open valve: its Shelly on closes it",
+    "extra_dehumidifier_zone": "Draws its water through the zone's valve",
+    "extra_dehumidifier_zone_none": "None",
+    "extra_dehumidifier_zone_hint": "While the dehumidifier is on (in summer) this zone's valve stays open, even if the zone sits out the cooling.",
+    "rule_now_closed": "Closed now",
+    "rule_now_open": "Open now",
+    "rule_should_be_closed": "Should be closed",
+    "rule_should_be_open": "Should be open",
+    "season_valve_closed": "{name}: closed",
+    "season_valve_open": "{name}: open",
+    "season_link": "{leader} on opens the {zone} valve",
+    "links_heading": "Links",
+    "link_row": "{leader} on → {zone} valve open",
+    "link_when_cool": "in summer",
+    "link_when_heat": "in winter",
+    "link_when_always": "always",
+    "link_in_config": "written in config.yaml"
   },
   "vmc_presets": {
     "night": "Night",
@@ -806,7 +828,8 @@
     "override_target_range": "The temperature must be between {min} and {max} °C, or off.",
     "override_hours_invalid": "The duration must be above zero and at most {max} hours.",
     "vmc_speeds_invalid": "Each VMC speed must be between 1 and 100%.",
-    "vmc_speeds_order": "Night must be slower than day, and day slower than boost."
+    "vmc_speeds_order": "Night must be slower than day, and day slower than boost.",
+    "dehumidifier_zone_invalid": "The zone the dehumidifier draws its water from doesn't exist: {zone}."
   },
   "home": {
     "health_checking": "Checking…",
@@ -987,6 +1010,21 @@
     "air_voc_mgm3": "VOC",
     "air_ch2o_mgm3": "Formaldehyde",
     "air_24h": "last 24 hours",
-    "air_peak": "peak {value} ppm {when}"
+    "air_peak": "peak {value} ppm {when}",
+    "valve_closed": "closed",
+    "valve_open": "open",
+    "rule_on_heat_no": "In winter LocalHome keeps it closed",
+    "rule_off_heat_no": "In winter it stays open",
+    "rule_manual_heat_no": "In winter you open and close it",
+    "rule_on_cool_no": "In summer LocalHome keeps it closed",
+    "rule_off_cool_no": "In summer it stays open",
+    "rule_manual_cool_no": "In summer you open and close it",
+    "normally_open_note": "Normally open valve: its Shelly on closes it.",
+    "link_note": "Uses the {zone} valve's water: on, it opens it.",
+    "link_open": "{zone} valve open for it.",
+    "st_driven": "{name} on: valve open",
+    "line_driven": "{zone}: valve open, {name} on",
+    "fact_driven_on": "Valve open because {name} is on",
+    "fact_driven_off": "The valve opens while {name} is on"
   }
 }

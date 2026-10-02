@@ -128,6 +128,12 @@ chosen level - a VMC, typically:
 
 - `hide_toggle: true` on a `switch` - its card shows whether it's
   running, but offers no on/off control.
+- `normally_open: true` on a `switch` that powers a normally open valve
+  (one that closes when powered, like a bypass valve): its Shelly on
+  means the valve **closed**, and the home page, the classic page and
+  the admin panel say "closed"/"open" for it, not "on"/"off" - its
+  season rules too ("always closed (Shelly on)"). Nothing changes in
+  what LocalHome commands; only how it's told.
 - `presets` on a `number` - one-tap buttons above its slider, each
   `{key: <name>, value: <number>}` (the label is the dashboard's
   translation of `vmc_presets.<key>`: `night`, `day`, `boost`) or
@@ -317,6 +323,31 @@ the valve feeding it open indefinitely.
 Leave this interlock out if that zone's valve must stay closed in cool
 mode no matter what: without it, a `cool_enabled: false` zone's valve is
 simply held closed all summer (see above).
+
+The admin panel builds this link for its own dehumidifier: "Draws its
+water through the zone's valve" in its *Extra switches* section - by
+default the one zone kept out of cooling, if there's exactly one - in
+summer only. Switching the dehumidifier on opens that valve at once, not
+at the next loop. The home page says it on both sides: the
+dehumidifier's tile ("uses the Bathrooms valve's water: on, it opens
+it") and the zone's card ("Dehumidifier on: valve open").
+
+#### The whole plant, season by season
+
+As on the installation this was built for - a normally open bypass
+valve, a dehumidifier fed through the bathrooms' valve, the bathrooms
+kept out of cooling:
+
+| | Summer (`cool`) | Winter (`heat`) |
+|---|---|---|
+| Rooms' valve | by temperature | by temperature |
+| Bathrooms' valve | powered if and only if the dehumidifier is on | by temperature |
+| Bypass valve (normally open) | powered: closed | off: open |
+| Dehumidifier | by hand | off |
+
+A season switch applies the whole column at once (the thermostat and
+the rules tick right away), and every loop after that keeps it so - a
+device that didn't answer at the switch is put right on the next one.
 
 Nothing about `interlocks` is dehumidifier-specific - any "switch A on
 requires switch B on too" relationship fits.

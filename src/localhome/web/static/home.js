@@ -289,6 +289,11 @@ function gapText(zone) {
 
 function zoneStatus(zone, climate) {
   const mode = climate.mode;
+  // Held open by another device (a dehumidifier drawing its water
+  // through this valve) - even in a zone that sits out the cooling.
+  if (zone.valve_driver && zone.valve_driver.on) {
+    return { tone: "active", text: tr("home.st_driven", { name: displayName(zone.valve_driver.name) }), active: true };
+  }
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
   if (zone.sensor_failsafe_active) return { tone: "warn", text: tr("home.st_failsafe") };
   if (zone.sensor_manual && !zone.sensor_ok) return { tone: "warn", text: tr("home.st_manual_waiting") };
@@ -353,6 +358,10 @@ function fillZone(card, zone, climate) {
     : `<span class="now-missing">--</span>`;
   const facts = [];
   const excluded = mode === "cool" && !zone.cool_enabled;
+  if (zone.valve_driver) {
+    facts.push(`<div class="fact${zone.valve_driver.on ? " fact-rule" : ""}">${esc(tr(zone.valve_driver.on ? "home.fact_driven_on" : "home.fact_driven_off",
+      { name: displayName(zone.valve_driver.name) }))}</div>`);
+  }
   if (zone.target_c != null && !excluded) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
     facts.push(`<div class="fact">${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}</div>`);
@@ -702,6 +711,9 @@ function renderHero() {
 // One zone's state in a few words, for the line under the title.
 function zoneLine(zone, climate) {
   const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
+  if (zone.valve_driver && zone.valve_driver.on) {
+    return tr("home.line_driven", { zone: zone.name, name: displayName(zone.valve_driver.name) });
+  }
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
@@ -826,11 +838,21 @@ function renderPlant() {
     if (!device) return;
     const reading = state.readings[rule.switch] || {};
     const what = rule[climate.mode];
+    // A normally open valve: its Shelly on means closed - said as such,
+    // and its dot lit while water can pass, like any open valve.
+    const no = !!rule.normally_open;
+    const state_ = no ? tr(reading.is_on ? "home.valve_closed" : "home.valve_open") : tr(reading.is_on ? "home.on" : "home.off_state");
     const control = what === "manual" && device.controllable
       ? `<button class="switch" type="button" role="switch" data-switch="${esc(rule.switch)}" aria-checked="${!!reading.is_on}" aria-label="${esc(displayName(rule.switch))}"></button>`
-      : `<span class="dot-state" data-on="${!!reading.is_on}">${esc(tr(reading.is_on ? "home.on" : "home.off_state"))}</span>`;
+      : `<span class="dot-state" data-on="${no ? !reading.is_on : !!reading.is_on}">${esc(state_)}</span>`;
+    // What it opens with it: the valve a dehumidifier draws its water through.
+    const link = ((climate.season_effects || {}).links || []).find(l => l.leader === rule.switch);
+    const linkZone = link && (link.zone || displayName(link.follower));
+    const notes = [tr(`home.rule_${what}_${climate.mode}${no ? "_no" : ""}`)];
+    if (no) notes.push(tr("home.normally_open_note"));
+    if (link) notes.push(tr(reading.is_on && (!link.mode || link.mode === climate.mode) ? "home.link_open" : "home.link_note", { zone: linkZone }));
     tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${esc(displayName(rule.switch))}</span>${control}</div>
-      <div class="tile-note">${esc(tr(`home.rule_${what}_${climate.mode}`))}</div></div>`);
+      ${notes.map(n => `<div class="tile-note">${esc(n)}</div>`).join("")}</div>`);
   });
   document.getElementById("plant").hidden = !tiles.length;
   document.getElementById("plant-body").innerHTML = tiles.join("");

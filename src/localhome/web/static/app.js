@@ -635,7 +635,11 @@ function updateSensorCard(sensor, reading, linkedReading) {
     html += `
       <div class="switch-body">
         <div>
-          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>" : sensor.hide_toggle ? (reading.is_on ? tr("sensors.running") : tr("sensors.stopped")) : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
+          <div class="headline"><div class="big">${reading.power_w != null ? fmt(reading.power_w, 0) + " <span>W</span>"
+            // A normally open valve: its Shelly on closes it.
+            : sensor.normally_open ? (reading.is_on ? tr("climate.valve_closed") : tr("climate.valve_open"))
+            : sensor.hide_toggle ? (reading.is_on ? tr("sensors.running") : tr("sensors.stopped")) : (reading.is_on ? tr("sensors.switch_on") : tr("sensors.switch_off"))}</div></div>
+          ${sensor.normally_open ? `<div class="switch-sub">${tr("home.normally_open_note")}</div>` : ""}
           ${sensor.hide_toggle && !reading.is_on && sensor.pairedBrightness && sensor.pairedBrightness.presets ? `<div class="switch-sub">${tr("sensors.stopped_pick_preset")}</div>` : ""}
           <div class="switch-sub">${reading.voltage_v != null ? fmt(reading.voltage_v, 0) + " V · " + fmt(reading.current_a, 2) + " A" : ""}</div>
         </div>

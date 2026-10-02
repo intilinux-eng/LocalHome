@@ -81,10 +81,11 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _launch(home: Path, zones: list[dict]):
-    """Starts LocalHome in `home` with these zones: (base URL, process)."""
+def _launch(home: Path, zones: list[dict], config: str = CONFIG):
+    """Starts LocalHome in `home` with these zones and config.yaml (a
+    template with {port}): (base URL, process)."""
     port = _free_port()
-    (home / "config.yaml").write_text(CONFIG.format(port=port), encoding="utf-8")
+    (home / "config.yaml").write_text(config.format(port=port), encoding="utf-8")
     (home / "climate_map.json").write_text(json.dumps({"zones": zones}), encoding="utf-8")
     log_path = home / "server.log"
     env = dict(os.environ, LOCALHOME_CONFIG=str(home / "config.yaml"), PYTHONUNBUFFERED="1")
@@ -105,12 +106,13 @@ def _launch(home: Path, zones: list[dict]):
 
 @pytest.fixture(scope="session")
 def start_server(tmp_path_factory):
-    """start_server(zones) -> the base URL of another LocalHome with these
-    zones; all of them stopped when the session ends."""
+    """start_server(zones, config=None) -> the base URL of another
+    LocalHome with these zones (and this config.yaml template, else the
+    usual one); all of them stopped when the session ends."""
     procs = []
 
-    def _start(zones):
-        base, proc = _launch(tmp_path_factory.mktemp("localhome"), zones)
+    def _start(zones, config=None):
+        base, proc = _launch(tmp_path_factory.mktemp("localhome"), zones, config or CONFIG)
         procs.append(proc)
         return base
 

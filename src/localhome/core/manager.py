@@ -85,7 +85,9 @@ class DeviceManager:
                     self.dashboard_tab[driver.name] = options["dashboard_tab"]
                 if options.get("visible_in_mode"):
                     self.visible_in_mode[driver.name] = options["visible_in_mode"]
-                ui = {key: options[key] for key in ("presets", "hide_toggle") if options.get(key)}
+                # normally_open: a valve its Shelly *closes* when on (the
+                # pages say "closed"/"open" by it, not "on"/"off").
+                ui = {key: options[key] for key in ("presets", "hide_toggle", "normally_open") if options.get(key)}
                 if ui:
                     self.ui_options[driver.name] = ui
 

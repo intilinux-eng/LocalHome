@@ -473,6 +473,12 @@ async function loadExtraSwitches() {
   const data = await res.json();
   document.getElementById("extra-bypass-valve-id").value = data.bypass_valve_device_id || "";
   document.getElementById("extra-dehumidifier-id").value = data.dehumidifier_device_id || "";
+  document.getElementById("extra-bypass-normally-open").checked = data.bypass_valve_normally_open !== false;
+  // The zone whose valve the dehumidifier draws its water through.
+  const zoneSelect = document.getElementById("extra-dehumidifier-zone");
+  zoneSelect.innerHTML = [`<option value="">${escapeHtml(tr("climate_admin.extra_dehumidifier_zone_none"))}</option>`,
+    ...(data.zones || []).map(z => `<option value="${escapeAttr(z)}">${escapeHtml(z)}</option>`)].join("");
+  zoneSelect.value = data.dehumidifier_water_zone || "";
   extraSwitchesRestartPending = !!data.restart_pending;
   const wired = [data.bypass_valve_device_id, data.dehumidifier_device_id].filter(Boolean).length;
   extraSwitchesPill = extraSwitchesRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
@@ -486,6 +492,8 @@ async function saveExtraSwitches(button) {
   const body = {
     bypass_valve_device_id: document.getElementById("extra-bypass-valve-id").value.trim() || null,
     dehumidifier_device_id: document.getElementById("extra-dehumidifier-id").value.trim() || null,
+    bypass_valve_normally_open: document.getElementById("extra-bypass-normally-open").checked,
+    dehumidifier_water_zone: document.getElementById("extra-dehumidifier-zone").value || null,
   };
   button.disabled = true;
   try {
@@ -863,7 +871,9 @@ function valveStatusHtml(zone, valveMode) {
     <button class="range-btn admin-valve-test" onclick="testValve(${jsArg(zone.valve)}, 'off', this)">${tr("climate_admin.valve_test_close")}</button>
   `;
   if (zone.valve_ok) {
-    const state = zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed");
+    const driven = zone.valve_driver && zone.valve_driver.on
+      ? ` · ${tr("home.st_driven", { name: displayName(zone.valve_driver.name) })}` : "";
+    const state = (zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed")) + driven;
     return `${pill}<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state} ${testButtons}`;
   }
   return `${pill}<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span> ${testButtons}`;
@@ -1625,8 +1635,12 @@ function seasonEffects(mode, data) {
     zones.filter(z => z.cool_enabled === false).forEach(z => items.push(tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) })));
   }
   (effects.rules || []).forEach(rule => items.push(tr(
-    { on: "climate_admin.season_switch_on", off: "climate_admin.season_switch_off", manual: "climate_admin.season_limited_usable" }[rule[mode]],
+    rule.normally_open
+      ? { on: "climate_admin.season_valve_closed", off: "climate_admin.season_valve_open", manual: "climate_admin.season_limited_usable" }[rule[mode]]
+      : { on: "climate_admin.season_switch_on", off: "climate_admin.season_switch_off", manual: "climate_admin.season_limited_usable" }[rule[mode]],
     { name: escapeHtml(displayName(rule.switch)) })));
+  (effects.links || []).filter(link => !link.mode || link.mode === mode).forEach(link => items.push(tr("climate_admin.season_link",
+    { leader: escapeHtml(displayName(link.leader)), zone: escapeHtml(link.zone || displayName(link.follower)) })));
   items.push(tr(`climate_admin.season_schedule_${mode}`));
   return items;
 }
@@ -1667,13 +1681,14 @@ const ruleMismatchSince = {};
 let extraSwitchesPill = "";     // the section header's own pill, from loadExtraSwitches()
 let seasonRuleRoles = [];       // from GET /api/climate-admin/season-rules
 
-function ruleActionText(action) {
-  return tr(`climate.rule_action_${action}`);
+// A normally open valve's "on" is its Shelly on - the valve closed.
+function ruleActionText(action, normallyOpen) {
+  return tr(`climate.rule_action_${action}${normallyOpen ? "_no" : ""}`);
 }
 
-function ruleSelectHtml(role, mode, value, disabled) {
+function ruleSelectHtml(role, mode, value, disabled, normallyOpen) {
   const options = ["off", "on", "manual"].map(a =>
-    `<option value="${a}"${a === value ? " selected" : ""}>${escapeHtml(ruleActionText(a))}</option>`).join("");
+    `<option value="${a}"${a === value ? " selected" : ""}>${escapeHtml(ruleActionText(a, normallyOpen))}</option>`).join("");
   return `<label class="rule-season">${escapeHtml(tr(mode === "heat" ? "climate.season_winter" : "climate.season_summer"))}
     <select data-role="${escapeAttr(role)}" data-mode="${mode}"${disabled ? " disabled" : ""}>${options}</select></label>`;
 }
@@ -1699,8 +1714,8 @@ async function loadSeasonRules() {
   seasonRuleRoles = data.roles;
   const el = document.getElementById("season-rules");
   el.innerHTML = data.roles.map(r => seasonRuleRowHtml(r.switch,
-    ruleSelectHtml(r.role, "heat", r.heat, r.in_config || !data.thermostat)
-      + ruleSelectHtml(r.role, "cool", r.cool, r.in_config || !data.thermostat),
+    ruleSelectHtml(r.role, "heat", r.heat, r.in_config || !data.thermostat, r.normally_open)
+      + ruleSelectHtml(r.role, "cool", r.cool, r.in_config || !data.thermostat, r.normally_open),
     r.in_config ? tr("climate_admin.rule_in_config") : !r.wired ? tr("climate_admin.rule_not_wired") : "")).join("");
   document.getElementById("season-rules-actions").hidden = !data.thermostat || data.roles.every(r => r.in_config);
 }
@@ -1740,8 +1755,8 @@ async function refreshSeasonRules(data) {
     if (!row) {
       // A rule config.yaml gives a switch the panel doesn't manage.
       el.insertAdjacentHTML("beforeend", seasonRuleRowHtml(rule.switch,
-        `<span class="hint-text">${escapeHtml(tr("climate.season_winter"))}: ${escapeHtml(ruleActionText(rule.heat))}
-         · ${escapeHtml(tr("climate.season_summer"))}: ${escapeHtml(ruleActionText(rule.cool))}</span>`,
+        `<span class="hint-text">${escapeHtml(tr("climate.season_winter"))}: ${escapeHtml(ruleActionText(rule.heat, rule.normally_open))}
+         · ${escapeHtml(tr("climate.season_summer"))}: ${escapeHtml(ruleActionText(rule.cool, rule.normally_open))}</span>`,
         tr("climate_admin.rule_in_config")));
       row = el.lastElementChild;
     }
@@ -1771,12 +1786,26 @@ async function refreshSeasonRules(data) {
       ruleMismatchSince[rule.switch] = ruleMismatchSince[rule.switch] || Date.now();
       const late = Date.now() - ruleMismatchSince[rule.switch] > RULE_GRACE_MS;
       state = late ? "bad" : "neutral";
-      text = late ? tr(want ? "climate_admin.rule_should_be_on" : "climate_admin.rule_should_be_off")
+      text = late ? tr(rule.normally_open ? (want ? "climate_admin.rule_should_be_closed" : "climate_admin.rule_should_be_open")
+        : (want ? "climate_admin.rule_should_be_on" : "climate_admin.rule_should_be_off"))
         : tr("climate_admin.rule_waiting");
     }
     if (state === "bad" || (state === "neutral" && worst === "ok")) worst = state;
-    const now = reading.ok ? `${tr(reading.is_on ? "climate_admin.rule_now_on" : "climate_admin.rule_now_off")} ` : "";
+    const nowKey = rule.normally_open ? (reading.is_on ? "rule_now_closed" : "rule_now_open")
+      : (reading.is_on ? "rule_now_on" : "rule_now_off");
+    const now = reading.ok ? `${tr(`climate_admin.${nowKey}`)} ` : "";
     row.querySelector(".rule-live").innerHTML = `${escapeHtml(now)}${pillHtml(state, text)}`;
+  }
+  // What one switch opens with it: the valve a dehumidifier draws its
+  // water through.
+  const links = (data.season_effects || {}).links || [];
+  const linksEl = document.getElementById("season-links");
+  if (linksEl) {
+    linksEl.hidden = !links.length;
+    linksEl.innerHTML = links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>`
+      + links.map(link => `<p class="season-link">${escapeHtml(tr("climate_admin.link_row",
+          { leader: displayName(link.leader), zone: link.zone || displayName(link.follower) }))}
+          <span class="admin-pill">${escapeHtml(tr(`climate_admin.link_when_${link.mode || "always"}`))}</span></p>`).join("") : "";
   }
   // A switch not doing what its rule says outranks the header's count.
   setPill("extra-switches-summary", worst !== "ok" && !extraSwitchesRestartPending

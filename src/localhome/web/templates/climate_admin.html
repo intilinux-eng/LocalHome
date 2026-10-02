@@ -239,6 +239,8 @@
     <h3 class="admin-subheading">{{ t.climate_admin.rules_heading }}</h3>
     <p class="hint-text">{{ t.climate_admin.rules_note }}</p>
     <div class="season-rules" id="season-rules"></div>
+    <!-- What one switch opens with it - see refreshSeasonRules(). -->
+    <div class="season-links" id="season-links" hidden></div>
     <div class="toolbar admin-actions" id="season-rules-actions" hidden>
       <button class="tbtn open" onclick="saveSeasonRules(this)">{{ t.climate_admin.rules_save }}</button>
     </div>
@@ -249,9 +251,18 @@
         <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
         <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
       </div>
+      <label class="admin-checkbox">
+        <input type="checkbox" id="extra-bypass-normally-open" checked>
+        {{ t.climate_admin.extra_bypass_normally_open }}
+      </label>
       <div class="admin-field">
         <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
         <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+      </div>
+      <div class="admin-field">
+        <label for="extra-dehumidifier-zone">{{ t.climate_admin.extra_dehumidifier_zone }}</label>
+        <select id="extra-dehumidifier-zone"></select>
+        <p class="hint-text">{{ t.climate_admin.extra_dehumidifier_zone_hint }}</p>
       </div>
     </div>
     <div class="toolbar admin-actions">

@@ -509,3 +509,7 @@
 .admin-speed-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 76px), 1fr)); gap: 10px; }
 #vmc-speeds { margin-top: 14px; }
 #vmc-speeds h3 { margin: 0; }
+
+/* What one switch opens with it (a dehumidifier -> its zone's valve). */
+.season-links { margin-top: 12px; }
+.season-link { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0; font-size: 0.9rem; }

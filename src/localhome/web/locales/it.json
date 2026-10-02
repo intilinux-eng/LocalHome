@@ -239,7 +239,12 @@
     "override_until_tomorrow": "fino a domani alle {time}",
     "override_until_day": "fino a {day} alle {time}",
     "override_cancel": "Torna alla programmazione",
-    "override_tile": "Cambio temporaneo in corso"
+    "override_tile": "Cambio temporaneo in corso",
+    "rule_action_on_no": "sempre chiusa (Shelly acceso)",
+    "rule_action_off_no": "sempre aperta (Shelly spento)",
+    "rule_action_manual_no": "a scelta",
+    "valve_closed": "Chiusa",
+    "valve_open": "Aperta"
   },
   "climate_admin": {
     "link_title": "Pannello amministratore clima",
@@ -748,7 +753,24 @@
     "vmc_speeds_title": "Velocità",
     "vmc_speeds_note": "Le percentuali di Notte, Giorno e Massimo: dei pulsanti sulla home, dei programmi e di \"Massimo per\". Valgono subito, senza riavvio; un programma attivo le segue.",
     "vmc_speeds_save": "Salva velocità",
-    "vmc_speeds_saved": "Salvate: in uso da adesso."
+    "vmc_speeds_saved": "Salvate: in uso da adesso.",
+    "extra_bypass_normally_open": "Valvola normalmente aperta: lo Shelly acceso la chiude",
+    "extra_dehumidifier_zone": "Prende l'acqua dalla valvola della zona",
+    "extra_dehumidifier_zone_none": "Nessuna",
+    "extra_dehumidifier_zone_hint": "Mentre il deumidificatore è acceso (d'estate) la valvola di questa zona resta aperta, anche se la zona è esclusa dal raffrescamento.",
+    "rule_now_closed": "Ora chiusa",
+    "rule_now_open": "Ora aperta",
+    "rule_should_be_closed": "Dovrebbe essere chiusa",
+    "rule_should_be_open": "Dovrebbe essere aperta",
+    "season_valve_closed": "{name}: chiusa",
+    "season_valve_open": "{name}: aperta",
+    "season_link": "{leader} acceso apre la valvola {zone}",
+    "links_heading": "Collegamenti",
+    "link_row": "{leader} acceso → valvola {zone} aperta",
+    "link_when_cool": "d'estate",
+    "link_when_heat": "d'inverno",
+    "link_when_always": "sempre",
+    "link_in_config": "scritto in config.yaml"
   },
   "vmc_presets": {
     "night": "Notte",
@@ -806,7 +828,8 @@
     "override_target_range": "La temperatura deve essere tra {min} e {max} °C, oppure spento.",
     "override_hours_invalid": "La durata deve essere tra pochi minuti e {max} ore.",
     "vmc_speeds_invalid": "Ogni velocità della VMC deve essere tra 1 e 100%.",
-    "vmc_speeds_order": "Notte deve essere più lenta di Giorno, e Giorno più lenta di Massimo."
+    "vmc_speeds_order": "Notte deve essere più lenta di Giorno, e Giorno più lenta di Massimo.",
+    "dehumidifier_zone_invalid": "La zona da cui il deumidificatore prende l'acqua non esiste: {zone}."
   },
   "home": {
     "health_checking": "Controllo…",
@@ -987,6 +1010,21 @@
     "air_voc_mgm3": "VOC",
     "air_ch2o_mgm3": "Formaldeide",
     "air_24h": "ultime 24 ore",
-    "air_peak": "picco {value} ppm {when}"
+    "air_peak": "picco {value} ppm {when}",
+    "valve_closed": "chiusa",
+    "valve_open": "aperta",
+    "rule_on_heat_no": "D'inverno la tiene chiusa LocalHome",
+    "rule_off_heat_no": "D'inverno resta aperta",
+    "rule_manual_heat_no": "D'inverno la apri e chiudi tu",
+    "rule_on_cool_no": "D'estate la tiene chiusa LocalHome",
+    "rule_off_cool_no": "D'estate resta aperta",
+    "rule_manual_cool_no": "D'estate la apri e chiudi tu",
+    "normally_open_note": "Valvola normalmente aperta: lo Shelly acceso la chiude.",
+    "link_note": "Usa l'acqua della valvola {zone}: acceso, la apre.",
+    "link_open": "Valvola {zone} aperta per lui.",
+    "st_driven": "{name} acceso: valvola aperta",
+    "line_driven": "{zone}: valvola aperta, {name} acceso",
+    "fact_driven_on": "Valvola aperta perché {name} è acceso",
+    "fact_driven_off": "La valvola si apre quando {name} è acceso"
   }
 }

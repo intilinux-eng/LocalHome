@@ -193,6 +193,15 @@ EXTRA_SWITCH_FIELDS = {
     "bypass_valve_device_id": "Bathroom Bypass Valve",
     "dehumidifier_device_id": "Dehumidifier",
 }
+# The bypass valve is normally open: its Shelly on means the valve closed.
+# The pages say "closed"/"open" by this, not "on"/"off". True unless saved
+# otherwise.
+BYPASS_NORMALLY_OPEN_KEY = "bypass_valve_normally_open"
+# The zone whose valve the dehumidifier draws its chilled water through:
+# while it runs (in summer) that valve is held open, even for a zone kept
+# out of cooling - see services/interlock.py's Interlock. Never saved: the
+# one zone kept out of cooling, if there's exactly one. Saved None: none.
+DEHUMIDIFIER_ZONE_KEY = "dehumidifier_water_zone"
 
 
 def _extra_switch_device_ids(extra_switches: dict) -> list[str]:
@@ -296,6 +305,23 @@ def validate_extra_switches(
         + _extra_dimmer_device_ids(extra_dimmers or {})
     )
     _validate_role_ids(extra_switches, EXTRA_SWITCH_FIELDS, other_ids, "extra_switches")
+    normally_open = extra_switches.get(BYPASS_NORMALLY_OPEN_KEY, True)
+    if not isinstance(normally_open, bool):
+        raise InputError("request_invalid", f"{BYPASS_NORMALLY_OPEN_KEY} must be true or false")
+    water_zone = extra_switches.get(DEHUMIDIFIER_ZONE_KEY)
+    names = [z.get("name") for z in zones or []]
+    if water_zone is not None and (not isinstance(water_zone, str) or (zones is not None and water_zone not in names)):
+        raise InputError("dehumidifier_zone_invalid", f"{DEHUMIDIFIER_ZONE_KEY}: not one of the zones ({', '.join(names)})",
+                         zone=str(water_zone))
+
+
+def dehumidifier_water_zone(extra_switches: dict, zones: list[dict] | None) -> str | None:
+    """The zone whose valve the dehumidifier opens - see DEHUMIDIFIER_ZONE_KEY."""
+    extra_switches = extra_switches or {}
+    if DEHUMIDIFIER_ZONE_KEY in extra_switches:
+        return extra_switches[DEHUMIDIFIER_ZONE_KEY]
+    kept_out = [z["name"] for z in zones or [] if z.get("cool_enabled") is False]
+    return kept_out[0] if len(kept_out) == 1 else None
 
 
 # Fixed role, not a user-typed name - an outdoor reading isn't part of
@@ -504,6 +530,8 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
             options = _valve_integration_options(zone_shaped, display_name, broker_file)
+            if key == "bypass_valve_device_id" and (extra_switches or {}).get(BYPASS_NORMALLY_OPEN_KEY, True):
+                options["normally_open"] = True
             integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 
@@ -728,6 +756,17 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
         return config.raw.get("thermostat")
     thermostat_cfg = dict(config.raw.get("thermostat") or {})
     thermostat_cfg["zones"] = build_zone_configs(panel_zones)
+    # The panel's dehumidifier draws its water through a zone's valve:
+    # while it runs, in summer, that valve is held open - unless
+    # config.yaml already links the dehumidifier to something.
+    water_zone = dehumidifier_water_zone(extra_switches, panel_zones)
+    dehumidifier = EXTRA_SWITCH_FIELDS["dehumidifier_device_id"]
+    interlocks = list(thermostat_cfg.get("interlocks") or [])
+    if ((extra_switches or {}).get("dehumidifier_device_id") and water_zone
+            and any(z.get("name") == water_zone for z in panel_zones)
+            and not any(link.get("leader") == dehumidifier for link in interlocks)):
+        interlocks.append({"leader": dehumidifier, "follower": f"{water_zone} Valve", "active_in_mode": "cool"})
+        thermostat_cfg["interlocks"] = interlocks
     return thermostat_cfg
 
 

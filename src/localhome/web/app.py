@@ -25,6 +25,8 @@ from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.core.registry import skipped_driver_modules
 from localhome.services.climate_map_store import (
+    BYPASS_NORMALLY_OPEN_KEY,
+    DEHUMIDIFIER_ZONE_KEY,
     EXTRA_DIMMER_FIELDS,
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
@@ -35,6 +37,7 @@ from localhome.services.climate_map_store import (
     ClimateMapStore,
     apply_to_config,
     configured_rule_switches,
+    dehumidifier_water_zone,
     extra_roles,
     panel_season_rules,
     snapshot_from_config,
@@ -176,12 +179,22 @@ def create_app(config_path: str | None = None) -> Flask:
 
     def season_rules() -> list[dict]:
         """Every switch that follows the season, whatever form its rule was
-        written in: [{"switch", "heat", "cool", "source"}]."""
+        written in: [{"switch", "heat", "cool", "source", "normally_open"}]
+        - "on" is the Shelly on, which closes a normally open valve."""
         rows = [{"switch": r.switch, **{m: r.action(m) for m in SEASON_MODES}, "source": "config"}
                 for r in static_rules]
         rows += [{"switch": r.switch, **{m: r.action(m) for m in SEASON_MODES}, "source": "panel", "role": row["role"]}
                  for r, row in _panel_rules()]
+        for row in rows:
+            row["normally_open"] = bool(manager.ui_options.get(row["switch"], {}).get("normally_open"))
         return rows
+
+    def season_links() -> list[dict]:
+        """What one switch opens with it - a dehumidifier the valve it draws
+        its water through: [{"leader", "follower", "zone", "mode"}]."""
+        zone_of = {zone.valve: zone.name for zone in (thermostat.zones if thermostat else [])}
+        return [{"leader": link.leader, "follower": link.follower, "zone": zone_of.get(link.follower),
+                 "mode": link.active_in_mode} for link in interlock_links]
 
     def forced_by_season(name: str) -> bool:
         """Whether the current season turns this switch on or off by itself -
@@ -354,6 +367,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["INTERLOCK_FOLLOWERS"] = interlock_followers
     app.config["INTERLOCK_LINKS"] = interlock_links
     app.config["SEASON_RULES"] = season_rules
+    app.config["SEASON_LINKS"] = season_links
     app.config["FORCED_BY_SEASON"] = forced_by_season
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
@@ -960,6 +974,11 @@ def _register_routes(app: Flask) -> None:
             return jsonify(ok=False, error=str(exc)), 502
         manager.pollers[name].cache.merge({"is_on": action == "on"})
         _wake_poller(manager, name)
+        # A switch that opens another with it (a dehumidifier, the valve it
+        # draws its water through): that one follows now, not a minute later.
+        interlock: InterlockController | None = app.config["INTERLOCK"]
+        if interlock is not None and name in app.config["INTERLOCK_FOLLOWERS"]:
+            interlock.tick()
         return jsonify(ok=True)
 
     @app.route("/api/sensors/<name>/set-value", methods=["POST"])
@@ -1140,7 +1159,7 @@ def _register_routes(app: Flask) -> None:
             hysteresis_c=thermostat.hysteresis_c,
             # What the season does besides the zones: every switch that
             # follows it, and what it does in each season.
-            season_effects={"rules": app.config["SEASON_RULES"]()},
+            season_effects={"rules": app.config["SEASON_RULES"](), "links": app.config["SEASON_LINKS"]()},
             zones=zones,
         )
 
@@ -1437,13 +1456,20 @@ def _register_routes(app: Flask) -> None:
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         saved = climate_map.get_extra_switches()
         restart_pending = _set_roles(saved) != _set_roles(app.config["ACTIVE_EXTRA_SWITCHES"])
-        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS})
+        zones = climate_map.get_zones() or []
+        return jsonify(ok=True, restart_pending=restart_pending, **{key: saved.get(key) for key in EXTRA_SWITCH_FIELDS},
+                       **{BYPASS_NORMALLY_OPEN_KEY: saved.get(BYPASS_NORMALLY_OPEN_KEY, True),
+                          DEHUMIDIFIER_ZONE_KEY: dehumidifier_water_zone(saved, zones)},
+                       zones=[z["name"] for z in zones])
 
     @app.route("/api/climate-admin/extra-switches", methods=["POST"])
     def api_climate_admin_set_extra_switches():
         climate_map: ClimateMapStore = app.config["CLIMATE_MAP"]
         data = _json_body()
         extra_switches = {key: data.get(key) for key in EXTRA_SWITCH_FIELDS}
+        for key in (BYPASS_NORMALLY_OPEN_KEY, DEHUMIDIFIER_ZONE_KEY):
+            if key in data:
+                extra_switches[key] = data[key]
         try:
             climate_map.set_extra_switches(extra_switches)
         except ValueError as exc:
@@ -1460,7 +1486,9 @@ def _register_routes(app: Flask) -> None:
         saved = climate_map.get_season_rules()
         wired = climate_map.get_extra_switches()
         roles = [{"role": field, "switch": EXTRA_SWITCH_FIELDS[field], **saved[field],
-                  "wired": bool(wired.get(field)), "in_config": EXTRA_SWITCH_FIELDS[field] in taken}
+                  "wired": bool(wired.get(field)), "in_config": EXTRA_SWITCH_FIELDS[field] in taken,
+                  # Its "on" closes it: the admin says "closed"/"open".
+                  "normally_open": field == "bypass_valve_device_id" and wired.get(BYPASS_NORMALLY_OPEN_KEY, True) is not False}
                  for field in SEASON_RULE_DEFAULTS]
         return jsonify(ok=True, thermostat=app.config["THERMOSTAT"] is not None, roles=roles,
                        actions=list(SEASON_ACTIONS))
