@@ -1,4 +1,5 @@
-"""Each day's energy and peak for every power meter, kept for good.
+"""Each day's energy and peak for everything that measures its power - a
+meter, a smart plug - kept for good.
 
 The history keeps 30 days of samples; a week, a month and the year so far
 need each day's total instead - one small row per meter per day

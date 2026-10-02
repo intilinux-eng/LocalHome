@@ -167,7 +167,8 @@ The climate admin panel's VMC gets all three automatically.
 
 ## `energy` (power-budget alerting)
 
-Every power meter's days are kept too, for good and whatever
+Every power meter's days - and those of anything else that measures its
+power, like a smart plug - are kept too, for good and whatever
 `history.retention_days` says: one row a day with its kWh and its peak
 (`daily_energy` in the history database, services/energy.py). The kWh
 come from the meter's own counters when it has them (a Sonoff POWCT's

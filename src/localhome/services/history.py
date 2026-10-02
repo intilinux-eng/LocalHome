@@ -550,8 +550,8 @@ class HistoryRecorder:
         cycle adds to today (services/energy.py's backfill())."""
         if self.energy is None:
             return
-        for name, kind in getattr(self.manager, "sensor_kinds", {}).items():
-            if kind == "power_meter":
+        for name, poller in self.manager.pollers.items():
+            if "power_w" in getattr(poller.driver, "history_fields", ()):
                 try:
                     self.energy.backfill(name)
                 except Exception:
@@ -578,7 +578,6 @@ class HistoryRecorder:
         now = int(time.time())
         batch: dict[str, dict[str, float]] = {}
         meters: dict[str, dict] = {}
-        kinds = getattr(self.manager, "sensor_kinds", {})
         for name, poller in self.manager.pollers.items():
             fields = getattr(poller.driver, "history_fields", ())
             if not fields:
@@ -586,7 +585,9 @@ class HistoryRecorder:
             reading = poller.get()
             if not reading.get("ok"):
                 continue
-            if kinds.get(name) == "power_meter":
+            # Anything that measures its power - a meter, a plug - gets
+            # its days kept (services/energy.py).
+            if "power_w" in fields:
                 meters[name] = reading
             values = {f: reading[f] for f in fields if isinstance(reading.get(f), (int, float))}
             if values:

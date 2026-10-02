@@ -46,9 +46,9 @@ const state = {
   weeks: {},              // zone -> {heat: week, cool: week}
   history: {},            // zone -> {temps: [...], runs: [...]}
   airHistory: {},         // air sensor -> its CO2 over the last 24 h
-  energy: {},             // power meter -> its days, week, month, year (/api/energy)
-  energyRange: "week",    // the period its bars show
-  energyPick: null,       // the bar tapped, to read its numbers
+  energy: {},             // meter or plug -> its days, week, month, year (/api/energy)
+  energyRange: {},        // meter or plug -> the period its bars show
+  energyPick: {},         // meter or plug -> the bar tapped, to read its numbers
   onHours: {},
   vmc: null,
   problems: null,
@@ -1058,7 +1058,12 @@ function renderHouse() {
     if (d.kind === "number" && d.paired_switch && devices.some(o => o.name === d.paired_switch)) return;
     const r = state.readings[d.name] || {};
     const name = esc(displayName(d.name));
-    if (d.kind === "switch") {
+    if (d.kind === "switch" && r.power_w != null && state.energy[d.name]) {
+      // A plug that measures its power: its days, with its switch.
+      const control = d.controllable && !d.hide_toggle
+        ? `<button class="switch" type="button" role="switch" data-switch="${esc(d.name)}" aria-checked="${!!r.is_on}" aria-label="${name}"></button>` : "";
+      tiles.push(energyTile(d, r, control));
+    } else if (d.kind === "switch") {
       const level = numbersByPair[d.name];
       const slider = level ? rangeHtml(level, state.readings[level.name] || {}) : "";
       tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${name}</span>
@@ -1225,7 +1230,7 @@ function energyBars(data, range) {
   });
 }
 
-function energyTile(device, r) {
+function energyTile(device, r, control = "") {
   const data = state.energy[device.name];
   const level = powerLevel(device, r.power_w);
   const today = data && data.today;
@@ -1238,10 +1243,11 @@ function energyTile(device, r) {
     r.voltage_v != null ? `${fmt(r.voltage_v, 0)} V` : "", r.current_a != null ? `${fmt(r.current_a, 2)} A` : ""].filter(Boolean);
   let chart = "";
   if (data) {
-    const range = state.energyRange;
+    const range = state.energyRange[device.name] || "week";
     const bars = energyBars(data, range);
     const top = Math.max(0.1, ...bars.map(b => b.kwh || 0));
-    const pick = state.energyPick != null && bars[state.energyPick] && bars[state.energyPick].kwh != null ? bars[state.energyPick] : null;
+    const picked = state.energyPick[device.name];
+    const pick = picked != null && bars[picked] && bars[picked].kwh != null ? bars[picked] : null;
     const span = data[range];
     const total = tr(`home.energy_total_${range}`, { kwh: fmt(span.kwh, 1) });
     const since = data.since && data.since > span.from ? tr("home.energy_since", { date: dayName(data.since) }) : "";
@@ -1261,7 +1267,7 @@ function energyTile(device, r) {
   const budget = device.power_budget ? `<div class="tile-note">${esc(tr("sensors.power_budget_note", {
     available: fmt(device.power_budget.available_power_w / 1000, 1), trip: fmt(device.power_budget.trip_risk_w / 1000, 1) }))}</div>` : "";
   return `<div class="tile energy" data-sensor="${esc(device.name)}">
-    <div class="tile-head"><span class="tile-name">${esc(displayName(device.name))}</span></div>
+    <div class="tile-head"><span class="tile-name">${esc(displayName(device.name))}</span>${control}</div>
     <div class="energy-now" data-level="${level}">
       <span class="tile-value">${r.power_w != null ? `${fmt(r.power_w, 0)}<small>W</small>` : "--"}</span>
       ${peak ? `<span class="energy-peak" data-level="${powerLevel(device, today.peak_w)}">${esc(peak)}</span>` : ""}
@@ -1272,7 +1278,9 @@ function energyTile(device, r) {
 }
 
 async function refreshEnergy() {
-  const meters = houseDevices().filter(d => d.kind === "power_meter");
+  // Meters, and plugs that measure their power.
+  const meters = houseDevices().filter(d => d.kind === "power_meter"
+    || (d.kind === "switch" && (state.readings[d.name] || {}).power_w != null));
   await Promise.all(meters.map(async d => {
     try {
       state.energy[d.name] = await api(`/api/energy/${encodeURIComponent(d.name)}`);
@@ -1297,16 +1305,19 @@ function readingNote(reading) {
 async function onHouseClick(event) {
   const button = event.target.closest("button");
   if (!button) return;
-  // The energy card's period and bars only change this page.
-  if (button.dataset.energyRange) {
-    state.energyRange = button.dataset.energyRange;
-    state.energyPick = null;
+  // An energy card's period and bars only change this page.
+  const energyCard = button.closest(".tile.energy");
+  if (energyCard && button.dataset.energyRange) {
+    state.energyRange[energyCard.dataset.sensor] = button.dataset.energyRange;
+    delete state.energyPick[energyCard.dataset.sensor];
     renderHouse();
     return;
   }
-  if (button.dataset.energyPick !== undefined) {
+  if (energyCard && button.dataset.energyPick !== undefined) {
+    const name = energyCard.dataset.sensor;
     const i = Number(button.dataset.energyPick);
-    state.energyPick = state.energyPick === i ? null : i;
+    if (state.energyPick[name] === i) delete state.energyPick[name];
+    else state.energyPick[name] = i;
     renderHouse();
     return;
   }

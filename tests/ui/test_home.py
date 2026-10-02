@@ -304,3 +304,27 @@ def test_a_power_meter_shows_its_peak_and_its_week_month_and_year(open_page):
     assert "lunedì 28 settembre: 5,1 kWh" in page.locator(".tile.energy .energy-total").inner_text()
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
+
+
+def test_a_plug_that_measures_its_power_shows_its_days_with_its_switch(open_page):
+    opened = _open_home(open_page)
+    page = opened.page
+    page.evaluate("""() => {
+      const days = Array(7).fill(null);
+      days[0] = { day: "2026-09-28", kwh: 1.2, source: "power", peak_w: 160, peak_ts: Date.now() / 1000 - 7200 };
+      state.devices.sensors.push({ name: "Scrivania", kind: "switch", tab: "home", controllable: true });
+      state.readings["Scrivania"] = { ok: true, is_on: true, power_w: 94.4, voltage_v: 225.6, current_a: 0.56 };
+      state.energy["Scrivania"] = { ok: true, today: days[0], yesterday: null, since: "2026-09-22",
+        week: { from: "2026-09-28", kwh: 1.2, estimated: true, days },
+        month: { from: "2026-10-01", kwh: 0, estimated: false, days: Array(31).fill(null) },
+        year: { from: "2026-01-01", kwh: 1.2, estimated: true,
+                months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, kwh: null, estimated: false })) } };
+      renderHouse();
+    }""")
+    tile = page.locator(".tile.energy[data-sensor='Scrivania']")
+    assert tile.locator("button[data-switch='Scrivania']").count() == 1
+    assert "94W" in tile.locator(".energy-now").inner_text().replace(" ", "").replace("\n", "")
+    assert tile.locator(".energy-total").inner_text().startswith("Questa settimana 1,2 kWh")
+    tile.locator("[data-energy-range=month]").click()
+    assert page.locator(".tile.energy[data-sensor='Scrivania'] .energy-total").inner_text().startswith("Questo mese")
+    assert opened.errors == []

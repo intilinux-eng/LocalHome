@@ -1071,11 +1071,15 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/energy/<name>")
     def api_energy(name):
-        """A power meter's today, yesterday, this week, this month and this
-        year by month - kWh and peaks (services/energy.py)."""
+        """Today, yesterday, this week, this month and this year by month -
+        kWh and peaks - of anything that measures its power: a meter, a
+        smart plug (services/energy.py)."""
         manager: DeviceManager = app.config["MANAGER"]
-        if manager.sensor_kinds.get(name) != "power_meter":
-            return _fail("not_a_power_meter", f"'{name}' is not a power meter", 404, name=name)
+        poller = manager.pollers.get(name)
+        measured = manager.sensor_kinds.get(name) == "power_meter" or (
+            poller is not None and "power_w" in getattr(poller.driver, "history_fields", ()))
+        if not measured:
+            return _fail("not_a_power_meter", f"'{name}' doesn't measure its power", 404, name=name)
         return jsonify(ok=True, name=name, **energy_summary(app.config["HISTORY"], name))
 
     @app.route("/api/sensors/<name>/peak-today")

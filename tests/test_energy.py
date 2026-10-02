@@ -98,3 +98,38 @@ def test_the_route_answers_for_a_power_meter_only(tmp_path):
         assert body["ok"] is True and body["today"]["kwh"] == 3.2 and body["week"]["kwh"] >= 3.2
     finally:
         app.config["HISTORY"].close()
+
+
+def test_a_plug_that_measures_its_power_gets_its_days_too(store):
+    """Not only a meter: a smart plug's power (a Meross on the desk) is
+    kept day by day as well, from the recording cycle."""
+    from types import SimpleNamespace
+
+    from localhome.services.history import HistoryRecorder
+
+    reading = {"ok": True, "name": "Scrivania", "is_on": True, "power_w": 94.4}
+    plug = SimpleNamespace(driver=SimpleNamespace(history_fields=("power_w", "voltage_v")), get=lambda: dict(reading))
+    lamp = SimpleNamespace(driver=SimpleNamespace(history_fields=("is_on",)), get=lambda: {"ok": True, "is_on": True})
+    manager = SimpleNamespace(pollers={"Scrivania": plug, "Lampada": lamp}, sensor_kinds={"Scrivania": "switch"})
+    recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
+    recorder.energy = EnergyLedger(store)
+
+    recorder.poll_once()
+
+    days = store.energy_days("Scrivania")
+    assert list(days.values())[0]["peak_w"] == 94.4
+    assert store.energy_days("Lampada") == {}, "nothing measured, nothing kept"
+
+
+def test_the_route_answers_for_a_plug_that_measures_its_power(tmp_path):
+    from types import SimpleNamespace
+    (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
+    app = create_app(str(tmp_path / "config.yaml"))
+    try:
+        app.config["MANAGER"].pollers["Scrivania"] = SimpleNamespace(driver=SimpleNamespace(history_fields=("power_w",)))
+        app.config["MANAGER"].pollers["Lampada"] = SimpleNamespace(driver=SimpleNamespace(history_fields=("is_on",)))
+        client = app.test_client()
+        assert client.get("/api/energy/Scrivania").get_json()["ok"] is True
+        assert client.get("/api/energy/Lampada").status_code == 404
+    finally:
+        app.config["HISTORY"].close()
