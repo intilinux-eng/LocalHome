@@ -65,7 +65,8 @@ from localhome.services import shelly_health
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
-from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore
+from localhome.errors import InputError
+from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore, day_night_of
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -938,25 +939,60 @@ def _register_routes(app: Flask) -> None:
         _wake_poller(manager, name)
         return jsonify(ok=True)
 
+    def vmc_answer(vmc: VmcScheduleController, schedule: dict | None = None):
+        """The program as both pages read it: the week, and - for the
+        classic page's two time fields - its day and night when it is one
+        (None for a week painted otherwise)."""
+        schedule = dict(schedule or vmc.store.get())
+        schedule.update(day_night_of(schedule["week"]) or {"day": None, "night": None})
+        return jsonify(ok=True, schedule=schedule, status=vmc.status())
+
     @app.route("/api/vmc-schedule")
     def api_vmc_schedule_get():
-        """The ventilation unit's day/night program, read and written from
+        """The ventilation unit's weekly program, read and written from
         its own card on the dashboard - it's a daily control, not part of
         the installation the admin panel configures."""
-        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
-        return jsonify(ok=True, schedule=vmc.store.get(), status=vmc.status())
+        return vmc_answer(app.config["VMC_SCHEDULE"])
 
     @app.route("/api/vmc-schedule", methods=["POST"])
     def api_vmc_schedule_save():
+        """Only what the body names changes: {"enabled", "target"} turns it
+        on or off, {"week"} replaces the week, {"day", "night"} (the older
+        two-period form) replaces it with those two."""
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        # A day or night of None is what this route answers for a painted
+        # week: sent back, it means "not changing them".
+        body = {k: v for k, v in _json_body().items()
+                if k in ("enabled", "target", "week") or (k in ("day", "night") and v is not None)}
         try:
-            schedule = vmc.store.set(_json_body())
+            schedule = vmc.store.update(body)
         except ValueError as exc:
             return _refusal(exc, 400)
         # Applied straight away, so saving is the whole action - no
         # restart, and no waiting for the next tick to see it work.
         vmc.tick()
-        return jsonify(ok=True, schedule=schedule, status=vmc.status())
+        return vmc_answer(vmc, schedule)
+
+    @app.route("/api/vmc-schedule/boost", methods=["POST"])
+    def api_vmc_boost():
+        """{"device", "value", "minutes"}: that speed for that long, then
+        back to the program - or to how the unit was, with it off."""
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        body = _json_body()
+        try:
+            value = body.get("value")
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 100:
+                raise InputError("vmc_override_invalid", "a speed must be between 0 and 100")
+            vmc.boost(str(body.get("device") or ""), round(value), body.get("minutes"))
+        except ValueError as exc:
+            return _refusal(exc, 400)
+        return vmc_answer(vmc)
+
+    @app.route("/api/vmc-schedule/boost/cancel", methods=["POST"])
+    def api_vmc_boost_cancel():
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        vmc.cancel_boost()
+        return vmc_answer(vmc)
 
     @app.route("/api/sensors/<name>/history")
     def api_sensor_history(name):

@@ -397,29 +397,45 @@ another switch, that's `interlocks`, not this. On the dashboard its card
 says so ("Winter: always off · Summer: always on") and offers no switch
 while its season drives it.
 
-### The ventilation unit's day/night program
+### The ventilation unit's weekly program
 
 Mechanical ventilation runs all the time; what changes is how fast. The
-VMC's own card on the dashboard has a small program for it, right under
-its speed buttons: two periods, each with a start time and a speed,
-saved in `config/vmc_schedule.json`:
+VMC's own card on the home page has a program for it, as the controllers
+sold for these units do: a week of hours, each with one of the unit's
+speeds - off, night, day or boost - painted on a grid like a zone's.
+Ready-made weeks fill it in one tap and can be reshaped afterwards:
+*day and night* (day 7-22), *out at work* (night speed 8-17 on
+weekdays), *busy mornings and evenings* (boost 7-8 and 19-20), *always
+day*, *always quiet*. It's saved in `config/vmc_schedule.json`:
 
 ```json
 {
   "enabled": true,
   "target": "VMC Speed",
-  "day": {"at": "07:00", "value": 50},
-  "night": {"at": "22:00", "value": 20}
+  "week": {"mon": [20, 20, 20, 20, 20, 20, 20, 50, ...24 speeds], "tue": [...], ...},
+  "override": null
 }
 ```
 
 `target` is the device whose card the program was switched on from, so
 a VMC declared in config.yaml is driven just as well as one mapped in
-the admin panel. The speed is written **once, when a period begins**: a
-speed picked by hand therefore stays until the next period starts,
-instead of being corrected away a minute later. Every change on the card
-saves by itself, and the control loop (`services/vmc_schedule.py`, every
-60s) re-reads the file, so it takes effect without a restart.
+the admin panel. A speed of 0 switches the unit off; the next speed
+switches it back on. The speed is written **once, when the program
+changes it**: a speed picked by hand therefore stays until the next
+change, instead of being corrected away a minute later. Every change on
+the card saves by itself, and the control loop
+(`services/vmc_schedule.py`, every 60s) re-reads the file, so it takes
+effect without a restart.
+
+The older form - `"day": {"at": "07:00", "value": 50}, "night": {"at":
+"22:00", "value": 20}` in place of `week` - is still read, as the week
+it stands for, and is what the classic page (`/classic`) edits; a week
+painted otherwise is only switched on or off there.
+
+**A timed speed** ("Boost for 30 min / 1 h / 2 h" on the card) is the
+`override`: that speed until its end, then back to the program - or,
+with the program off, to the speed and on/off state from before. A
+speed picked by hand meanwhile ends it.
 
 ### Away mode
 

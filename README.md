@@ -79,8 +79,8 @@ mains voltage, restarts and firmware updates.
   can sit out the summer. A silent sensor closes its valve after a day
   instead of leaving it open forever.
 - **The rest of the plant** - a bathroom bypass valve and a dehumidifier
-  following per-season rules, the ventilation's speed on a day/night
-  program, an outdoor sensor.
+  following per-season rules, the ventilation's speed on a weekly
+  program with a timed boost, an outdoor sensor.
 - **Statistics** - every run of the last day or week, with what the
   temperature and humidity did meanwhile, in a SQLite history on the
   board.
