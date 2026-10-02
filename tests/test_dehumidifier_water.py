@@ -226,3 +226,12 @@ def test_every_season_switch_applies_the_whole_plant_at_once(tmp_path):
         assert _plant(client) == {"bypass": True, "dehumidifier": False, "stanze": False, "bagni": False}
     finally:
         app.config["HISTORY"].close()
+
+
+def test_the_admin_hears_that_config_yaml_has_its_own_rules(board):
+    """So it doesn't list the panel's empty places beside them - the same
+    dehumidifier and bypass twice."""
+    _, client = board
+    body = client.get("/api/climate-admin/season-rules").get_json()
+    assert body["config_rules"] == 2
+    assert not any(role["wired"] for role in body["roles"])

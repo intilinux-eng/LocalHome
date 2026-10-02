@@ -114,6 +114,10 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
     page.wait_for_selector("#season-rules .season-rule", state="attached", timeout=20000)
     page.evaluate("document.getElementById('extra-switches').open = true")
     assert eventually(page, lambda: "Ora chiusa" in page.inner_text("#season-rules"), timeout_ms=20000)
+    # Written in config.yaml: listed once, without the panel's empty places beside them.
+    names = page.locator("#season-rules .season-rule strong").all_inner_texts()
+    assert sorted(names) == ["Deumidificatore", "Valvola Bypass Bagni"], names
+    assert page.locator("#season-rules-actions").is_hidden()
     assert "sempre chiusa (Shelly acceso)" in page.inner_text("#season-rules")
     assert eventually(page, lambda: "Deumidificatore acceso" in page.inner_text("#season-links"))
     assert page.evaluate(UNTRANSLATED_JS) == []

@@ -1490,8 +1490,11 @@ def _register_routes(app: Flask) -> None:
                   # Its "on" closes it: the admin says "closed"/"open".
                   "normally_open": field == "bypass_valve_device_id" and wired.get(BYPASS_NORMALLY_OPEN_KEY, True) is not False}
                  for field in SEASON_RULE_DEFAULTS]
+        # config.yaml's own rules: an installation that writes its switches
+        # there has no use for the panel's empty places beside them.
+        config_rules = sum(1 for rule in app.config["SEASON_RULES"]() if rule["source"] == "config")
         return jsonify(ok=True, thermostat=app.config["THERMOSTAT"] is not None, roles=roles,
-                       actions=list(SEASON_ACTIONS))
+                       actions=list(SEASON_ACTIONS), config_rules=config_rules)
 
     @app.route("/api/climate-admin/season-rules", methods=["POST"])
     def api_climate_admin_set_season_rules():

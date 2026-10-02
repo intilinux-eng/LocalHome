@@ -1711,13 +1711,17 @@ async function loadSeasonRules() {
     return;
   }
   if (!data.ok) return;
-  seasonRuleRoles = data.roles;
+  // A panel switch with no device id yet is a place to fill in - unless
+  // config.yaml already has its own switches and rules, listed below:
+  // then it would only show the same dehumidifier or bypass twice.
+  const roles = data.roles.filter(r => r.wired || r.in_config || !data.config_rules);
+  seasonRuleRoles = roles;
   const el = document.getElementById("season-rules");
-  el.innerHTML = data.roles.map(r => seasonRuleRowHtml(r.switch,
+  el.innerHTML = roles.map(r => seasonRuleRowHtml(r.switch,
     ruleSelectHtml(r.role, "heat", r.heat, r.in_config || !data.thermostat, r.normally_open)
       + ruleSelectHtml(r.role, "cool", r.cool, r.in_config || !data.thermostat, r.normally_open),
     r.in_config ? tr("climate_admin.rule_in_config") : !r.wired ? tr("climate_admin.rule_not_wired") : "")).join("");
-  document.getElementById("season-rules-actions").hidden = !data.thermostat || data.roles.every(r => r.in_config);
+  document.getElementById("season-rules-actions").hidden = !data.thermostat || roles.every(r => r.in_config);
 }
 
 async function saveSeasonRules(button) {
