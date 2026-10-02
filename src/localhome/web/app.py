@@ -13,6 +13,7 @@ import io
 import logging
 import math
 import os
+import socket
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -1635,6 +1636,33 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True)
 
 
+def listen_addresses(host: str, port: int, ipv6: bool | None = None) -> str:
+    """Where the web server listens, as waitress's `listen`. "Every
+    address" (0.0.0.0, "::" or empty) is IPv4 *and* IPv6: on a router that
+    hands out IPv6 (a Wind3 HUB, say) a phone or PC resolves the board's
+    .local name to an IPv6 address too and tries that first - an
+    IPv4-only server refuses it, and the page "refuses the connection"
+    by name while it opens by IP. A specific address is used as given."""
+    if host not in ("0.0.0.0", "", "::"):
+        return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+    if ipv6 is None:
+        ipv6 = _ipv6_available()
+    return f"0.0.0.0:{port} [::]:{port}" if ipv6 else f"0.0.0.0:{port}"
+
+
+def _ipv6_available() -> bool:
+    """False where the kernel has IPv6 switched off - binding [::] would
+    stop the server from starting at all."""
+    if not socket.has_ipv6:
+        return False
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.bind(("::1", 0))
+        return True
+    except OSError:
+        return False
+
+
 # Worker threads for the web server. One dashboard tab fires ~20 requests
 # at once on load (every card, chart and stat) - 8 serves that without
 # queueing, with room for a second device.
@@ -1663,7 +1691,7 @@ def main() -> None:
     host = "127.0.0.1" if config.web_host in ("0.0.0.0", "", "::") else config.web_host
     ServiceWatchdog(f"http://{host}:{config.web_port}/api/server-time", lambda: _loops(app),
                     event_log=config.resolve("watchdog.log")).start()
-    serve(app, host=config.web_host, port=config.web_port, threads=WEB_THREADS, ident="LocalHome")
+    serve(app, listen=listen_addresses(config.web_host, config.web_port), threads=WEB_THREADS, ident="LocalHome")
 
 
 if __name__ == "__main__":
