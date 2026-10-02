@@ -400,13 +400,14 @@ while its season drives it.
 ### The ventilation unit's weekly program
 
 Mechanical ventilation runs all the time; what changes is how fast. The
-VMC's own card on the home page has a program for it, as the controllers
-sold for these units do: a week of hours, each with one of the unit's
-speeds - off, night, day or boost - painted on a grid like a zone's.
-Ready-made weeks fill it in one tap and can be reshaped afterwards:
-*day and night* (day 7-22), *out at work* (night speed 8-17 on
-weekdays), *busy mornings and evenings* (boost 7-8 and 19-20), *always
-day*, *always quiet*. It's saved in `config/vmc_schedule.json`:
+VMC's own card on the home page has one choice for it, under its speed
+buttons: **manual** (no program - the speed stays what you pick) or a
+ready-made program: *day and night* (day 7-22), *out at work* (night
+speed 8-17 on weekdays, day 8-23 at the weekend) or *busy mornings and
+evenings* (boost 7-8 and 19-20). Underneath, a program is a week of
+hours, each with one of the unit's speeds (0 is off), as the controllers
+sold for these units run it - the API takes any such week, the card
+offers the ready-made ones. It's saved in `config/vmc_schedule.json`:
 
 ```json
 {

@@ -175,21 +175,6 @@ def test_the_vmc_is_turned_off_from_its_card_and_a_speed_starts_it_again(open_pa
     assert eventually(page, lambda: off.get_attribute("aria-pressed") == "false")
 
 
-def test_the_vmc_program_is_turned_on_for_this_vmc_and_off(open_page, api):
-    """A program never turned on has no device yet: the switch has to say
-    which one, as the classic card does, or the board refuses it."""
-    api("/api/vmc-schedule", dict(api("/api/vmc-schedule")["schedule"], enabled=False, target=None))
-    page = _open_home(open_page).page
-    switch = page.locator("#plant-body button[data-vmc-program]")
-    speed = switch.get_attribute("data-device")
-    switch.click()
-    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["enabled"] is True)
-    assert api("/api/vmc-schedule")["schedule"]["target"] == speed
-    assert eventually(page, lambda: switch.get_attribute("aria-checked") == "true")
-    switch.click()
-    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["enabled"] is False)
-
-
 def test_away_is_set_from_the_hero_and_ended(open_page, api):
     page = _open_home(open_page).page
     page.click("#away-chip")
@@ -221,32 +206,34 @@ def _reset_vmc(api):
         api("/api/vmc-schedule/boost/cancel", {})
 
 
-def test_the_vmc_week_is_painted_hour_by_hour_and_saved(open_page, api):
-    _reset_vmc(api)
-    opened = _open_home(open_page)
-    page = opened.page
-    page.wait_for_selector("#vmc-grid .sched-cell")
-    page.click("#vmc-card [data-vmc-paint='0']")
-    page.click("#vmc-grid .sched-cell[data-day='mon'][data-hour='3']")
-    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][3] == 0)
-    page.wait_for_timeout(800)
-    page.click("#vmc-card [data-vmc-copy='weekdays']")
-    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["fri"][3] == 0)
-    week = _vmc(api)["schedule"]["week"]
-    assert [week[d][3] for d in ("tue", "sat")] == [0, 20], "Monday to the weekdays only"
-    assert opened.errors == []
-
-
-def test_a_ready_made_vmc_program_is_applied_and_undone(open_page, api):
+def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
+    """One choice: a ready-made program switches it on, on this VMC, with
+    its week; "manual" switches it off and leaves the speed alone."""
     _reset_vmc(api)
     page = _open_home(open_page).page
-    page.wait_for_selector("#vmc-grid .sched-cell")
-    page.click("#vmc-card [data-vmc-template='work']")
-    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][10] == 20)
-    assert _vmc(api)["schedule"]["week"]["sat"][10] == 50, "the weekend stays at day speed"
-    assert page.get_attribute("#vmc-card [data-vmc-template='work']", "aria-pressed") == "true"
-    page.click("#vmc-card [data-vmc-undo]")
-    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][10] == 50)
+    assert page.get_attribute("#vmc-card [data-vmc-choice='manual']", "aria-checked") == "true"
+    work = page.locator("#vmc-card [data-vmc-choice='work']")
+    speed = work.get_attribute("data-device")
+    work.click()
+    assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is True)
+    schedule = _vmc(api)["schedule"]
+    assert schedule["target"] == speed
+    assert schedule["week"]["mon"][10] == 20 and schedule["week"]["sat"][10] == 50, "night 8-17 on weekdays only"
+    assert eventually(page, lambda: page.get_attribute("#vmc-card [data-vmc-choice='work']", "aria-checked") == "true")
+    page.click("#vmc-card [data-vmc-choice='manual']")
+    assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is False)
+    assert _vmc(api)["schedule"]["week"]["mon"][10] == 20, "the week stays saved"
+
+
+def test_a_week_set_on_the_classic_page_shows_as_custom(open_page, api):
+    _reset_vmc(api)
+    page = _open_home(open_page).page
+    speed = page.get_attribute("#vmc-card [data-vmc-choice='work']", "data-device")
+    api("/api/vmc-schedule", {"enabled": True, "target": speed,
+                              "day": {"at": "09:00", "value": 50}, "night": {"at": "23:00", "value": 20}})
+    page.evaluate("refreshDevices()")
+    assert eventually(page, lambda: page.get_attribute("#vmc-card [data-vmc-choice='custom']", "aria-checked") == "true")
+    _reset_vmc(api)
 
 
 def test_the_vmc_runs_at_its_maximum_for_a_while_and_back(open_page, api):
