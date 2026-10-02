@@ -886,7 +886,7 @@
     "st_stale": "Sensore silenzioso",
     "st_first_report": "In attesa del primo invio",
     "line_first_report": "{zone} in attesa del primo invio dall'accensione",
-    "last_saved": "ultimo dato salvato {age} fa",
+    "last_saved": "ultimo dato salvato {age}",
     "no_zones": "Nessuna zona ancora",
     "no_zones_note": "Le zone si configurano dal pannello di amministrazione.",
     "target": "Obiettivo",

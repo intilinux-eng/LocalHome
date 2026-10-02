@@ -886,7 +886,7 @@
     "st_stale": "Sensor quiet",
     "st_first_report": "Waiting for its first report",
     "line_first_report": "{zone} waiting for its first report since start-up",
-    "last_saved": "last saved value {age} ago",
+    "last_saved": "last saved value {age}",
     "no_zones": "No zones yet",
     "no_zones_note": "Zones are set up from the admin panel.",
     "target": "Target",

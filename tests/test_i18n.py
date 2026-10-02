@@ -51,3 +51,14 @@ def test_every_locale_preserves_placeholders_from_english():
         other_values = flatten_values(load_translations(language))
         for path, en_value in en_values.items():
             assert placeholders(other_value := other_values[path]) == placeholders(en_value), (language, path)
+
+
+def test_a_home_age_isnt_followed_by_ago_twice():
+    """The home page's ages already say "ago" (home.h_ago, home.min_ago):
+    a string wrapping one mustn't add it again - "16 h fa fa"."""
+    for language in ("it", "en"):
+        home = load_translations(language)["home"]
+        ago = home["h_ago"].replace("{h}", "").strip().split()[-1]
+        for key, text in home.items():
+            if isinstance(text, str) and "{age}" in text:
+                assert f"{{age}} {ago}" not in text, (language, key, text)
