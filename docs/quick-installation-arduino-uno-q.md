@@ -152,6 +152,9 @@ cd ~/localhome && git pull --ff-only && sudo systemctl restart localhome
 `git clone` from a bundle leaves that file as `origin`, so `git pull`
 just works - no remote to configure.
 
+Or, from the PC, let `python tools/deploy_board.py carlucci` do all of
+it - see docs/deployment.md, "Updating LocalHome on the board".
+
 ## 5. Python environment
 
 ```bash

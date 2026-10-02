@@ -35,6 +35,8 @@ ui = ["playwright>=1.40,<2"]
 # GPL-3.0-or-later, unlike every other dependency here - opt-in on
 # purpose, see THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically
 tplink = ["python-kasa>=0.7,<0.11"]
+# tools/deploy_board.py, on the PC only - never installed on the board.
+deploy = ["paramiko>=3.0,<6"]
 
 [project.scripts]
 localhome = "localhome.web.app:main"

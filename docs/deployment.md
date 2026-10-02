@@ -180,6 +180,22 @@ with the MQTT broker itself down:
 
 ## Updating LocalHome on the board
 
+From a PC with this repository, one command does all of the below -
+sends the commits the board is missing, reinstalls if the dependencies
+changed, restarts and waits for the page to answer:
+
+```bash
+pip install -e .[deploy]                         # once, on the PC
+python tools/deploy_board.py antonio             # over the network (antonio.local)
+python tools/deploy_board.py antonio --usb       # over the USB cable
+python tools/deploy_board.py antonio --check     # what it would do, changing nothing
+python tools/deploy_board.py antonio --rollback  # back to the version before
+```
+
+It deploys the latest commit of the branch the board is on (`--branch`
+for another) and asks the board's password once. See the script's own
+help for the rest. By hand, it comes down to:
+
 However the new code gets there - `git pull`, or a copy of the repo from
 your PC - always reinstall and restart afterwards:
 

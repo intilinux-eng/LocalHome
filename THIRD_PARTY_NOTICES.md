@@ -16,6 +16,7 @@ copyleft/share-alike obligations on this project - one exception,
 | [PyYAML](https://github.com/yaml/pyyaml)             | MIT             | Reading config.yaml |
 | [paho-mqtt](https://github.com/eclipse-paho/paho.mqtt.python) | EPL-2.0 OR BSD-3-Clause (dual-licensed; used here under the BSD-3-Clause option) | The generic MQTT driver family |
 | [python-kasa](https://github.com/python-kasa/python-kasa) | **GPL-3.0-or-later** - see below | TP-Link Kasa/Tapo LED strip control (`tplink_led_strip`) |
+| [paramiko](https://github.com/paramiko/paramiko)     | LGPL-2.1        | `tools/deploy_board.py` only, on the PC that updates a board - optional (`.[deploy]`), never installed on the board |
 
 None of their source is vendored into this repository; they're declared
 as ordinary pip dependencies in `pyproject.toml`/`requirements.txt` and
