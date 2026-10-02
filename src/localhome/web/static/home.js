@@ -45,6 +45,7 @@ const state = {
   readings: {},
   weeks: {},              // zone -> {heat: week, cool: week}
   history: {},            // zone -> {temps: [...], runs: [...]}
+  airHistory: {},         // air sensor -> its CO2 over the last 24 h
   onHours: {},
   vmc: null,
   problems: null,
@@ -1045,6 +1046,8 @@ function renderHouse() {
       tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${name}</span></div>
         <div class="tile-value">${r.power_w != null ? `${fmt(r.power_w, 0)}<small>W</small>` : "--"}</div>
         <div class="tile-note">${[r.voltage_v != null ? `${fmt(r.voltage_v, 0)} V` : "", r.current_a != null ? `${fmt(r.current_a, 2)} A` : ""].filter(Boolean).join(" · ")}</div>${readingNote(r)}</div>`);
+    } else if (d.kind === "climate" && isAirReading(r)) {
+      tiles.push(airTile(d, r));
     } else if (d.kind === "climate") {
       tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${name}</span></div>
         <div class="tile-value">${r.temperature_c != null ? `${fmt(r.temperature_c)}<small>°</small>` : "--"}${r.humidity_pct != null ? ` <small>${fmt(r.humidity_pct, 0)}%</small>` : ""}</div>${readingNote(r)}</div>`);
@@ -1060,6 +1063,89 @@ function renderHouse() {
   });
   document.getElementById("house").hidden = !tiles.length;
   document.getElementById("house-body").innerHTML = tiles.join("");
+}
+
+// --------------------------------------------------------- the air --
+// An air-quality sensor: its CO2 large, with the last 24 hours under it
+// (a night with the door shut reads as a curve), and the particles and
+// organic compounds each against the usual limit. `AIR_LIMITS`: up to
+// the first value it's fine, up to the second it's worth airing, past it
+// it's poor - CO2 by the usual indoor bands, PM2.5/PM10 by the WHO's 24 h
+// guidelines (15/45), total VOCs under 0.3 mg/m3, formaldehyde under
+// the WHO's 0.1 mg/m3.
+
+const AIR_LIMITS = {
+  co2_ppm: [800, 1200],
+  pm25_ugm3: [15, 35],
+  pm10_ugm3: [45, 100],
+  voc_mgm3: [0.3, 1],
+  ch2o_mgm3: [0.06, 0.1],
+};
+const AIR_FACTS = [
+  { field: "pm25_ugm3", unit: "µg/m³", digits: 0 },
+  { field: "pm10_ugm3", unit: "µg/m³", digits: 0 },
+  { field: "voc_mgm3", unit: "mg/m³", digits: 2 },
+  { field: "ch2o_mgm3", unit: "mg/m³", digits: 3 },
+];
+const AIR_TONE = { ok: 0, warn: 1, bad: 2 };
+
+function isAirReading(reading) {
+  return Object.keys(AIR_LIMITS).some(field => reading[field] != null);
+}
+
+function airLevel(field, value) {
+  const [fine, poor] = AIR_LIMITS[field];
+  return value <= fine ? "ok" : value <= poor ? "warn" : "bad";
+}
+
+function airTile(device, r) {
+  const measured = Object.keys(AIR_LIMITS).filter(f => r[f] != null).map(f => ({ field: f, level: airLevel(f, r[f]) }));
+  const worst = measured.reduce((a, b) => (AIR_TONE[b.level] > AIR_TONE[a.level] ? b : a), measured[0]);
+  const summary = worst.level === "ok" ? tr("home.air_good")
+    : tr(worst.level === "bad" ? "home.air_very_high" : "home.air_high", { what: tr(`home.air_${worst.field}`) });
+  const facts = AIR_FACTS.filter(f => r[f.field] != null).map(f => `<span class="air-fact" data-level="${airLevel(f.field, r[f.field])}">
+      <span class="air-dot"></span>${esc(tr(`home.air_${f.field}`))} <b>${fmt(r[f.field], f.digits)}</b> <small>${f.unit}</small></span>`).join("");
+  const extra = [r.temperature_c != null ? `${fmt(r.temperature_c)}°` : "", r.humidity_pct != null ? `${fmt(r.humidity_pct, 0)}%` : "",
+    r.battery_pct != null ? tr("home.battery", { pct: Math.round(r.battery_pct) }) : ""].filter(Boolean).join(" · ");
+  return `<div class="tile air" data-sensor="${esc(device.name)}">
+    <div class="tile-head"><span class="tile-name">${esc(displayName(device.name))}</span>
+      <span class="state" data-tone="${{ ok: "ok", warn: "warn", bad: "bad" }[worst.level]}">${esc(summary)}</span></div>
+    ${r.co2_ppm != null ? `<div class="air-co2" data-level="${airLevel("co2_ppm", r.co2_ppm)}">
+      <span class="tile-value">${fmt(r.co2_ppm, 0)}<small>ppm</small></span><span class="air-co2-name">CO₂</span></div>
+      ${airSparkHtml(device.name)}` : ""}
+    ${facts ? `<div class="air-facts">${facts}</div>` : ""}
+    ${extra ? `<div class="tile-note">${esc(extra)}</div>` : ""}${readingNote(r)}
+  </div>`;
+}
+
+// The CO2 of the last 24 hours as a line, the "air it" and "poor" limits
+// dashed, and the day's peak said in words.
+function airSparkHtml(name) {
+  const points = state.airHistory[name] || [];
+  if (points.length < 2) return "";
+  const w = 300, h = 54;
+  const start = Date.now() / 1000 - 86400;
+  const values = points.map(p => p.value);
+  const lo = Math.min(400, ...values), hi = Math.max(1300, ...values);
+  const x = ts => ((ts - start) / 86400) * w;
+  const y = v => h - 2 - ((v - lo) / (hi - lo)) * (h - 4);
+  const line = points.map((p, i) => `${i ? "L" : "M"}${x(p.ts).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
+  const limits = AIR_LIMITS.co2_ppm.map(v => `<line class="air-limit" x1="0" x2="${w}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" vector-effect="non-scaling-stroke"/>`).join("");
+  const peak = points.reduce((a, b) => (b.value > a.value ? b : a));
+  return `<svg class="air-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${esc(tr("home.air_24h"))}">
+      ${limits}<path class="air-line" d="${line}" vector-effect="non-scaling-stroke"/></svg>
+    <div class="air-spark-note"><span>${esc(tr("home.air_24h"))}</span><span>${esc(tr("home.air_peak", { value: fmt(peak.value, 0), when: whenText(wall(peak.ts * 1000)) }))}</span></div>`;
+}
+
+async function refreshAirHistory() {
+  const sensors = houseDevices().filter(d => d.kind === "climate" && isAirReading(state.readings[d.name] || {}));
+  await Promise.all(sensors.map(async d => {
+    try {
+      const data = await api(`/api/sensors/${encodeURIComponent(d.name)}/history?field=co2_ppm&range=24h`);
+      state.airHistory[d.name] = data.series.co2_ppm || [];
+    } catch (e) { /* keep what we had */ }
+  }));
+  if (sensors.length) renderHouse();
 }
 
 function rangeHtml(device, reading) {
@@ -1216,6 +1302,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && state.shee
   }
   await refreshClimate();
   await Promise.all([refreshHistory(), refreshDevices(), refreshProblems()]);
+  refreshAirHistory();
+  setInterval(refreshAirHistory, HISTORY_MS);
   setInterval(refreshClimate, REFRESH_MS);
   setInterval(refreshDevices, REFRESH_MS);
   setInterval(refreshHistory, HISTORY_MS);

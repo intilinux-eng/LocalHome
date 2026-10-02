@@ -977,6 +977,16 @@
     "vmc_tpl_manual": "Manual",
     "vmc_tpl_manual_note": "You pick the speed",
     "vmc_tpl_custom": "Custom",
-    "vmc_tpl_custom_note": "Hours set on the classic page"
+    "vmc_tpl_custom_note": "Hours set on the classic page",
+    "air_good": "Air is good",
+    "air_high": "{what} high",
+    "air_very_high": "{what} very high",
+    "air_co2_ppm": "CO₂",
+    "air_pm25_ugm3": "PM2.5",
+    "air_pm10_ugm3": "PM10",
+    "air_voc_mgm3": "VOC",
+    "air_ch2o_mgm3": "Formaldehyde",
+    "air_24h": "last 24 hours",
+    "air_peak": "peak {value} ppm {when}"
   }
 }

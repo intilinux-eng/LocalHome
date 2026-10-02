@@ -598,6 +598,28 @@ a { color: inherit; }
 
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
+/* An air-quality sensor (home.js airTile): CO2 with its day, the rest as
+   dots - green under the usual limit, amber worth airing, red poor. */
+.air { --level: var(--ok); }
+@media (min-width: 600px) { .air { grid-column: span 2; } }
+.air [data-level="ok"] { --level: var(--ok); }
+.air [data-level="warn"] { --level: var(--warn); }
+.air [data-level="bad"] { --level: var(--bad); }
+.state[data-tone="bad"] { color: var(--bad); }
+.state[data-tone="bad"]::before { background: var(--bad); }
+.air-co2 { display: flex; align-items: baseline; gap: 8px; }
+.air-co2 .tile-value { font-size: 2.2rem; font-weight: 300; color: var(--level); }
+.air-co2-name { font-weight: 600; color: var(--text-2); }
+.air-spark { display: block; width: 100%; height: 54px; overflow: visible; }
+.air-line { fill: none; stroke: var(--text-2); stroke-width: 1.6; stroke-linejoin: round; }
+.air-limit { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 3; }
+.air-spark-note { display: flex; justify-content: space-between; gap: 8px; font-size: 0.76rem; color: var(--text-3); }
+.air-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.86rem; color: var(--text-2); }
+.air-fact { display: inline-flex; align-items: center; gap: 6px; }
+.air-fact b { color: var(--text); font-variant-numeric: tabular-nums; }
+.air-fact small { color: var(--text-3); }
+.air-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--level); }
+
 /* -------------------------------------------------------------- sheet -- */
 
 .sheet-backdrop {

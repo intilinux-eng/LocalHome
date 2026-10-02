@@ -247,3 +247,25 @@ def test_the_vmc_runs_at_its_maximum_for_a_while_and_back(open_page, api):
     page.click("#vmc-card button[data-vmc-boost-cancel]")
     assert eventually(page, lambda: "override" not in _vmc(api)["status"])
     _reset_vmc(api)
+
+
+def test_an_air_quality_sensor_shows_its_co2_day_and_levels(open_page):
+    """The test server has no Tuya air sensor: its reading - tonight's,
+    from the real one - is handed to the page as refreshDevices() would."""
+    opened = _open_home(open_page)
+    page = opened.page
+    page.evaluate("""() => {
+      const now = Date.now() / 1000;
+      state.devices.sensors.push({ name: "Aria", kind: "climate", tab: "home", controllable: false });
+      state.readings["Aria"] = { ok: true, co2_ppm: 1514, pm25_ugm3: 12, pm10_ugm3: 20, voc_mgm3: 0.076,
+                                 ch2o_mgm3: 0.006, temperature_c: 21.6, humidity_pct: 60, battery_pct: 40 };
+      state.airHistory["Aria"] = [{ ts: now - 7200, value: 420 }, { ts: now - 3600, value: 1514 }, { ts: now - 60, value: 900 }];
+      renderHouse();
+    }""")
+    tile = page.locator(".tile.air")
+    assert "CO₂ molto alto" in tile.locator(".state").inner_text()
+    assert tile.locator(".air-co2").get_attribute("data-level") == "bad"
+    assert "picco 1514 ppm" in tile.inner_text()
+    assert [f.get_attribute("data-level") for f in tile.locator(".air-fact").all()] == ["ok", "ok", "ok", "ok"]
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
