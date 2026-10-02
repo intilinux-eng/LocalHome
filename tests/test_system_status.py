@@ -389,6 +389,31 @@ def test_a_device_not_heard_yet_after_a_boot_is_not_called_offline():
     assert [p["code"] for p in running_for_days] == ["device_offline"]
 
 
+def test_a_last_value_from_before_the_power_cut_is_still_not_yet():
+    """The board was off all night: the sensor's last value, kept over the
+    power cut, is 16 hours old and past its stale limit. Minutes after the
+    boot that's still "waiting for its first report" - it only becomes
+    offline once it's had its two hours to speak."""
+    stale = {"name": "Stanze Sensor", "kind": "climate", "ok": False, "seconds_since_update": 57898,
+             "error": "no MQTT message in 57898s (stale_after_seconds=21600) - device is probably offline"}
+
+    after_boot = system_status.problems([stale], [], {"low": False, "path": "/"}, host={"uptime_seconds": 300})
+    hours_later = system_status.problems([dict(stale, seconds_since_update=57898 + 3 * 3600)], [],
+                                         {"low": False, "path": "/"}, host={"uptime_seconds": 3 * 3600})
+
+    assert [p["code"] for p in after_boot] == ["device_not_heard_yet"]
+    assert [p["code"] for p in hours_later] == ["device_offline"]
+
+
+def test_waiting_since_boot_is_only_mqtt_silence_older_than_the_boot():
+    waiting = system_status.waiting_since_boot
+    assert waiting(None, "no MQTT message received yet", 600)
+    assert waiting(5000, "no MQTT message in 5000s - device is probably offline", 600)
+    assert not waiting(300, "no MQTT message in 300s - device is probably offline", 600), "heard since the boot"
+    assert not waiting(None, "no RPC reply - device is probably offline", 600), "a mains device answers at once"
+    assert not waiting(5000, "no MQTT message received yet", None), "no uptime known: no guessing"
+
+
 def test_a_device_that_reported_then_went_quiet_is_offline_even_after_a_boot():
     devices = [{"name": "Plug", "kind": "switch", "ok": False, "error": "timeout", "seconds_since_update": 120}]
 

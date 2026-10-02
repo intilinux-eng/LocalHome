@@ -303,6 +303,26 @@ def _uptime_seconds() -> float | None:
         return None
 
 
+def board_uptime_seconds() -> float | None:
+    """How long the board has been up - None off Linux."""
+    return _uptime_seconds()
+
+
+def waiting_since_boot(age_seconds: float | None, error: str | None, uptime_seconds: float | None) -> bool:
+    """A device not heard from since the board came up, in its first
+    hours: a battery sensor waiting for its next report - "not yet", not
+    "offline". Its last value, kept across the power cut (drivers/mqtt/
+    state_cache.py), is older than the boot itself - or there is none.
+    Only MQTT's own silence: a device answering with an error (a light
+    strip timing out at an address it no longer has) is offline, and
+    says why."""
+    if uptime_seconds is None or uptime_seconds >= FRESH_BOOT_SECONDS:
+        return False
+    if error and "no MQTT message" not in error:
+        return False
+    return age_seconds is None or age_seconds > uptime_seconds
+
+
 def boot_times() -> dict:
     """When the board came up, and when LocalHome started on it. Both
     matter for reading a device's silence: a last reading older than
@@ -903,17 +923,13 @@ def problems(
     # A board that came up minutes ago hasn't heard from its battery
     # sensors yet - they speak every couple of hours. That's "not yet",
     # not "offline", and calling it offline right after every power cut
-    # is how a problems list gets ignored.
-    just_booted = (host or {}).get("uptime_seconds") is not None and host["uptime_seconds"] < FRESH_BOOT_SECONDS
+    # is how a problems list gets ignored. Their last value, kept over
+    # the power cut, is from before the boot: that's still "not yet".
+    uptime = (host or {}).get("uptime_seconds")
     for device in devices:
         if not device["ok"]:
-            # "Not yet" is for a device that simply hasn't spoken since the
-            # boot - a battery sensor waiting for its next report. One that
-            # answers with an error (a light strip timing out at an address
-            # it no longer has) is offline, and says why.
-            never_heard = device.get("seconds_since_update") is None
-            waiting = not device.get("error") or "received yet" in device["error"]
-            code = "device_not_heard_yet" if (never_heard and just_booted and waiting) else "device_offline"
+            waiting = waiting_since_boot(device.get("seconds_since_update"), device.get("error"), uptime)
+            code = "device_not_heard_yet" if waiting else "device_offline"
             found.append({"code": code, "subject": device["name"], "detail": device["error"]})
     # What the Shellys say about themselves: too hot, a weak signal, battery
     # reports that didn't get through - see services/shelly_health.py.

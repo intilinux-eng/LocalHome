@@ -989,6 +989,8 @@ def _register_routes(app: Flask) -> None:
             link.follower: link for link in app.config["INTERLOCK_LINKS"]
             if link.active_in_mode in (None, mode)
         }
+        # For a sensor not heard from since the board came up - see sensor_waiting.
+        uptime = system_status.board_uptime_seconds()
         zones = []
         overrides = thermostat.schedule_store.get_overrides(now)
         for zone in thermostat.zones:
@@ -1019,6 +1021,11 @@ def _register_routes(app: Flask) -> None:
                 # A value typed by hand (the admin panel's "manual" mode):
                 # the home page lets it be set from the zone's card.
                 "sensor_manual": manager.driver_types.get(zone.sensor) == "manual_override",
+                # Not heard from since the board came up, in its first
+                # hours: "waiting for the first report", its last value
+                # (from before the power cut) still shown.
+                "sensor_waiting": not sensor_reading.get("ok", False) and system_status.waiting_since_boot(
+                    sensor_reading.get("seconds_since_update"), sensor_reading.get("error"), uptime),
                 "sensor_seconds_since_update": sensor_reading.get("seconds_since_update"),
                 "sensor_error": sensor_reading.get("error"),
                 # Set only for the "every MQTT topic went stale, but at

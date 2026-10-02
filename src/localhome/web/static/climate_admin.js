@@ -784,7 +784,9 @@ function sensorStatusHtml(zone, mode) {
     // Neutral, not the red "offline" pill below: the value shown is
     // real, just not necessarily current.
     if (!zone.sensor_ok) {
-      const note = staleValueNote(zone.sensor_last_value_age_seconds);
+      // Just after a power-up: not heard from since, which is normal.
+      const note = (zone.sensor_waiting ? `${tr("climate_admin.first_report_after_boot")} - ` : "")
+        + staleValueNote(zone.sensor_last_value_age_seconds);
       return `<span class="admin-status neutral">${note}</span> ${fmt(zone.temperature_c, 1)}°C${extra}`;
     }
     return `<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${fmt(zone.temperature_c, 1)}°C${extra}${freshnessNote(zone, mode)}`;

@@ -291,6 +291,8 @@ function zoneStatus(zone, climate) {
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
   if (zone.sensor_failsafe_active) return { tone: "warn", text: tr("home.st_failsafe") };
   if (zone.sensor_manual && !zone.sensor_ok) return { tone: "warn", text: tr("home.st_manual_waiting") };
+  // The board just came up: the sensor hasn't reported since - not a fault.
+  if (zone.sensor_waiting) return { tone: "off", text: tr("home.st_first_report") };
   if (!zone.sensor_ok && zone.temperature_c == null) return { tone: "warn", text: tr("home.st_waiting") };
   if (!zone.sensor_ok) return { tone: "warn", text: tr("home.st_stale") };
   if (climate.away_until && !zone.override) return { tone: "off", text: tr("home.st_away") };
@@ -367,7 +369,8 @@ function fillZone(card, zone, climate) {
   const foot = [];
   // A typed value isn't a reading: no "updated a moment ago" under it.
   const age = zone.sensor_manual ? "" : fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
-  if (age) foot.push(esc(tr("home.updated", { age })));
+  // A value the sensor hasn't confirmed since: the last one saved, and how old.
+  if (age) foot.push(esc(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age })));
   if (zone.battery_pct != null) foot.push(esc(tr("home.battery", { pct: Math.round(zone.battery_pct) })));
   const hoursToday = (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
@@ -699,6 +702,7 @@ function renderHero() {
 function zoneLine(zone, climate) {
   const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
+  if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
   if (zone.target_c == null) {
     const change = zone.override ? null : nextChange((state.weeks[zone.name] || {})[climate.mode], boardNow());
