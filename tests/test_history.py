@@ -36,7 +36,10 @@ def test_query_is_scoped_to_sensor_and_field(tmp_path):
 
 def test_query_peak_today_returns_the_highest_value_and_its_timestamp(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
-    now = int(time.time())
+    # All three today, whenever the test runs - a minute after midnight,
+    # "a minute ago" was yesterday.
+    start_of_today = int(time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)))
+    now = max(int(time.time()), start_of_today + 120)
 
     store.record("meter", now - 60, {"power_w": 500.0})
     store.record("meter", now - 30, {"power_w": 1200.0})
