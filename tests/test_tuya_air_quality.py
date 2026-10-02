@@ -55,3 +55,12 @@ def test_read_rejects_an_all_zero_snapshot_as_a_bad_read(driver):
 def test_read_keeps_a_genuine_single_zero_field(driver):
     driver._connection.dps = {"2": 0, "3": 41}  # 0.0C outdoors in winter is real
     assert driver.read()["temperature_c"] == 0
+
+
+def test_everything_it_measures_is_recorded_not_only_temperature(driver):
+    """The CO2 and the particles are what it's for - a night with the door
+    shut is read the next morning from the history."""
+    assert {"co2_ppm", "pm25_ugm3", "pm10_ugm3", "voc_mgm3", "ch2o_mgm3"} <= set(driver.history_fields)
+    driver._connection.dps = {"2": 215, "3": 47, "4": 1514, "6": 76, "7": 36, "9": 47}
+    reading = driver.read()
+    assert (reading["co2_ppm"], reading["voc_mgm3"], reading["pm25_ugm3"]) == (1514, 0.076, 36)

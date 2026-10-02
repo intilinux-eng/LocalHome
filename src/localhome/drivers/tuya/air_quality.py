@@ -28,7 +28,14 @@ FIELDS = {
 
 
 class TuyaAirQualityDriver(PollingDriver):
-    history_fields = ("temperature_c", "humidity_pct")
+    # Everything it measures, so a night with the door shut is a curve to
+    # read the next morning. Its CO2 is measured, not estimated from the
+    # VOC reading (tested by breathing on it: CO2 to ~1500 ppm with the
+    # VOC barely moving, back to ~410 within two minutes); it updates its
+    # values every ~30 s, the default poll. Its humidity reads ~20 points
+    # above the Shelly H&Ts' in the same rooms: recorded, not trusted.
+    history_fields = ("temperature_c", "humidity_pct", "co2_ppm", "pm25_ugm3", "pm10_ugm3",
+                      "voc_mgm3", "ch2o_mgm3", "battery_pct")
 
     def __init__(self, entry: dict, poll_interval_seconds: float = 30.0, addresses=None):
         self.name = entry["name"]
