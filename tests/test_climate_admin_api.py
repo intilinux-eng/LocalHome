@@ -691,7 +691,7 @@ def test_devices_api_exposes_the_vmc_modes_and_hidden_toggle(tmp_path, fake_rpc)
 
     by_name = {s["name"]: s for s in body["sensors"]}
     assert by_name["VMC"]["hide_toggle"] is True
-    assert [p["value"] for p in by_name["VMC Speed"]["presets"]] == [20, 50, 100]
+    assert [p["value"] for p in by_name["VMC Speed"]["presets"]] == [25, 50, 100]
     assert "presets" not in by_name["VMC"]
 
 

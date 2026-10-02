@@ -504,3 +504,8 @@
 
 .modal-overlay[hidden] { display: none; }
 .modal-panel { background: var(--surface); border-radius: var(--radius); padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); }
+
+/* The VMC's three speeds, side by side where they fit. */
+.admin-speed-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 76px), 1fr)); gap: 10px; }
+#vmc-speeds { margin-top: 14px; }
+#vmc-speeds h3 { margin: 0; }

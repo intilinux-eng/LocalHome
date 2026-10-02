@@ -200,7 +200,7 @@ def _vmc(api):
 
 
 def _reset_vmc(api):
-    week = {d: [20] * 7 + [50] * 15 + [20] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    week = {d: [25] * 7 + [50] * 15 + [25] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
     api("/api/vmc-schedule", {"enabled": False, "week": week})
     if "override" in _vmc(api)["status"]:
         api("/api/vmc-schedule/boost/cancel", {})
@@ -218,11 +218,11 @@ def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
     assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is True)
     schedule = _vmc(api)["schedule"]
     assert schedule["target"] == speed
-    assert schedule["week"]["mon"][10] == 20 and schedule["week"]["sat"][10] == 50, "night 8-17 on weekdays only"
+    assert schedule["week"]["mon"][10] == 25 and schedule["week"]["sat"][10] == 50, "night 8-17 on weekdays only"
     assert eventually(page, lambda: page.get_attribute("#vmc-card [data-vmc-choice='work']", "aria-checked") == "true")
     page.click("#vmc-card [data-vmc-choice='manual']")
     assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is False)
-    assert _vmc(api)["schedule"]["week"]["mon"][10] == 20, "the week stays saved"
+    assert _vmc(api)["schedule"]["week"]["mon"][10] == 25, "the week stays saved"
 
 
 def test_a_week_set_on_the_classic_page_shows_as_custom(open_page, api):

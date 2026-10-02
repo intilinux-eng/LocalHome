@@ -307,6 +307,23 @@
       <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_short }}</button>
     </div>
     <p class="hint-text" id="save-vmc-result"></p>
+    <!-- Night/day/boost percentages: in use at once - see loadVmcSpeeds(). -->
+    <div class="admin-zone-card" id="vmc-speeds" hidden>
+      <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
+      <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
+      <div class="admin-speed-fields">
+        {% for key in ("night", "day", "boost") %}
+        <div class="admin-field">
+          <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
+          <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" id="save-vmc-speeds-btn" onclick="saveVmcSpeeds(this)">{{ t.climate_admin.vmc_speeds_save }}</button>
+      </div>
+      <p class="hint-text" id="save-vmc-speeds-result"></p>
+    </div>
     <!-- The day/night program lives on the dashboard, with the VMC's own
          speed buttons: it's a daily control, not installation config. -->
     <p class="hint-text">{{ t.climate_admin.vmc_program_moved }}</p>

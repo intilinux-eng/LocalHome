@@ -674,6 +674,54 @@ async function saveVmc(button) {
   }
 }
 
+// The VMC's night/day/boost percentages (services/vmc_speeds.py): in use
+// as soon as they're saved, on the cards and in the programs.
+async function loadVmcSpeeds() {
+  const box = document.getElementById("vmc-speeds");
+  if (!box) return;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/vmc-speeds", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  box.hidden = !(data.ok && data.device);
+  if (box.hidden) return;
+  box.querySelectorAll("[data-speed]").forEach(input => {
+    if (document.activeElement !== input) input.value = data.speeds[input.dataset.speed] ?? "";
+  });
+}
+
+async function saveVmcSpeeds(button) {
+  const resultEl = document.getElementById("save-vmc-speeds-result");
+  const body = {};
+  document.querySelectorAll("#vmc-speeds [data-speed]").forEach(input => {
+    body[input.dataset.speed] = input.value === "" ? null : Number(input.value);
+  });
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate-admin/vmc-speeds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
+      resultEl.className = "hint-text admin-error";
+      return;
+    }
+    resultEl.textContent = tr("climate_admin.vmc_speeds_saved");
+    resultEl.className = "hint-text admin-success";
+    await loadVmcSpeeds();
+  } catch (e) {
+    resultEl.textContent = tr("sensors.request_failed");
+    resultEl.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function refreshVmcStatus() {
   const slot = document.getElementById("vmc-status");
   if (!slot) return;
@@ -2417,6 +2465,7 @@ loadExtraSwitches();
 loadSeasonRules();
 loadExtraSensor();
 loadVmc();
+loadVmcSpeeds();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);
 loadMaintenance();

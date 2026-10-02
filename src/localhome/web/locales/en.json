@@ -375,7 +375,7 @@
     "system_skipped_line": "package {package} is missing, install it with",
     "system_config_path": "Configuration: {path}",
     "vmc_heading": "Ventilation (VMC)",
-    "vmc_note": "Mechanical ventilation driven by a Shelly 0/1-10V Dimmer Gen3: one id creates the switch and the speed, with the night/day/boost buttons and the day/night program on the dashboard. Until the VMC is wired leave it Simulated: the controls still show and work, marked as simulated. With None it doesn't appear.",
+    "vmc_note": "Mechanical ventilation driven by a Shelly 0/1-10V Dimmer Gen3: one id creates the switch and the speed, with the night/day/boost buttons and the program on the home page. Until the VMC is wired leave it Simulated: the controls still show and work, marked as simulated. With None it doesn't appear.",
     "vmc_label": "VMC dimmer device id",
     "vmc_suggestion": "Found in config.yaml (\"{name}\"). Save to manage it from here: after the restart the config.yaml entry for this device is ignored and the VMC shows up as \"VMC\".",
     "vmc_reachable": "Reachable",
@@ -524,7 +524,7 @@
     "how_data": "The charts' history has a day limit and a size limit (in Settings): past them, the oldest data is deleted. System logs live in RAM (30 MB at most), don't wear the eMMC and are lost at reboot. Before any deletion in Maintenance a backup is saved on the board (the last 10, plus one history copy if there's room).",
     "how_diagnostic_title": "Diagnostics",
     "vmc_pick_device": "Choose which device the program controls.",
-    "vmc_program_moved": "The VMC's day/night program is set on the dashboard, on the VMC's own card next to its speed buttons.",
+    "vmc_program_moved": "The VMC's program (manual, day and night, out at work...) is picked on the home page, on the VMC's card.",
     "system_problem_device_not_heard_yet": "{subject}: not heard yet since the board came up - battery sensors report every couple of hours",
     "setting_site_name": "Page name",
     "setting_site_name_help": "The heading at the top of the dashboard, and the name under the icon on a phone. At most 24 characters, so it stays readable on a small screen. Blank = LocalHome. Takes effect when the page is reloaded, with no restart.",
@@ -744,7 +744,11 @@
     "shelly_up_to_date": "up to date",
     "shelly_restart_required": "asks for a restart",
     "system_problem_device_hot": "{subject} very hot: check its box isn't sealed or near a heat source",
-    "system_problem_device_reports_missed": "{subject}: reports lost over the last 24 hours (weak signal or battery)"
+    "system_problem_device_reports_missed": "{subject}: reports lost over the last 24 hours (weak signal or battery)",
+    "vmc_speeds_title": "Speeds",
+    "vmc_speeds_note": "The percentages of Night, Day and Boost: of the home page's buttons, of the programs and of \"Boost for\". In use at once, no restart; a running program follows them.",
+    "vmc_speeds_save": "Save speeds",
+    "vmc_speeds_saved": "Saved: in use from now."
   },
   "vmc_presets": {
     "night": "Night",
@@ -800,7 +804,9 @@
     "zone_unknown": "No zone is called \"{zone}\".",
     "override_zone_excluded": "\"{zone}\" is left out of cooling: no temporary changes in summer.",
     "override_target_range": "The temperature must be between {min} and {max} °C, or off.",
-    "override_hours_invalid": "The duration must be above zero and at most {max} hours."
+    "override_hours_invalid": "The duration must be above zero and at most {max} hours.",
+    "vmc_speeds_invalid": "Each VMC speed must be between 1 and 100%.",
+    "vmc_speeds_order": "Night must be slower than day, and day slower than boost."
   },
   "home": {
     "health_checking": "Checking…",

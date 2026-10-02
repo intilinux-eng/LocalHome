@@ -123,3 +123,25 @@ def test_both_pages_say_when_the_board_stops_answering(open_page):
         page.unroute("**/api/**")
     for page in pages:
         assert eventually(page, page.locator("#connection-banner").is_hidden, timeout_ms=40000), "recovers by itself"
+
+
+def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
+    """Night, day and boost percentages: refused when out of order, in use
+    at once when saved - the home card's buttons say so, no restart."""
+    before = api("/api/climate-admin/vmc-speeds")["speeds"]
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    page.wait_for_selector("#vmc-speeds:not([hidden])", state="attached", timeout=20000)
+    page.evaluate("document.getElementById('vmc').open = true")
+    page.fill("#vmc-speed-night", "60")
+    page.click("#save-vmc-speeds-btn")
+    assert eventually(page, lambda: "Notte deve essere" in page.inner_text("#save-vmc-speeds-result"))
+    page.fill("#vmc-speed-night", "30")
+    page.click("#save-vmc-speeds-btn")
+    assert eventually(page, lambda: api("/api/climate-admin/vmc-speeds")["speeds"]["night"] == 30)
+    home = open_page("/", 390).page
+    home.wait_for_selector("#vmc-card button[data-vmc]", timeout=20000)
+    assert "30%" in home.locator("#vmc-card button[data-vmc]").first.inner_text()
+    api("/api/climate-admin/vmc-speeds", before)
+    # The browser logs the refused save's 400; nothing else.
+    assert [e for e in opened.errors if "400" not in e] == []

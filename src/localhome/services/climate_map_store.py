@@ -340,7 +340,7 @@ DIMMER_SPEED_SUFFIX = " Speed"
 # speeds, and picking one also switches it back on if it was off.
 # `key` names the dashboard's translated label (vmc_presets.<key>).
 VMC_PRESETS = [
-    {"key": "night", "value": 20},
+    {"key": "night", "value": 25},
     {"key": "day", "value": 50},
     {"key": "boost", "value": 100},
 ]

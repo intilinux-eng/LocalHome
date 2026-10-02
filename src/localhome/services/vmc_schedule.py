@@ -43,7 +43,7 @@ PERIODS = ("day", "night")
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 WEEK_HOURS = 7 * 24
 MAX_OVERRIDE_MINUTES = 24 * 60
-DEFAULT_DAY_NIGHT = {"day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 20}}
+DEFAULT_DAY_NIGHT = {"day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 25}}
 
 
 def day_night_week(day: dict, night: dict) -> dict[str, list[int]]:
@@ -275,6 +275,15 @@ class VmcScheduleController:
                 return  # mid-stretch: whatever speed was picked by hand stays
             if self._apply(schedule["target"], value, "program"):
                 self._applied = wanted
+
+    def speeds_changed(self, moves: dict[int, int]) -> None:
+        """The unit's speeds were given new values (the admin panel), and
+        the week moved with them: the stretch running now counts as applied
+        at its new value - so a speed picked by hand isn't replaced."""
+        with self._lock:
+            if self._applied and self._applied[0] != "override":
+                target, start, value = self._applied
+                self._applied = (target, start, moves.get(value, value))
 
     def boost(self, device: str, value: int, minutes: int, now: datetime | None = None) -> dict:
         """`value` on `device` for `minutes`, then back to the program -

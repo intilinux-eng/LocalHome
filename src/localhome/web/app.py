@@ -66,6 +66,7 @@ from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
 from localhome.errors import InputError
+from localhome.services import vmc_speeds
 from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore, day_night_of
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -337,6 +338,9 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
     app.config["VMC_SCHEDULE"] = vmc
+    # The VMC's night/day/boost speeds as set in the admin panel, laid over
+    # its device's presets - see services/vmc_speeds.py.
+    app.config["VMC_SPEEDS"] = vmc_speeds.VmcSpeedStore(config.resolve("vmc_speeds.json"))
     # What each cover's last read said - covers are read on demand, not
     # polled, so this is where the system status learns about them.
     app.config["COVER_READS"] = {}
@@ -427,6 +431,40 @@ def _fail(code: str, message: str, status: int = 400, **params):
     """A refusal with a code the pages translate (errors.<code>) - the
     English message stays for logs and API callers. See localhome/errors.py."""
     return jsonify(ok=False, error=message, code=code, params=params), status
+
+
+def _vmc_speed_device(manager: DeviceManager) -> str | None:
+    """The VMC's speed: the level paired with a switch that has speed
+    presets - the same one the home page's VMC card shows."""
+    for name, switch in manager.paired_switch.items():
+        if name in manager.numbers and (manager.ui_options.get(name) or {}).get("presets") and switch:
+            return name
+    return None
+
+
+def _vmc_speeds_in_use(app: Flask, device: str | None) -> dict:
+    manager: DeviceManager = app.config["MANAGER"]
+    presets = (manager.ui_options.get(device) or {}).get("presets") or [] if device else []
+    return vmc_speeds.of_presets(vmc_speeds.apply(presets, app.config["VMC_SPEEDS"].get()))
+
+
+def _move_vmc_to_new_speed(manager: DeviceManager, device: str | None, moves: dict) -> None:
+    """A unit running at an old speed goes to its new value - one that's
+    off stays off (setting a speed would switch it on)."""
+    switch = manager.paired_switch.get(device) if device else None
+    if not device or (switch and manager.sensor_reading(switch).get("is_on") is not True):
+        return
+    current = manager.sensor_reading(device).get("value")
+    target = moves.get(round(current)) if isinstance(current, (int, float)) else None
+    if target is None or target == round(current):
+        return
+    try:
+        manager.numbers[device].set_value(target)
+    except Exception as exc:
+        logger.warning("VMC speeds: couldn't move %s from %s%% to %s%% (%s)", device, current, target, exc)
+        return
+    manager.pollers[device].cache.merge({"value": target})
+    _wake_poller(manager, device)
 
 
 def _refusal(exc: Exception, status: int = 400):
@@ -787,6 +825,8 @@ def _register_routes(app: Flask) -> None:
             if name in interlock_followers:
                 entry["linked_valve"] = interlock_followers[name]
             entry.update(manager.ui_options.get(name, {}))
+            if entry.get("presets"):
+                entry["presets"] = vmc_speeds.apply(entry["presets"], app.config["VMC_SPEEDS"].get())
             if power_budget is not None and name == power_sensor:
                 entry["power_budget"] = {
                     "contract_limit_w": power_budget.contract_limit_w,
@@ -1496,6 +1536,37 @@ def _register_routes(app: Flask) -> None:
         except ValueError as exc:
             return _refusal(exc, 400)
         return jsonify(ok=True, restart_required=True)
+
+    @app.route("/api/climate-admin/vmc-speeds")
+    def api_vmc_speeds_get():
+        """The VMC's night/day/boost speeds in use, and whether they were
+        set here (else they're its device's own)."""
+        device = _vmc_speed_device(app.config["MANAGER"])
+        saved = app.config["VMC_SPEEDS"].get()
+        return jsonify(ok=True, device=device, saved=saved is not None, speeds=_vmc_speeds_in_use(app, device))
+
+    @app.route("/api/climate-admin/vmc-speeds", methods=["POST"])
+    def api_vmc_speeds_save():
+        """New speeds, in use at once: the buttons and programs show them,
+        a program's hours move to them (its night stays night), and a
+        unit running at one of the old speeds moves to its new value."""
+        manager: DeviceManager = app.config["MANAGER"]
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        device = _vmc_speed_device(manager)
+        old = _vmc_speeds_in_use(app, device)
+        try:
+            new = app.config["VMC_SPEEDS"].set(_json_body())
+        except ValueError as exc:
+            return _refusal(exc, 400)
+        if old:
+            moves = {old[k]: new[k] for k in vmc_speeds.SPEED_KEYS if k in old}
+            schedule = vmc.store.get()
+            week = vmc_speeds.remap_week(schedule["week"], old, new)
+            if week != schedule["week"]:
+                vmc.store.update({"week": week})
+            vmc.speeds_changed(moves)
+            _move_vmc_to_new_speed(manager, device, moves)
+        return jsonify(ok=True, device=device, saved=True, speeds=new)
 
     @app.route("/api/climate-admin/restart", methods=["POST"])
     def api_climate_admin_restart():

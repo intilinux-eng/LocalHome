@@ -375,7 +375,7 @@
     "system_skipped_line": "manca il pacchetto {package}, si installa con",
     "system_config_path": "Configurazione: {path}",
     "vmc_heading": "VMC",
-    "vmc_note": "La ventilazione meccanica, comandata da uno Shelly 0/1-10V Dimmer Gen3: un solo ID crea l'interruttore e la velocità, con i pulsanti notte/giorno/boost e il programma giorno/notte sulla dashboard. Finché la VMC non è collegata lasciala Simulata: la gestione si vede e si prova lo stesso, segnata come simulata. Con Nessuna non compare.",
+    "vmc_note": "La ventilazione meccanica, comandata da uno Shelly 0/1-10V Dimmer Gen3: un solo ID crea l'interruttore e la velocità, con i pulsanti notte/giorno/massimo e il programma sulla home. Finché la VMC non è collegata lasciala Simulata: la gestione si vede e si prova lo stesso, segnata come simulata. Con Nessuna non compare.",
     "vmc_label": "ID dispositivo dimmer VMC",
     "vmc_suggestion": "Trovato in config.yaml (\"{name}\"). Salva per gestirlo da qui: dopo il riavvio la voce di config.yaml per questo dispositivo viene ignorata e la VMC appare come \"VMC\".",
     "vmc_reachable": "Raggiungibile",
@@ -524,7 +524,7 @@
     "how_data": "Lo storico dei grafici ha un limite di giorni e di dimensione (in Impostazioni): oltre, si cancellano i dati più vecchi. I registri di sistema stanno in RAM (massimo 30 MB), non consumano la memoria eMMC e si perdono al riavvio. Prima di ogni cancellazione in Manutenzione viene salvato un backup sulla scheda (ultimi 10, più una copia dello storico se c'è spazio).",
     "how_diagnostic_title": "Diagnosi",
     "vmc_pick_device": "Scegli quale dispositivo comanda il programma.",
-    "vmc_program_moved": "Il programma giorno/notte della VMC si imposta dalla dashboard, sulla card della VMC insieme ai pulsanti della velocità.",
+    "vmc_program_moved": "Il programma della VMC (manuale, giorno e notte, fuori per lavoro...) si sceglie dalla home, sulla card della VMC.",
     "system_problem_device_not_heard_yet": "{subject}: non ancora sentito da quando la scheda è accesa - i sensori a batteria si fanno vivi ogni paio d'ore",
     "setting_site_name": "Nome della pagina",
     "setting_site_name_help": "Il titolo in alto nella dashboard e il nome sotto l'icona sul telefono. Massimo 24 caratteri, così resta leggibile su uno schermo piccolo. Vuoto = LocalHome. Cambia al ricaricamento della pagina, senza riavvio.",
@@ -744,7 +744,11 @@
     "shelly_up_to_date": "aggiornato",
     "shelly_restart_required": "chiede un riavvio",
     "system_problem_device_hot": "{subject} molto caldo: controlla che la scatola non sia chiusa o vicina a fonti di calore",
-    "system_problem_device_reports_missed": "{subject}: invii persi nelle ultime 24 ore (segnale debole o batteria)"
+    "system_problem_device_reports_missed": "{subject}: invii persi nelle ultime 24 ore (segnale debole o batteria)",
+    "vmc_speeds_title": "Velocità",
+    "vmc_speeds_note": "Le percentuali di Notte, Giorno e Massimo: dei pulsanti sulla home, dei programmi e di \"Massimo per\". Valgono subito, senza riavvio; un programma attivo le segue.",
+    "vmc_speeds_save": "Salva velocità",
+    "vmc_speeds_saved": "Salvate: in uso da adesso."
   },
   "vmc_presets": {
     "night": "Notte",
@@ -800,7 +804,9 @@
     "zone_unknown": "Nessuna zona si chiama «{zone}».",
     "override_zone_excluded": "«{zone}» è esclusa dal raffrescamento: niente cambi temporanei in estate.",
     "override_target_range": "La temperatura deve essere tra {min} e {max} °C, oppure spento.",
-    "override_hours_invalid": "La durata deve essere tra pochi minuti e {max} ore."
+    "override_hours_invalid": "La durata deve essere tra pochi minuti e {max} ore.",
+    "vmc_speeds_invalid": "Ogni velocità della VMC deve essere tra 1 e 100%.",
+    "vmc_speeds_order": "Notte deve essere più lenta di Giorno, e Giorno più lenta di Massimo."
   },
   "home": {
     "health_checking": "Controllo…",

@@ -154,7 +154,7 @@ The climate admin panel's VMC gets all three automatically.
   paired_switch: "VMC"
   on_with_value: true
   presets:
-    - {key: night, value: 20}
+    - {key: night, value: 25}
     - {key: day, value: 50}
     - {key: boost, value: 100}
 ```
@@ -432,6 +432,14 @@ The older form - `"day": {"at": "07:00", "value": 50}, "night": {"at":
 "22:00", "value": 20}` in place of `week` - is still read, as the week
 it stands for, and is what the classic page (`/classic`) edits; a week
 painted otherwise is only switched on or off there.
+
+**The speeds themselves** - the percentages of night, day and boost - are
+set in the admin panel's VMC section (`config/vmc_speeds.json`), over
+the device's own `presets`, hand-written or the panel's defaults (25, 50,
+100). They're in use at once, no restart: the card's buttons and the
+ready-made programs show them, a running program's hours move to them
+(its night stays night), and a unit running at an old speed goes to its
+new value.
 
 **A timed speed** ("Boost for 30 min / 1 h / 2 h" on the card) is the
 `override`: that speed until its end, then back to the program - or,
