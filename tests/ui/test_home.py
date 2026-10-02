@@ -208,3 +208,55 @@ def test_the_home_page_says_when_the_board_stops_answering(open_page):
     assert eventually(page, page.locator("#offline").is_visible, timeout_ms=60000)
     page.unroute("**/api/**")
     assert eventually(page, page.locator("#offline").is_hidden, timeout_ms=60000)
+
+
+def _vmc(api):
+    return api("/api/vmc-schedule")
+
+
+def _reset_vmc(api):
+    week = {d: [20] * 7 + [50] * 15 + [20] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    api("/api/vmc-schedule", {"enabled": False, "week": week})
+    if "override" in _vmc(api)["status"]:
+        api("/api/vmc-schedule/boost/cancel", {})
+
+
+def test_the_vmc_week_is_painted_hour_by_hour_and_saved(open_page, api):
+    _reset_vmc(api)
+    opened = _open_home(open_page)
+    page = opened.page
+    page.wait_for_selector("#vmc-grid .sched-cell")
+    page.click("#vmc-card [data-vmc-paint='0']")
+    page.click("#vmc-grid .sched-cell[data-day='mon'][data-hour='3']")
+    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][3] == 0)
+    page.wait_for_timeout(800)
+    page.click("#vmc-card [data-vmc-copy='weekdays']")
+    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["fri"][3] == 0)
+    week = _vmc(api)["schedule"]["week"]
+    assert [week[d][3] for d in ("tue", "sat")] == [0, 20], "Monday to the weekdays only"
+    assert opened.errors == []
+
+
+def test_a_ready_made_vmc_program_is_applied_and_undone(open_page, api):
+    _reset_vmc(api)
+    page = _open_home(open_page).page
+    page.wait_for_selector("#vmc-grid .sched-cell")
+    page.click("#vmc-card [data-vmc-template='work']")
+    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][10] == 20)
+    assert _vmc(api)["schedule"]["week"]["sat"][10] == 50, "the weekend stays at day speed"
+    assert page.get_attribute("#vmc-card [data-vmc-template='work']", "aria-pressed") == "true"
+    page.click("#vmc-card [data-vmc-undo]")
+    assert eventually(page, lambda: _vmc(api)["schedule"]["week"]["mon"][10] == 50)
+
+
+def test_the_vmc_runs_at_its_maximum_for_a_while_and_back(open_page, api):
+    _reset_vmc(api)
+    page = _open_home(open_page).page
+    boost = page.locator("#vmc-card button[data-vmc-boost='30']")
+    speed = boost.get_attribute("data-device")
+    boost.click()
+    assert eventually(page, lambda: "override" in _vmc(api)["status"])
+    assert eventually(page, lambda: _value(api, speed) == 100)
+    page.click("#vmc-card button[data-vmc-boost-cancel]")
+    assert eventually(page, lambda: "override" not in _vmc(api)["status"])
+    _reset_vmc(api)

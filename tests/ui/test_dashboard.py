@@ -143,3 +143,43 @@ def test_a_zone_can_be_set_aside_for_a_while_and_back(open_page, api):
     page.wait_for_selector(f"{box} .ovr-open", timeout=10000)
     assert next(z for z in api("/api/climate/zones")["zones"] if z["name"] == ZONE_A)["override"] is None
     assert opened.errors == []
+
+
+DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def _open_vmc_program(open_page):
+    """The classic page's VMC card, with its program panel filled."""
+    opened = open_page("/classic", 1280)
+    page = opened.page
+    page.wait_for_selector(".vmc-program", state="attached", timeout=20000)
+    page.wait_for_timeout(1500)
+    return opened, page.locator(".vmc-program").first
+
+
+def test_the_classic_vmc_program_edits_day_and_night_as_before(open_page, api):
+    api("/api/vmc-schedule", {"enabled": True, "target": "VMC Speed",
+                              "day": {"at": "08:00", "value": 50}, "night": {"at": "23:00", "value": 20}})
+    opened, panel = _open_vmc_program(open_page)
+    panel_id = panel.get_attribute("id").replace("vmc-program-", "")
+    page = opened.page
+    assert page.input_value(f"#vmc-day-at-{panel_id}") == "08:00"
+    assert page.locator(f"#vmc-program-custom-{panel_id}").is_hidden()
+    page.fill(f"#vmc-night-at-{panel_id}", "22:00")
+    page.dispatch_event(f"#vmc-night-at-{panel_id}", "change")
+    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["night"] == {"at": "22:00", "value": 20})
+    assert opened.errors == []
+
+
+def test_the_classic_vmc_program_leaves_a_painted_week_alone(open_page, api):
+    week = {d: [20] * 7 + [100] + [50] * 14 + [20] * 2 for d in DAYS}
+    api("/api/vmc-schedule", {"enabled": True, "target": "VMC Speed", "week": week})
+    opened, panel = _open_vmc_program(open_page)
+    panel_id = panel.get_attribute("id").replace("vmc-program-", "")
+    page = opened.page
+    assert page.locator(f"#vmc-program-custom-{panel_id}").is_visible()
+    assert page.locator(f"#vmc-program-fields-{panel_id}").is_hidden()
+    page.uncheck(f"#vmc-program-on-{panel_id}")
+    assert eventually(page, lambda: api("/api/vmc-schedule")["schedule"]["enabled"] is False)
+    assert api("/api/vmc-schedule")["schedule"]["week"] == week, "turning it off here keeps the week"
+    assert opened.errors == []

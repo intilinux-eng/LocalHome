@@ -816,9 +816,27 @@ function deviceByName(name) {
 
 function renderPlant() {
   const climate = state.climate;
-  const tiles = [];
+  const body = document.getElementById("plant-body");
   const vmcSpeed = (state.devices ? state.devices.sensors : []).find(d => d.kind === "number" && d.paired_switch && (d.presets || []).length);
-  if (vmcSpeed) tiles.push(vmcTile(vmcSpeed));
+  // The VMC's card is kept and refilled, like a zone's: its weekly grid
+  // is built once, so a refresh never rebuilds it under a stroke.
+  let card = document.getElementById("vmc-card");
+  if (card && (!vmcSpeed || card.dataset.device !== vmcSpeed.name)) {
+    card.remove();
+    card = null;
+    vmc.built = null;
+  }
+  if (vmcSpeed && !card) {
+    body.insertAdjacentHTML("afterbegin", `<div class="tile tile-wide vmc" id="vmc-card" data-device="${esc(vmcSpeed.name)}">
+      <div class="vmc-live"></div><section class="vmc-plan" hidden></section></div>`);
+    card = document.getElementById("vmc-card");
+    vmc.built = null;
+  }
+  if (card) {
+    fillVmcLive(card, vmcSpeed);
+    fillVmcPlan(card, vmcSpeed);
+  }
+  const tiles = [];
   const rules = (climate && climate.season_effects && climate.season_effects.rules) || [];
   rules.forEach(rule => {
     const device = deviceByName(rule.switch);
@@ -831,21 +849,89 @@ function renderPlant() {
     tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${esc(displayName(rule.switch))}</span>${control}</div>
       <div class="tile-note">${esc(tr(`home.rule_${what}_${climate.mode}`))}</div></div>`);
   });
-  document.getElementById("plant").hidden = !tiles.length;
-  document.getElementById("plant-body").innerHTML = tiles.join("");
+  [...body.children].forEach(child => { if (child !== card) child.remove(); });
+  body.insertAdjacentHTML("beforeend", tiles.join(""));
+  document.getElementById("plant").hidden = !card && !tiles.length;
 }
 
-const VMC_ICONS = { night: "moon", day: "sun", boost: "wind" };
+// ------------------------------------------------------------- the VMC --
+// Its speeds, a timed boost, and a week of hours painted with its speeds
+// (services/vmc_schedule.py) - from scratch or from a ready-made program.
 
-function vmcTile(speed) {
+const VMC_ICONS = { night: "moon", day: "sun", boost: "wind", off: "power" };
+const VMC_BOOST_MINUTES = [30, 60, 120];
+// Ready-made weeks in the unit's own speeds: [from hour, speed] per day.
+const VMC_PROGRAMS = [
+  { key: "day_night", all: [[0, "night"], [7, "day"], [22, "night"]] },
+  { key: "work", weekdays: [[0, "night"], [6, "day"], [8, "night"], [17, "day"], [23, "night"]],
+    weekend: [[0, "night"], [8, "day"], [23, "night"]] },
+  { key: "peaks", all: [[0, "night"], [7, "boost"], [8, "day"], [19, "boost"], [20, "day"], [22, "night"]] },
+  { key: "always_day", all: [[0, "day"]] },
+  { key: "always_night", all: [[0, "night"]] },
+];
+const vmc = { week: null, paint: null, painting: false, saveTimer: null, undo: null, built: null };
+
+// The speeds a cell can have: off (if the unit can be switched off) and
+// the unit's presets.
+function vmcLevels(speed) {
+  const power = deviceByName(speed.paired_switch);
+  const off = power && power.controllable ? [{ key: "off", value: 0 }] : [];
+  return [...off, ...speed.presets.map(p => ({ key: p.key, value: p.value }))];
+}
+
+function vmcLevelOf(speed, value) {
+  return vmcLevels(speed).find(l => l.value === value) || (value === 0 ? { key: "off", value: 0 } : { key: "custom", value });
+}
+
+function vmcLevelName(speed, value) {
+  const level = vmcLevelOf(speed, value);
+  if (level.key === "off") return tr("home.vmc_off");
+  return level.key === "custom" ? `${fmt(value, 0)}%` : tr(`vmc_presets.${level.key}`);
+}
+
+function vmcProgramWeek(program, speed) {
+  const levels = vmcLevels(speed);
+  const value = key => (levels.find(l => l.key === key) || levels.find(l => l.key === "day") || { value: 50 }).value;
+  const day = steps => {
+    const hours = new Array(24);
+    steps.forEach(([from, key], i) => {
+      const to = i + 1 < steps.length ? steps[i + 1][0] : 24;
+      for (let h = from; h < to; h++) hours[h] = value(key);
+    });
+    return hours;
+  };
+  const week = {};
+  DAYS.forEach((d, i) => { week[d] = day(program.all || (i < 5 ? program.weekdays : program.weekend)); });
+  return week;
+}
+
+function sameWeek(a, b) {
+  return !!a && !!b && DAYS.every(d => a[d].every((v, h) => v === b[d][h]));
+}
+
+function copyOfWeek(week) {
+  const out = {};
+  DAYS.forEach(d => { out[d] = week[d].slice(); });
+  return out;
+}
+
+function vmcRunning(speed) {
+  const program = state.vmc && state.vmc.schedule;
+  const programOn = !!(program && program.enabled && program.target === speed.name);
+  const status = state.vmc && state.vmc.status;
+  return { program, programOn, running: programOn && status && status.enabled ? status : null,
+           boost: status && status.override && status.override.device === speed.name ? status.override : null };
+}
+
+function fillVmcLive(card, speed) {
   const reading = state.readings[speed.name] || {};
   const value = reading.value;
   const on = (state.readings[speed.paired_switch] || {}).is_on !== false;
   const current = (speed.presets || []).find(p => p.value === value);
+  const { program, programOn, running, boost } = vmcRunning(speed);
   // Each button names the device it sets: with light strips on the Home
-  // tab there's more than one level paired with a switch.
-  // Off first, as on a fan's dial; a speed switches it back on (the
-  // dimmer's on_with_value).
+  // tab there's more than one level paired with a switch. Off first, as
+  // on a fan's dial; a speed switches it back on.
   const power = deviceByName(speed.paired_switch);
   const offButton = power && power.controllable
     ? `<button class="vmc-preset vmc-off" type="button" data-vmc-off data-device="${esc(speed.paired_switch)}" aria-pressed="${!on}">
@@ -853,26 +939,34 @@ function vmcTile(speed) {
     : "";
   const buttons = offButton + speed.presets.map(p => `<button class="vmc-preset" type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${on && value === p.value}">
       ${ICONS[VMC_ICONS[p.key]] || ""}<span class="vmc-preset-name">${esc(tr(`vmc_presets.${p.key}`))}</span><span class="vmc-preset-value">${fmt(p.value, 0)}%</span></button>`).join("");
-  const program = state.vmc && state.vmc.schedule;
-  // The saved program drives one device: it's on for this card only if
-  // it's this VMC's (static/app.js does the same).
-  const programOn = !!(program && program.enabled && program.target === speed.name);
-  const running = programOn && state.vmc.status && state.vmc.status.enabled ? state.vmc.status : null;
-  const nextPeriod = running && (running.period === "day" ? "night" : "day");
+
+  const until = at => (at ? untilText(boardDate(at)) : "");
   const programNote = running
-    ? tr("home.vmc_program_now", { period: tr(`vmc_presets.${running.period}`), until: running.until,
-        next: tr(`vmc_presets.${nextPeriod}`).toLowerCase(), value: program[nextPeriod].value })
-    : programOn ? tr("home.vmc_program_hours", { day: program.day.at, night: program.night.at })
+    ? (running.until_at
+        ? tr("home.vmc_program_now", { level: vmcLevelName(speed, running.value), until: until(running.until_at),
+            next: vmcLevelName(speed, running.next_value).toLowerCase() })
+        : tr("home.vmc_program_always", { level: vmcLevelName(speed, running.value) }))
     : tr("home.vmc_program_manual");
-  // Off with the program on: the next period's speed starts it again.
-  const status = !on ? (running ? tr("home.vmc_off_until", { until: running.until }) : tr("home.vmc_off"))
+  const boostText = boost && tr("home.vmc_boost_running", { level: vmcLevelName(speed, boost.value), until: until(boost.until) });
+  // A timed speed is spelled out in its own row below: up here, just its name.
+  const status = boost ? vmcLevelName(speed, boost.value)
+    : !on ? (running ? (running.value === 0 ? tr("home.vmc_off_program") : tr("home.vmc_off_until", { until: running.until || "" }))
+      : tr("home.vmc_off"))
     : current ? tr(`vmc_presets.${current.key}`)
     : value != null ? tr("home.vmc_custom") : "";
+  // The maximum for a while, then back to the program (or to before).
+  const top = Math.max(...speed.presets.map(p => p.value));
+  const boostRow = boost
+    ? `<div class="vmc-boost" data-active="true">${ICONS.wind}<span class="vmc-boost-text">${esc(boostText)}</span>
+        <button class="chip" type="button" data-vmc-boost-cancel>${esc(tr("home.vmc_boost_cancel"))}</button></div>`
+    : `<div class="vmc-boost">${ICONS.wind}<span class="vmc-boost-text">${esc(tr("home.vmc_boost_for", { level: vmcLevelName(speed, top) }))}</span>
+        <span class="vmc-boost-times">${VMC_BOOST_MINUTES.map(m => `<button class="chip" type="button" data-vmc-boost="${m}" data-value="${top}" data-device="${esc(speed.name)}">${esc(m < 60 ? tr("home.vmc_minutes", { m }) : tr("home.vmc_hours", { h: m / 60 }))}</button>`).join("")}</span></div>`;
   // The fan turns faster as the speed goes up; its phase comes from the
   // clock, so a refresh that redraws the card doesn't make it jump.
   const turn = on && value > 0 ? Math.max(0.8, 90 / value) : 0;
   const spin = turn ? ` style="--turn: ${turn.toFixed(2)}s; --phase: -${((Date.now() / 1000) % turn).toFixed(2)}s"` : "";
-  return `<div class="tile tile-wide vmc" data-on="${on}">
+  card.dataset.on = String(on);
+  card.querySelector(".vmc-live").innerHTML = `
     <div class="vmc-head">
       <span class="vmc-fan" data-spin="${!!turn}"${spin}>${ICONS.fan}</span>
       <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
@@ -880,28 +974,204 @@ function vmcTile(speed) {
       <span class="tile-value">${!on ? "" : value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
     </div>
     <div class="vmc-presets" data-count="${speed.presets.length + (offButton ? 1 : 0)}" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
+    ${boostRow}
     ${program ? `<div class="vmc-program">${ICONS.clock}
       <span class="vmc-title"><span class="vmc-program-name">${esc(tr("home.vmc_program"))}</span>
         <span class="tile-note">${esc(programNote)}</span></span>
       <button class="switch" type="button" role="switch" data-vmc-program data-device="${esc(speed.name)}" aria-checked="${programOn}" aria-label="${esc(tr("home.vmc_program"))}"></button>
-    </div>` : ""}
-  </div>`;
+    </div>` : ""}`;
+}
+
+// The week: ready-made programs, the speeds to paint with, the grid and
+// its copy buttons. Built once; a refresh only updates it in place.
+function fillVmcPlan(card, speed) {
+  const plan = card.querySelector(".vmc-plan");
+  const schedule = state.vmc && state.vmc.schedule;
+  if (!schedule) { plan.hidden = true; return; }
+  plan.hidden = false;
+  const levels = vmcLevels(speed);
+  const key = `${speed.name}|${levels.map(l => `${l.key}:${l.value}`).join(",")}`;
+  if (vmc.built !== key) {
+    vmc.built = key;
+    vmc.week = copyOfWeek(schedule.week);
+    if (!levels.some(l => l.value === vmc.paint)) vmc.paint = (levels.find(l => l.key === "day") || levels[0]).value;
+    plan.innerHTML = `
+      <div class="sched-season-label">${esc(tr("home.vmc_plan_title"))}</div>
+      <div class="vmc-programs" role="group" aria-label="${esc(tr("home.vmc_programs"))}">
+        ${VMC_PROGRAMS.map(p => `<button class="vmc-template" type="button" data-vmc-template="${p.key}" aria-pressed="false">
+          <span class="vmc-template-name">${esc(tr(`home.vmc_tpl_${p.key}`))}</span>
+          <span class="vmc-template-note">${esc(tr(`home.vmc_tpl_${p.key}_note`))}</span></button>`).join("")}
+      </div>
+      <p class="vmc-undo" hidden></p>
+      <div class="vmc-palette" role="group" aria-label="${esc(tr("home.vmc_paint_with"))}">
+        ${levels.map(l => `<button class="vmc-swatch" type="button" data-vmc-paint="${l.value}" data-level="${l.key}" aria-pressed="${l.value === vmc.paint}">
+          <span class="vmc-swatch-dot"></span>${ICONS[VMC_ICONS[l.key]] || ""}<span>${esc(vmcLevelName(speed, l.value))}</span></button>`).join("")}
+      </div>
+      <p class="hint-text">${esc(tr("home.vmc_paint_hint"))}</p>
+      <div class="sched-hour-axis-wrap">
+        <div class="sched-hour-axis">${hourAxisHtml()}</div>
+        <span class="sched-hour-axis-end">24h</span>
+      </div>
+      <div class="sched-grid vmc-grid" id="vmc-grid"></div>
+      <div class="zone-actions">
+        <span class="copy-label">${esc(tr("climate.copy_label"))}</span>
+        <button class="range-btn" type="button" data-vmc-copy="weekdays">${esc(tr("climate.copy_weekdays"))}</button>
+        <button class="range-btn" type="button" data-vmc-copy="week">${esc(tr("climate.copy_monday"))}</button>
+      </div>`;
+    buildVmcGrid(plan.querySelector("#vmc-grid"), speed);
+  } else if (!vmc.saveTimer && !vmc.painting && !sameWeek(vmc.week, schedule.week)) {
+    // Changed elsewhere (another phone, the classic page): take it.
+    vmc.week = copyOfWeek(schedule.week);
+    paintVmcGrid(speed);
+  }
+  markVmcTemplates(speed);
+}
+
+function markVmcTemplates(speed) {
+  document.querySelectorAll("#vmc-card [data-vmc-template]").forEach(button => {
+    const program = VMC_PROGRAMS.find(p => p.key === button.dataset.vmcTemplate);
+    button.setAttribute("aria-pressed", String(sameWeek(vmc.week, vmcProgramWeek(program, speed))));
+  });
+}
+
+function buildVmcGrid(grid, speed) {
+  const labels = tr("climate.days");
+  const { dayKey: today, hour: nowHour } = scheduleNow();
+  const cells = [];
+  DAYS.forEach((day, d) => {
+    cells.push(`<span class="sched-day-label${day === today ? " now" : ""}">${esc(labels[d] || day)}</span>`);
+    for (let h = 0; h < 24; h++) {
+      cells.push(`<div class="sched-cell${day === today && h === nowHour ? " now" : ""}" data-day="${day}" data-hour="${h}"></div>`);
+    }
+  });
+  grid.innerHTML = cells.join("");
+  paintVmcGrid(speed);
+  grid.addEventListener("pointerdown", event => {
+    const cell = event.target.closest(".sched-cell");
+    if (!cell) return;
+    event.preventDefault();
+    vmc.painting = true;
+    paintVmcCell(cell, speed);
+  });
+  grid.addEventListener("pointerover", event => {
+    const cell = event.target.closest(".sched-cell");
+    if (cell && vmc.painting) paintVmcCell(cell, speed);
+  });
+}
+
+function styleVmcCell(cell, speed, value) {
+  cell.dataset.level = vmcLevelOf(speed, value).key;
+  cell.title = `${tr(`home.day_long.${cell.dataset.day}`)} ${String(cell.dataset.hour).padStart(2, "0")}:00 · ${vmcLevelName(speed, value)}`;
+}
+
+function paintVmcGrid(speed) {
+  document.querySelectorAll("#vmc-grid .sched-cell").forEach(cell => {
+    styleVmcCell(cell, speed, vmc.week[cell.dataset.day][Number(cell.dataset.hour)]);
+  });
+}
+
+function paintVmcCell(cell, speed) {
+  const hours = vmc.week[cell.dataset.day];
+  const hour = Number(cell.dataset.hour);
+  if (hours[hour] === vmc.paint) return;
+  hours[hour] = vmc.paint;
+  styleVmcCell(cell, speed, vmc.paint);
+  vmcWeekChanged(speed);
+}
+
+document.addEventListener("pointerup", () => { vmc.painting = false; });
+document.addEventListener("pointercancel", () => { vmc.painting = false; });
+
+// Saved by itself, a moment after the last change - like a zone's grid.
+function vmcWeekChanged(speed) {
+  markVmcTemplates(speed);
+  clearTimeout(vmc.saveTimer);
+  vmc.saveTimer = setTimeout(async () => {
+    try {
+      state.vmc = await api("/api/vmc-schedule", { week: vmc.week });
+    } catch (e) {
+      notify(errorText(e));
+      vmc.built = null;           // rebuilt from what the board has
+    } finally {
+      vmc.saveTimer = null;
+    }
+    renderPlant();
+  }, 600);
+}
+
+function showVmcUndo(text) {
+  const note = document.querySelector("#vmc-card .vmc-undo");
+  if (!note) return;
+  note.hidden = !text;
+  note.innerHTML = text ? `${esc(text)} <button class="link-btn" type="button" data-vmc-undo>${esc(tr("home.vmc_undo"))}</button>` : "";
+}
+
+// What only changes this page: the speed to paint with, a ready-made
+// program, copying Monday, undoing. True if `target` was one of them.
+function onVmcPlanClick(target, speed) {
+  if (target.dataset.vmcPaint !== undefined) {
+    vmc.paint = Number(target.dataset.vmcPaint);
+    document.querySelectorAll("#vmc-card [data-vmc-paint]").forEach(b => b.setAttribute("aria-pressed", String(b === target)));
+    return true;
+  }
+  if (target.dataset.vmcTemplate) {
+    const program = VMC_PROGRAMS.find(p => p.key === target.dataset.vmcTemplate);
+    const week = vmcProgramWeek(program, speed);
+    if (sameWeek(week, vmc.week)) return true;
+    vmc.undo = copyOfWeek(vmc.week);
+    vmc.week = week;
+    paintVmcGrid(speed);
+    showVmcUndo(tr("home.vmc_applied", { name: tr(`home.vmc_tpl_${program.key}`) }));
+    vmcWeekChanged(speed);
+    return true;
+  }
+  if (target.hasAttribute("data-vmc-undo")) {
+    if (vmc.undo) {
+      vmc.week = vmc.undo;
+      vmc.undo = null;
+      paintVmcGrid(speed);
+      vmcWeekChanged(speed);
+    }
+    showVmcUndo("");
+    return true;
+  }
+  if (target.dataset.vmcCopy) {
+    const days = target.dataset.vmcCopy === "weekdays" ? DAYS.slice(1, 5) : DAYS.slice(1);
+    days.forEach(d => { vmc.week[d] = vmc.week.mon.slice(); });
+    paintVmcGrid(speed);
+    vmcWeekChanged(speed);
+    return true;
+  }
+  return false;
 }
 
 async function onPlantClick(event) {
   const target = event.target.closest("button");
   if (!target) return;
+  const card = target.closest("#vmc-card");
+  const speed = card && deviceByName(card.dataset.device);
+  if (speed && onVmcPlanClick(target, speed)) return;
   target.disabled = true;
   try {
+    const boosting = speed && vmcRunning(speed).boost;
     if (target.hasAttribute("data-vmc-off") && target.dataset.device) {
+      // A speed picked by hand ends a timed one, so it isn't undone later.
+      if (boosting) await api("/api/vmc-schedule/boost/cancel", {});
       await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/off`, {});
+    } else if (target.dataset.vmcBoost && target.dataset.device) {
+      await api("/api/vmc-schedule/boost", { device: target.dataset.device, value: Number(target.dataset.value),
+                                             minutes: Number(target.dataset.vmcBoost) });
+    } else if (target.hasAttribute("data-vmc-boost-cancel")) {
+      await api("/api/vmc-schedule/boost/cancel", {});
     } else if (target.dataset.vmc && target.dataset.device) {
+      if (boosting) await api("/api/vmc-schedule/boost/cancel", {});
       await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/set-value`, { value: Number(target.dataset.vmc) });
     } else if (target.hasAttribute("data-vmc-program")) {
       // Turning it on from this card is what picks the device it drives -
-      // without a target the board refuses it (vmc_no_target).
+      // without a target the board refuses it (vmc_no_target). Only that:
+      // the week stays as painted.
       const enabled = target.getAttribute("aria-checked") !== "true";
-      await api("/api/vmc-schedule", Object.assign({}, state.vmc.schedule, { enabled, target: target.dataset.device }));
+      await api("/api/vmc-schedule", { enabled, target: target.dataset.device });
     } else if (target.dataset.switch) {
       const on = target.getAttribute("aria-checked") !== "true";
       await api(`/api/sensors/${encodeURIComponent(target.dataset.switch)}/${on ? "on" : "off"}`, {});

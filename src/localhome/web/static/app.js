@@ -373,7 +373,7 @@ function programPanelHtml(sensor) {
       <div class="vmc-period-row">
         <span class="vmc-period-name">${icon} ${tr(`climate.vmc_period_${key}`)}</span>
         <label>${tr("climate.vmc_from")}
-          <input type="time" id="vmc-${key}-at-${id}" data-program="${escapeAttr(sensor.name)}">
+          <input type="time" step="3600" id="vmc-${key}-at-${id}" data-program="${escapeAttr(sensor.name)}">
         </label>
         <label>${tr("climate.vmc_speed_label")}
           <input type="number" min="0" max="100" step="5" id="vmc-${key}-value-${id}" data-program="${escapeAttr(sensor.name)}">
@@ -391,6 +391,7 @@ function programPanelHtml(sensor) {
       <div class="vmc-program-fields" id="vmc-program-fields-${id}" hidden>
         ${period("day", ICON_DAY)}${period("night", ICON_NIGHT)}
       </div>
+      <p class="vmc-program-custom hint" id="vmc-program-custom-${id}" hidden>${tr("climate.vmc_program_custom")}</p>
     </div>`;
 }
 
@@ -743,22 +744,31 @@ function fillVmcProgram(data) {
     // the same controls, but off.
     const mine = schedule.target && slug(schedule.target) === id;
     const on = mine && schedule.enabled;
+    // A week painted by the hour on the new home page has no day and
+    // night to edit here: it's said so, and turning the program on or
+    // off here leaves that week alone.
+    const custom = !schedule.day;
+    panel.dataset.custom = String(custom);
     const toggle = document.getElementById(`vmc-program-on-${id}`);
     if (document.activeElement !== toggle) toggle.checked = on;
-    document.getElementById(`vmc-program-fields-${id}`).hidden = !on;
-    for (const key of ["day", "night"]) {
+    document.getElementById(`vmc-program-fields-${id}`).hidden = !on || custom;
+    document.getElementById(`vmc-program-custom-${id}`).hidden = !custom;
+    for (const key of custom ? [] : ["day", "night"]) {
       const at = document.getElementById(`vmc-${key}-at-${id}`);
       const value = document.getElementById(`vmc-${key}-value-${id}`);
       if (document.activeElement !== at) at.value = schedule[key].at;
       if (document.activeElement !== value) value.value = schedule[key].value;
     }
-    document.getElementById(`vmc-program-state-${id}`).textContent = on && status.enabled
-      ? tr("climate.vmc_program_running", {
-          period: tr(`vmc_presets.${status.period}`).toLowerCase(),
-          value: status.value,
-          until: status.until,
-        })
-      : tr("climate.vmc_program_off");
+    document.getElementById(`vmc-program-state-${id}`).textContent = !(on && status.enabled)
+      ? tr("climate.vmc_program_off")
+      : status.period && status.until
+        ? tr("climate.vmc_program_running", {
+            period: tr(`vmc_presets.${status.period}`).toLowerCase(),
+            value: status.value,
+            until: status.until,
+          })
+        : tr(status.until ? "climate.vmc_program_running_value" : "climate.vmc_program_running_always",
+             { value: status.value, until: status.until });
   });
 }
 
@@ -767,15 +777,21 @@ function fillVmcProgram(data) {
 function onVmcProgramChange(input) {
   const name = input.dataset.program;
   const id = slug(name);
-  document.getElementById(`vmc-program-fields-${id}`).hidden = !document.getElementById(`vmc-program-on-${id}`).checked;
+  const custom = document.getElementById(`vmc-program-${id}`).dataset.custom === "true";
+  document.getElementById(`vmc-program-fields-${id}`).hidden = custom || !document.getElementById(`vmc-program-on-${id}`).checked;
   clearTimeout(vmcSaveTimer);
   vmcSaveTimer = setTimeout(() => saveVmcProgram(name), 500);
 }
 
 async function saveVmcProgram(name) {
   const id = slug(name);
+  const enabled = document.getElementById(`vmc-program-on-${id}`).checked;
+  // A painted week: only on/off from here - its hours aren't these fields'.
+  if (document.getElementById(`vmc-program-${id}`).dataset.custom === "true") {
+    return postVmcProgram(name, { enabled, target: name });
+  }
   const body = {
-    enabled: document.getElementById(`vmc-program-on-${id}`).checked,
+    enabled,
     // Turning it on from this card is what picks the device it drives.
     target: name,
     day: {
@@ -787,10 +803,14 @@ async function saveVmcProgram(name) {
       value: Number(document.getElementById(`vmc-night-value-${id}`).value),
     },
   };
-  if (body.day.at === body.night.at) {
+  if (body.day.at.slice(0, 2) === body.night.at.slice(0, 2)) {
     notify(tr("climate.vmc_same_time"));
     return refreshVmcProgram();
   }
+  return postVmcProgram(name, body);
+}
+
+async function postVmcProgram(name, body) {
   try {
     const res = await fetch("/api/vmc-schedule", {
       method: "POST",

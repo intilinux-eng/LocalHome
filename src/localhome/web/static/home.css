@@ -24,6 +24,10 @@
   --heat-soft: rgba(217, 115, 26, 0.13);
   --cool: #2a7cc7;
   --cool-soft: rgba(42, 124, 199, 0.12);
+  --vmc-night: #6474cf;
+  --vmc-day: #e4a43a;
+  --vmc-boost: #16a096;
+  --vmc-custom: #9aa0aa;
   --radius: 22px;
   --radius-s: 14px;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -47,6 +51,10 @@
     --heat-soft: rgba(240, 146, 58, 0.16);
     --cool: #56a6ec;
     --cool-soft: rgba(86, 166, 236, 0.15);
+    --vmc-night: #8190ea;
+    --vmc-day: #e9b354;
+    --vmc-boost: #2fc0b4;
+    --vmc-custom: #8a909b;
   }
 }
 
@@ -464,6 +472,7 @@ a { color: inherit; }
 /* The VMC: a card like a zone's, three big speeds with their icon and
    level, a fan that turns as fast as it runs (home.js vmcTile). */
 .vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }
+.vmc-live { display: grid; gap: 16px; }
 .vmc svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .vmc-head, .vmc-program { display: flex; align-items: center; gap: 12px; }
 .vmc-title { display: grid; gap: 1px; flex: 1; min-width: 0; }
@@ -522,12 +531,71 @@ a { color: inherit; }
 .vmc-program > svg { flex: none; width: 22px; height: 22px; }
 .vmc-program-name { font-weight: 600; color: var(--text); font-size: 0.92rem; }
 
+/* The maximum for a while: three lengths, or what's running and Cancel. */
+.vmc-boost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; color: var(--text-3); }
+.vmc-boost > svg { flex: none; width: 20px; height: 20px; }
+.vmc-boost-text { font-size: 0.9rem; font-weight: 600; color: var(--text-2); }
+.vmc-boost-times { display: flex; gap: 6px; margin-left: auto; }
+.vmc-boost .chip { box-shadow: none; font-weight: 600; padding: 8px 14px; }
+.vmc-boost[data-active="true"] { padding: 6px 6px 6px 12px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--accent); }
+.vmc-boost[data-active="true"] .vmc-boost-text { color: var(--accent); flex: 1; }
+
 @media (min-width: 760px) {
-  .vmc { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "program presets"; column-gap: 28px; align-items: center; }
+  .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "boost presets" "program presets"; column-gap: 28px; align-items: center; }
   .vmc-head { grid-area: head; }
   .vmc-presets { grid-area: presets; }
+  .vmc-boost { grid-area: boost; }
   .vmc-program { grid-area: program; align-self: end; }
 }
+
+/* The weekly program (home.js fillVmcPlan): ready-made weeks, the
+   speeds to paint with, and the grid - the zones' grid, coloured by speed. */
+.vmc-plan { padding-top: 16px; border-top: 1px solid var(--line); }
+.vmc [data-level="off"] { --level: var(--surface-3); }
+.vmc [data-level="night"] { --level: var(--vmc-night); }
+.vmc [data-level="day"] { --level: var(--vmc-day); }
+.vmc [data-level="boost"] { --level: var(--vmc-boost); }
+.vmc [data-level="custom"] { --level: var(--vmc-custom); }
+.vmc-programs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 136px), 1fr)); gap: 8px; margin-bottom: 12px; }
+.vmc-template {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-height: 58px;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.vmc-template-name { font-weight: 600; font-size: 0.9rem; }
+.vmc-template-note { font-size: 0.76rem; color: var(--text-3); line-height: 1.3; }
+.vmc-template[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.vmc-template[aria-pressed="true"] .vmc-template-name { color: var(--accent); }
+.vmc-undo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: -4px 0 10px; font-size: 0.86rem; color: var(--text-2); }
+.vmc-undo[hidden] { display: none; }
+.vmc-palette { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.vmc-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.vmc-swatch svg { width: 18px; height: 18px; }
+.vmc-swatch-dot { width: 16px; height: 16px; border-radius: 5px; background: var(--level); }
+.vmc-swatch[data-level="off"] .vmc-swatch-dot { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--surface-3) 3px 6px); border: 1px solid var(--line); }
+.vmc-swatch[aria-pressed="true"] { border-color: var(--text); color: var(--text); font-weight: 600; }
+.vmc-grid .sched-cell { background: var(--level, var(--surface-2)); }
+.vmc-grid .sched-cell[data-level="off"] { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--surface-3) 3px 6px); }
 
 .switch {
   position: relative;
