@@ -829,7 +829,8 @@
     "override_hours_invalid": "The duration must be above zero and at most {max} hours.",
     "vmc_speeds_invalid": "Each VMC speed must be between 1 and 100%.",
     "vmc_speeds_order": "Night must be slower than day, and day slower than boost.",
-    "dehumidifier_zone_invalid": "The zone the dehumidifier draws its water from doesn't exist: {zone}."
+    "dehumidifier_zone_invalid": "The zone the dehumidifier draws its water from doesn't exist: {zone}.",
+    "not_a_power_meter": "{name} isn't a power meter."
   },
   "home": {
     "health_checking": "Checking…",
@@ -1025,6 +1026,22 @@
     "st_driven": "{name} on: valve open",
     "line_driven": "{zone}: valve open, {name} on",
     "fact_driven_on": "Valve open because {name} is on",
-    "fact_driven_off": "The valve opens while {name} is on"
+    "fact_driven_off": "The valve opens while {name} is on",
+    "energy_peak_today": "Peak today {value} {when}",
+    "energy_today": "today {kwh} kWh",
+    "energy_yesterday": "yesterday {kwh} kWh",
+    "energy_ranges": "Period",
+    "energy_tab_week": "Week",
+    "energy_tab_month": "Month",
+    "energy_tab_year": "Year",
+    "energy_total_week": "This week {kwh} kWh",
+    "energy_total_month": "This month {kwh} kWh",
+    "energy_total_year": "Year to date {kwh} kWh",
+    "energy_since": "data since {date}",
+    "energy_estimated": "≈ some days estimated from the recorded power",
+    "energy_bar": "{when}: {kwh} kWh",
+    "energy_bar_peak": "{when}: {kwh} kWh, peak {peak}",
+    "months_short": ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
+    "months_long": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
   }
 }

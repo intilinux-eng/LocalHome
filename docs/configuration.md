@@ -167,6 +167,17 @@ The climate admin panel's VMC gets all three automatically.
 
 ## `energy` (power-budget alerting)
 
+Every power meter's days are kept too, for good and whatever
+`history.retention_days` says: one row a day with its kWh and its peak
+(`daily_energy` in the history database, services/energy.py). The kWh
+come from the meter's own counters when it has them (a Sonoff POWCT's
+`day_kwh` and `yesterday_kwh`), otherwise from its power, integrated
+between samples; the days already in the history when this started are
+worked out from their recorded power once, and said to be estimates. The
+home page shows them under the meter: today's peak with when, and this
+week, this month or the year by month as bars - `/api/energy/<name>`.
+Clearing the history clears them as well.
+
 If set, `energy.sensor` must name a `power_meter` integration by its
 `name`. Whenever that sensor's `power_w` reading crosses
 `contract_limit_w * 1.10` ("safe indefinitely" limit), a notification is

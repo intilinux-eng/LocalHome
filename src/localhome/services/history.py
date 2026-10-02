@@ -153,9 +153,11 @@ class HistoryStore:
             conn.close()
 
     def clear(self) -> int:
-        """Removes every sample and gives the space back to the disk."""
+        """Removes every sample - and every day's energy - and gives the
+        space back to the disk."""
         conn = self._connect()
         try:
+            conn.execute("DELETE FROM daily_energy")
             removed = conn.execute("DELETE FROM readings").rowcount
             conn.commit()
             self._on_stats_cache.clear()
@@ -205,6 +207,22 @@ class HistoryStore:
             # Notes about this database itself - currently only the last
             # time the size ceiling forced days out (see prune_to_size).
             conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            # Each power meter's energy and peak, one row a day, never
+            # pruned - a week, a month, the year so far (services/energy.py).
+            # `source`: "meter" (its own counter) or "power" (integrated).
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_energy (
+                    sensor TEXT NOT NULL,
+                    day TEXT NOT NULL,
+                    kwh REAL,
+                    source TEXT,
+                    peak_w REAL,
+                    peak_ts INTEGER,
+                    PRIMARY KEY (sensor, day)
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -230,6 +248,58 @@ class HistoryStore:
             conn.commit()
         finally:
             conn.close()
+
+    # ------------------------------------------------- daily energy ----
+
+    def _day_write(self, sql: str, params: tuple) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(sql, params)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def set_day(self, sensor: str, day: str, kwh: float, source: str) -> None:
+        """A day's kWh as a meter's own counter says it - replaced, not added."""
+        self._day_write(
+            "INSERT INTO daily_energy (sensor, day, kwh, source) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(sensor, day) DO UPDATE SET kwh=excluded.kwh, source=excluded.source",
+            (sensor, day, kwh, source))
+
+    def add_day_kwh(self, sensor: str, day: str, kwh: float) -> None:
+        """kWh worked out from the power, added to the day's."""
+        self._day_write(
+            "INSERT INTO daily_energy (sensor, day, kwh, source) VALUES (?, ?, ?, 'power') "
+            "ON CONFLICT(sensor, day) DO UPDATE SET kwh=COALESCE(daily_energy.kwh, 0) + excluded.kwh, source='power' "
+            "WHERE daily_energy.source IS NULL OR daily_energy.source = 'power'",
+            (sensor, day, kwh))
+
+    def raise_day_peak(self, sensor: str, day: str, power_w: float, ts: int) -> None:
+        self._day_write(
+            "INSERT INTO daily_energy (sensor, day, peak_w, peak_ts) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(sensor, day) DO UPDATE SET peak_w=excluded.peak_w, peak_ts=excluded.peak_ts "
+            "WHERE daily_energy.peak_w IS NULL OR excluded.peak_w > daily_energy.peak_w",
+            (sensor, day, power_w, ts))
+
+    def energy_days(self, sensor: str, since: str = "") -> dict[str, dict]:
+        """{day: {"kwh", "source", "peak_w", "peak_ts"}} from `since` on."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT day, kwh, source, peak_w, peak_ts FROM daily_energy WHERE sensor = ? AND day >= ? ORDER BY day",
+                (sensor, since)).fetchall()
+        finally:
+            conn.close()
+        return {day: {"kwh": None if kwh is None else round(kwh, 3), "source": source,
+                      "peak_w": peak_w, "peak_ts": peak_ts} for day, kwh, source, peak_w, peak_ts in rows}
+
+    def first_energy_day(self, sensor: str) -> str | None:
+        conn = self._connect()
+        try:
+            row = conn.execute("SELECT MIN(day) FROM daily_energy WHERE sensor = ?", (sensor,)).fetchone()
+        finally:
+            conn.close()
+        return row[0] if row else None
 
     def query(self, sensor: str, field: str, range_key: str) -> list[dict]:
         window_seconds, bucket_seconds = RANGE_BUCKETS.get(range_key, RANGE_BUCKETS["24h"])
@@ -455,6 +525,9 @@ class HistoryRecorder:
         # applied per-zone target, set by create_app() once the thermostat
         # exists (it's built after this recorder).
         self.extra_samples = None
+        # Each power meter's day - energy and peak - kept for good
+        # (services/energy.py); set by create_app().
+        self.energy = None
         # When the last cycle's samples were written, on the monotonic
         # clock - see ThermostatController.last_tick_ok_ts for why.
         self.last_write_ok_ts: float | None = None
@@ -471,6 +544,18 @@ class HistoryRecorder:
             return
         self._started = True
         threading.Thread(target=self._loop, daemon=True).start()
+
+    def backfill_energy(self) -> None:
+        """Each power meter's days already in the history, before the first
+        cycle adds to today (services/energy.py's backfill())."""
+        if self.energy is None:
+            return
+        for name, kind in getattr(self.manager, "sensor_kinds", {}).items():
+            if kind == "power_meter":
+                try:
+                    self.energy.backfill(name)
+                except Exception:
+                    logger.exception("Energy: couldn't work out %s's past days", name)
 
     def _loop(self) -> None:
         while True:
@@ -492,6 +577,8 @@ class HistoryRecorder:
         thread and sleeping through real poll intervals to observe them."""
         now = int(time.time())
         batch: dict[str, dict[str, float]] = {}
+        meters: dict[str, dict] = {}
+        kinds = getattr(self.manager, "sensor_kinds", {})
         for name, poller in self.manager.pollers.items():
             fields = getattr(poller.driver, "history_fields", ())
             if not fields:
@@ -499,6 +586,8 @@ class HistoryRecorder:
             reading = poller.get()
             if not reading.get("ok"):
                 continue
+            if kinds.get(name) == "power_meter":
+                meters[name] = reading
             values = {f: reading[f] for f in fields if isinstance(reading.get(f), (int, float))}
             if values:
                 batch[name] = values
@@ -521,6 +610,12 @@ class HistoryRecorder:
             logger.info("History resumed: the clock is synchronized")
             self.paused_for_clock = False
         self.store.record_many(now, batch)
+        if self.energy is not None:
+            for name, reading in meters.items():
+                try:
+                    self.energy.sample(name, reading, now)
+                except Exception:
+                    logger.exception("Energy: couldn't record %s's day", name)
         self.last_write_ok_ts = time.monotonic()
         self._maybe_prune(now)
 

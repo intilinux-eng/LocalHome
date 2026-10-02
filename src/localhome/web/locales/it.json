@@ -829,7 +829,8 @@
     "override_hours_invalid": "La durata deve essere tra pochi minuti e {max} ore.",
     "vmc_speeds_invalid": "Ogni velocità della VMC deve essere tra 1 e 100%.",
     "vmc_speeds_order": "Notte deve essere più lenta di Giorno, e Giorno più lenta di Massimo.",
-    "dehumidifier_zone_invalid": "La zona da cui il deumidificatore prende l'acqua non esiste: {zone}."
+    "dehumidifier_zone_invalid": "La zona da cui il deumidificatore prende l'acqua non esiste: {zone}.",
+    "not_a_power_meter": "{name} non è un misuratore di consumo."
   },
   "home": {
     "health_checking": "Controllo…",
@@ -1025,6 +1026,22 @@
     "st_driven": "{name} acceso: valvola aperta",
     "line_driven": "{zone}: valvola aperta, {name} acceso",
     "fact_driven_on": "Valvola aperta perché {name} è acceso",
-    "fact_driven_off": "La valvola si apre quando {name} è acceso"
+    "fact_driven_off": "La valvola si apre quando {name} è acceso",
+    "energy_peak_today": "Picco oggi {value} {when}",
+    "energy_today": "oggi {kwh} kWh",
+    "energy_yesterday": "ieri {kwh} kWh",
+    "energy_ranges": "Periodo",
+    "energy_tab_week": "Settimana",
+    "energy_tab_month": "Mese",
+    "energy_tab_year": "Anno",
+    "energy_total_week": "Questa settimana {kwh} kWh",
+    "energy_total_month": "Questo mese {kwh} kWh",
+    "energy_total_year": "Da inizio anno {kwh} kWh",
+    "energy_since": "dati dal {date}",
+    "energy_estimated": "≈ alcuni giorni stimati dalla potenza registrata",
+    "energy_bar": "{when}: {kwh} kWh",
+    "energy_bar_peak": "{when}: {kwh} kWh, picco {peak}",
+    "months_short": ["G", "F", "M", "A", "M", "G", "L", "A", "S", "O", "N", "D"],
+    "months_long": ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
   }
 }

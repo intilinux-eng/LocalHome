@@ -598,6 +598,29 @@ a { color: inherit; }
 
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
+/* A power meter (home.js energyTile): now, today's peak, the week /
+   month / year as bars - the current one darker, estimates lighter. */
+@media (min-width: 600px) { .energy { grid-column: span 2; } }
+.energy [data-level="ok"] { --level: var(--text); }
+.energy [data-level="warn"] { --level: var(--warn); }
+.energy [data-level="bad"] { --level: var(--bad); }
+.energy-now { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.energy-now .tile-value { font-size: 2.2rem; font-weight: 300; color: var(--level); }
+.energy-peak { font-size: 0.86rem; font-weight: 600; color: var(--level); }
+.energy-peak[data-level="ok"] { color: var(--text-2); }
+.energy-ranges { margin-top: 4px; }
+.energy-bars { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; align-items: end; height: 96px; }
+.energy-bar { height: var(--h); min-height: 0; padding: 0; border: 0; border-radius: 4px 4px 1px 1px;
+  background: color-mix(in srgb, var(--text) 28%, transparent); cursor: pointer; }
+.energy-bar[data-current="true"] { background: var(--text-2); }
+.energy-bar[data-estimated="true"] { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text) 22%, transparent) 0 3px, transparent 3px 6px); }
+.energy-bar[aria-pressed="true"] { background: var(--accent); }
+.energy-bar:disabled { cursor: default; }
+.energy-labels { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; font-size: 0.68rem; color: var(--text-3); text-align: center; margin-top: -4px; }
+.energy-labels span { white-space: nowrap; overflow: visible; }
+.energy-total { font-size: 0.9rem; color: var(--text-2); }
+.energy-total b { color: var(--text); font-weight: 600; }
+
 /* An air-quality sensor (home.js airTile): CO2 with its day, the rest as
    dots - green under the usual limit, amber worth airing, red poor. */
 .air { --level: var(--ok); }

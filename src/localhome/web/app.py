@@ -70,6 +70,7 @@ from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
 from localhome.errors import InputError
 from localhome.services import vmc_speeds
+from localhome.services.energy import EnergyLedger, summary as energy_summary
 from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore, day_night_of
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -331,6 +332,10 @@ def create_app(config_path: str | None = None) -> Flask:
     # (sent on its first read) isn't missed.
     shelly_watch = _start_shelly_health(config, store, manager)
 
+    # Each power meter's day, kept for good: its past days worked out from
+    # the history first, then every recording cycle adds to today.
+    recorder.energy = EnergyLedger(store)
+    recorder.backfill_energy()
     manager.start()
     recorder.start()
     if thermostat:
@@ -1063,6 +1068,15 @@ def _register_routes(app: Flask) -> None:
         if range_key not in RANGE_BUCKETS:
             return jsonify(ok=False, error="invalid range"), 400
         return jsonify(ok=True, series={field: store.query(name, field, range_key) for field in fields})
+
+    @app.route("/api/energy/<name>")
+    def api_energy(name):
+        """A power meter's today, yesterday, this week, this month and this
+        year by month - kWh and peaks (services/energy.py)."""
+        manager: DeviceManager = app.config["MANAGER"]
+        if manager.sensor_kinds.get(name) != "power_meter":
+            return _fail("not_a_power_meter", f"'{name}' is not a power meter", 404, name=name)
+        return jsonify(ok=True, name=name, **energy_summary(app.config["HISTORY"], name))
 
     @app.route("/api/sensors/<name>/peak-today")
     def api_sensor_peak(name):

@@ -46,6 +46,9 @@ const state = {
   weeks: {},              // zone -> {heat: week, cool: week}
   history: {},            // zone -> {temps: [...], runs: [...]}
   airHistory: {},         // air sensor -> its CO2 over the last 24 h
+  energy: {},             // power meter -> its days, week, month, year (/api/energy)
+  energyRange: "week",    // the period its bars show
+  energyPick: null,       // the bar tapped, to read its numbers
   onHours: {},
   vmc: null,
   problems: null,
@@ -1065,9 +1068,7 @@ function renderHouse() {
     } else if (d.kind === "number") {
       tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${name}</span></div>${rangeHtml(d, r)}${readingNote(r)}</div>`);
     } else if (d.kind === "power_meter") {
-      tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${name}</span></div>
-        <div class="tile-value">${r.power_w != null ? `${fmt(r.power_w, 0)}<small>W</small>` : "--"}</div>
-        <div class="tile-note">${[r.voltage_v != null ? `${fmt(r.voltage_v, 0)} V` : "", r.current_a != null ? `${fmt(r.current_a, 2)} A` : ""].filter(Boolean).join(" · ")}</div>${readingNote(r)}</div>`);
+      tiles.push(energyTile(d, r));
     } else if (d.kind === "climate" && isAirReading(r)) {
       tiles.push(airTile(d, r));
     } else if (d.kind === "climate") {
@@ -1170,6 +1171,116 @@ async function refreshAirHistory() {
   if (sensors.length) renderHouse();
 }
 
+// ------------------------------------------------------ the energy --
+// A power meter: what it draws now, today's peak with when, and the
+// week (Monday on), the month or the year by month as bars - tap one for
+// its kWh and peak. Days worked out from the recorded power, before the
+// meter's own counter was kept, are drawn lighter and said to be estimates.
+
+const ENERGY_RANGES = ["week", "month", "year"];
+
+function fmtPower(w) {
+  return w >= 1000 ? `${fmt(w / 1000, 1)} kW` : `${fmt(w, 0)} W`;
+}
+
+// Against the contract: amber past what it bears for good, red past what
+// it bears for a moment (the power budget, when one is configured).
+function powerLevel(device, w) {
+  const b = device.power_budget;
+  if (!b || w == null) return "ok";
+  return w >= b.trip_risk_w ? "bad" : w >= b.available_power_w ? "warn" : "ok";
+}
+
+function dayName(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const weekday = DAYS[(new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7];
+  return `${tr(`home.day_long.${weekday}`)} ${d} ${tr("home.months_long")[m - 1]}`;
+}
+
+// The bars of the period shown: [{label, kwh, peak_w, estimated, current, title}].
+function energyBars(data, range) {
+  const todayIso = data.today ? data.today.day : null;
+  const now = boardNow();
+  const todayKey = todayIso || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+  if (range === "year") {
+    const months = tr("home.months_short");
+    return data.year.months.map((m, i) => ({
+      label: months[i], kwh: m.kwh, estimated: m.estimated, current: todayKey.startsWith(m.month),
+      title: m.kwh == null ? "" : tr("home.energy_bar", { when: tr("home.months_long")[i], kwh: fmt(m.kwh, 1) }),
+    }));
+  }
+  const span = data[range];
+  const labels = tr("climate.days");
+  return span.days.map((d, i) => {
+    const iso = d ? d.day : null;
+    const n = i + 1;
+    const label = range === "week" ? labels[i] : (n === 1 || n % 5 === 0 ? String(n) : "");
+    if (!d || d.kwh == null) return { label, kwh: null };
+    return {
+      label, kwh: d.kwh, peak_w: d.peak_w, estimated: d.source === "power", current: iso === todayKey,
+      title: d.peak_w != null
+        ? tr("home.energy_bar_peak", { when: dayName(iso), kwh: fmt(d.kwh, 1), peak: fmtPower(d.peak_w) })
+        : tr("home.energy_bar", { when: dayName(iso), kwh: fmt(d.kwh, 1) }),
+    };
+  });
+}
+
+function energyTile(device, r) {
+  const data = state.energy[device.name];
+  const level = powerLevel(device, r.power_w);
+  const today = data && data.today;
+  const peak = today && today.peak_w != null
+    ? tr("home.energy_peak_today", { value: fmtPower(today.peak_w), when: whenText(wall(today.peak_ts * 1000)) }) : "";
+  const todayKwh = r.day_kwh != null ? r.day_kwh : today && today.kwh;
+  const yesterdayKwh = r.yesterday_kwh != null ? r.yesterday_kwh : data && data.yesterday && data.yesterday.kwh;
+  const facts = [todayKwh != null ? tr("home.energy_today", { kwh: fmt(todayKwh, 1) }) : "",
+    yesterdayKwh != null ? tr("home.energy_yesterday", { kwh: fmt(yesterdayKwh, 1) }) : "",
+    r.voltage_v != null ? `${fmt(r.voltage_v, 0)} V` : "", r.current_a != null ? `${fmt(r.current_a, 2)} A` : ""].filter(Boolean);
+  let chart = "";
+  if (data) {
+    const range = state.energyRange;
+    const bars = energyBars(data, range);
+    const top = Math.max(0.1, ...bars.map(b => b.kwh || 0));
+    const pick = state.energyPick != null && bars[state.energyPick] && bars[state.energyPick].kwh != null ? bars[state.energyPick] : null;
+    const span = data[range];
+    const total = tr(`home.energy_total_${range}`, { kwh: fmt(span.kwh, 1) });
+    const since = data.since && data.since > span.from ? tr("home.energy_since", { date: dayName(data.since) }) : "";
+    chart = `
+      <div class="segmented energy-ranges" role="group" aria-label="${esc(tr("home.energy_ranges"))}">
+        ${ENERGY_RANGES.map(k => `<button type="button" data-energy-range="${k}" aria-pressed="${k === range}">${esc(tr(`home.energy_tab_${k}`))}</button>`).join("")}
+      </div>
+      <div class="energy-bars" style="--n: ${bars.length}">
+        ${bars.map((b, i) => `<button type="button" class="energy-bar" data-energy-pick="${i}" style="--h: ${b.kwh == null ? 0 : Math.max(2, b.kwh / top * 100).toFixed(1)}%"
+          ${b.kwh == null ? "disabled" : ""} data-current="${!!b.current}" data-estimated="${!!b.estimated}" aria-pressed="${pick === b}"
+          title="${esc(b.title || "")}" aria-label="${esc(b.title || b.label)}"></button>`).join("")}
+      </div>
+      <div class="energy-labels" style="--n: ${bars.length}">${bars.map(b => `<span>${esc(b.label)}</span>`).join("")}</div>
+      <div class="energy-total"><b>${esc(pick ? pick.title : total)}</b>${since ? ` <span>· ${esc(since)}</span>` : ""}</div>
+      ${span.estimated ? `<div class="tile-note">${esc(tr("home.energy_estimated"))}</div>` : ""}`;
+  }
+  const budget = device.power_budget ? `<div class="tile-note">${esc(tr("sensors.power_budget_note", {
+    available: fmt(device.power_budget.available_power_w / 1000, 1), trip: fmt(device.power_budget.trip_risk_w / 1000, 1) }))}</div>` : "";
+  return `<div class="tile energy" data-sensor="${esc(device.name)}">
+    <div class="tile-head"><span class="tile-name">${esc(displayName(device.name))}</span></div>
+    <div class="energy-now" data-level="${level}">
+      <span class="tile-value">${r.power_w != null ? `${fmt(r.power_w, 0)}<small>W</small>` : "--"}</span>
+      ${peak ? `<span class="energy-peak" data-level="${powerLevel(device, today.peak_w)}">${esc(peak)}</span>` : ""}
+    </div>
+    ${facts.length ? `<div class="tile-note">${esc(facts.join(" · "))}</div>` : ""}
+    ${chart}${budget}${readingNote(r)}
+  </div>`;
+}
+
+async function refreshEnergy() {
+  const meters = houseDevices().filter(d => d.kind === "power_meter");
+  await Promise.all(meters.map(async d => {
+    try {
+      state.energy[d.name] = await api(`/api/energy/${encodeURIComponent(d.name)}`);
+    } catch (e) { /* keep what we had */ }
+  }));
+  if (meters.length) renderHouse();
+}
+
 function rangeHtml(device, reading) {
   const range = device.range || { min: 0, max: 100, unit: "%" };
   const value = reading.value != null ? reading.value : range.min;
@@ -1186,6 +1297,19 @@ function readingNote(reading) {
 async function onHouseClick(event) {
   const button = event.target.closest("button");
   if (!button) return;
+  // The energy card's period and bars only change this page.
+  if (button.dataset.energyRange) {
+    state.energyRange = button.dataset.energyRange;
+    state.energyPick = null;
+    renderHouse();
+    return;
+  }
+  if (button.dataset.energyPick !== undefined) {
+    const i = Number(button.dataset.energyPick);
+    state.energyPick = state.energyPick === i ? null : i;
+    renderHouse();
+    return;
+  }
   button.disabled = true;
   try {
     if (button.dataset.switch) {
@@ -1326,6 +1450,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && state.shee
   await Promise.all([refreshHistory(), refreshDevices(), refreshProblems()]);
   refreshAirHistory();
   setInterval(refreshAirHistory, HISTORY_MS);
+  refreshEnergy();
+  setInterval(refreshEnergy, HISTORY_MS);
   setInterval(refreshClimate, REFRESH_MS);
   setInterval(refreshDevices, REFRESH_MS);
   setInterval(refreshHistory, HISTORY_MS);

@@ -269,3 +269,38 @@ def test_an_air_quality_sensor_shows_its_co2_day_and_levels(open_page):
     assert [f.get_attribute("data-level") for f in tile.locator(".air-fact").all()] == ["ok", "ok", "ok", "ok"]
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
+
+
+def test_a_power_meter_shows_its_peak_and_its_week_month_and_year(open_page):
+    """The test server has no power meter: its summary (/api/energy) and
+    reading are handed to the page as refreshEnergy()/refreshDevices() would."""
+    opened = _open_home(open_page)
+    page = opened.page
+    page.evaluate("""() => {
+      const day = (d, kwh, source) => ({ day: d, kwh, source, peak_w: 3300, peak_ts: Date.now() / 1000 - 3600 });
+      const week = [day("2026-09-28", 5.1, "power"), day("2026-09-29", 4.9, "power"), null, day("2026-10-01", 5.7, "meter"),
+                    day("2026-10-02", 6.4, "meter"), null, null];
+      state.devices.sensors.push({ name: "Consumo", kind: "power_meter", tab: "home", controllable: false,
+                                   power_budget: { contract_limit_w: 3000, available_power_w: 3300, trip_risk_w: 4000 } });
+      state.readings["Consumo"] = { ok: true, power_w: 157, voltage_v: 227, current_a: 1.07, day_kwh: 6.44, yesterday_kwh: 5.73 };
+      state.energy["Consumo"] = {
+        ok: true, today: week[4], yesterday: week[3], since: "2026-09-22",
+        week: { from: "2026-09-28", kwh: 22.1, estimated: true, days: week },
+        month: { from: "2026-10-01", kwh: 12.1, estimated: false, days: [week[3], week[4], ...Array(29).fill(null)] },
+        year: { from: "2026-01-01", kwh: 66.4, estimated: true,
+                months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`,
+                  kwh: i === 8 ? 54.3 : i === 9 ? 12.1 : null, estimated: i === 8 })) },
+      };
+      renderHouse();
+    }""")
+    tile = page.locator(".tile.energy")
+    assert "Picco oggi 3,3 kW" in tile.inner_text() and "oggi 6,4 kWh" in tile.inner_text()
+    assert tile.locator(".energy-total").inner_text().startswith("Questa settimana 22,1 kWh")
+    assert "stimati" in tile.inner_text()
+    tile.locator("[data-energy-range=year]").click()
+    assert page.locator(".tile.energy .energy-total").inner_text().startswith("Da inizio anno 66,4 kWh")
+    page.locator(".tile.energy [data-energy-range=week]").click()
+    page.locator(".tile.energy .energy-bar:not([disabled])").first.click()
+    assert "lunedì 28 settembre: 5,1 kWh" in page.locator(".tile.energy .energy-total").inner_text()
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
