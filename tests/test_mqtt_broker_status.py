@@ -8,7 +8,7 @@ this.
 import json
 import socket
 
-from localhome.services.mqtt_broker_status import check_broker
+from localhome.services.mqtt_broker_status import PROBE_EVERY_SECONDS, BrokerStatus, check_broker
 
 
 def _unused_port() -> int:
@@ -55,3 +55,38 @@ def test_missing_broker_file_reports_unreachable_not_a_crash(tmp_path):
 
     assert result["reachable"] is False
     assert "does_not_exist.json" in result["error"]
+
+
+def _broker_file(tmp_path):
+    path = tmp_path / "mqtt_broker.json"
+    path.write_text(json.dumps({"host": "localhost", "port": 1883}), encoding="utf-8")
+    return str(path)
+
+
+def test_localhomes_own_connection_answers_without_a_probe(tmp_path):
+    """Up: no connection to the broker at all - every probe is two lines
+    in its log, and an open admin page asks every few seconds."""
+    probes = []
+    status = BrokerStatus(_broker_file(tmp_path), connection_up=lambda host, port: True,
+                          probe=lambda path: probes.append(path) or {"reachable": False})
+    for _ in range(5):
+        assert status.get()["reachable"] is True
+    assert probes == []
+
+
+def test_without_a_connection_up_it_probes_at_most_once_a_minute(tmp_path):
+    now = [1000.0]
+    probes = []
+    status = BrokerStatus(_broker_file(tmp_path), connection_up=lambda host, port: None,
+                          probe=lambda path: probes.append(now[0]) or {"reachable": True, "host": "localhost"},
+                          clock=lambda: now[0])
+    for step in range(20):      # one ask every 3.5 s for 70 s
+        now[0] = 1000.0 + step * 3.5
+        assert status.get()["reachable"] is True
+    assert probes == [1000.0, 1000.0 + 18 * 3.5], "the first ask, then the first one a minute later"
+
+
+def test_a_connection_down_falls_back_to_the_probe(tmp_path):
+    status = BrokerStatus(_broker_file(tmp_path), connection_up=lambda host, port: False,
+                          probe=lambda path: {"reachable": False, "error": "refused"})
+    assert status.get() == {"reachable": False, "error": "refused"}

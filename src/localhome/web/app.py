@@ -48,7 +48,7 @@ from localhome.services import diagnostics, led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
 from localhome.services.mqtt_broker_config import get_broker
-from localhome.services.mqtt_broker_status import check_broker
+from localhome.services.mqtt_broker_status import BrokerStatus
 from localhome.drivers.mqtt import base as mqtt_base, client as mqtt_client
 from localhome.drivers.mqtt.rpc import ShellyRpcClient
 from localhome.drivers.simulated import world as simulated_world
@@ -1364,16 +1364,17 @@ def _register_routes(app: Flask) -> None:
             lang=config.web_language,
         )
 
+    broker_status = BrokerStatus(app.config["LOCALHOME_CONFIG"].resolve("mqtt_broker.json"),
+                                 connection_up=mqtt_client.connection_up)
+
     @app.route("/api/climate-admin/broker-status")
     def api_climate_admin_broker_status():
-        # A raw TCP probe, not a real MQTT client - answers "is anything
-        # even listening" so a device stuck on "not reachable yet" isn't
-        # misdiagnosed as its own fault when the broker itself is down
-        # (a real incident this panel is meant to catch immediately - see
-        # services/mqtt_broker_status.py).
-        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
-        broker_file = config.resolve("mqtt_broker.json")
-        return jsonify(ok=True, **check_broker(broker_file))
+        # Whether the broker answers, kept apart from each zone's own
+        # status so a device stuck on "not reachable yet" isn't
+        # misdiagnosed as its own fault when the broker itself is down.
+        # From LocalHome's own connection when it's up, else a TCP probe
+        # at most once a minute - see services/mqtt_broker_status.py.
+        return jsonify(ok=True, **broker_status.get())
 
     @app.route("/api/climate-admin/broker")
     def api_climate_admin_get_broker():

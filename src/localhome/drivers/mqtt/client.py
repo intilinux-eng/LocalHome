@@ -118,6 +118,14 @@ def broker_down_for(now: float | None = None) -> float:
     return max((now - since for since in downs), default=0.0)
 
 
+def connection_up(host: str, port: int) -> bool | None:
+    """Whether LocalHome's own connection to the broker at host:port is
+    up - None when it has none (no MQTT device on that broker)."""
+    with _pool_lock:
+        states = [c.down_since is None for (h, p, _), c in _pool.items() if (h, p) == (host, port)]
+    return all(states) if states else None
+
+
 def load_broker_config(options: dict) -> dict:
     """`broker_file` (resolved to an absolute path by DeviceManager) takes
     precedence; a plain inline `broker: {...}` mapping also works for a
