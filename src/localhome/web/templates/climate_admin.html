@@ -216,6 +216,51 @@
       <p class="hint-text">{{ t.climate_admin.shelly_note_more }}</p>
     </details>
     <ul class="admin-device-list" id="device-list"><li class="hint-text">{{ t.climate_admin.status_loading }}</li></ul>
+    <!-- What to set in the Shelly app, and why: LocalHome never changes a
+         device. The relays' settings it reads back every 5 minutes and
+         names in their row when they're otherwise - see
+         services/shelly_health.py's expected_settings(). -->
+    <details class="admin-more" id="shelly-app-settings">
+      <summary>{{ t.climate_admin.shelly_app_heading }}</summary>
+      <p class="hint-text">{{ t.climate_admin.shelly_app_note }}</p>
+      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_all }}</h4>
+      <dl class="shelly-guide-list">
+        <dt>{{ t.climate_admin.shelly_app_mqtt_server | replace("{board}", board_host) }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_mqtt_server_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_mqtt_status }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_mqtt_status_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_mqtt_rpc }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_mqtt_rpc_why }}</dd>
+      </dl>
+      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_valve }}</h4>
+      <dl class="shelly-guide-list">
+        <dt>{{ t.climate_admin.shelly_app_wiring }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_wiring_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_in_mode }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_in_mode_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_power_on }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_power_on_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_auto_off }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_auto_off_why }}</dd>
+      </dl>
+      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_bypass }}</h4>
+      <dl class="shelly-guide-list">
+        <dt>{{ t.climate_admin.shelly_app_bypass_in_mode }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_bypass_in_mode_why }}</dd>
+        <dt>{{ t.climate_admin.shelly_app_bypass_rest }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_bypass_rest_why }}</dd>
+      </dl>
+      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_ht }}</h4>
+      <dl class="shelly-guide-list">
+        <dt>{{ t.climate_admin.shelly_app_ht_button }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_ht_button_why }}</dd>
+      </dl>
+      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_app }}</h4>
+      <dl class="shelly-guide-list">
+        <dt>{{ t.climate_admin.shelly_app_app_only }}</dt>
+        <dd>{{ t.climate_admin.shelly_app_app_only_why }}</dd>
+      </dl>
+    </details>
 
     <h3 class="admin-subheading">{{ t.climate_admin.devices_setup_heading }}</h3>
     <p class="hint-text">{{ t.climate_admin.devices_setup_note }}</p>
@@ -528,6 +573,7 @@
       <summary>{{ t.climate_admin.more_details }}</summary>
       <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
       <p class="hint-text">{{ t.climate_admin.how_missing }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_hold }}</p>
     </details>
     <h3 class="how-h">{{ t.climate_admin.how_data_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_data_short }}</p>

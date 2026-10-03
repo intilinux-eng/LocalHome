@@ -211,6 +211,21 @@ A zone valve's (or the dehumidifier's) on/off relay. One unit on the
 production board since 3 October 2026, firmware 1.3.3, measured with no
 load on it.
 
+### Wiring a valve
+
+The relay is a dry contact between **I** and **O**:
+
+- **L** and **N** - the Shelly's own supply, from the mains.
+- **I** - a bridge from **L**: the live it switches.
+- **O** - to the valve's live. Several actuators on one zone go in
+  parallel.
+- The valve's **neutral** - straight to the mains neutral, not into the
+  Shelly.
+- **SW** - empty.
+
+With 24 V actuators there's no bridge: **I** takes the transformer's 24 V
+and the actuators' other wire goes back to the transformer.
+
 ### Settings for a valve
 
 In the Shelly app, besides the [MQTT settings](#mqtt-settings-that-work):

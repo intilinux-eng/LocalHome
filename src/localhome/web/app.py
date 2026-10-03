@@ -1362,6 +1362,9 @@ def _register_routes(app: Flask) -> None:
             site_name=site_name(),
             t=app.config["TRANSLATIONS"],
             lang=config.web_language,
+            # The address the Shellys' MQTT setting points at - see the
+            # Devices section's guide to the Shelly app.
+            board_host=f"{socket.gethostname()}.local",
         )
 
     broker_status = BrokerStatus(app.config["LOCALHOME_CONFIG"].resolve("mqtt_broker.json"),
