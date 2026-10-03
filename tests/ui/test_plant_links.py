@@ -174,3 +174,23 @@ def test_diagnostic_mode_speaks_of_the_valve_and_the_bypass_the_other_way_round(
     finally:
         call(plant, "/api/climate/diagnostic-mode", {"enabled": False})
         context.close()
+
+
+
+def test_the_bathrooms_zone_groups_its_bypass_and_dehumidifier_in_devices(browser, plant):
+    """The zone kept out of cooling is the bathrooms': its sensor and valve,
+    the dehumidifier that draws water through that valve and the bypass,
+    together under its name."""
+    context, opened = _open(browser, plant, "/climate-admin")
+    page = opened.page
+    page.evaluate("document.getElementById('devices').open = true")
+    items = page.locator("#device-list > li")
+    assert eventually(page, lambda: any(f"{ZONE_B} Valve" in t for t in items.all_inner_texts()), timeout_ms=20000)
+    page.wait_for_timeout(1500)
+    texts = [t.strip() for t in items.all_inner_texts()]
+    start = next(i for i, t in enumerate(texts) if t.lower() == f"zona {ZONE_B}".lower())
+    group = texts[start + 1:start + 5]
+    assert f"{ZONE_B} Sensor" in group[0] and f"{ZONE_B} Valve" in group[1]
+    assert {"Deumidificatore", "Valvola Bypass Bagni"} == {next(n for n in ("Deumidificatore", "Valvola Bypass Bagni") if n in t) for t in group[2:]}
+    assert opened.errors == []
+    context.close()

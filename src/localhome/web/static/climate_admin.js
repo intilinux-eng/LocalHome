@@ -1052,7 +1052,7 @@ async function refreshStatus() {
     // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
     const restartPending = (savedMap && savedMap.restart_pending) || extraSwitchesRestartPending;
     updatePlantOverview(data, restartPending);
-    deviceZones = (data.zones || []).map(z => ({ name: z.name, members: [z.sensor, z.valve].filter(Boolean) }));
+    deviceZones = devicesByZone(data);
     renderDevices();
     const byName = {};
     (data.zones || []).forEach(z => { byName[z.name] = z; });
@@ -2559,9 +2559,24 @@ function deviceRowHtml(row) {
     + `<summary class="admin-device-line">${line}</summary>${errors}${row.stats}</details></li>`;
 }
 
-// A zone's sensor and valve belong together: a group each, the sensor
-// then the valve whatever their state; every other device after them,
-// trouble first.
+// What belongs to each zone: its sensor and valve; a switch linked to
+// its valve (the dehumidifier drawing its water through it); and the
+// plant's season switches - the bathrooms' bypass and dehumidifier - with
+// the one zone kept out of cooling, the bathrooms.
+function devicesByZone(data) {
+  const effects = data.season_effects || {};
+  const zones = data.zones || [];
+  const excluded = zones.filter(z => z.cool_enabled === false);
+  return zones.map(z => {
+    const members = [z.sensor, z.valve];
+    (effects.links || []).filter(l => l.follower === z.valve || l.zone === z.name).forEach(l => members.push(l.leader));
+    if (excluded.length === 1 && excluded[0] === z) (effects.rules || []).forEach(r => members.push(r.switch));
+    return { name: z.name, members: [...new Set(members.filter(Boolean))] };
+  });
+}
+
+// A zone's devices belong together: a group each, in that order whatever
+// their state; every other device after them, trouble first.
 function deviceGroups(rows) {
   const placed = new Set();
   const groups = [];
