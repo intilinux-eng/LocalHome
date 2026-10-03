@@ -1,6 +1,7 @@
 """The admin panel's check of a Shelly the moment its id is typed - see
 services/shelly_check.py. A fake RPC: nothing on the network."""
 import json
+import re
 
 from localhome.services.shelly_check import ShellyCheck
 from localhome.web.app import create_app
@@ -107,6 +108,10 @@ def test_the_installers_guide_is_served_and_linked_from_the_admin(tmp_path):
         res = client.get(path)
         assert res.status_code == 200 and len(res.data) > 2000, path
     html = client.get("/static/guide/shelly-plus1-valvole.html").get_data(as_text=True)
-    for setting in ("Detached", "spegnersi quando è alimentato", "900 secondi", "ponte"):
+    for setting in ("Detached", "spegnersi quando è alimentato", "00:15:00", "ponte", "comando a tempo"):
         assert setting in html
     assert client.get("/static/guide/shelly-plus1-valvole.pdf").data.startswith(b"%PDF")
+    images = re.findall(r'<img src="([^"]+)"', html)
+    assert len(images) == 5
+    for image in images:
+        assert client.get(f"/static/guide/{image}").status_code == 200, image

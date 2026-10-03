@@ -217,14 +217,11 @@ The relay is a dry contact between **I** and **O**:
 
 - **L** and **N** - the Shelly's own supply, from the mains.
 - **I** - a bridge from **L**: the live it switches.
-- **O** - to the valve's live. Several actuators on one zone go in
-  parallel.
+- **O** - to the zone valve's live. A zone with several valves has
+  them in parallel.
 - The valve's **neutral** - straight to the mains neutral, not into the
   Shelly.
 - **SW** - empty.
-
-With 24 V actuators there's no bridge: **I** takes the transformer's 24 V
-and the actuators' other wire goes back to the transformer.
 
 ### Settings for a valve
 

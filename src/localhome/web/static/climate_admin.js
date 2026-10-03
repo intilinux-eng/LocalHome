@@ -2390,7 +2390,9 @@ function shellyCheckText(data) {
 // words, so it's clear what to change there (shelly_health.settings_wrong).
 function shellySettingValue(key, value) {
   if (key === "auto_off" || key === "auto_on") {
-    return value ? tr("climate_admin.shelly_seconds", { s: value }) : tr("climate_admin.shelly_value_off");
+    // As the Shelly app writes it: 00:15:00, not 900 s.
+    const hms = [Math.floor(value / 3600), Math.floor(value / 60) % 60, value % 60].map(n => String(n).padStart(2, "0")).join(":");
+    return value ? tr("climate_admin.shelly_timer_on", { time: hms }) : tr("climate_admin.shelly_value_off");
   }
   if (typeof value === "boolean") return tr(value ? "climate_admin.shelly_value_on" : "climate_admin.shelly_value_off");
   const label = tr(`climate_admin.shelly_${key}_${value}`);
