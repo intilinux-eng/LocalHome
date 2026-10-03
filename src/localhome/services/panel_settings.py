@@ -48,14 +48,39 @@ SETTINGS = {
     "history_retention_days": {"section": "history", "option": "retention_days", "type": "int",
                                "min": 1, "max": 365, "step": 1, "default": 30},
     "history_max_db_mb": {"section": "history", "option": "max_db_mb", "type": "int",
-                          "min": 50, "max": 5000, "step": 50, "default": 300},
+                          "min": 50, "max": 2000, "step": 50, "default": 300},
 }
 
+# The history's ceiling also follows the disk it's on, and stays well
+# inside it: a tenth of the disk, and a third of the room there is (its
+# free space plus what the history already takes) - room for the history,
+# its backup copy before a deletion and SQLite's temporary copy while it's
+# cleared, with the system's own needs on top. 2000 MB at most whatever
+# the disk: a year of a house with fifteen sensors is about 1.5 GB.
+HISTORY_DISK_SHARE = 0.10
+HISTORY_ROOM_SHARE = 1 / 3
 
-def validate(values: dict) -> dict:
+
+def history_ceiling_mb(disk: dict | None, history_bytes: int = 0) -> int:
+    """The largest history this disk allows, in MB, on the setting's step
+    - never under its minimum. A disk that can't be read: the setting's
+    own maximum."""
+    spec = SETTINGS["history_max_db_mb"]
+    total = (disk or {}).get("total_bytes")
+    free = (disk or {}).get("free_bytes")
+    if not total or free is None:
+        return spec["max"]
+    room = min(total * HISTORY_DISK_SHARE, (free + history_bytes) * HISTORY_ROOM_SHARE)
+    return max(spec["min"], min(spec["max"], int(room / 1_000_000) // spec["step"] * spec["step"]))
+
+
+def validate(values: dict, ceilings: dict | None = None, clamp: bool = False) -> dict:
     """The accepted overrides, converted to their type; raises ValueError
     naming the first bad one. None (or a missing key) means "not set
-    here" - fall back to config.yaml."""
+    here" - fall back to config.yaml. `ceilings` lowers a setting's
+    maximum (the history's, to what the disk allows). `clamp` brings a
+    number outside its range back inside instead - for a file saved when
+    the range was wider."""
     if not isinstance(values, dict):
         raise InputError("request_invalid", "settings must be an object")
     clean = {}
@@ -80,9 +105,13 @@ def validate(values: dict) -> dict:
             number = float(value)
         except (TypeError, ValueError):
             raise InputError("setting_number", f"{key}: must be a number", key=key) from None
-        if not spec["min"] <= number <= spec["max"]:
-            raise InputError("setting_range", f"{key}: must be between {spec['min']} and {spec['max']}",
-                             key=key, min=spec["min"], max=spec["max"])
+        high = min(spec["max"], (ceilings or {}).get(key, spec["max"]))
+        if not spec["min"] <= number <= high:
+            if not clamp:
+                raise InputError("setting_range", f"{key}: must be between {spec['min']} and {high}",
+                                 key=key, min=spec["min"], max=high)
+            logger.warning("Setting %s: %s is outside %s-%s - using the nearest", key, value, spec["min"], high)
+            number = min(max(number, spec["min"]), high)
         clean[key] = int(round(number)) if spec["type"] == "int" else round(number, 2)
     return clean
 
@@ -118,13 +147,13 @@ class PanelSettingsStore:
             logger.exception("Failed to read %s - using config.yaml's settings", self.path)
             return {}
         try:
-            return validate(data if isinstance(data, dict) else {})
+            return validate(data if isinstance(data, dict) else {}, clamp=True)
         except ValueError:
             logger.exception("Ignoring invalid %s - using config.yaml's settings", self.path)
             return {}
 
-    def set(self, values: dict) -> dict:
-        clean = validate(values)
+    def set(self, values: dict, ceilings: dict | None = None) -> dict:
+        clean = validate(values, ceilings)
         with self._lock:
             if clean:
                 save_json_atomic(self.path, clean)
@@ -133,9 +162,10 @@ class PanelSettingsStore:
         return clean
 
 
-def effective(config, overrides: dict) -> list[dict]:
+def effective(config, overrides: dict, ceilings: dict | None = None) -> list[dict]:
     """Every setting with the value in force and where it comes from:
-    "panel" (set here), "config" (config.yaml) or "default"."""
+    "panel" (set here), "config" (config.yaml) or "default" - and, when
+    that's over its ceiling, the lower one actually used."""
     rows = []
     for key, spec in SETTINGS.items():
         from_config = (config.raw.get(spec["section"]) or {}).get(spec["option"])
@@ -150,6 +180,10 @@ def effective(config, overrides: dict) -> list[dict]:
         for extra in ("min", "max", "step", "choices", "max_length"):
             if extra in spec:
                 row[extra] = spec[extra]
+        if key in (ceilings or {}):
+            row["max"] = min(spec["max"], ceilings[key])
+            if isinstance(value, (int, float)) and value > row["max"]:
+                row["capped_to"] = row["max"]
         rows.append(row)
     return rows
 

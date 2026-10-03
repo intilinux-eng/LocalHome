@@ -1908,6 +1908,7 @@ async function loadSettings() {
     const data = await res.json();
     if (!data.ok) return;
     historyStats = data.history || null;
+    settingsDisk = data.disk || null;
     settingsLoaded = Object.fromEntries(data.settings.map(s => [s.key, s.source === "panel" ? s.value : null]));
     document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
     settingsRestartPending = !!data.restart_pending;
@@ -1921,12 +1922,24 @@ async function loadSettings() {
 }
 
 let historyStats = null; // from the last GET /api/climate-admin/settings
+let settingsDisk = null;  // the disk the history is on, from the same
 let settingsLoaded = {};  // key -> the value set here when the form was loaded (null = not set here)
 
 // "300 MB" means nothing without knowing what's in there now. The history
 // holds measurements only - one row per sensor field per cycle - while
 // schedules, settings and the zone mapping live in their own files, which
 // is the first thing people assume is filling it up.
+// Where the history's maximum comes from: the disk it's on, kept well
+// inside (panel_settings.history_ceiling_mb).
+function historyDiskHtml(s) {
+  const d = settingsDisk;
+  if (!d || !d.total_bytes) return "";
+  const gb = bytes => (bytes / 1e9).toLocaleString(LOCALE, { maximumFractionDigits: 1 });
+  let text = tr("climate_admin.setting_history_disk", { max: s.max, total: gb(d.total_bytes), free: gb(d.free_bytes) });
+  if (s.capped_to) text += " " + tr("climate_admin.setting_history_capped", { value: s.value, max: s.capped_to });
+  return `<span class="hint-text setting-usage">${escapeHtml(text)}</span>`;
+}
+
 function historyUsageHtml(maxMb) {
   const h = historyStats;
   if (!h || !h.rows) return `<span class="hint-text setting-usage">${escapeHtml(tr("climate_admin.setting_history_empty"))}</span>`;
@@ -1981,7 +1994,7 @@ function settingFieldHtml(s) {
       <label>${escapeHtml(label)} <span class="setting-range">${s.type === "choice" ? "" : `${s.min}–${s.max}`}</span></label>
       ${input}
       <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
-      ${s.key === "history_max_db_mb" ? historyUsageHtml(Number(s.value)) : ""}
+      ${s.key === "history_max_db_mb" ? historyDiskHtml(s) + historyUsageHtml(Number(s.capped_to || s.value)) : ""}
     </div>`;
 }
 

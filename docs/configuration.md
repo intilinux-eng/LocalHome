@@ -63,6 +63,16 @@ history:
   max_db_mb: 300                     # default shown - hard ceiling: over it, the oldest days go first
 ```
 
+`max_db_mb` is also held to what the disk the history is on allows, well
+inside it: a tenth of that disk and a third of the room there is (free
+space plus what the history already takes), 2000 MB at most. That leaves
+room for the backup copy taken before a deletion, SQLite's temporary copy
+while the history is cleared, and the system. A larger value - here or
+saved in the panel - is used as that ceiling, with a warning in the log.
+On the UNO Q the history lives in `/home/arduino`: about 1.9 GB of ceiling
+on the 32 GB eMMC model; a house with fifteen sensors writes about 4 MB a
+day, so 30 days take some 130 MB.
+
 ## `integrations`
 
 A list of driver instances to start. Every entry needs `kind` and `type`;
@@ -729,7 +739,8 @@ The admin panel's **Settings** section changes the operating parameters
 without touching this file: `thermostat.hysteresis_c`,
 `thermostat.poll_interval_seconds`, `thermostat.sensor_failsafe_hours`,
 `history.retention_days`, `history.max_db_mb`, `web.language` and
-`web.site_name`. Each has a safe range (a value outside it is refused),
+`web.site_name`. Each has a safe range (a value outside it is refused;
+the history's maximum is the disk's, see `max_db_mb` above),
 and each field shows whether its value comes from the panel, from
 config.yaml or from the built-in default. Saved in
 `config/panel_settings.json`, they take precedence over config.yaml after

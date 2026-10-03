@@ -225,6 +225,11 @@ def create_app(config_path: str | None = None) -> Flask:
     power_sensor = energy_cfg.get("sensor")
 
     history_poll_interval = history_cfg.get("poll_interval_seconds", 30)
+    max_db_mb = history_cfg.get("max_db_mb", 300)
+    history_ceiling = _history_ceiling_mb(store)
+    if max_db_mb > history_ceiling:
+        logger.warning("History: max_db_mb %s is more than this disk allows - using %d MB", max_db_mb, history_ceiling)
+        max_db_mb = history_ceiling
     recorder = HistoryRecorder(
         manager,
         store,
@@ -232,7 +237,7 @@ def create_app(config_path: str | None = None) -> Flask:
         power_budget=power_budget,
         power_sensor=power_sensor,
         retention_days=history_cfg.get("retention_days", 30),
-        max_db_bytes=int(history_cfg.get("max_db_mb", 300) * 1_000_000),
+        max_db_bytes=int(max_db_mb * 1_000_000),
     )
     # No rows with a clock that isn't synchronized yet - see
     # HistoryRecorder.clock_ready. Where that can't be known (a PC), it
@@ -570,6 +575,20 @@ def _shelly_problems(app: Flask) -> list[dict]:
     return health.problems() if health else []
 
 
+def _history_disk(store: HistoryStore) -> dict:
+    return system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
+
+
+def _history_ceiling_mb(store: HistoryStore) -> int:
+    """How big the history may grow on the disk it's on - see
+    panel_settings.history_ceiling_mb."""
+    try:
+        size = os.path.getsize(store.db_path)
+    except OSError:
+        size = 0
+    return panel_settings.history_ceiling_mb(_history_disk(store), size)
+
+
 def _health(app: Flask) -> dict:
     """What the admin panel's system status is built from."""
     manager: DeviceManager = app.config["MANAGER"]
@@ -577,7 +596,7 @@ def _health(app: Flask) -> dict:
     loops = _loops(app)
     devices = system_status.device_health(manager) + system_status.cover_health(app.config["COVER_READS"])
     failed = manager.failed_integrations
-    disk = system_status.disk_stats(os.path.dirname(os.path.abspath(store.db_path)))
+    disk = _history_disk(store)
     host = system_status.host_stats()
     storage = system_status.storage_health(uptime_seconds=host.get("uptime_seconds"),
                                            recent=app.config["WRITE_RATE"].per_day())
@@ -1614,12 +1633,16 @@ def _register_routes(app: Flask) -> None:
         store: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = store.get()
+        history: HistoryStore = app.config["HISTORY"]
+        ceilings = {"history_max_db_mb": _history_ceiling_mb(history)}
         return jsonify(
             ok=True,
-            settings=panel_settings.effective(config, saved),
+            settings=panel_settings.effective(config, saved, ceilings),
             # Next to "maximum history size": what's in there now, so the
-            # ceiling is a number with something to compare it against.
+            # ceiling is a number with something to compare it against -
+            # and the disk the ceiling's own maximum comes from.
             history=_database_stats(),
+            disk=_history_disk(history),
             restart_pending=panel_settings.needs_restart(saved, app.config["ACTIVE_PANEL_SETTINGS"]),
         )
 
@@ -1627,8 +1650,9 @@ def _register_routes(app: Flask) -> None:
     def api_panel_settings_set():
         store: panel_settings.PanelSettingsStore = app.config["PANEL_SETTINGS"]
         data = _json_body()
+        ceilings = {"history_max_db_mb": _history_ceiling_mb(app.config["HISTORY"])}
         try:
-            saved = store.set(data.get("values") or {})
+            saved = store.set(data.get("values") or {}, ceilings)
         except ValueError as exc:
             return _refusal(exc, 400)
         return jsonify(ok=True, saved=saved,

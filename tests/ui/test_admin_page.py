@@ -145,3 +145,17 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     api("/api/climate-admin/vmc-speeds", before)
     # The browser logs the refused save's 400; nothing else.
     assert [e for e in opened.errors if "400" not in e] == []
+
+
+def test_the_history_size_says_what_the_disk_allows(open_page, api):
+    """The maximum history size is the disk's, and the field says so."""
+    row = next(r for r in api("/api/climate-admin/settings")["settings"] if r["key"] == "history_max_db_mb")
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    page.evaluate("document.getElementById('settings').open = true")
+    field = page.locator("#settings-form .admin-field", has=page.locator("[data-setting='history_max_db_mb']"))
+    assert eventually(page, lambda: "Su questo disco al massimo" in field.inner_text())
+    assert f"50–{row['max']}" in field.inner_text()
+    assert page.locator("[data-setting='history_max_db_mb']").get_attribute("max") == str(row["max"])
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
