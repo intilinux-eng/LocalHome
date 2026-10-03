@@ -448,6 +448,11 @@
 .admin-device-age { margin-left: auto; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .boot-list li { display: flex; justify-content: space-between; gap: 12px; }
 
+/* The devices list: a zone's sensor and valve under the zone's name. */
+.admin-device-list li.device-group { padding: 16px 0 4px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-3); }
+.admin-device-list li.device-group:first-child { padding-top: 4px; }
+
 /* The devices list: a Shelly's row opens to what it says about itself. */
 .device-row > summary { list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .device-row > summary::-webkit-details-marker { display: none; }

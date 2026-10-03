@@ -3,7 +3,7 @@ in, the bar follows the scroll, page-wide notices come and go, refusals
 arrive in the page's language. See conftest.py for the server."""
 import pytest
 
-from .helpers import OVERFLOW_JS, UNTRANSLATED_JS, ZONE_A, eventually
+from .helpers import OVERFLOW_JS, UNTRANSLATED_JS, ZONE_A, ZONE_B, eventually
 
 pytestmark = pytest.mark.ui
 
@@ -192,8 +192,14 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     opened = open_page("/climate-admin", 390)
     page = opened.page
     page.evaluate("document.getElementById('devices').open = true")
-    rows = page.locator("#device-list > li")
+    rows = page.locator("#device-list > li:not(.device-group)")
     assert eventually(page, lambda: rows.count() == len(names))
+    # Each zone's sensor and valve together, under the zone's name, before the rest.
+    items = page.locator("#device-list > li").all_inner_texts()
+    assert items[0].strip().lower() == f"zona {ZONE_A}".lower()
+    assert f"{ZONE_A} Sensor" in items[1] and f"{ZONE_A} Valve" in items[2]
+    assert items[3].strip().lower() == f"zona {ZONE_B}".lower()
+    assert "altri dispositivi" in [i.strip().lower() for i in items]
     assert "tutti ok" in page.inner_text("#devices-summary")
     shelly = page.locator("#device-list details.device-row", has_text=ZONE_A).first
     assert "a batteria" in shelly.locator("summary").inner_text()

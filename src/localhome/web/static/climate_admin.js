@@ -1035,6 +1035,8 @@ async function refreshStatus() {
     // see web/app.py's ACTIVE_CLIMATE_ZONES/ACTIVE_EXTRA_SWITCHES.
     const restartPending = (savedMap && savedMap.restart_pending) || extraSwitchesRestartPending;
     updatePlantOverview(data, restartPending);
+    deviceZones = (data.zones || []).map(z => ({ name: z.name, members: [z.sensor, z.valve].filter(Boolean) }));
+    renderDevices();
     const byName = {};
     (data.zones || []).forEach(z => { byName[z.name] = z; });
     mapZones.forEach((mapEntry, index) => {
@@ -2487,6 +2489,7 @@ async function loadShellyHealth() {
 
 let deviceStatus = null;   // devices from the last GET /api/system-status
 let shellyHealth = null;   // the last GET /api/climate-admin/shelly-health
+let deviceZones = null;    // each zone's sensor and valve, from the last GET /api/climate/zones
 const openDeviceRows = new Set();
 const DEVICE_STATE_ORDER = { bad: 0, neutral: 1, ok: 2 };
 
@@ -2539,11 +2542,29 @@ function deviceRowHtml(row) {
     + `<summary class="admin-device-line">${line}</summary>${errors}${row.stats}</details></li>`;
 }
 
+// A zone's sensor and valve belong together: a group each, the sensor
+// then the valve whatever their state; every other device after them,
+// trouble first.
+function deviceGroups(rows) {
+  const placed = new Set();
+  const groups = [];
+  for (const zone of deviceZones || []) {
+    const members = zone.members.map(name => rows.find(r => !placed.has(r) && r.names.includes(name))).filter(Boolean);
+    members.forEach(r => placed.add(r));
+    if (members.length) groups.push({ title: tr("climate_admin.devices_zone_group", { zone: zone.name }), rows: members });
+  }
+  const rest = rows.filter(r => !placed.has(r));
+  if (rest.length) groups.push({ title: groups.length ? tr("climate_admin.devices_other_group") : "", rows: rest });
+  return groups;
+}
+
 function renderDevices() {
   const list = document.getElementById("device-list");
   if (!list || !deviceStatus) return;
   const rows = deviceRows();
-  list.innerHTML = rows.length ? rows.map(deviceRowHtml).join("")
+  list.innerHTML = rows.length
+    ? deviceGroups(rows).map(g => (g.title ? `<li class="device-group">${escapeHtml(g.title)}</li>` : "")
+      + g.rows.map(deviceRowHtml).join("")).join("")
     : `<li class="hint-text">${escapeHtml(tr("climate_admin.devices_none"))}</li>`;
   const bad = rows.filter(r => r.state === "bad").length;
   const check = rows.filter(r => r.state === "neutral").length;

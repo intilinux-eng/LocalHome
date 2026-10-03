@@ -460,6 +460,8 @@
     "devices_heading": "Dispositivi e broker MQTT",
     "devices_note": "Tutto quello che LocalHome legge o comanda, prima quelli che non rispondono. Uno Shelly si apre su quello che dice di sé.",
     "devices_none": "Nessun dispositivo configurato.",
+    "devices_zone_group": "Zona {zone}",
+    "devices_other_group": "Altri dispositivi",
     "devices_ok": "{count}, tutti ok",
     "devices_bad": "{count} di {total} non rispondono",
     "devices_check": "{count} di {total} da controllare",
