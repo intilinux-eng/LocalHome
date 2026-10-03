@@ -1792,16 +1792,54 @@ async function refreshSeasonRules(data) {
     const now = reading.ok ? `${tr(`climate_admin.${nowKey}`)} ` : "";
     row.querySelector(".rule-live").innerHTML = `${escapeHtml(now)}${pillHtml(state, text)}`;
   }
-  // What one switch opens with it: the valve a dehumidifier draws its
-  // water through.
+  // What one switch opens with it - the valve a dehumidifier draws its
+  // water through - and whether it holds right now: the valve on with its
+  // leader, off with it, or, past a control cycle, said not to be.
   const links = (data.season_effects || {}).links || [];
   const linksEl = document.getElementById("season-links");
   if (linksEl) {
     linksEl.hidden = !links.length;
-    linksEl.innerHTML = links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>`
-      + links.map(link => `<p class="season-link">${escapeHtml(tr("climate_admin.link_row",
-          { leader: displayName(link.leader), zone: link.zone || displayName(link.follower) }))}
-          <span class="admin-pill">${escapeHtml(tr(`climate_admin.link_when_${link.mode || "always"}`))}</span></p>`).join("") : "";
+    const rows = [];
+    for (const link of links) {
+      const zone = link.zone || displayName(link.follower);
+      let live;
+      if (data.diagnostic_mode) {
+        live = pillHtml("idle", tr("climate_admin.rule_diag"));
+      } else if (link.mode && link.mode !== data.mode) {
+        live = pillHtml("idle", tr("climate_admin.link_off_season"));
+      } else {
+        let leader = {};
+        let valve = {};
+        try {
+          [leader, valve] = await Promise.all([link.leader, link.follower].map(name =>
+            fetch(`/api/sensors/${encodeURIComponent(name)}`).then(r => r.json())));
+        } catch (e) { /* said below */ }
+        const key = `link:${link.leader}`;
+        if (!leader.ok || !valve.ok) {
+          live = pillHtml("bad", tr("climate_admin.rule_offline"));
+          worst = "bad";
+        } else {
+          const want = !!leader.is_on;
+          const now = tr("climate_admin.link_now", { leader: displayName(link.leader),
+            leader_state: tr(want ? "home.on" : "home.off_state"), valve_state: tr(valve.is_on ? "home.valve_open" : "home.valve_closed") });
+          if (!!valve.is_on === want) {
+            delete ruleMismatchSince[key];
+            live = `${escapeHtml(now)} ${pillHtml("ok", tr("climate_admin.rule_ok"))}`;
+          } else {
+            ruleMismatchSince[key] = ruleMismatchSince[key] || Date.now();
+            const late = Date.now() - ruleMismatchSince[key] > RULE_GRACE_MS;
+            if (late) worst = "bad";
+            else if (worst === "ok") worst = "neutral";
+            live = `${escapeHtml(now)} ${pillHtml(late ? "bad" : "neutral", late
+              ? tr(want ? "climate_admin.rule_should_be_open" : "climate_admin.rule_should_be_closed") : tr("climate_admin.rule_waiting"))}`;
+          }
+        }
+      }
+      rows.push(`<div class="season-link"><span>${escapeHtml(tr("climate_admin.link_row", { leader: displayName(link.leader), zone }))}</span>
+        <span class="admin-pill">${escapeHtml(tr(`climate_admin.link_when_${link.mode || "always"}`))}</span>
+        <span class="rule-live">${live}</span></div>`);
+    }
+    linksEl.innerHTML = links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>${rows.join("")}` : "";
   }
   // A switch not doing what its rule says outranks the header's count.
   setPill("extra-switches-summary", worst !== "ok" && !extraSwitchesRestartPending

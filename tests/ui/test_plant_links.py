@@ -123,3 +123,20 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
     assert page.evaluate(UNTRANSLATED_JS) == []
     assert opened.errors == []
     context.close()
+
+
+def test_the_admin_says_live_whether_the_valve_follows_the_dehumidifier(browser, plant):
+    context, opened = _open(browser, plant, "/climate-admin")
+    page = opened.page
+    page.evaluate("document.getElementById('extra-switches').open = true")
+    links = page.locator("#season-links")
+    assert eventually(page, lambda: "Ora: Deumidificatore spento, valvola chiusa" in links.inner_text(), timeout_ms=20000)
+    assert "Come previsto" in links.inner_text()
+    call(plant, "/api/sensors/Deumidificatore/on", {})
+    assert eventually(page, lambda: "Ora: Deumidificatore acceso, valvola aperta" in links.inner_text(), timeout_ms=20000)
+    assert "Come previsto" in links.inner_text()
+    call(plant, "/api/sensors/Deumidificatore/off", {})
+    assert eventually(page, lambda: "Ora: Deumidificatore spento, valvola chiusa" in links.inner_text(), timeout_ms=20000)
+    assert page.evaluate(UNTRANSLATED_JS) == []
+    assert opened.errors == []
+    context.close()
