@@ -406,3 +406,23 @@ def test_a_dimmer_isnt_asked_for_its_settings(tmp_path):
     watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
     watcher.poll_once()
     assert "Shelly.GetConfig" not in rpc.calls
+
+
+
+def test_a_device_restarting_for_an_update_is_asked_again_and_its_new_firmware_read(tmp_path):
+    """Seen on the production board: asked in the middle of a firmware
+    update, the Plus 1 said "shutting down in 2267 ms" - an error worth
+    a quick second ask, and a version worth reading again."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    assert watcher.poll_once() is False
+    rpc.fail = "RPC error: {'code': -109, 'message': 'shutting down in 2267 ms'}"
+    assert watcher.poll_once() is True, "worth asking again soon"
+    rpc.fail = None
+    clock.t += 120
+    rpc.status["sys"]["uptime"] = 60                      # back up, on the new firmware
+    asked = rpc.calls.count("Shelly.GetDeviceInfo")
+    assert watcher.poll_once() is False
+    assert by_id(watcher, RELAY)["error"] is None
+    assert rpc.calls.count("Shelly.GetDeviceInfo") == asked + 1, "the version is read again after a restart"

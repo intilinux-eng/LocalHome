@@ -51,6 +51,9 @@ REPORT_SPAN_SECONDS = 60
 HEARTBEAT_TOLERANCE_SECONDS = 180
 POLL_SECONDS = 300
 FIRST_POLL_SECONDS = 20
+# A device that didn't answer is asked again this soon, once - often it
+# was only restarting (a firmware update: "shutting down in 2267 ms").
+RETRY_SECONDS = 30
 # A Shelly switches its output off by itself at about 90°C.
 HOT_C = 80
 MISSED_PER_DAY = 3
@@ -313,24 +316,32 @@ class ShellyHealth:
 
     # ----------------------------------------------------------- asking --
 
-    def poll_once(self) -> None:
-        """Asks every mains Shelly for its status - one RPC each."""
+    def poll_once(self) -> bool:
+        """Asks every mains Shelly for its status - one RPC each. True when
+        one of them didn't answer."""
+        failed = False
         for state in list(self._devices.values()):
             if state["battery"] or self._rpc_for is None:
                 continue
             try:
                 rpc = self._rpc.get(state["id"]) or self._rpc.setdefault(state["id"], self._rpc_for(state["id"]))
-                if state["model"] is None:
-                    info = rpc.call("Shelly.GetDeviceInfo")
-                    with self._lock:
-                        state["model"], state["firmware"] = info.get("model"), info.get("ver")
                 status = rpc.call("Shelly.GetStatus")
             except Exception as exc:
                 with self._lock:
                     state["error"] = str(exc)
+                failed = True
                 continue
             with self._lock:
                 self._read_status(state, status)
+            # Its model and firmware: at the first answer, and again after a
+            # restart (_read_sys() forgets them) - a firmware update is one.
+            if state["model"] is None:
+                try:
+                    info = rpc.call("Shelly.GetDeviceInfo")
+                    with self._lock:
+                        state["model"], state["firmware"] = info.get("model"), info.get("ver")
+                except Exception:
+                    pass        # asked again at the next check
             if state["expect"]:
                 try:
                     config = rpc.call("Shelly.GetConfig")
@@ -339,6 +350,7 @@ class ShellyHealth:
                 with self._lock:
                     state["settings_wrong"] = settings_wrong(state["expect"], config)
         self.refresh_problems()
+        return failed
 
     def _read_status(self, state: dict, status: dict) -> None:
         now = self.clock()
@@ -375,6 +387,8 @@ class ShellyHealth:
         if known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
             if known is not None and booted > known:
                 self._record(state["id"], {"restart": 1}, ts=booted)
+                # A firmware update is one: its version is asked again.
+                state["model"] = None
             self._record(state["id"], {"booted_at": booted})
             state["booted_at"] = booted
 
@@ -498,13 +512,18 @@ class ShellyHealth:
         with self._lock:
             return list(self._problems)
 
-    def start(self, every: float = POLL_SECONDS, first: float = FIRST_POLL_SECONDS) -> None:
+    def start(self, every: float = POLL_SECONDS, first: float = FIRST_POLL_SECONDS,
+              retry: float = RETRY_SECONDS) -> None:
         def loop():
             time.sleep(first)
+            retried = False
             while True:
+                failed = False
                 try:
-                    self.poll_once()
+                    failed = self.poll_once()
                 except Exception:
                     logger.exception("Shelly health check failed")
-                time.sleep(every)
+                # Once soon after a device didn't answer, then the usual pace.
+                retried = failed and not retried
+                time.sleep(retry if retried else every)
         threading.Thread(target=loop, daemon=True, name="shelly-health").start()
