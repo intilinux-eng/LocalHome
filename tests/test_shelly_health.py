@@ -10,7 +10,8 @@ from localhome.config import Integration
 from localhome.services import shelly_health
 from localhome.services.history import HistoryStore
 from localhome.services.shelly_health import (
-    HEARTBEAT_SECONDS as H, ShellyHealth, missed_reports, next_heartbeat, shelly_devices, split_reports,
+    HEARTBEAT_SECONDS as H, ShellyHealth, expected_settings, missed_reports, next_heartbeat, settings_wrong,
+    shelly_devices, split_reports,
 )
 
 HT = "shellyhtg3-c0ffee000002"
@@ -329,3 +330,79 @@ def test_the_admin_api_lists_a_bench_with_simulated_sensors_and_no_broker(tmp_pa
         time.sleep(0.1)
     device = client.get("/api/climate-admin/shelly-health").get_json()["devices"][0]
     assert device["stats"]["reports_24h"] == 1
+
+
+
+# ---------------------------------------------------------- relay settings --
+# A relay LocalHome commands has to be set as a valve needs it - read back
+# from the device, said by name when it isn't (docs/shelly-gen3.md).
+
+RELAY = "shellyplus1-c0ffee000001"
+
+
+def valve_integration(**extra):
+    return Integration("switch", "mqtt_json", {
+        "name": "Stanze Valve", "state_topic": f"{RELAY}/status/switch:0", "command_topic": f"{RELAY}/command/switch:0",
+        "hold_seconds": 900, **extra})
+
+
+# As read from the production board's Plus 1 on 3 October 2026, after a
+# first try in the app: the power-on state right, the relay type not, no Auto OFF.
+RELAY_CONFIG = {
+    "switch:0": {"id": 0, "in_mode": "activate", "initial_state": "off", "auto_on": False, "auto_on_delay": 60.0,
+                 "auto_off": False, "auto_off_delay": 60.0},
+    "mqtt": {"enable": True, "server": "antonio.local:1883", "rpc_ntf": True, "status_ntf": True,
+             "enable_rpc": True, "enable_control": True},
+}
+
+
+def test_what_a_held_valve_relay_must_be_set_to():
+    assert expected_settings(valve_integration()) == {
+        "in_mode": "detached", "mqtt_control": True, "mqtt_status": True, "initial_state": "off", "auto_off": 900}
+    assert expected_settings(valve_integration(rest_state="on"))["auto_on"] == 900
+    unheld = expected_settings(valve_integration(hold_seconds=None))
+    assert unheld == {"in_mode": "detached", "mqtt_control": True, "mqtt_status": True}
+    assert expected_settings(ht_integration()) == {} and expected_settings(dimmer_integrations()[0]) == {}
+
+
+def test_the_settings_set_otherwise_are_said_by_name():
+    wrong = settings_wrong(expected_settings(valve_integration()), RELAY_CONFIG)
+    assert wrong == [{"key": "in_mode", "value": "activate", "expected": "detached"},
+                     {"key": "auto_off", "value": 0, "expected": 900}]
+    right = json.loads(json.dumps(RELAY_CONFIG))
+    right["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)
+    assert settings_wrong(expected_settings(valve_integration()), right) == []
+    assert settings_wrong(expected_settings(valve_integration()), {}) == [], "nothing reported, nothing said"
+
+
+class RelayRpc(Rpc):
+    def __init__(self, status, config):
+        super().__init__(status)
+        self.config = json.loads(json.dumps(config))
+
+    def call(self, method, params=None):
+        if method == "Shelly.GetConfig":
+            self.calls.append(method)
+            return json.loads(json.dumps(self.config))
+        return super().call(method, params)
+
+
+def test_a_relay_set_otherwise_shows_in_devices_and_as_a_problem(tmp_path):
+    status = {"switch:0": {"id": 0, "output": False, "temperature": {"tC": 52.4}},
+              "sys": {"uptime": 3000}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
+    assert watcher.problems() == [{"code": "shelly_settings", "subject": "Stanze Valve",
+                                   "detail": "in_mode, auto_off", "settings": ["in_mode", "auto_off"]}]
+    rpc.config["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)   # fixed in the app
+    watcher.poll_once()
+    assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []
+
+
+def test_a_dimmer_isnt_asked_for_its_settings(tmp_path):
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    watcher.poll_once()
+    assert "Shelly.GetConfig" not in rpc.calls

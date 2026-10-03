@@ -364,6 +364,12 @@ and logs "network back".
      (it's what publishes the readings), **SSL** off, no username or
      password. A battery H&T only applies new settings when it wakes:
      press its button once after saving.
+  3. **A relay (Plus 1) driving a valve**, also on the Shelly: relay type
+     **Detached**, relay state at power-on **off** ("spegnersi quando è
+     alimentato" in the Italian app), **Auto OFF on, 900 s** - why, and
+     what was measured, in [shelly-gen3.md](shelly-gen3.md#plus-1-relay).
+     The admin panel checks them every 5 minutes: one set otherwise
+     shows in *Devices*, by name, with the value it should have.
 
   The panel's per-zone status then says whether the device is really
   being heard, and tells "not reachable yet" (a battery sensor that

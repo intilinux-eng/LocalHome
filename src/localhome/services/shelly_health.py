@@ -13,7 +13,10 @@ Two ways in, one per kind of device:
   under the sensor's name) - that's what its day and week are read from.
 - A mains Shelly (a relay, the VMC's dimmer) is always connected, but
   doesn't publish its signal or temperature by itself: it's asked, every
-  5 minutes, with one Shelly.GetStatus over MQTT.
+  5 minutes, with one Shelly.GetStatus over MQTT. A relay LocalHome
+  commands is also asked for its settings (Shelly.GetConfig): the ones a
+  valve needs - see expected_settings() - and that aren't so are said by
+  name, for whoever fixes them in the Shelly app.
 
 The devices come from the integrations themselves (shelly_devices()),
 whether written in config.yaml or built by the admin panel - and a
@@ -69,10 +72,54 @@ LISTEN_SENSOR = "shelly_health"
 SIMULATED_PREFIX = "simulated:"
 
 
+def expected_settings(integration) -> dict:
+    """What a relay LocalHome commands has to be set to on the device
+    (docs/shelly-gen3.md#plus-1-relay): its input detached, MQTT commands
+    and status on, and - when it's held (drivers/mqtt/switch.py) - its
+    rest state at power-on and Auto OFF (or ON) at the hold, which covers
+    a restart of the Shelly itself. Empty for anything else."""
+    options = integration.options or {}
+    if getattr(integration, "kind", None) != "switch" \
+            or not str(options.get("command_topic") or "").endswith("/command/switch:0"):
+        return {}
+    expect = {"in_mode": "detached", "mqtt_control": True, "mqtt_status": True}
+    hold = options.get("hold_seconds")
+    if hold:
+        rest = options.get("rest_state", "off")
+        expect["initial_state"] = rest
+        expect["auto_on" if rest == "on" else "auto_off"] = int(hold)
+    return expect
+
+
+def settings_wrong(expect: dict, config: dict) -> list[dict]:
+    """The expected settings the device has otherwise, from its
+    Shelly.GetConfig: [{"key", "value", "expected"}]. A setting the device
+    doesn't report (another model, older firmware) isn't one."""
+    switch = config.get("switch:0") if isinstance(config.get("switch:0"), dict) else {}
+    mqtt = config.get("mqtt") if isinstance(config.get("mqtt"), dict) else {}
+
+    def timer(enabled, delay):
+        if enabled is None:
+            return None
+        return int(_number(delay) or 0) if enabled else 0
+
+    actual = {
+        "in_mode": switch.get("in_mode"),
+        "initial_state": switch.get("initial_state"),
+        "auto_off": timer(switch.get("auto_off"), switch.get("auto_off_delay")),
+        "auto_on": timer(switch.get("auto_on"), switch.get("auto_on_delay")),
+        "mqtt_control": mqtt.get("enable_control"),
+        "mqtt_status": mqtt.get("status_ntf"),
+    }
+    return [{"key": key, "value": actual[key], "expected": value}
+            for key, value in expect.items() if actual.get(key) is not None and actual[key] != value]
+
+
 def shelly_devices(integrations) -> list[dict]:
     """Every Shelly the integrations use: {"id", "names" (the integrations
-    backed by it), "battery"}. From an RPC `device_id` or the first part of
-    an MQTT topic; battery-powered if a topic is its `devicepower`."""
+    backed by it), "battery", "expect" (expected_settings())}. From an RPC
+    `device_id` or the first part of an MQTT topic; battery-powered if a
+    topic is its `devicepower`."""
     found: dict[str, dict] = {}
     for integration in integrations:
         options = integration.options or {}
@@ -86,7 +133,8 @@ def shelly_devices(integrations) -> list[dict]:
         for device_id in dict.fromkeys(ids):
             if not SHELLY_ID.match(device_id):
                 continue
-            device = found.setdefault(device_id, {"id": device_id, "names": [], "battery": False})
+            device = found.setdefault(device_id, {"id": device_id, "names": [], "battery": False, "expect": {}})
+            device["expect"].update(expected_settings(integration))
             name = options.get("name")
             if name and name not in device["names"]:
                 device["names"].append(name)
@@ -199,6 +247,7 @@ class ShellyHealth:
                 "device_temp_c": None, "voltage_v": None, "errors": [],
                 "booted_at": None, "update": None, "restart_required": False,
                 "model": None, "firmware": None,
+                "expect": dict(device.get("expect") or {}), "settings_wrong": [],
                 "battery_pct": None, "battery_v": None, "external_power": None, "last_report_at": None,
             }
             self._devices[device["id"]] = state
@@ -282,6 +331,13 @@ class ShellyHealth:
                 continue
             with self._lock:
                 self._read_status(state, status)
+            if state["expect"]:
+                try:
+                    config = rpc.call("Shelly.GetConfig")
+                except Exception:
+                    continue    # said at the next check; the status above stands
+                with self._lock:
+                    state["settings_wrong"] = settings_wrong(state["expect"], config)
         self.refresh_problems()
 
     def _read_status(self, state: dict, status: dict) -> None:
@@ -395,7 +451,8 @@ class ShellyHealth:
     def devices(self) -> list[dict]:
         now = self.clock()
         with self._lock:
-            states = [dict(s, errors=list(s["errors"])) for s in self._devices.values()]
+            states = [dict(s, errors=list(s["errors"]), settings_wrong=list(s["settings_wrong"]))
+                      for s in self._devices.values()]
         for state in states:
             state["stats"] = self._stats(state, now)
             state["name"] = state["names"][0] if state["names"] else state["id"]
@@ -429,6 +486,9 @@ class ShellyHealth:
             # every report through for weeks. Reports that don't arrive are.
             if device["battery"] and stats.get("missed_24h", 0) >= MISSED_PER_DAY:
                 found.append({"code": "device_reports_missed", "subject": name, "detail": str(stats["missed_24h"])})
+            if device["settings_wrong"]:
+                keys = [s["key"] for s in device["settings_wrong"]]
+                found.append({"code": "shelly_settings", "subject": name, "detail": ", ".join(keys), "settings": keys})
         with self._lock:
             self._problems = found
 

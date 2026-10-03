@@ -1251,7 +1251,8 @@ function problemHtml(problem) {
   const subject = problem.code === "protection_missing"
     ? tr(`climate_admin.protection_${problem.subject}`) : displayName(problem.subject);
   const title = tr(`climate_admin.system_problem_${problem.code}`, { subject });
-  const detail = problem.detail ? `<div class="admin-problem-detail">${escapeHtml(problem.detail)}</div>` : "";
+  const text = problem.settings ? problem.settings.map(key => tr(`climate_admin.shelly_setting_${key}`)).join(", ") : problem.detail;
+  const detail = text ? `<div class="admin-problem-detail">${escapeHtml(text)}</div>` : "";
   return `<li>${escapeHtml(title)}${detail}</li>`;
 }
 
@@ -2365,8 +2366,21 @@ function signalRow(label, stats) {
   return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }));
 }
 
+// A setting a valve's Shelly needs otherwise - in the Shelly app's own
+// words, so it's clear what to change there (shelly_health.settings_wrong).
+function shellySettingValue(key, value) {
+  if (key === "auto_off" || key === "auto_on") {
+    return value ? tr("climate_admin.shelly_seconds", { s: value }) : tr("climate_admin.shelly_value_off");
+  }
+  if (typeof value === "boolean") return tr(value ? "climate_admin.shelly_value_on" : "climate_admin.shelly_value_off");
+  const label = tr(`climate_admin.shelly_${key}_${value}`);
+  return label === `climate_admin.shelly_${key}_${value}` ? String(value) : label;
+}
+
 function shellyStatsHtml(d, data, now) {
-  const rows = [];
+  const rows = (d.settings_wrong || []).map(s => statRowHtml(tr(`climate_admin.shelly_setting_${s.key}`),
+    tr("climate_admin.shelly_setting_change", { now: shellySettingValue(s.key, s.value), want: shellySettingValue(s.key, s.expected) }),
+    true));
   const s = d.stats || {};
   if (d.battery) {
     const age = d.last_report_at == null ? null : now - d.last_report_at;
