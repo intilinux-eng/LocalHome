@@ -901,17 +901,17 @@ let diagnosticModeEnabled = false;
 // Fetched once at load from /api/devices (only ever lists drivers
 // DeviceManager actually built, so nothing not-yet-restarted shows up
 // as controllable before it actually is).
-let climateSwitchNames = [];
+let climateSwitches = [];   // {name, normallyOpen}: the switches diagnostic mode drives
 
 async function loadClimateSwitchNames() {
   try {
     const res = await fetch("/api/devices");
     const data = await res.json();
-    climateSwitchNames = (data.sensors || [])
+    climateSwitches = (data.sensors || [])
       .filter(s => s.kind === "switch" && s.tab === "climate")
-      .map(s => s.name);
+      .map(s => ({ name: s.name, normallyOpen: !!s.normally_open }));
   } catch (e) {
-    climateSwitchNames = [];
+    climateSwitches = [];
   }
 }
 
@@ -944,19 +944,32 @@ async function onDiagnosticModeToggle(checkbox) {
   refreshStatus();
 }
 
-function diagnosticValveRowHtml(name, isOn, isOk) {
-  const state = !isOk
-    ? `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span>`
-    : isOn
-      ? `<span class="admin-status ok">${tr("climate_admin.valve_open")}</span>`
-      : `<span class="admin-status neutral">${tr("climate_admin.valve_closed")}</span>`;
+// The valve's state first, the Shelly's contact after it: "open" and
+// "close" always mean the valve. A zone valve opens when the contact
+// closes; a normally open one (the bypass) closes when it does.
+function diagnosticRowHtml(row) {
+  const contact = tr(row.isOn ? "climate_admin.diag_contact_closed" : "climate_admin.diag_contact_open");
+  let state;
+  let buttons;
+  if (row.valve) {
+    const open = row.normallyOpen ? !row.isOn : row.isOn;
+    state = `<span class="admin-status ${open ? "ok" : "neutral"}">${tr(open ? "climate_admin.valve_open" : "climate_admin.valve_closed")}</span>`;
+    const [openAction, closeAction] = row.normallyOpen ? ["off", "on"] : ["on", "off"];
+    buttons = `
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(row.name)}, '${openAction}', this)">${tr("climate_admin.diag_open_valve")}</button>
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(row.name)}, '${closeAction}', this)">${tr("climate_admin.diag_close_valve")}</button>`;
+  } else {
+    state = `<span class="admin-status ${row.isOn ? "ok" : "neutral"}">${tr(row.isOn ? "climate_admin.diag_on" : "climate_admin.diag_off")}</span>`;
+    buttons = `
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(row.name)}, 'on', this)">${tr("climate_admin.diag_turn_on")}</button>
+        <button class="range-btn" onclick="diagnosticToggle(${jsArg(row.name)}, 'off', this)">${tr("climate_admin.diag_turn_off")}</button>`;
+  }
+  if (!row.ok) state = `<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span>`;
   return `
     <div class="admin-zone-card admin-diagnostic-row">
-      <div><strong>${escapeHtml(displayName(name))}</strong></div>
-      <div>${state}</div>
-      <div class="toolbar">
-        <button class="range-btn" onclick="diagnosticToggle(${jsArg(name)}, 'on', this)">${tr("climate_admin.valve_test_open")}</button>
-        <button class="range-btn" onclick="diagnosticToggle(${jsArg(name)}, 'off', this)">${tr("climate_admin.valve_test_close")}</button>
+      <div><strong>${escapeHtml(displayName(row.name))}</strong></div>
+      <div>${state}${row.ok ? ` <span class="hint-text diag-contact">${escapeHtml(contact)}</span>` : ""}</div>
+      <div class="toolbar">${buttons}
       </div>
     </div>
   `;
@@ -1000,17 +1013,21 @@ async function refreshDiagnosticSection(data) {
     container.innerHTML = "";
     return;
   }
+  // A valve - a zone's, or a normally open one like the bypass - is
+  // opened and closed; anything else (the dehumidifier) switched on and off.
+  const zoneValves = new Set((data.zones || []).map(z => z.valve));
   const rows = [];
-  for (const name of climateSwitchNames) {
+  for (const device of climateSwitches) {
+    const row = { ...device, valve: zoneValves.has(device.name) || device.normallyOpen };
     try {
-      const res = await fetch(`/api/sensors/${encodeURIComponent(name)}`);
-      const reading = await res.json();
-      rows.push({ name, is_on: reading.is_on, ok: reading.ok });
+      const reading = await (await fetch(`/api/sensors/${encodeURIComponent(device.name)}`)).json();
+      rows.push({ ...row, isOn: !!reading.is_on, ok: !!reading.ok });
     } catch (e) {
-      rows.push({ name, is_on: false, ok: false });
+      rows.push({ ...row, isOn: false, ok: false });
     }
   }
-  container.innerHTML = `<div class="admin-diagnostic-grid">${rows.map(r => diagnosticValveRowHtml(r.name, r.is_on, r.ok)).join("")}</div>`;
+  container.innerHTML = `<p class="hint-text">${tr("climate_admin.diag_contact_note")}</p>`
+    + `<div class="admin-diagnostic-grid">${rows.map(diagnosticRowHtml).join("")}</div>`;
 }
 
 async function refreshStatus() {

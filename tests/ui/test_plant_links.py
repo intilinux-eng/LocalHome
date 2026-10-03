@@ -140,3 +140,37 @@ def test_the_admin_says_live_whether_the_valve_follows_the_dehumidifier(browser,
     assert page.evaluate(UNTRANSLATED_JS) == []
     assert opened.errors == []
     context.close()
+
+
+
+def test_diagnostic_mode_speaks_of_the_valve_and_the_bypass_the_other_way_round(browser, plant):
+    """Open and Close mean the valve; the Shelly's contact is said beside
+    it. A zone valve opens when the contact closes, the normally open
+    bypass closes when it does - its Open button switches the relay off.
+    The dehumidifier isn't a valve: switched on and off."""
+    call(plant, "/api/climate/diagnostic-mode", {"enabled": True})
+    context, opened = _open(browser, plant, "/climate-admin")
+    page = opened.page
+    try:
+        page.evaluate("document.getElementById('diagnostic').open = true")
+        rows = page.locator("#diagnostic-valves .admin-diagnostic-row")
+        assert eventually(page, lambda: rows.count() >= 3, timeout_ms=20000)
+        row = lambda name: page.locator("#diagnostic-valves .admin-diagnostic-row", has_text=name).first
+        bypass = row("Valvola Bypass Bagni")
+        # summer: the bypass's Shelly is on - the valve closed
+        assert "Valvola chiusa" in bypass.inner_text() and "contatto Shelly chiuso" in bypass.inner_text()
+        bypass.get_by_role("button", name="Apri valvola").click()
+        assert eventually(page, lambda: _valve_on(plant, "Valvola Bypass Bagni") is False), "opening it switches the relay off"
+        assert eventually(page, lambda: "Valvola aperta" in row("Valvola Bypass Bagni").inner_text(), timeout_ms=10000)
+        zone = row(f"{ZONE_A} Valve")
+        zone.get_by_role("button", name="Apri valvola").click()
+        assert eventually(page, lambda: _valve_on(plant, f"{ZONE_A} Valve") is True)
+        assert eventually(page, lambda: "contatto Shelly chiuso" in row(f"{ZONE_A} Valve").inner_text(), timeout_ms=10000)
+        dehumidifier = row("Deumidificatore")
+        assert dehumidifier.get_by_role("button", name="Accendi").count() == 1
+        assert dehumidifier.get_by_role("button", name="Apri valvola").count() == 0
+        assert page.evaluate(UNTRANSLATED_JS) == []
+        assert opened.errors == []
+    finally:
+        call(plant, "/api/climate/diagnostic-mode", {"enabled": False})
+        context.close()
