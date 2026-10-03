@@ -520,3 +520,96 @@ def test_number_last_update_ts_is_the_mqtt_messages_own_arrival_time(fake_connec
     fake_clock(300)
 
     assert driver.last_update_ts == message_ts
+
+
+
+# ------------------------------------------------------------------ hold ----
+# A Shelly relay out of its rest state is held for hold_seconds and the
+# hold renewed while LocalHome runs - measured on a real Plus 1: each
+# "on,N" restarts the timer and the output never drops (docs/shelly-gen3.md).
+
+@pytest.fixture
+def monotonic(monkeypatch):
+    now = {"t": 5000.0}
+    monkeypatch.setattr("localhome.drivers.mqtt.switch.time.monotonic", lambda: now["t"])
+    return now
+
+
+def _valve(**options):
+    return MqttSwitchDriver(
+        name="Rooms Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False, command_on="on", command_off="off", **options)
+
+
+def _status(fake_connection, on):
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": on}))
+
+
+def test_a_held_relay_is_switched_on_for_a_while_and_off_for_good(fake_connection, monotonic):
+    valve = _valve(hold_seconds=900)
+    valve.turn_on()
+    valve.turn_off()
+    assert fake_connection.published == [("shellyplus1-XXXX/command/switch:0", "on,900"),
+                                         ("shellyplus1-XXXX/command/switch:0", "off")]
+
+
+def test_while_on_the_hold_is_renewed_once_a_minute(fake_connection, monotonic):
+    valve = _valve(hold_seconds=900)
+    valve.turn_on()
+    _status(fake_connection, True)
+    for _ in range(9):                  # readings every 20 s for 3 minutes
+        monotonic["t"] += 20
+        assert valve.read()["is_on"] is True
+    sent = [p for _, p in fake_connection.published]
+    assert sent == ["on,900"] * 4, "the command, then one renewal a minute"
+
+
+def test_a_relay_found_on_is_held_at_once_after_a_restart(fake_connection, monotonic):
+    """LocalHome restarted: the relay is still on, its timer running -
+    renewed at the first reading, before it runs out."""
+    valve = _valve(hold_seconds=900)
+    _status(fake_connection, True)      # its first status since the restart
+    valve.read()
+    assert fake_connection.published == [("shellyplus1-XXXX/command/switch:0", "on,900")]
+
+
+def test_at_rest_nothing_is_sent(fake_connection, monotonic):
+    valve = _valve(hold_seconds=900)
+    _status(fake_connection, False)
+    for _ in range(10):
+        monotonic["t"] += 60
+        valve.read()
+    assert fake_connection.published == []
+
+
+def test_a_relay_resting_on_is_held_off(fake_connection, monotonic):
+    valve = _valve(hold_seconds=600, rest_state="on")
+    valve.turn_off()
+    valve.turn_on()
+    _status(fake_connection, False)
+    monotonic["t"] += 60
+    valve.read()
+    assert [p for _, p in fake_connection.published] == ["off,600", "on", "off,600"]
+
+
+def test_a_renewal_that_fails_doesnt_hide_the_reading(fake_connection, monotonic, caplog):
+    valve = _valve(hold_seconds=900)
+    _status(fake_connection, True)
+
+    def broken(topic, payload):
+        raise ConnectionError("broker down")
+    valve._state.publish = broken
+    for _ in range(3):
+        monotonic["t"] += 60
+        assert valve.read()["is_on"] is True
+    assert sum("couldn't renew" in r.getMessage() for r in caplog.records) == 1, "said once"
+
+
+def test_without_a_hold_the_commands_are_plain(fake_connection, monotonic):
+    valve = _valve()
+    valve.turn_on()
+    _status(fake_connection, True)
+    monotonic["t"] += 120
+    valve.read()
+    assert [p for _, p in fake_connection.published] == ["on"]

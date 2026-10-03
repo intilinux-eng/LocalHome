@@ -437,6 +437,9 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
     }
 
 
+VALVE_HOLD_SECONDS = 900
+
+
 def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> dict:
     device_id = zone["valve_device_id"].strip()
     return {
@@ -451,6 +454,10 @@ def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) ->
         # payloads above as text) it ignores without a word.
         "command_on": "on",
         "command_off": "off",
+        # Open only while LocalHome is there to say so: "on,900", renewed
+        # every minute - if the board goes, the valve closes within 15
+        # minutes by itself (drivers/mqtt/switch.py).
+        "hold_seconds": VALVE_HOLD_SECONDS,
         "dashboard_tab": "climate",
         # No stale_after_seconds: a relay only publishes on state change,
         # so a timeout here would wrongly flag a valve that's just been
@@ -534,8 +541,12 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
             options = _valve_integration_options(zone_shaped, display_name, broker_file)
-            if key == "bypass_valve_device_id" and (extra_switches or {}).get(BYPASS_NORMALLY_OPEN_KEY, True):
-                options["normally_open"] = True
+            if key == "bypass_valve_device_id":
+                if (extra_switches or {}).get(BYPASS_NORMALLY_OPEN_KEY, True):
+                    options["normally_open"] = True
+                # Which state is safe for the bypass if the board goes is
+                # the plant's to say, not decided yet: no hold for now.
+                options.pop("hold_seconds")
             integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 

@@ -17,6 +17,7 @@ firmware.
 - [MQTT settings that work](#mqtt-settings-that-work)
 - [H&T Gen3 on batteries](#ht-gen3-on-batteries)
 - [Dimmer 0/1-10V PM Gen3](#dimmer-01-10v-pm-gen3)
+- [Plus 1 relay](#plus-1-relay)
 - [The network under them](#the-network-under-them)
 - [Where this lives in the code](#where-this-lives-in-the-code)
 
@@ -26,7 +27,7 @@ firmware.
 |---|---|---|---|
 | **Shelly H&T Gen3** - temperature and humidity | `shellyhtg3-<mac>` | 4 × AA batteries | Two units, in daily use since September 2026 |
 | **Shelly Dimmer 0/1-10V PM Gen3** (`S3DM-0010WW`) - a 0-10 V control output | `shelly0110dimg3-<mac>` | mains | One unit driving a VMC's speed input, in daily use; firmware 2.0.0 |
-| Shelly Plus 1 (Gen2) - relay | `shellyplus1-<mac>` | mains | Supported (the zone valves and the extra switches), not yet in the field |
+| **Shelly Plus 1** (Gen2) - relay | `shellyplus1-<mac>` | mains | One unit as the Rooms valve since October 2026 (no load yet); firmware 1.3.3 |
 
 A Gen2/Gen3 id is the model prefix plus the device's full MAC address,
 lowercase. The same id is the MQTT topic prefix, the RPC address and the
@@ -203,6 +204,48 @@ Used here to set a ventilation unit's speed through its 0-10 V input.
   a crash), `sys.available_updates.stable.version` (a firmware update
   waiting), `sys.restart_required`, and each component's `errors`
   (`overtemp`, `overpower`, ...).
+
+## Plus 1 relay
+
+A zone valve's (or the dehumidifier's) on/off relay. One unit on the
+production board since 3 October 2026, firmware 1.3.3, measured with no
+load on it.
+
+### Settings for a valve
+
+In the Shelly app, besides the [MQTT settings](#mqtt-settings-that-work):
+
+| Setting | Value | Why |
+|---|---|---|
+| Input/output → relay type | **Detached** | Only LocalHome moves the valve: whatever ends up on SW (a wire, a disturbance) can't. The default, Toggle, follows the input. |
+| Relay state at power-on | **Off** | After a power cut the valve starts at rest: closed. The default follows the input. |
+| Auto OFF | **on, 900 s** | The backstop: any switch-on - from LocalHome, the app, the button - ends within 15 minutes unless renewed, a restart of the Shelly included (see below). |
+| App-only settings (input state shown on the button, notifications, the card) | the defaults | They change the app, not the device. |
+
+### On only while LocalHome says so
+
+If the board stops, a relay keeps its last state: a valve left open stays
+open. So LocalHome never sends a plain `on` to a valve: it sends `on,900`
+on the command topic - on for 15 minutes, then off by itself - and renews
+it every minute while the valve should be open
+([drivers/mqtt/switch.py](../src/localhome/drivers/mqtt/switch.py),
+`hold_seconds`). Measured on the Plus 1:
+
+| Test | Result |
+|---|---|
+| `on,60` renewed every 20 s for 100 s | stays on, **never drops** (no `output: false` in its MQTT status, no extra click); each renewal restarts the timer (`timer_started_at` moves) |
+| renewals stop | off by itself 59 s after the last one, `source: timer` |
+| `on,900` | accepted |
+| `off,20` renewed - a relay whose rest is on | stays off, then back on by itself |
+| a plain `on` while a timer runs | **cancels the timer** - stays on for good. Hence never a plain `on` |
+| restart of the Shelly while on, no Auto OFF | **comes back on with no timer** (`source: init`) |
+| the same with Auto OFF set | comes back on with Auto OFF's timer, then off ✓ |
+| `on,60` renewals with Auto OFF at 30 s | the command's timer wins, on past the 30 s, no drop ✓ |
+
+Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
+device for whatever LocalHome doesn't cover. The command topic takes
+`on`, `off`, `toggle`, `on,<seconds>`, `off,<seconds>` - anything else,
+`true` or `True` included, is ignored without a word.
 
 ## The network under them
 
