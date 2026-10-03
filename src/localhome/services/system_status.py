@@ -775,8 +775,9 @@ def read_events(path: str, source: str) -> list[dict]:
 
 
 def watchdog_history(localhome_log: str, wifi_log: str = WIFI_WATCHDOG_LOG,
-                     service_log: str = SERVICE_WATCHDOG_LOG, limit: int = 30) -> list[dict]:
-    """Both watchdogs' actions, newest first."""
+                     service_log: str = SERVICE_WATCHDOG_LOG, limit: int = 10) -> list[dict]:
+    """Both watchdogs' actions, newest first - the last `limit`, what the
+    admin page lists. The diagnostics zip carries the whole logs."""
     events = (read_events(localhome_log, "localhome") + read_events(service_log, "localhome")
               + read_events(wifi_log, "wifi"))
     return sorted(events, key=lambda e: e["when"], reverse=True)[:limit]

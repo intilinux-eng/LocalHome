@@ -216,3 +216,12 @@ def test_devices_not_reaching_the_board_is_a_problem_and_rt_on_the_matrix():
     assert system_status.problems([], [], {}, lan_silent_seconds=300) == [], "10 minutes' grace"
     assert led_matrix.problem_codes(found, [])[0]["code"] == "RT"
     assert all(c in led_matrix.FONT for c in "RT")
+
+
+def test_the_admin_page_lists_the_last_ten_watchdog_actions(tmp_path):
+    """Newest first, ten at most - the whole logs go in the diagnostics zip."""
+    log = tmp_path / "watchdog.log"
+    log.write_text("".join(f"2026-10-{day:02d} 12:00:00 restarted\n" for day in range(1, 16)), encoding="utf-8")
+    history = system_status.watchdog_history(str(log), str(tmp_path / "none.log"), str(tmp_path / "none2.log"))
+    assert len(history) == 10
+    assert history[0]["when"] == "2026-10-15 12:00:00" and history[-1]["when"] == "2026-10-06 12:00:00"

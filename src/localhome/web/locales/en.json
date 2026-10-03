@@ -538,7 +538,7 @@
     "protection_na": "not available",
     "system_problem_protection_missing": "Protection not on: {subject} - run sudo sh deploy/tune-board.sh",
     "watchdog_heading": "Watchdog history",
-    "watchdog_note": "What the watchdogs did: the Wi-Fi one and the one that restarts LocalHome. The board's unexpected reboots are under Recent boots.",
+    "watchdog_note": "What the watchdogs did, the last 10 times: the Wi-Fi one and the one that restarts LocalHome. Every other time is in the Download diagnostics file; the board's unexpected reboots are under Recent board boots.",
     "watchdog_none": "Nothing so far: it hasn't been needed.",
     "watchdog_source_wifi": "Wi-Fi",
     "watchdog_source_localhome": "LocalHome",

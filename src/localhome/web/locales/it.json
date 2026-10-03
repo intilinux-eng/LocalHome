@@ -538,7 +538,7 @@
     "protection_na": "non disponibile",
     "system_problem_protection_missing": "Protezione non attiva: {subject} - esegui sudo sh deploy/tune-board.sh",
     "watchdog_heading": "Storico watchdog",
-    "watchdog_note": "Cosa hanno fatto i watchdog: quello del Wi-Fi e quello che riavvia LocalHome. I riavvii inattesi della scheda sono in Riavvii recenti.",
+    "watchdog_note": "Cosa hanno fatto i watchdog, le ultime 10 volte: quello del Wi-Fi e quello che riavvia LocalHome. Tutte le altre sono nel file di Scarica diagnosi; i riavvii inattesi della scheda sono in Ultimi avvii della scheda.",
     "watchdog_none": "Nessun intervento: finora non è servito.",
     "watchdog_source_wifi": "Wi-Fi",
     "watchdog_source_localhome": "LocalHome",
