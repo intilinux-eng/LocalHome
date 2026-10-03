@@ -8,8 +8,7 @@ from .helpers import OVERFLOW_JS, UNTRANSLATED_JS, ZONE_A, eventually
 pytestmark = pytest.mark.ui
 
 SECTION_PILLS = ("season-summary", "zones-summary", "broker-status", "extra-switches-summary",
-                 "extra-sensor-summary", "vmc-summary", "system-status-summary", "led-matrix-summary",
-                 "diagnostic-summary")
+                 "extra-sensor-summary", "vmc-summary", "system-status-summary", "diagnostic-summary")
 
 
 @pytest.mark.parametrize("width", [1280, 390, 320])
@@ -45,10 +44,13 @@ def test_the_bar_follows_the_scroll(open_page):
 
 def test_a_tile_opens_its_section_and_it_stays_open_after_a_reload(open_page):
     page = open_page("/climate-admin", 1280).page
-    section = page.locator("#led-matrix")
+    # The LED matrix's card is in the system status: its tile opens that.
+    section = page.locator("#system-status")
     assert not section.evaluate("d => d.open")
     page.locator("#ov-led").click()
     assert section.evaluate("d => d.open")
+    assert page.locator("#led-matrix-mirror").is_visible()
+    assert page.locator("#led-matrix-legend").is_hidden(), "what each picture means stays folded"
     # The restart button reloads the page: what was open stays open.
     page.reload()
     page.wait_for_timeout(500)

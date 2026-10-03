@@ -377,8 +377,9 @@ and logs "network back".
 The UNO Q's 13x8 LED matrix shows LocalHome's health to whoever is in
 front of the box, without a phone - above all when the network or
 LocalHome itself is down, exactly when the dashboard can't help. The
-admin panel's **LED matrix** section has a live mirror of it, a legend
-of every picture and what each problem code means.
+admin panel's **System status** has a live mirror of it, and under
+"What it means" a legend of every picture and what each problem code
+means.
 
 The picture is decided by LocalHome; the microcontroller only draws it,
 and shows two things on its own: a dot running along the bottom until
@@ -431,7 +432,7 @@ arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_
 About two minutes, most of it compiling; a successful run ends with
 `Sketch uses ... bytes` and openocd's `shutdown command invoked`. No
 LocalHome restart is needed: the matrix lights up within 30 seconds, and
-the admin panel's LED matrix section turns "active". Loading it
+the admin panel's LED matrix card (in System status) turns "active". Loading it
 replaces whatever sketch was on the microcontroller (an Arduino App Lab
 app included). Without it, LocalHome runs exactly the same - the admin
 panel just says the sketch isn't loaded.

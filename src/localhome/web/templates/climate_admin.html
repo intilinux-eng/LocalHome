@@ -78,7 +78,6 @@
     <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
     <a href="#group-devices">{{ t.climate_admin.group_devices }}</a>
     <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
-    <a href="#led-matrix">{{ t.climate_admin.led_heading }}</a>
     <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
     <a href="#group-tools">{{ t.climate_admin.group_tools }}</a>
   </nav>
@@ -326,29 +325,32 @@
       <a class="tbtn open" href="/api/climate-admin/diagnostics.zip" download>{{ t.climate_admin.diagnostics_button }}</a>
       <span class="hint-text">{{ t.climate_admin.diagnostics_note }}</span>
     </div>
+    <!-- What the UNO Q's LED matrix is showing - for whoever stands in
+         front of the box - and, folded, what every picture on it means.
+         The legend is drawn by the server with the same code that drives
+         the LEDs (services/led_matrix.py), so the two can't drift apart. -->
+    <div class="admin-zone-card admin-stat-group" id="led-matrix">
+      <h3>{{ t.climate_admin.led_heading }} <span id="led-matrix-summary"></span></h3>
+      <p class="hint-text" id="led-matrix-status"></p>
+      <div class="led-live">
+        <div id="led-matrix-mirror"></div>
+        <div>
+          <p class="led-live-label">{{ t.climate_admin.led_live_label }}</p>
+          <p id="led-matrix-now"></p>
+        </div>
+      </div>
+      <details class="admin-more">
+        <summary>{{ t.climate_admin.led_meaning }}</summary>
+        <p class="hint-text">{{ t.climate_admin.led_note }}</p>
+        <h3 class="admin-subheading">{{ t.climate_admin.led_legend_heading }}</h3>
+        <div class="led-legend" id="led-matrix-legend"></div>
+        <h3 class="admin-subheading">{{ t.climate_admin.led_codes_heading }}</h3>
+        <div class="led-codes" id="led-matrix-codes"></div>
+      </details>
+    </div>
     <div id="system-status-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
   </details>
 
-  <!-- What the UNO Q's LED matrix is showing and what every picture
-       on it means - for whoever will stand in front of the box. The
-       legend is drawn by the server with the same code that drives the
-       LEDs (services/led_matrix.py), so the two can't drift apart. -->
-  <details class="admin-details" id="led-matrix" data-nav="led-matrix">
-    <summary>{{ icon("led") }}<span class="sec-title">{{ t.climate_admin.led_heading }}</span><span class="sec-pills" id="led-matrix-summary"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.led_note }}</p>
-    <p class="hint-text" id="led-matrix-status"></p>
-    <div class="led-live">
-      <div id="led-matrix-mirror"></div>
-      <div>
-        <p class="led-live-label">{{ t.climate_admin.led_live_label }}</p>
-        <p id="led-matrix-now"></p>
-      </div>
-    </div>
-    <h3 class="admin-subheading">{{ t.climate_admin.led_legend_heading }}</h3>
-    <div class="led-legend" id="led-matrix-legend"></div>
-    <h3 class="admin-subheading">{{ t.climate_admin.led_codes_heading }}</h3>
-    <div class="led-codes" id="led-matrix-codes"></div>
-  </details>
 
   <!-- Thermostat tuning, history limits and language - changed here
        instead of in config.yaml; see services/panel_settings.py. -->

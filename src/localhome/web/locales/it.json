@@ -384,6 +384,7 @@
     "led_heading": "Matrice LED",
     "led_note": "La matrice di LED della scheda mostra lo stato di LocalHome a chi è davanti al quadro, senza telefono - e soprattutto quando la rete o LocalHome stesso non funzionano, cioè proprio quando questa pagina non si apre. In ogni schermata il pixel in alto a destra lampeggia: LocalHome è vivo e sta disegnando.",
     "led_live_label": "In questo momento la matrice mostra:",
+    "led_meaning": "Cosa significa",
     "led_legend_heading": "Cosa può mostrare",
     "led_codes_heading": "Codici dei problemi",
     "led_status_running": "Collegata: la matrice mostra lo stato in tempo reale.",

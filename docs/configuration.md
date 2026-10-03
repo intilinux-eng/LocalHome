@@ -554,7 +554,7 @@ the season, the zones, the MQTT broker, the board (uptime, clock) and
 the LED matrix, coloured by how they're doing and each a link to its
 section. Below it the sections come in four groups - *Plant* (season,
 zones), *Devices* (Shellys and MQTT broker, extra switches, outdoor sensor, VMC), *Board*
-(system status, LED matrix, settings) and *Tools* (diagnostic mode,
+(system status - with the LED matrix's mirror - and settings) and *Tools* (diagnostic mode,
 maintenance, how it works) - each a card whose header says its state
 even when closed. A sticky bar of links follows the scroll. Two notices
 sit above everything when they apply: saved changes waiting for a

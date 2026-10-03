@@ -384,6 +384,7 @@
     "led_heading": "LED matrix",
     "led_note": "The board's LED matrix shows LocalHome's state to whoever is standing in front of the box, without a phone - above all when the network or LocalHome itself isn't working, which is exactly when this page won't open. On every screen the top-right pixel blinks: LocalHome is alive and drawing.",
     "led_live_label": "Right now the matrix shows:",
+    "led_meaning": "What it means",
     "led_legend_heading": "What it can show",
     "led_codes_heading": "Problem codes",
     "led_status_running": "Connected: the matrix shows the state live.",

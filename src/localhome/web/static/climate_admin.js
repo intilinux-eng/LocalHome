@@ -2194,8 +2194,9 @@ async function refreshLedMatrix() {
   }
 }
 
+// Polled while the system status, where it's shown, is open.
 function watchLedMatrix() {
-  const section = document.getElementById("led-matrix");
+  const section = document.getElementById("system-status");
   if (!section) return;
   const sync = () => {
     if (ledTimer) clearInterval(ledTimer);
@@ -2477,9 +2478,13 @@ loadSettings();
 watchLedMatrix();
 
 // A link to a collapsed section (a bookmark, another page) opens it.
+// A link to something inside one (the LED matrix's card) opens that one.
 function openLinkedSection() {
   const target = location.hash && document.getElementById(location.hash.slice(1));
-  if (target && target.tagName === "DETAILS") target.open = true;
+  const section = target && target.closest("details.admin-details");
+  if (!section || section.open) return;
+  section.open = true;
+  if (section !== target) target.scrollIntoView();
 }
 window.addEventListener("hashchange", openLinkedSection);
 openLinkedSection();
