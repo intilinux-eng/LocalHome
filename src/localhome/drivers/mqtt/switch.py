@@ -60,6 +60,11 @@ logger = logging.getLogger(__name__)
 # renewals in a row can be lost to the Wi-Fi without the relay noticing,
 # and a home router isn't kept busy for years by a relay that's just on.
 RENEWALS_PER_HOLD = 3
+# Right after a command the device is re-read before it has said anything
+# (a relay answers within a moment): for this long, unless it has spoken
+# since, a reading says what was commanded rather than the state before.
+# Past it, whatever the device last said - it may not have heard.
+CONFIRM_SECONDS = 15
 
 
 class MqttSwitchDriver(SwitchDriver):
@@ -104,6 +109,7 @@ class MqttSwitchDriver(SwitchDriver):
         # (the relay hasn't confirmed yet), and renewing that would turn
         # it straight back on.
         self._commanded: bool | None = None
+        self._commanded_at: float | None = None   # wall clock, as the MQTT receive time
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
         self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
@@ -124,6 +130,8 @@ class MqttSwitchDriver(SwitchDriver):
             value = extract_path(payload, path)
             if value is not None:
                 reading[field] = value
+        if self._commanded_at is not None and (self._state.get_received_at() or 0) <= self._commanded_at                 and time.time() - self._commanded_at < CONFIRM_SECONDS:
+            reading["is_on"] = self._commanded
         # Out of rest: LocalHome holds it while it runs - what it last
         # commanded, or, after a restart of LocalHome (nothing commanded
         # yet), whatever it finds, before the relay's timer runs out.
@@ -166,12 +174,12 @@ class MqttSwitchDriver(SwitchDriver):
 
     def turn_on(self) -> None:
         self._send(self._held_command(True))
-        self._commanded = True
+        self._commanded, self._commanded_at = True, time.time()
         self._renewed_at = time.monotonic() if self._hold_seconds and not self._rest_on else None
 
     def turn_off(self) -> None:
         self._send(self._held_command(False))
-        self._commanded = False
+        self._commanded, self._commanded_at = False, time.time()
         self._renewed_at = time.monotonic() if self._hold_seconds and self._rest_on else None
 
     def _send(self, value: str) -> None:

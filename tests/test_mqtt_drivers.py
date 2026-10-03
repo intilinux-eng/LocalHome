@@ -629,7 +629,7 @@ def test_switched_off_it_isnt_turned_back_on_by_a_reading_from_before(fake_conne
     _status(fake_connection, True)
     valve.read()
     valve.turn_off()
-    assert valve.read()["is_on"] is True          # the relay hasn't confirmed yet
+    valve.read()                                   # the relay hasn't confirmed yet
     monotonic["t"] += 600
     valve.read()
     assert [p for _, p in fake_connection.published] == ["on,900", "off"]
@@ -648,3 +648,26 @@ def test_switched_on_again_after_off_it_is_held_again(fake_connection, monotonic
     monotonic["t"] += 300
     valve.read()
     assert [p for _, p in fake_connection.published] == ["on,900", "off", "on,900", "on,900"]
+
+
+
+def test_just_commanded_it_reads_as_commanded_until_the_device_says_otherwise(fake_connection, monkeypatch):
+    """Seen in diagnostic mode: the relay clicked at once, the page said so
+    only at the next poll - the re-read right after the command had found
+    the state from before it. Until the device speaks, or for
+    CONFIRM_SECONDS if it doesn't, a reading says what was commanded."""
+    import localhome.drivers.mqtt.switch as switch_module
+    now = {"t": 2_000_000_000.0}
+    monkeypatch.setattr(switch_module.time, "time", lambda: now["t"])
+    monkeypatch.setattr("localhome.drivers.mqtt.base.time.time", lambda: now["t"])
+    valve = _valve(hold_seconds=900)
+    _status(fake_connection, False)
+    now["t"] += 1
+    valve.turn_on()
+    assert valve.read()["is_on"] is True, "commanded, not confirmed yet"
+    now["t"] += 1
+    _status(fake_connection, False)                # the device says it didn't
+    assert valve.read()["is_on"] is False
+    valve.turn_on()
+    now["t"] += switch_module.CONFIRM_SECONDS + 1  # and never answers
+    assert valve.read()["is_on"] is False, "past the wait, what the device last said"
