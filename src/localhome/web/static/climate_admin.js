@@ -783,17 +783,13 @@ function sensorStatusHtml(zone, mode) {
 
 function valveStatusHtml(zone, valveMode) {
   const pill = valveMode === "simulated" ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ` : "";
-  const testButtons = `
-    <button class="range-btn admin-valve-test" onclick="testValve(${jsArg(zone.valve)}, 'on', this)">${tr("climate_admin.valve_test_open")}</button>
-    <button class="range-btn admin-valve-test" onclick="testValve(${jsArg(zone.valve)}, 'off', this)">${tr("climate_admin.valve_test_close")}</button>
-  `;
   if (zone.valve_ok) {
     const driven = zone.valve_driver && zone.valve_driver.on
       ? ` · ${tr("home.st_driven", { name: displayName(zone.valve_driver.name) })}` : "";
     const state = (zone.valve_on ? tr("climate_admin.valve_open") : tr("climate_admin.valve_closed")) + driven;
-    return `${pill}<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state} ${testButtons}`;
+    return `${pill}<span class="admin-status ok">${tr("climate_admin.reporting")}</span> ${state}`;
   }
-  return `${pill}<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span> ${testButtons}`;
+  return `${pill}<span class="admin-status bad">${tr("climate_admin.valve_not_reachable")}</span>`;
 }
 
 function targetHtml(zone) {
@@ -860,7 +856,6 @@ function zoneStatusInnerHtml(zone, mapEntry, mode) {
     ${failsafeNoticeHtml(zone)}
     <div>${targetHtml(zone)}</div>
     <div>${tr("climate_admin.valve_label")}: ${valveStatusHtml(zone, valveMode)}</div>
-    <p class="hint-text admin-valve-test-hint">${tr("climate_admin.valve_test_hint")}</p>
     ${modeExclusionNoticeHtml(zone, mode)}
   `;
 }
@@ -967,11 +962,10 @@ function diagnosticValveRowHtml(name, isOn, isOk) {
   `;
 }
 
-// Same underlying route as testValve() (the generic on/off switch
-// route every controllable device already has) - the only difference
-// is what happens after: no thermostat/interlock tick is going to
-// reassert anything while diagnostic mode is on, so this command is
-// the valve's new, lasting state, not a transient test of it.
+// The generic on/off route every controllable device has: while
+// diagnostic mode is on no thermostat/interlock tick reasserts anything,
+// so this command is the valve's new, lasting state - the one way to
+// move a valve by hand from this page.
 async function diagnosticToggle(name, action, button) {
   button.disabled = true;
   try {
@@ -1056,25 +1050,6 @@ async function refreshStatus() {
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place and
     // keep polling rather than blanking the page.
-  }
-}
-
-// A manual test, not the thermostat's own control - reuses the generic
-// switch route every controllable device already has (web/app.py's
-// api_sensor_action()), so pressing it just proves the physical relay
-// responds; the thermostat's own next tick re-asserts its schedule
-// shortly after, same as it would for any manual toggle.
-async function testValve(valveName, action, button) {
-  button.disabled = true;
-  try {
-    const res = await fetch(`/api/sensors/${encodeURIComponent(valveName)}/${action}`, { method: "POST" });
-    const data = await res.json();
-    if (!data.ok) notify(tr("sensors.error_prefix") + apiError(data));
-    refreshStatus();
-  } catch (e) {
-    notify(tr("sensors.request_failed"));
-  } finally {
-    button.disabled = false;
   }
 }
 

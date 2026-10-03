@@ -575,7 +575,7 @@ Per zone:
   temperature without waiting for a real event.
 - **Valve source**: a real Shelly relay, or simulated
   (`drivers/simulated/switch.py`) - fully controllable through the
-  same generic on/off route the panel's own manual test buttons use,
+  same generic on/off route Diagnostic mode's open/close buttons use,
   so the whole control loop (sensor → thermostat → valve) can be
   verified before any relay is actually wired.
 
