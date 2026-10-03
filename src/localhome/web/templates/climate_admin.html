@@ -143,6 +143,10 @@
   <details class="admin-details" id="season" data-nav="season">
     <summary>{{ icon("season") }}<span class="sec-title">{{ t.climate_admin.season_heading }}</span><span class="sec-pills"><span id="season-summary"></span><span id="season-rules-summary"></span></span></summary>
     <p class="hint-text">{{ t.climate_admin.season_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.season_note_more }}</p>
+    </details>
     <div class="season-cards" id="season-cards"></div>
     <div class="season-confirm" id="season-confirm" hidden>
       <span id="season-confirm-text"></span>
@@ -205,12 +209,20 @@
     <p class="hint-text admin-error" id="broker-down-hint" hidden>{{ t.climate_admin.broker_down_hint }}</p>
     <p class="hint-text" id="broker-current"></p>
     <p class="hint-text">{{ t.climate_admin.shelly_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.shelly_note_more }}</p>
+    </details>
     <div class="admin-stat-grid" id="shelly-health-list"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
   </details>
 
   <details class="admin-details" id="extra-switches" data-nav="group-devices">
     <summary>{{ icon("switches") }}<span class="sec-title">{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.extra_switches_note_more }}</p>
+    </details>
     <div class="admin-zone-card" id="extra-switch-form">
       <div class="admin-field">
         <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
@@ -239,6 +251,10 @@
   <details class="admin-details" id="extra-sensor" data-nav="group-devices">
     <summary>{{ icon("outdoor") }}<span class="sec-title">{{ t.climate_admin.extra_sensor_heading }}</span><span class="sec-pills" id="extra-sensor-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.extra_sensor_note_more }}</p>
+    </details>
     <div class="admin-zone-card" id="extra-sensor-form">
       <div class="admin-field">
         <label for="extra-outdoor-sensor-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
@@ -263,6 +279,10 @@
   <details class="admin-details" id="vmc" data-nav="group-devices">
     <summary>{{ icon("vmc") }}<span class="sec-title">{{ t.climate_admin.vmc_heading }}</span><span class="sec-pills" id="vmc-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.vmc_note_more }}</p>
+    </details>
     <div class="admin-zone-card" id="vmc-form">
       <div class="admin-field">
         <label for="extra-vmc-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
@@ -319,6 +339,10 @@
          a full disk) - see GET /api/system-status. -->
     <div class="admin-problems" id="system-problems" hidden></div>
     <p class="hint-text">{{ t.climate_admin.system_note }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.system_note_more }}</p>
+    </details>
     <!-- Everything needed to understand the board from afar, one file to
          send - see services/diagnostics.py. -->
     <div class="diagnostics-row">
