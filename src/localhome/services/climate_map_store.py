@@ -455,7 +455,7 @@ def valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> 
         "command_on": "on",
         "command_off": "off",
         # Open only while LocalHome is there to say so: "on,900", renewed
-        # every minute - if the board goes, the valve closes within 15
+        # every 5 minutes - if the board goes, the valve closes within 15
         # minutes by itself (drivers/mqtt/switch.py).
         "hold_seconds": VALVE_HOLD_SECONDS,
         "dashboard_tab": "climate",

@@ -554,15 +554,17 @@ def test_a_held_relay_is_switched_on_for_a_while_and_off_for_good(fake_connectio
                                          ("shellyplus1-XXXX/command/switch:0", "off")]
 
 
-def test_while_on_the_hold_is_renewed_once_a_minute(fake_connection, monotonic):
+def test_while_on_the_hold_is_renewed_every_five_minutes(fake_connection, monotonic):
+    """Only as often as the hold needs: two renewals can go missing and
+    the relay still doesn't drop - no more traffic than that, for years."""
     valve = _valve(hold_seconds=900)
     valve.turn_on()
     _status(fake_connection, True)
-    for _ in range(9):                  # readings every 20 s for 3 minutes
+    for _ in range(45):                 # readings every 20 s for 15 minutes
         monotonic["t"] += 20
         assert valve.read()["is_on"] is True
     sent = [p for _, p in fake_connection.published]
-    assert sent == ["on,900"] * 4, "the command, then one renewal a minute"
+    assert sent == ["on,900"] * 4, "the command, then a renewal every 5 minutes"
 
 
 def test_a_relay_found_on_is_held_at_once_after_a_restart(fake_connection, monotonic):
@@ -588,7 +590,7 @@ def test_a_relay_resting_on_is_held_off(fake_connection, monotonic):
     valve.turn_off()
     valve.turn_on()
     _status(fake_connection, False)
-    monotonic["t"] += 60
+    monotonic["t"] += 200
     valve.read()
     assert [p for _, p in fake_connection.published] == ["off,600", "on", "off,600"]
 
@@ -601,7 +603,7 @@ def test_a_renewal_that_fails_doesnt_hide_the_reading(fake_connection, monotonic
         raise ConnectionError("broker down")
     valve._state.publish = broken
     for _ in range(3):
-        monotonic["t"] += 60
+        monotonic["t"] += 300
         assert valve.read()["is_on"] is True
     assert sum("couldn't renew" in r.getMessage() for r in caplog.records) == 1, "said once"
 

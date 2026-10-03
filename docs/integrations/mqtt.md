@@ -116,7 +116,7 @@ it overrides even a still-fresh regular reading, not just a stale one:
   payload_off: false
   command_on: "on"            # ...and what the command topic takes
   command_off: "off"
-  hold_seconds: 900           # optional: "on,900" renewed every minute - see below
+  hold_seconds: 900           # optional: "on,900" renewed every 5 minutes - see below
   availability_topic: "shellyplus1pm-XXXXXX/online"   # confirm with mosquitto_sub -t '<id>/#' -v
   fields:
     power_w: "apower"
@@ -125,7 +125,7 @@ it overrides even a still-fresh regular reading, not just a stale one:
 `hold_seconds` (a Shelly Gen2/Gen3 relay only) keeps the relay out of
 its rest state only while LocalHome runs: switched on, it's sent
 `on,<hold_seconds>` - on for that long, then off by itself - and the
-command is renewed every `hold_seconds`/15 while it reads on. If the
+command is renewed every `hold_seconds`/3 while it reads on. If the
 board stops, the relay is back at rest within `hold_seconds`. A relay
 whose rest is *on* takes `rest_state: "on"` (then `off,<hold_seconds>`
 is what's held). Measured, with the device settings that go with it, in

@@ -237,9 +237,12 @@ In the Shelly app, besides the [MQTT settings](#mqtt-settings-that-work):
 | Auto OFF | **on, 900 s** | The backstop: any switch-on - from LocalHome, the app, the button - ends within 15 minutes unless renewed, a restart of the Shelly included (see below). |
 | App-only settings (input state shown on the button, notifications, the card) | the defaults | They change the app, not the device. |
 
-LocalHome reads these back from every relay it commands, every 5
-minutes (`Shelly.GetConfig` over MQTT), together with MQTT control and
-"Generic status update" being on. Anything set otherwise shows in the
+LocalHome reads these back from every relay it commands
+(`Shelly.GetConfig` over MQTT), together with MQTT control and "Generic
+status update" being on - only when they can have changed: at its first
+answer, after the Shelly restarts (an update can reset them), and every
+5 minutes while one is wrong, so a fix shows. The admin panel also asks
+the moment a Shelly's id is typed in. Anything set otherwise shows in the
 admin panel - the device's row in *Devices* says which setting, what it
 is and what it should be, in the app's own words, and *System status*
 lists it as a problem. Nothing is ever changed on the device.
@@ -249,7 +252,7 @@ lists it as a problem. Nothing is ever changed on the device.
 If the board stops, a relay keeps its last state: a valve left open stays
 open. So LocalHome never sends a plain `on` to a valve: it sends `on,900`
 on the command topic - on for 15 minutes, then off by itself - and renews
-it every minute while the valve should be open
+it every 5 minutes while the valve should be open
 ([drivers/mqtt/switch.py](../src/localhome/drivers/mqtt/switch.py),
 `hold_seconds`). Measured on the Plus 1:
 

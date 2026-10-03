@@ -426,3 +426,30 @@ def test_a_device_restarting_for_an_update_is_asked_again_and_its_new_firmware_r
     assert watcher.poll_once() is False
     assert by_id(watcher, RELAY)["error"] is None
     assert rpc.calls.count("Shelly.GetDeviceInfo") == asked + 1, "the version is read again after a restart"
+
+
+
+def test_settings_are_read_only_when_they_can_have_changed(tmp_path):
+    """First answer, then not again while all is right - only while one is
+    wrong (so a fix shows), and after a restart of the Shelly."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000}, "wifi": {"rssi": -57}}
+    right = json.loads(json.dumps(RELAY_CONFIG))
+    right["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)
+    rpc = RelayRpc(status, right)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    for _ in range(4):
+        clock.t += 300
+        rpc.status["sys"]["uptime"] += 300
+        watcher.poll_once()
+    assert rpc.calls.count("Shelly.GetConfig") == 1, "all right: read once"
+    clock.t += 300
+    rpc.status["sys"]["uptime"] = 40                      # restarted (an update)
+    rpc.config = json.loads(json.dumps(RELAY_CONFIG))       # ...which reset a setting
+    watcher.poll_once()
+    assert rpc.calls.count("Shelly.GetConfig") == 2
+    assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
+    rpc.config = right                                      # fixed in the app
+    clock.t += 300
+    rpc.status["sys"]["uptime"] += 300
+    watcher.poll_once()
+    assert by_id(watcher, RELAY)["settings_wrong"] == [] and rpc.calls.count("Shelly.GetConfig") == 3

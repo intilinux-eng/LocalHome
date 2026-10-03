@@ -368,8 +368,10 @@ and logs "network back".
      **Detached**, relay state at power-on **off** ("spegnersi quando è
      alimentato" in the Italian app), **Auto OFF on, 900 s** - why, and
      what was measured, in [shelly-gen3.md](shelly-gen3.md#plus-1-relay).
-     The admin panel checks them every 5 minutes: one set otherwise
-     shows in *Devices*, by name, with the value it should have.
+     The admin panel checks them as soon as the id is typed in (the
+     line under the field), and again after the Shelly restarts: one
+     set otherwise shows in *Devices*, by name, with the value it
+     should have.
 
   The panel's per-zone status then says whether the device is really
   being heard, and tells "not reachable yet" (a battery sensor that

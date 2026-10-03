@@ -16,7 +16,7 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
                rest state ("off" by default) the relay is commanded
                "on,<hold_seconds>" - on for that long, then back to rest
                by itself - and the command is renewed while LocalHome
-               runs, every hold_seconds/15. If LocalHome stops, the relay
+               runs, every hold_seconds/3. If LocalHome stops, the relay
                goes back to rest on its own; while it runs, it never
                drops (measured on a Plus 1: each renewal restarts the
                timer, the output stays on - docs/shelly-gen3.md).
@@ -56,9 +56,10 @@ from localhome.drivers.mqtt.paths import extract_path
 
 logger = logging.getLogger(__name__)
 
-# Renewals per hold: a 15-minute hold is renewed every minute, so a Wi-Fi
-# outage of up to 14 minutes goes by without the relay noticing.
-RENEWALS_PER_HOLD = 15
+# Renewals per hold: a 15-minute hold is renewed every 5 minutes - two
+# renewals in a row can be lost to the Wi-Fi without the relay noticing,
+# and a home router isn't kept busy for years by a relay that's just on.
+RENEWALS_PER_HOLD = 3
 
 
 class MqttSwitchDriver(SwitchDriver):

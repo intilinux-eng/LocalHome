@@ -14,9 +14,11 @@ Two ways in, one per kind of device:
 - A mains Shelly (a relay, the VMC's dimmer) is always connected, but
   doesn't publish its signal or temperature by itself: it's asked, every
   5 minutes, with one Shelly.GetStatus over MQTT. A relay LocalHome
-  commands is also asked for its settings (Shelly.GetConfig): the ones a
-  valve needs - see expected_settings() - and that aren't so are said by
-  name, for whoever fixes them in the Shelly app.
+  commands is also asked for its settings (Shelly.GetConfig) - only when
+  they can have changed: at its first answer, after it restarts (an
+  update can reset them), and while one is wrong, until it's fixed. The
+  ones a valve needs - see expected_settings() - and that aren't so are
+  said by name, for whoever fixes them in the Shelly app.
 
 The devices come from the integrations themselves (shelly_devices()),
 whether written in config.yaml or built by the admin panel - and a
@@ -250,7 +252,7 @@ class ShellyHealth:
                 "device_temp_c": None, "voltage_v": None, "errors": [],
                 "booted_at": None, "update": None, "restart_required": False,
                 "model": None, "firmware": None,
-                "expect": dict(device.get("expect") or {}), "settings_wrong": [],
+                "expect": dict(device.get("expect") or {}), "settings_wrong": [], "settings_read": False,
                 "battery_pct": None, "battery_v": None, "external_power": None, "last_report_at": None,
             }
             self._devices[device["id"]] = state
@@ -342,13 +344,14 @@ class ShellyHealth:
                         state["model"], state["firmware"] = info.get("model"), info.get("ver")
                 except Exception:
                     pass        # asked again at the next check
-            if state["expect"]:
+            if state["expect"] and (not state["settings_read"] or state["settings_wrong"]):
                 try:
                     config = rpc.call("Shelly.GetConfig")
                 except Exception:
-                    continue    # said at the next check; the status above stands
+                    continue    # asked at the next check; the status above stands
                 with self._lock:
                     state["settings_wrong"] = settings_wrong(state["expect"], config)
+                    state["settings_read"] = True
         self.refresh_problems()
         return failed
 
@@ -387,8 +390,10 @@ class ShellyHealth:
         if known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
             if known is not None and booted > known:
                 self._record(state["id"], {"restart": 1}, ts=booted)
-                # A firmware update is one: its version is asked again.
+                # A firmware update is one: its version and settings are
+                # asked again.
                 state["model"] = None
+                state["settings_read"] = False
             self._record(state["id"], {"booted_at": booted})
             state["booted_at"] = booted
 
