@@ -216,58 +216,14 @@
       <p class="hint-text">{{ t.climate_admin.shelly_note_more }}</p>
     </details>
     <ul class="admin-device-list" id="device-list"><li class="hint-text">{{ t.climate_admin.status_loading }}</li></ul>
-    <!-- What to set in the Shelly app, and why: LocalHome never changes a
-         device. The relays' settings it reads back every 5 minutes and
-         names in their row when they're otherwise - see
-         services/shelly_health.py's expected_settings(). -->
-    <details class="admin-more" id="shelly-app-settings">
-      <summary>{{ t.climate_admin.shelly_app_heading }}</summary>
-      <p class="hint-text">{{ t.climate_admin.shelly_app_note }}</p>
-      <!-- The installer's guide, Italian, to keep and to pass on: see
-           static/guide/ and tools/build_guides.py. -->
-      <p class="guide-links">
-        <strong>{{ t.climate_admin.guide_plus1 }}</strong>
-        <a href="/static/guide/shelly-plus1-valvole.html" target="_blank" rel="noopener">{{ t.climate_admin.guide_open }}</a>
-        <a href="/static/guide/shelly-plus1-valvole.pdf" download="LocalHome - Shelly Plus 1 per le valvole di zona.pdf">{{ t.climate_admin.guide_pdf }}</a>
-      </p>
-      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_all }}</h4>
-      <dl class="shelly-guide-list">
-        <dt>{{ t.climate_admin.shelly_app_mqtt_server | replace("{board}", board_host) }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_mqtt_server_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_mqtt_status }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_mqtt_status_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_mqtt_rpc }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_mqtt_rpc_why }}</dd>
-      </dl>
-      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_valve }}</h4>
-      <dl class="shelly-guide-list">
-        <dt>{{ t.climate_admin.shelly_app_wiring }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_wiring_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_in_mode }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_in_mode_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_power_on }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_power_on_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_auto_off }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_auto_off_why }}</dd>
-      </dl>
-      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_bypass }}</h4>
-      <dl class="shelly-guide-list">
-        <dt>{{ t.climate_admin.shelly_app_bypass_in_mode }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_bypass_in_mode_why }}</dd>
-        <dt>{{ t.climate_admin.shelly_app_bypass_rest }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_bypass_rest_why }}</dd>
-      </dl>
-      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_ht }}</h4>
-      <dl class="shelly-guide-list">
-        <dt>{{ t.climate_admin.shelly_app_ht_button }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_ht_button_why }}</dd>
-      </dl>
-      <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_app }}</h4>
-      <dl class="shelly-guide-list">
-        <dt>{{ t.climate_admin.shelly_app_app_only }}</dt>
-        <dd>{{ t.climate_admin.shelly_app_app_only_why }}</dd>
-      </dl>
-    </details>
+    <!-- How to wire and set up a valve's Shelly: the installer's guide
+         (static/guide/), and the one thing it can't know - this board's
+         MQTT address. Whatever's set otherwise the rows above say. -->
+    <p class="guide-links">
+      {{ t.climate_admin.guide_plus1 }}
+      <a href="/static/guide/shelly-plus1-valvole.html" target="_blank" rel="noopener">{{ t.climate_admin.guide_open }}</a>
+    </p>
+    <p class="hint-text">{{ t.climate_admin.shelly_mqtt_server | replace("{board}", board_host) }}</p>
 
     <h3 class="admin-subheading">{{ t.climate_admin.devices_setup_heading }}</h3>
     <p class="hint-text">{{ t.climate_admin.devices_setup_note }}</p>

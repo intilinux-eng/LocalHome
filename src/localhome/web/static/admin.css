@@ -490,15 +490,10 @@
 .shelly-check:empty { display: none; }
 .shelly-check-again { margin-left: 4px; white-space: nowrap; }
 
-/* The installer's guide: open it, or download the PDF. */
-.guide-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 4px 0 10px; font-size: 0.88rem; }
-.guide-links strong { flex-basis: 100%; }
+/* The installer's guide, one line. */
+.guide-links { margin: 4px 0 2px; font-size: 0.88rem; }
+.guide-links a { margin-left: 4px; font-weight: 600; }
 
-/* What to set in the Shelly app: the setting, then why. */
-.shelly-guide-group { margin: 14px 0 4px; font-size: 0.9rem; }
-.shelly-guide-list { margin: 0; }
-.shelly-guide-list dt { margin-top: 8px; font-weight: 600; font-size: 0.86rem; overflow-wrap: anywhere; }
-.shelly-guide-list dd { margin: 2px 0 0; color: var(--text-2); font-size: 0.84rem; line-height: 1.45; }
 .boot-end { font-weight: 600; }
 .boot-end.boot-running { color: var(--ok); }
 .boot-end.boot-clean { color: var(--text-3); }

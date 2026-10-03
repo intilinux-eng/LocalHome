@@ -103,14 +103,12 @@ def test_the_installers_guide_is_served_and_linked_from_the_admin(tmp_path):
     config.write_text("web:\n  port: 5000\n  language: it\nintegrations: []\n", encoding="utf-8")
     client = create_app(str(config)).test_client()
     page = client.get("/climate-admin").get_data(as_text=True)
-    for path in ("/static/guide/shelly-plus1-valvole.html", "/static/guide/shelly-plus1-valvole.pdf"):
-        assert path in page
-        res = client.get(path)
-        assert res.status_code == 200 and len(res.data) > 2000, path
+    assert "/static/guide/shelly-plus1-valvole.html" in page and ".pdf" not in page
+    res = client.get("/static/guide/shelly-plus1-valvole.html")
+    assert res.status_code == 200 and len(res.data) > 2000
     html = client.get("/static/guide/shelly-plus1-valvole.html").get_data(as_text=True)
     for setting in ("Detached", "spegnersi quando è alimentato", "00:15:00", "ponte", "comando a tempo"):
         assert setting in html
-    assert client.get("/static/guide/shelly-plus1-valvole.pdf").data.startswith(b"%PDF")
     images = re.findall(r'<img src="([^"]+)"', html)
     assert len(images) == 5
     for image in images:
