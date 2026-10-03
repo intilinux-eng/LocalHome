@@ -83,21 +83,30 @@ SIMULATED_PREFIX = "simulated:"
 
 
 def expected_settings(integration) -> dict:
-    """What a relay LocalHome commands has to be set to on the device
-    (docs/shelly-gen3.md#plus-1-relay): its input detached, MQTT commands
-    and status on, and - when it's held (drivers/mqtt/switch.py) - its
-    rest state at power-on and Auto OFF (or ON) at the hold, which covers
-    a restart of the Shelly itself. Empty for anything else."""
+    """What a Shelly relay LocalHome commands has to be set to on the
+    device (docs/shelly-gen3.md#plus-1-relay). Any: MQTT commands and
+    status on. One of the plant's - a role from the panel (shelly_role) or
+    held: its input detached, only LocalHome moves it. Held (a zone
+    valve, the dehumidifier - drivers/mqtt/switch.py): its rest state at
+    power-on and Auto OFF (or ON) at the hold, which covers a restart of
+    the Shelly itself. The bypass: its last state kept through anything
+    - restored at power-on, no timer - so summer's closed stays closed.
+    Empty for anything that isn't a Shelly relay."""
     options = integration.options or {}
     if getattr(integration, "kind", None) != "switch" \
             or not str(options.get("command_topic") or "").endswith("/command/switch:0"):
         return {}
-    expect = {"in_mode": "detached", "mqtt_control": True, "mqtt_status": True}
+    expect = {"mqtt_control": True, "mqtt_status": True}
+    role = options.get("shelly_role")
     hold = options.get("hold_seconds")
+    if role or hold:
+        expect["in_mode"] = "detached"
     if hold:
         rest = options.get("rest_state", "off")
         expect["initial_state"] = rest
         expect["auto_on" if rest == "on" else "auto_off"] = int(hold)
+    elif role == "bypass":
+        expect.update(initial_state="restore_last", auto_off=0, auto_on=0)
     return expect
 
 

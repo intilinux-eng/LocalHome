@@ -458,6 +458,9 @@ def valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> 
         # every 5 minutes - if the board goes, the valve closes within 15
         # minutes by itself (drivers/mqtt/switch.py).
         "hold_seconds": VALVE_HOLD_SECONDS,
+        # What it is - the settings its Shelly is checked against follow
+        # (services/shelly_health.py's expected_settings()).
+        "shelly_role": "valve",
         "dashboard_tab": "climate",
         # No stale_after_seconds: a relay only publishes on state change,
         # so a timeout here would wrongly flag a valve that's just been
@@ -544,9 +547,12 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
             if key == "bypass_valve_device_id":
                 if (extra_switches or {}).get(BYPASS_NORMALLY_OPEN_KEY, True):
                     options["normally_open"] = True
-                # Which state is safe for the bypass if the board goes is
-                # the plant's to say, not decided yet: no hold for now.
+                # If the board stops, the bypass stays as the season left
+                # it - closed all summer - so no hold: it keeps its state.
                 options.pop("hold_seconds")
+                options["shelly_role"] = "bypass"
+            else:
+                options["shelly_role"] = "dehumidifier"
             integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 

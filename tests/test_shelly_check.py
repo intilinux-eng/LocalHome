@@ -47,10 +47,12 @@ def test_a_valve_relay_is_found_and_its_wrong_settings_named(tmp_path):
                                         {"key": "auto_off", "value": 0, "expected": 900}]
 
 
-def test_the_bypass_is_held_to_fewer_settings(tmp_path):
-    """Its safe state isn't decided: only Detached and MQTT are its own."""
+def test_the_bypass_is_checked_for_keeping_its_state(tmp_path):
+    """No timer, its last state restored at power-on: summer's closed stays
+    closed if the board stops."""
     check, _ = _check(tmp_path, FakeRpc())
-    assert [s["key"] for s in check.check(RELAY, "bypass")["settings_wrong"]] == ["in_mode"]
+    wrong = check.check(RELAY, "bypass")["settings_wrong"]
+    assert [(s["key"], s["expected"]) for s in wrong] == [("in_mode", "detached"), ("initial_state", "restore_last")]
 
 
 def test_a_silent_device_says_so(tmp_path):

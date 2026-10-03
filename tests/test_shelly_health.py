@@ -360,9 +360,18 @@ def test_what_a_held_valve_relay_must_be_set_to():
     assert expected_settings(valve_integration()) == {
         "in_mode": "detached", "mqtt_control": True, "mqtt_status": True, "initial_state": "off", "auto_off": 900}
     assert expected_settings(valve_integration(rest_state="on"))["auto_on"] == 900
-    unheld = expected_settings(valve_integration(hold_seconds=None))
-    assert unheld == {"in_mode": "detached", "mqtt_control": True, "mqtt_status": True}
     assert expected_settings(ht_integration()) == {} and expected_settings(dimmer_integrations()[0]) == {}
+
+
+def test_the_bypass_keeps_its_last_state_and_any_other_relay_only_needs_mqtt():
+    """The bypass, normally open, closed by LocalHome all summer: if the
+    board stops it stays as it was - restored at power-on, no timer. A
+    Shelly relay that isn't the plant's (a lamp with its wall switch on
+    SW) isn't told to detach its input."""
+    bypass = expected_settings(valve_integration(hold_seconds=None, shelly_role="bypass"))
+    assert bypass == {"in_mode": "detached", "mqtt_control": True, "mqtt_status": True,
+                      "initial_state": "restore_last", "auto_off": 0, "auto_on": 0}
+    assert expected_settings(valve_integration(hold_seconds=None)) == {"mqtt_control": True, "mqtt_status": True}
 
 
 def test_the_settings_set_otherwise_are_said_by_name():

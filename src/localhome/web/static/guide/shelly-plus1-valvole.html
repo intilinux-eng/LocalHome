@@ -228,8 +228,19 @@ entro qualche minuto.</p>
   <li>Togli la spunta: il termostato riprende il controllo.</li>
 </ol>
 
-<p><strong>Deumidificatore e valvola di bypass:</strong> stesso collegamento e stesso tipo relè (Detached). Per il bypass, che è
-normalmente aperto, stato all'accensione e spegnimento automatico dipendono dall'impianto: da decidere.</p>
+<h2>Deumidificatore e valvola di bypass bagni</h2>
+<p><strong>Deumidificatore:</strong> stesso collegamento e stesse impostazioni delle valvole di zona.</p>
+<p><strong>Valvola di bypass bagni:</strong> è <strong>normalmente aperta</strong> - senza corrente è aperta; d'estate LocalHome la
+chiude chiudendo il contatto dello Shelly, d'inverno la lascia aperta. Se la scheda si ferma deve <strong>restare com'è</strong>:
+d'estate chiusa, d'inverno aperta. Per questo niente comando a tempo, e nello Shelly:</p>
+<table>
+  <tr><th>Impostazione</th><th>Scegli</th></tr>
+  <tr><td>Collegamento</td><td class="value">come le valvole di zona</td></tr>
+  <tr><td>Imposta tipo relè</td><td class="value">"Detached"</td></tr>
+  <tr><td>Stato del relè all'accensione</td><td class="value">"…per ripristinare l'ultima modalità in cui si trovava"</td></tr>
+  <tr><td>Timer: accensione e spegnimento automatico</td><td class="value">entrambi spenti</td></tr>
+</table>
+<p>Anche per il bypass LocalHome controlla queste impostazioni e dice cosa manca.</p>
 
 <footer>LocalHome - guida aggiornata al 3 ottobre 2026, provata su Shelly Plus 1 firmware 1.7.5.</footer>
 </main>

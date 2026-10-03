@@ -265,7 +265,14 @@ it every 5 minutes while the valve should be open
 | `on,60` renewals with Auto OFF at 30 s | the command's timer wins, on past the 30 s, no drop ✓ |
 
 Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
-device for whatever LocalHome doesn't cover. The command topic takes
+device for whatever LocalHome doesn't cover.
+
+The bathrooms' **bypass** is the exception: normally open, closed by
+LocalHome all summer, and if the board stops it must stay as it is -
+closed in summer, open in winter. So no hold: plain `on`/`off`, and on the
+device relay type **Detached**, state at power-on **restore last**, Auto
+OFF and Auto ON both **off**. The admin panel checks those for it
+(`shelly_role: "bypass"`). The command topic takes
 `on`, `off`, `toggle`, `on,<seconds>`, `off,<seconds>` - anything else,
 `true` or `True` included, is ignored without a word.
 

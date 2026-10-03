@@ -153,12 +153,14 @@ def test_build_extra_switch_integrations_shape():
 
 def test_a_valve_and_the_dehumidifier_are_held_the_bypass_not_yet():
     """On only while LocalHome is there to say so - "on,900" renewed. The
-    bypass's safe state is the plant's to decide: no hold for it yet."""
+    bypass keeps its last state if the board stops: no hold for it."""
     switches = {i.options["name"]: i.options for i in build_extra_switch_integrations(VALID_EXTRA_SWITCHES, "mqtt_broker.json")}
     valve = build_climate_integrations([VALID_ZONES[1]], "mqtt_broker.json", "manual_override.json")
     valve = next(i.options for i in valve if i.options["name"] == "Bathrooms Valve")
     assert valve["hold_seconds"] == 900 and switches["Dehumidifier"]["hold_seconds"] == 900
     assert "hold_seconds" not in switches["Bathroom Bypass Valve"]
+    roles = {name: options["shelly_role"] for name, options in switches.items()}
+    assert roles == {"Bathroom Bypass Valve": "bypass", "Dehumidifier": "dehumidifier"} and valve["shelly_role"] == "valve"
 
 
 def test_build_extra_switch_integrations_skips_an_unset_field():
