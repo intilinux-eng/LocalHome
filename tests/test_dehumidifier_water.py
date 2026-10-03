@@ -234,3 +234,44 @@ def test_the_admin_hears_that_config_yaml_has_its_own_rules(board):
     body = client.get("/api/climate-admin/season-rules").get_json()
     assert body["config_rules"] == 2
     assert not any(role["wired"] for role in body["roles"])
+
+
+# ------------------------------------- dehumidifier on == bathrooms on --
+# In summer the bathrooms' valve follows the dehumidifier and nothing
+# else: on with it, off with it - whatever else is going on.
+
+def test_away_doesnt_close_the_valve_the_dehumidifier_needs(board):
+    """An empty house is exactly when it runs unattended."""
+    from datetime import datetime, timedelta
+    app, client = board
+    app.config["THERMOSTAT"].schedule_store.set_away_until(datetime.now() + timedelta(days=2))
+    client.post("/api/sensors/Deumidificatore/on")
+    _settle(app)
+    assert _valve(client) is True
+    client.post("/api/sensors/Deumidificatore/off")
+    _settle(app)
+    assert _valve(client) is False
+
+
+def test_a_valve_opened_or_closed_by_hand_goes_back_to_the_dehumidifier(board):
+    app, client = board
+    _settle(app)
+    client.post("/api/sensors/Bagni%20Valve/on")          # opened by hand, dehumidifier off
+    _settle(app)
+    assert _valve(client) is False
+    client.post("/api/sensors/Deumidificatore/on")
+    client.post("/api/sensors/Bagni%20Valve/off")         # closed by hand, dehumidifier on
+    _settle(app)
+    assert _valve(client) is True
+
+
+def test_a_silent_bathroom_sensor_doesnt_close_it_in_summer(board):
+    """The failsafe closes a valve whose sensor went quiet - not this one,
+    which the dehumidifier drives in summer, whatever the sensor says."""
+    app, client = board
+    thermostat = app.config["THERMOSTAT"]
+    thermostat.sensor_failsafe_hours = 0.0001
+    client.post("/api/sensors/Deumidificatore/on")
+    for _ in range(3):
+        _settle(app)
+    assert _valve(client) is True
