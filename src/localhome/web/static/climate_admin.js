@@ -305,12 +305,13 @@ async function loadMap() {
   document.getElementById("zone-forms").innerHTML = zones.map((z, i) => zoneFormHtml(z, i)).join("");
   const fresh = document.getElementById("zones-fresh-note");
   if (fresh) fresh.hidden = !!savedMap.configured;
-  // Open on a fresh install, closed once something is saved - unless it
-  // was opened or closed by hand in this tab.
+  // Only while there are no zones at all - none saved here, none in
+  // config.yaml - and then open, unless closed by hand in this tab.
   const guide = document.getElementById("guide");
   if (guide && !guideDecided) {
     guideDecided = true;
-    if (!(guide.id in openSectionsSaved)) guide.open = !savedMap.configured;
+    guide.hidden = !!(savedMap.configured || savedMap.zones);
+    if (!guide.hidden && !(guide.id in openSectionsSaved)) guide.open = true;
   }
   updateRestartBar();
   refreshAll();

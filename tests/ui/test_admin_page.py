@@ -161,3 +161,23 @@ def test_the_history_size_says_what_the_disk_allows(open_page, api):
     assert page.locator("[data-setting='history_max_db_mb']").get_attribute("max") == str(row["max"])
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
+
+
+def test_how_it_works_says_each_topic_short_and_folds_the_rest(open_page):
+    """A sentence or two per topic in view; the full text under "Più
+    dettagli". The four-step guide is for an installation with no zones."""
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    assert page.locator("#guide").is_hidden(), "zones are set up here"
+    page.evaluate("document.getElementById('how-it-works').open = true")
+    section = page.locator("#how-it-works")
+    assert section.locator("h3.how-h").count() == 9
+    assert section.locator("details.admin-more").count() == 9
+    assert section.locator("details.admin-more[open]").count() == 0
+    visible = page.evaluate(r"""() => [...document.querySelectorAll('#how-it-works > p')]
+      .reduce((n, p) => n + p.innerText.split(/\s+/).length, 0)""")
+    assert visible < 350, visible
+    section.locator("details.admin-more summary").nth(1).click()
+    assert "deumidificatore" in section.locator("details.admin-more").nth(1).inner_text()
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []

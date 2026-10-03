@@ -556,7 +556,10 @@ section. Below it the sections come in four groups - *Plant* (season,
 zones), *Devices* (Shellys and MQTT broker, extra switches, outdoor sensor, VMC), *Board*
 (system status - with the LED matrix's mirror - and settings) and *Tools* (diagnostic mode,
 maintenance, how it works) - each a card whose header says its state
-even when closed. A sticky bar of links follows the scroll. Two notices
+even when closed. *How it works* says each topic in a sentence or two,
+with the full explanation folded under it. On an installation with no
+zones yet - none saved in the panel, none in config.yaml - a four-step
+*How to use* guide opens above the groups. A sticky bar of links follows the scroll. Two notices
 sit above everything when they apply: saved changes waiting for a
 restart (naming which, with the restart button), and diagnostic mode
 being on. Which sections are open is remembered for the tab, so the

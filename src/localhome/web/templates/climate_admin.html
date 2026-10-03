@@ -118,9 +118,9 @@
     </a>
   </section>
 
-  <!-- How to use this page, in four steps. Open on a fresh install
-       (nothing saved yet), closed otherwise - see loadMap(). -->
-  <details class="admin-details admin-guide" id="guide" data-nav="overview">
+  <!-- How to use this page, in four steps - only on an installation
+       with no zones yet, open; see loadMap(). -->
+  <details class="admin-details admin-guide" id="guide" data-nav="overview" hidden>
     <summary>{{ icon("guide") }}<span class="sec-title">{{ t.climate_admin.guide_heading }}</span></summary>
     <p class="hint-text">{{ t.climate_admin.intro }}</p>
     <ol class="guide-steps">
@@ -450,33 +450,70 @@
   </details>
 
   <!-- Every non-obvious behavior the status pills above can leave a
-       technician guessing about - reference material, read once per
+       technician guessing about: each topic in a sentence or two, the
+       full text folded under it - reference material, read once per
        install. -->
   <details class="admin-details" id="how-it-works" data-nav="group-tools">
     <summary>{{ icon("help") }}<span class="sec-title">{{ t.climate_admin.how_it_works_heading }}</span></summary>
     <h3 class="how-h">{{ t.climate_admin.how_seasons_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_seasons }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_seasons_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_seasons }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_bathrooms_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_bathrooms }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_bathrooms_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_bathrooms }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_vmc_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_vmc }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_vmc_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_vmc }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_sensors_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
-    <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
-    <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
-    <p class="hint-text">{{ t.climate_admin.how_sensors_boot }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_sensors_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_sensors_boot }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_test_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_test }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_test_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_test }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_network_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_network }}</p>
-    <p class="hint-text">{{ t.climate_admin.how_network_router }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_network_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_network }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_network_router }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_safety_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
-    <p class="hint-text">{{ t.climate_admin.how_missing }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_safety_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_missing }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_data_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_data }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_data_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_data }}</p>
+    </details>
     <h3 class="how-h">{{ t.climate_admin.how_diagnostic_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
+    <p class="hint-text">{{ t.climate_admin.how_diagnostic_short }}</p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
+    </details>
   </details>
 
   </div>
