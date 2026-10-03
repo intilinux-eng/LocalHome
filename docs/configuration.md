@@ -553,7 +553,7 @@ The page opens on an **overview**: one tile each for the system status,
 the season, the zones, the MQTT broker, the board (uptime, clock) and
 the LED matrix, coloured by how they're doing and each a link to its
 section. Below it the sections come in four groups - *Plant* (season,
-zones), *Devices* (Shellys and MQTT broker, extra switches, outdoor sensor, VMC), *Board*
+zones), *Devices* (every device in one list, the MQTT broker above it and, below, the extra switches, outdoor sensor and VMC connected from there), *Board*
 (system status - with the LED matrix's mirror - and settings) and *Tools* (diagnostic mode,
 maintenance, how it works) - each a card whose header says its state
 even when closed. *How it works* says each topic in a sentence or two,

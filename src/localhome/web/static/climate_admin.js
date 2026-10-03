@@ -1467,20 +1467,6 @@ function systemStatusHtml(data) {
   const statsHtml = groups.map(([title, rows]) =>
     `<div class="admin-zone-card admin-stat-group"><h3>${escapeHtml(title)}</h3>${rows}</div>`).join("");
 
-  // Offline first: they're what someone opening this list is looking for.
-  const devices = [...(data.devices || [])].sort((a, b) => (a.ok === b.ok ? a.name.localeCompare(b.name) : a.ok ? 1 : -1));
-  const deviceRows = devices.map(d => {
-    const status = d.ok
-      ? `<span class="admin-status ok">${tr("climate_admin.system_device_ok")}</span>`
-      : `<span class="admin-status bad">${tr("climate_admin.system_device_offline")}</span>`;
-    const age = d.seconds_since_update == null
-      ? tr("climate_admin.system_device_never")
-      : tr("climate_admin.system_device_age", { age: formatAge(d.seconds_since_update) });
-    const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
-    return `<li><div class="admin-device-line">${status}<strong>${escapeHtml(displayName(d.name))}</strong>`
-      + `<span class="admin-pill">${escapeHtml(d.kind)}</span><span class="admin-device-age">${escapeHtml(age)}</span></div>${error}</li>`;
-  }).join("");
-
   const skipped = (data.skipped_driver_modules || []).map(s =>
     `<li><code>${escapeHtml(s.module)}</code> - ${escapeHtml(tr("climate_admin.system_skipped_line", { package: s.missing_package }))} <code>${escapeHtml(s.install)}</code></li>`).join("");
   const skippedHtml = skipped
@@ -1489,8 +1475,6 @@ function systemStatusHtml(data) {
 
   return `
     <div class="admin-stat-grid">${statsHtml}</div>
-    <h3>${tr("climate_admin.system_devices_heading", { count: devices.length })}</h3>
-    <ul class="admin-device-list">${deviceRows}</ul>
     ${bootsHtml(data.boots)}
     ${data.protections || (data.watchdog_history || []).length ? watchdogHistoryHtml(data.watchdog_history) : ""}
     ${skippedHtml}
@@ -1522,6 +1506,8 @@ async function refreshSystemStatus(force) {
     renderSystemProblems(data.problems || []);
     document.getElementById("system-status-body").innerHTML = systemStatusHtml(data);
     updateBoardOverview(data);
+    deviceStatus = [...(data.devices || [])];
+    renderDevices();
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -2379,7 +2365,7 @@ function signalRow(label, stats) {
   return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }));
 }
 
-function shellyDeviceHtml(d, data, now) {
+function shellyStatsHtml(d, data, now) {
   const rows = [];
   const s = d.stats || {};
   if (d.battery) {
@@ -2434,33 +2420,107 @@ function shellyDeviceHtml(d, data, now) {
   const update = d.update ? tr("climate_admin.shelly_update", { version: d.update }) : (d.firmware ? tr("climate_admin.shelly_up_to_date") : "");
   if (firmware || update) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), [firmware, update].filter(Boolean).join(" - ")));
   if (d.restart_required) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), tr("climate_admin.shelly_restart_required"), true));
-  const power = `<span class="admin-pill">${tr(d.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`;
-  // A simulated H&T is watched like a real one, but has no device id.
-  const simulated = d.simulated ? ` <span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "";
   const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
-  return `<div class="admin-zone-card admin-stat-group"><h3>${escapeHtml(displayName(d.name))} ${power}${simulated}</h3>`
-    + `${rows.join("")}${error}${d.simulated ? "" : `<p class="hint-text admin-path">${escapeHtml(d.id)}</p>`}</div>`;
+  // A simulated H&T is watched like a real one, but has no device id.
+  return `${rows.join("")}${error}${d.simulated ? "" : `<p class="hint-text admin-path">${escapeHtml(d.id)}</p>`}`;
 }
 
 async function loadShellyHealth() {
-  const list = document.getElementById("shelly-health-list");
-  if (!list) return;
-  let data;
   try {
-    data = await (await fetch("/api/climate-admin/shelly-health", { cache: "no-store" })).json();
+    const data = await (await fetch("/api/climate-admin/shelly-health", { cache: "no-store" })).json();
+    if (data.ok) shellyHealth = data;
   } catch (e) {
     return;   // offline: the connection banner says so already
   }
-  if (!data.ok) return;
+  renderDevices();
+}
+
+// ------------------------------------------------------------- devices ----
+// Every device LocalHome reads or drives, in one list: what the system
+// status knows of each one (answering, how fresh) joined with what each
+// Shelly says about itself (services/shelly_health.py). A Shelly is one
+// row whatever it drives - a VMC dimmer's switch and speed are one
+// device. Not answering first, then to check, then the rest; a Shelly's
+// row opens to its details, and stays open across refreshes.
+
+let deviceStatus = null;   // devices from the last GET /api/system-status
+let shellyHealth = null;   // the last GET /api/climate-admin/shelly-health
+const openDeviceRows = new Set();
+const DEVICE_STATE_ORDER = { bad: 0, neutral: 1, ok: 2 };
+
+function deviceRows() {
+  const shellys = (shellyHealth && shellyHealth.devices) || [];
+  const shellyOf = new Map();
+  shellys.forEach(s => (s.names && s.names.length ? s.names : [s.name]).forEach(name => shellyOf.set(name, s)));
+  const rows = new Map();
+  for (const d of deviceStatus || []) {
+    const shelly = shellyOf.get(d.name);
+    const key = shelly ? `shelly:${shelly.id}` : `device:${d.name}`;
+    if (!rows.has(key)) rows.set(key, { key, shelly, devices: [] });
+    rows.get(key).devices.push(d);
+  }
+  // A Shelly whose driver didn't load still says something about itself.
+  shellys.forEach(s => {
+    if (!rows.has(`shelly:${s.id}`)) rows.set(`shelly:${s.id}`, { key: `shelly:${s.id}`, shelly: s, devices: [] });
+  });
   const now = Date.now() / 1000;
-  const devices = data.devices || [];
-  list.innerHTML = devices.length
-    ? devices.map(d => shellyDeviceHtml(d, data, now)).join("")
-    : `<p class="hint-text">${tr("climate_admin.shelly_none")}</p>`;
-  const attention = list.querySelectorAll(".admin-stat.bad").length;
-  setPill("shelly-health-summary", !devices.length ? ""
-    : attention ? pillHtml("bad", tr("climate_admin.shelly_attention", { count: devices.length }))
-    : pillHtml("ok", tr("climate_admin.shelly_count", { count: devices.length })));
+  return [...rows.values()].map(row => {
+    const stats = row.shelly ? shellyStatsHtml(row.shelly, shellyHealth, now) : "";
+    const state = row.devices.some(d => !d.ok) ? "bad" : stats.includes('class="admin-stat bad"') ? "neutral" : "ok";
+    const names = row.devices.length ? row.devices.map(d => d.name) : (row.shelly.names || [row.shelly.name]);
+    return { ...row, stats, state, names };
+  }).sort((a, b) => DEVICE_STATE_ORDER[a.state] - DEVICE_STATE_ORDER[b.state]
+    || displayName(a.names[0]).localeCompare(displayName(b.names[0])));
+}
+
+function deviceRowHtml(row) {
+  const s = row.shelly;
+  const label = { ok: "system_device_ok", bad: "system_device_offline", neutral: "pill_rule_check" }[row.state];
+  const pills = s
+    ? `<span class="admin-pill">${tr(s.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`
+      + (s.simulated ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "")
+    : `<span class="admin-pill">${escapeHtml(row.devices[0].kind)}</span>`;
+  const meta = s ? [s.wifi_rssi_dbm != null ? `${Math.round(s.wifi_rssi_dbm)} dBm` : "",
+    s.battery && s.battery_pct != null ? `${Math.round(s.battery_pct)}%` : ""].filter(Boolean).join(" · ") : "";
+  const ages = row.devices.map(d => d.seconds_since_update).filter(age => age != null);
+  const age = !row.devices.length ? ""
+    : ages.length ? tr("climate_admin.system_device_age", { age: formatAge(Math.min(...ages)) })
+    : tr("climate_admin.system_device_never");
+  const errors = row.devices.filter(d => d.error).map(d =>
+    `<div class="admin-problem-detail">${escapeHtml(row.devices.length > 1 ? `${displayName(d.name)}: ${d.error}` : d.error)}</div>`).join("");
+  const line = `<span class="admin-status ${row.state}">${escapeHtml(tr(`climate_admin.${label}`))}</span>`
+    + `<strong>${row.names.map(name => escapeHtml(displayName(name))).join(" · ")}</strong>${pills}`
+    + (meta ? `<span class="device-meta">${escapeHtml(meta)}</span>` : "")
+    + `<span class="admin-device-age">${escapeHtml(age)}</span>`;
+  if (!s) return `<li><div class="admin-device-line">${line}</div>${errors}</li>`;
+  return `<li><details class="device-row" data-key="${escapeAttr(row.key)}"${openDeviceRows.has(row.key) ? " open" : ""}>`
+    + `<summary class="admin-device-line">${line}</summary>${errors}${row.stats}</details></li>`;
+}
+
+function renderDevices() {
+  const list = document.getElementById("device-list");
+  if (!list || !deviceStatus) return;
+  const rows = deviceRows();
+  list.innerHTML = rows.length ? rows.map(deviceRowHtml).join("")
+    : `<li class="hint-text">${escapeHtml(tr("climate_admin.devices_none"))}</li>`;
+  const bad = rows.filter(r => r.state === "bad").length;
+  const check = rows.filter(r => r.state === "neutral").length;
+  setPill("devices-summary", !rows.length ? ""
+    : bad ? pillHtml("bad", tr("climate_admin.devices_bad", { count: bad, total: rows.length }))
+    : check ? pillHtml("neutral", tr("climate_admin.devices_check", { count: check, total: rows.length }))
+    : pillHtml("ok", tr("climate_admin.devices_ok", { count: rows.length })));
+}
+
+function watchDeviceRows() {
+  const list = document.getElementById("device-list");
+  if (!list) return;
+  // "toggle" doesn't bubble: caught on the way down instead.
+  list.addEventListener("toggle", event => {
+    const row = event.target;
+    if (!row.classList || !row.classList.contains("device-row")) return;
+    if (row.open) openDeviceRows.add(row.dataset.key);
+    else openDeviceRows.delete(row.dataset.key);
+  }, true);
 }
 
 rememberOpenSections();
@@ -2472,6 +2532,7 @@ loadSeasonRules();
 loadExtraSensor();
 loadVmc();
 loadVmcSpeeds();
+watchDeviceRows();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);
 loadMaintenance();

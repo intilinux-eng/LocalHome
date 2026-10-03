@@ -449,6 +449,43 @@
 .admin-device-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .admin-device-age { margin-left: auto; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .boot-list li { display: flex; justify-content: space-between; gap: 12px; }
+
+/* The devices list: a Shelly's row opens to what it says about itself. */
+.device-row > summary { list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.device-row > summary::-webkit-details-marker { display: none; }
+.device-row > summary::after { content: "+"; color: var(--accent); font-weight: 700; }
+.device-row[open] > summary::after { content: "−"; }
+.device-row[open] > summary { margin-bottom: 6px; }
+.device-meta { color: var(--text-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+/* What's connected from here: a card each, closed, its state in the header. */
+.device-role { margin: 0 0 10px; padding: 0 14px; border-radius: var(--radius-s); background: var(--surface-2); }
+.device-role > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 52px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.device-role > summary::-webkit-details-marker { display: none; }
+.device-role > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin: 0 4px 0 auto;
+  border-right: 2px solid var(--text-3);
+  border-bottom: 2px solid var(--text-3);
+  transform: rotate(45deg);
+}
+.device-role[open] > summary::after { transform: rotate(225deg); }
+.device-role[open] { padding-bottom: 14px; }
+.device-role .admin-zone-card { background: var(--surface); }
+.device-role .sec-pills { font-weight: 400; }
+.settings-extra { margin-top: 16px; }
 .boot-end { font-weight: 600; }
 .boot-end.boot-running { color: var(--ok); }
 .boot-end.boot-clean { color: var(--text-3); }

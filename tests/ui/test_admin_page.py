@@ -7,8 +7,8 @@ from .helpers import OVERFLOW_JS, UNTRANSLATED_JS, ZONE_A, eventually
 
 pytestmark = pytest.mark.ui
 
-SECTION_PILLS = ("season-summary", "zones-summary", "broker-status", "extra-switches-summary",
-                 "extra-sensor-summary", "vmc-summary", "system-status-summary", "diagnostic-summary")
+SECTION_PILLS = ("season-summary", "zones-summary", "devices-summary", "broker-status",
+                 "system-status-summary", "diagnostic-summary")
 
 
 @pytest.mark.parametrize("width", [1280, 390, 320])
@@ -82,6 +82,7 @@ def test_a_save_waiting_for_a_restart_is_named_at_the_top(open_page, api):
     bar = page.locator("#restart-bar")
     page.wait_for_timeout(1000)
     assert bar.is_hidden()
+    page.locator("#devices > summary").click()
     page.locator("#extra-sensor > summary").click()
     page.select_option("#extra-outdoor-sensor-mode", "none" if before["outdoor_sensor_mode"] != "none" else "simulated")
     page.locator("#save-extra-sensor-btn").click()
@@ -134,7 +135,7 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     opened = open_page("/climate-admin", 390)
     page = opened.page
     page.wait_for_selector("#vmc-speeds:not([hidden])", state="attached", timeout=20000)
-    page.evaluate("document.getElementById('vmc').open = true")
+    page.evaluate("document.getElementById('settings').open = true")
     page.fill("#vmc-speed-night", "60")
     page.click("#save-vmc-speeds-btn")
     assert eventually(page, lambda: "Notte deve essere" in page.inner_text("#save-vmc-speeds-result"))
@@ -179,5 +180,29 @@ def test_how_it_works_says_each_topic_short_and_folds_the_rest(open_page):
     assert visible < 350, visible
     section.locator("details.admin-more summary").nth(1).click()
     assert "deumidificatore" in section.locator("details.admin-more").nth(1).inner_text()
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
+
+
+def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, api):
+    """Devices: one row each, those not answering first; a Shelly's row
+    (here the simulated H&Ts) opens to what it says about itself, and stays
+    open across refreshes. System status doesn't list them a second time."""
+    names = {d["name"] for d in api("/api/system-status")["devices"]}
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    page.evaluate("document.getElementById('devices').open = true")
+    rows = page.locator("#device-list > li")
+    assert eventually(page, lambda: rows.count() == len(names))
+    assert "tutti ok" in page.inner_text("#devices-summary")
+    shelly = page.locator("#device-list details.device-row", has_text=ZONE_A).first
+    assert "a batteria" in shelly.locator("summary").inner_text()
+    shelly.locator("summary").click()
+    assert "Ultimo invio" in shelly.inner_text()
+    page.evaluate("refreshSystemStatus(true)")
+    page.wait_for_timeout(1000)
+    assert page.locator("#device-list details.device-row[open]").count() == 1, "still open after a refresh"
+    page.evaluate("document.getElementById('system-status').open = true")
+    assert "Dispositivi (" not in page.inner_text("#system-status")
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []

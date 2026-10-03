@@ -101,7 +101,7 @@
       <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
       <span class="ov-sub"></span>
     </a>
-    <a class="ov-tile" id="ov-broker" href="#shelly-health" data-state="idle">
+    <a class="ov-tile" id="ov-broker" href="#devices" data-state="idle">
       <span class="ov-label">{{ icon("broker") }}{{ t.climate_admin.broker_heading }}</span>
       <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
       <span class="ov-sub"></span>
@@ -200,129 +200,114 @@
     <p>{{ t.climate_admin.group_devices_note }}</p>
   </div>
 
-  <!-- The broker the Shellys talk through - written by hand in
-       config/mqtt_broker.json, so here only where it is and whether it
-       answers (refreshBroker()) - and what each Shelly says about itself
-       (loadShellyHealth()). -->
-  <details class="admin-details" id="shelly-health" data-nav="group-devices">
-    <summary>{{ icon("broker") }}<span class="sec-title">{{ t.climate_admin.shelly_heading }}</span><span class="sec-pills"><span id="broker-status"></span><span id="shelly-health-summary"></span></span></summary>
+  <!-- Every device LocalHome reads or drives, in one list - a Shelly is
+       one row whatever it drives - with the MQTT broker above it (written
+       by hand in config/mqtt_broker.json: here only where it is and
+       whether it answers) and, under it, what's connected from here.
+       See the devices section of climate_admin.js. -->
+  <details class="admin-details" id="devices" data-nav="group-devices">
+    <summary>{{ icon("broker") }}<span class="sec-title">{{ t.climate_admin.devices_heading }}</span><span class="sec-pills"><span id="devices-summary"></span><span id="broker-status"></span></span></summary>
     <p class="hint-text admin-error" id="broker-down-hint" hidden>{{ t.climate_admin.broker_down_hint }}</p>
     <p class="hint-text" id="broker-current"></p>
-    <p class="hint-text">{{ t.climate_admin.shelly_note }}</p>
+    <p class="hint-text">{{ t.climate_admin.devices_note }}</p>
     <details class="admin-more">
       <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.shelly_note }}</p>
       <p class="hint-text">{{ t.climate_admin.shelly_note_more }}</p>
     </details>
-    <div class="admin-stat-grid" id="shelly-health-list"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
-  </details>
+    <ul class="admin-device-list" id="device-list"><li class="hint-text">{{ t.climate_admin.status_loading }}</li></ul>
 
-  <details class="admin-details" id="extra-switches" data-nav="group-devices">
-    <summary>{{ icon("switches") }}<span class="sec-title">{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.extra_switches_note_more }}</p>
-    </details>
-    <div class="admin-zone-card" id="extra-switch-form">
-      <div class="admin-field">
-        <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
-        <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
-      </div>
-      <label class="admin-checkbox">
-        <input type="checkbox" id="extra-bypass-normally-open" checked>
-        {{ t.climate_admin.extra_bypass_normally_open }}
-      </label>
-      <div class="admin-field">
-        <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
-        <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
-      </div>
-      <div class="admin-field">
-        <label for="extra-dehumidifier-zone">{{ t.climate_admin.extra_dehumidifier_zone }}</label>
-        <select id="extra-dehumidifier-zone"></select>
-        <p class="hint-text">{{ t.climate_admin.extra_dehumidifier_zone_hint }}</p>
-      </div>
-    </div>
-    <div class="toolbar admin-actions">
-      <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches(this)">{{ t.climate_admin.save_short }}</button>
-    </div>
-    <p class="hint-text" id="save-extra-result"></p>
-  </details>
-
-  <details class="admin-details" id="extra-sensor" data-nav="group-devices">
-    <summary>{{ icon("outdoor") }}<span class="sec-title">{{ t.climate_admin.extra_sensor_heading }}</span><span class="sec-pills" id="extra-sensor-summary"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.extra_sensor_note_more }}</p>
-    </details>
-    <div class="admin-zone-card" id="extra-sensor-form">
-      <div class="admin-field">
-        <label for="extra-outdoor-sensor-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
-        <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
-          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
-          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
-          <option value="none">{{ t.climate_admin.mode_none }}</option>
-        </select>
-      </div>
-      <div class="admin-field" id="extra-outdoor-sensor-id-field">
-        <label for="extra-outdoor-sensor-id">{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
-        <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
-      </div>
-      <div class="admin-zone-status" id="extra-sensor-status"></div>
-    </div>
-    <div class="toolbar admin-actions">
-      <button class="tbtn open" id="save-extra-sensor-btn" onclick="saveExtraSensor(this)">{{ t.climate_admin.save_short }}</button>
-    </div>
-    <p class="hint-text" id="save-extra-sensor-result"></p>
-  </details>
-
-  <details class="admin-details" id="vmc" data-nav="group-devices">
-    <summary>{{ icon("vmc") }}<span class="sec-title">{{ t.climate_admin.vmc_heading }}</span><span class="sec-pills" id="vmc-summary"></span></summary>
-    <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.vmc_note_more }}</p>
-    </details>
-    <div class="admin-zone-card" id="vmc-form">
-      <div class="admin-field">
-        <label for="extra-vmc-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
-        <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
-          <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
-          <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
-          <option value="none">{{ t.climate_admin.mode_none }}</option>
-        </select>
-      </div>
-      <div class="admin-field" id="extra-vmc-id-field">
-        <label for="extra-vmc-id">{{ t.climate_admin.vmc_label }}</label>
-        <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
-      </div>
-      <p class="hint-text" id="vmc-suggestion" hidden></p>
-      <div class="admin-zone-status" id="vmc-status"></div>
-    </div>
-    <div class="toolbar admin-actions">
-      <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_short }}</button>
-    </div>
-    <p class="hint-text" id="save-vmc-result"></p>
-    <!-- Night/day/boost percentages: in use at once - see loadVmcSpeeds(). -->
-    <div class="admin-zone-card" id="vmc-speeds" hidden>
-      <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
-      <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
-      <div class="admin-speed-fields">
-        {% for key in ("night", "day", "boost") %}
+    <h3 class="admin-subheading">{{ t.climate_admin.devices_setup_heading }}</h3>
+    <p class="hint-text">{{ t.climate_admin.devices_setup_note }}</p>
+    <details class="device-role" id="extra-switches">
+      <summary>{{ icon("switches") }}<span>{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
+      <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
+      <details class="admin-more">
+        <summary>{{ t.climate_admin.more_details }}</summary>
+        <p class="hint-text">{{ t.climate_admin.extra_switches_note_more }}</p>
+      </details>
+      <div class="admin-zone-card" id="extra-switch-form">
         <div class="admin-field">
-          <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
-          <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
+          <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
+          <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
         </div>
-        {% endfor %}
+        <label class="admin-checkbox">
+          <input type="checkbox" id="extra-bypass-normally-open" checked>
+          {{ t.climate_admin.extra_bypass_normally_open }}
+        </label>
+        <div class="admin-field">
+          <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
+          <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+        </div>
+        <div class="admin-field">
+          <label for="extra-dehumidifier-zone">{{ t.climate_admin.extra_dehumidifier_zone }}</label>
+          <select id="extra-dehumidifier-zone"></select>
+          <p class="hint-text">{{ t.climate_admin.extra_dehumidifier_zone_hint }}</p>
+        </div>
       </div>
       <div class="toolbar admin-actions">
-        <button class="tbtn open" id="save-vmc-speeds-btn" onclick="saveVmcSpeeds(this)">{{ t.climate_admin.vmc_speeds_save }}</button>
+        <button class="tbtn open" id="save-extra-btn" onclick="saveExtraSwitches(this)">{{ t.climate_admin.save_short }}</button>
       </div>
-      <p class="hint-text" id="save-vmc-speeds-result"></p>
-    </div>
-    <!-- The day/night program lives on the dashboard, with the VMC's own
-         speed buttons: it's a daily control, not installation config. -->
-    <p class="hint-text">{{ t.climate_admin.vmc_program_moved }}</p>
+      <p class="hint-text" id="save-extra-result"></p>
+    </details>
+    <details class="device-role" id="extra-sensor">
+      <summary>{{ icon("outdoor") }}<span>{{ t.climate_admin.extra_sensor_heading }}</span><span class="sec-pills" id="extra-sensor-summary"></span></summary>
+      <p class="hint-text">{{ t.climate_admin.extra_sensor_note }}</p>
+      <details class="admin-more">
+        <summary>{{ t.climate_admin.more_details }}</summary>
+        <p class="hint-text">{{ t.climate_admin.extra_sensor_note_more }}</p>
+      </details>
+      <div class="admin-zone-card" id="extra-sensor-form">
+        <div class="admin-field">
+          <label for="extra-outdoor-sensor-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
+          <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
+            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+            <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+            <option value="none">{{ t.climate_admin.mode_none }}</option>
+          </select>
+        </div>
+        <div class="admin-field" id="extra-outdoor-sensor-id-field">
+          <label for="extra-outdoor-sensor-id">{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
+          <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
+        </div>
+        <div class="admin-zone-status" id="extra-sensor-status"></div>
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" id="save-extra-sensor-btn" onclick="saveExtraSensor(this)">{{ t.climate_admin.save_short }}</button>
+      </div>
+      <p class="hint-text" id="save-extra-sensor-result"></p>
+    </details>
+    <details class="device-role" id="vmc">
+      <summary>{{ icon("vmc") }}<span>{{ t.climate_admin.vmc_heading }}</span><span class="sec-pills" id="vmc-summary"></span></summary>
+      <p class="hint-text">{{ t.climate_admin.vmc_note }}</p>
+      <details class="admin-more">
+        <summary>{{ t.climate_admin.more_details }}</summary>
+        <p class="hint-text">{{ t.climate_admin.vmc_note_more }}</p>
+      </details>
+      <div class="admin-zone-card" id="vmc-form">
+        <div class="admin-field">
+          <label for="extra-vmc-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
+          <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
+            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
+            <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+            <option value="none">{{ t.climate_admin.mode_none }}</option>
+          </select>
+        </div>
+        <div class="admin-field" id="extra-vmc-id-field">
+          <label for="extra-vmc-id">{{ t.climate_admin.vmc_label }}</label>
+          <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
+        </div>
+        <p class="hint-text" id="vmc-suggestion" hidden></p>
+        <div class="admin-zone-status" id="vmc-status"></div>
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" id="save-vmc-btn" onclick="saveVmc(this)">{{ t.climate_admin.save_short }}</button>
+      </div>
+      <p class="hint-text" id="save-vmc-result"></p>
+      <!-- The day/night program lives on the dashboard, with the VMC's own
+           speed buttons: it's a daily control, not installation config. -->
+      <p class="hint-text">{{ t.climate_admin.vmc_program_moved }}</p>
+    </details>
   </details>
 
   <!-- ============================================================ board -->
@@ -387,6 +372,24 @@
       <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
     </div>
     <p class="hint-text" id="settings-result"></p>
+    <!-- The VMC's night/day/boost percentages: in use at once, unlike the
+         settings above - see loadVmcSpeeds(). -->
+    <div class="admin-zone-card settings-extra" id="vmc-speeds" hidden>
+      <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
+      <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
+      <div class="admin-speed-fields">
+        {% for key in ("night", "day", "boost") %}
+        <div class="admin-field">
+          <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
+          <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" id="save-vmc-speeds-btn" onclick="saveVmcSpeeds(this)">{{ t.climate_admin.vmc_speeds_save }}</button>
+      </div>
+      <p class="hint-text" id="save-vmc-speeds-result"></p>
+    </div>
   </details>
 
   <!-- ============================================================ tools -->

@@ -102,7 +102,7 @@ ss -ltn | grep 1883      # -> 0.0.0.0:1883 and [::]:1883
 
 Checked on this board: from a PC on the LAN, an MQTT connection with no
 credentials is accepted over both IPv4 and IPv6. The admin panel's
-"Shellys and MQTT broker" section says "reachable" as well.
+"Devices and MQTT broker" section says "reachable" as well.
 
 Nothing in the installation depends on the board's IP address - the
 router's DHCP can move it freely: LocalHome reaches the broker as
