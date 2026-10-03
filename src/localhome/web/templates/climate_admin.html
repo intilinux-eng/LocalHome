@@ -142,7 +142,7 @@
        lives here (not on the dashboard) and needs the new season's name
        typed to switch - see climate_admin.js's season section. -->
   <details class="admin-details" id="season" data-nav="season">
-    <summary>{{ icon("season") }}<span class="sec-title">{{ t.climate_admin.season_heading }}</span><span class="sec-pills" id="season-summary"></span></summary>
+    <summary>{{ icon("season") }}<span class="sec-title">{{ t.climate_admin.season_heading }}</span><span class="sec-pills"><span id="season-summary"></span><span id="season-rules-summary"></span></span></summary>
     <p class="hint-text">{{ t.climate_admin.season_note }}</p>
     <div class="season-cards" id="season-cards"></div>
     <div class="season-confirm" id="season-confirm" hidden>
@@ -153,6 +153,18 @@
       <button class="range-btn" onclick="cancelSeason()">{{ t.climate_admin.maint_cancel_button }}</button>
     </div>
     <p class="hint-text" id="season-result"></p>
+    <!-- What each switch does in each season - editable for the panel's
+         own switches, effective at once - and whether it's doing it right
+         now: see the season rules section of climate_admin.js. -->
+    <h3 class="admin-subheading">{{ t.climate_admin.rules_heading }}</h3>
+    <p class="hint-text">{{ t.climate_admin.rules_note }}</p>
+    <div class="season-rules" id="season-rules"></div>
+    <!-- What one switch opens with it - see refreshSeasonRules(). -->
+    <div class="season-links" id="season-links" hidden></div>
+    <div class="toolbar admin-actions" id="season-rules-actions" hidden>
+      <button class="tbtn open" onclick="saveSeasonRules(this)">{{ t.climate_admin.rules_save }}</button>
+    </div>
+    <p class="hint-text" id="season-rules-result"></p>
   </details>
 
   <details class="admin-details" id="zones" data-nav="zones">
@@ -200,19 +212,6 @@
   <details class="admin-details" id="extra-switches" data-nav="group-devices">
     <summary>{{ icon("switches") }}<span class="sec-title">{{ t.climate_admin.extra_switches_heading }}</span><span class="sec-pills" id="extra-switches-summary"></span></summary>
     <p class="hint-text">{{ t.climate_admin.extra_switches_note }}</p>
-    <!-- What each switch does in each season - editable for the panel's
-         own switches, effective at once - and whether it's doing it right
-         now: see the season rules section of climate_admin.js. -->
-    <h3 class="admin-subheading">{{ t.climate_admin.rules_heading }}</h3>
-    <p class="hint-text">{{ t.climate_admin.rules_note }}</p>
-    <div class="season-rules" id="season-rules"></div>
-    <!-- What one switch opens with it - see refreshSeasonRules(). -->
-    <div class="season-links" id="season-links" hidden></div>
-    <div class="toolbar admin-actions" id="season-rules-actions" hidden>
-      <button class="tbtn open" onclick="saveSeasonRules(this)">{{ t.climate_admin.rules_save }}</button>
-    </div>
-    <p class="hint-text" id="season-rules-result"></p>
-    <h3 class="admin-subheading">{{ t.climate_admin.extra_switches_ids_heading }}</h3>
     <div class="admin-zone-card" id="extra-switch-form">
       <div class="admin-field">
         <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>

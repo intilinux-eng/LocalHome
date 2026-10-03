@@ -400,9 +400,8 @@ async function loadExtraSwitches() {
   zoneSelect.value = data.dehumidifier_water_zone || "";
   extraSwitchesRestartPending = !!data.restart_pending;
   const wired = [data.bypass_valve_device_id, data.dehumidifier_device_id].filter(Boolean).length;
-  extraSwitchesPill = extraSwitchesRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
-    : pillHtml("idle", wired ? tr("climate_admin.pill_switches", { count: wired }) : tr("climate_admin.pill_none"));
-  setPill("extra-switches-summary", extraSwitchesPill);
+  setPill("extra-switches-summary", extraSwitchesRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
+    : pillHtml("idle", wired ? tr("climate_admin.pill_switches", { count: wired }) : tr("climate_admin.pill_none")));
   updateRestartBar();
 }
 
@@ -1546,15 +1545,14 @@ function seasonEffects(mode, data) {
   const running = mode === "cool" ? zones.filter(z => z.cool_enabled !== false) : zones;
   if (running.length) items.push(tr(`climate_admin.season_zones_${mode}`, { zones: running.map(z => escapeHtml(z.name)).join(", ") }));
   if (mode === "cool") {
-    zones.filter(z => z.cool_enabled === false).forEach(z => items.push(tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) })));
+    // An excluded zone whose valve a dehumidifier opens isn't "always closed".
+    zones.filter(z => z.cool_enabled === false).forEach(z => {
+      const link = (effects.links || []).find(l => (!l.mode || l.mode === mode) && (l.zone || l.follower) === z.name);
+      items.push(link
+        ? tr("climate_admin.season_zone_excluded_linked", { zone: escapeHtml(z.name), leader: escapeHtml(displayName(link.leader)) })
+        : tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) }));
+    });
   }
-  (effects.rules || []).forEach(rule => items.push(tr(
-    rule.normally_open
-      ? { on: "climate_admin.season_valve_closed", off: "climate_admin.season_valve_open", manual: "climate_admin.season_limited_usable" }[rule[mode]]
-      : { on: "climate_admin.season_switch_on", off: "climate_admin.season_switch_off", manual: "climate_admin.season_limited_usable" }[rule[mode]],
-    { name: escapeHtml(displayName(rule.switch)) })));
-  (effects.links || []).filter(link => !link.mode || link.mode === mode).forEach(link => items.push(tr("climate_admin.season_link",
-    { leader: escapeHtml(displayName(link.leader)), zone: escapeHtml(link.zone || displayName(link.follower)) })));
   items.push(tr(`climate_admin.season_schedule_${mode}`));
   return items;
 }
@@ -1592,7 +1590,6 @@ function renderSeason(data) {
 
 const RULE_GRACE_MS = 90000;   // the interlock loop runs every minute
 const ruleMismatchSince = {};
-let extraSwitchesPill = "";     // the section header's own pill, from loadExtraSwitches()
 let seasonRuleRoles = [];       // from GET /api/climate-admin/season-rules
 
 // A normally open valve's "on" is its Shelly on - the valve closed.
@@ -1600,11 +1597,20 @@ function ruleActionText(action, normallyOpen) {
   return tr(`climate.rule_action_${action}${normallyOpen ? "_no" : ""}`);
 }
 
-function ruleSelectHtml(role, mode, value, disabled, normallyOpen) {
+function ruleSelectHtml(role, mode, value, normallyOpen) {
   const options = ["off", "on", "manual"].map(a =>
     `<option value="${a}"${a === value ? " selected" : ""}>${escapeHtml(ruleActionText(a, normallyOpen))}</option>`).join("");
   return `<label class="rule-season">${escapeHtml(tr(mode === "heat" ? "climate.season_winter" : "climate.season_summer"))}
-    <select data-role="${escapeAttr(role)}" data-mode="${mode}"${disabled ? " disabled" : ""}>${options}</select></label>`;
+    <select data-role="${escapeAttr(role)}" data-mode="${mode}">${options}</select></label>`;
+}
+
+// A rule that isn't changed here, as text - filled from the live rule
+// by refreshSeasonRules().
+const RULE_FIXED_HTML = '<span class="hint-text rule-fixed"></span>';
+
+function ruleFixedText(rule) {
+  return `${tr("climate.season_winter")}: ${ruleActionText(rule.heat, rule.normally_open)}`
+    + ` · ${tr("climate.season_summer")}: ${ruleActionText(rule.cool, rule.normally_open)}`;
 }
 
 function seasonRuleRowHtml(name, body, note) {
@@ -1632,8 +1638,8 @@ async function loadSeasonRules() {
   seasonRuleRoles = roles;
   const el = document.getElementById("season-rules");
   el.innerHTML = roles.map(r => seasonRuleRowHtml(r.switch,
-    ruleSelectHtml(r.role, "heat", r.heat, r.in_config || !data.thermostat, r.normally_open)
-      + ruleSelectHtml(r.role, "cool", r.cool, r.in_config || !data.thermostat, r.normally_open),
+    r.in_config || !data.thermostat ? RULE_FIXED_HTML
+      : ruleSelectHtml(r.role, "heat", r.heat, r.normally_open) + ruleSelectHtml(r.role, "cool", r.cool, r.normally_open),
     r.in_config ? tr("climate_admin.rule_in_config") : !r.wired ? tr("climate_admin.rule_not_wired") : "")).join("");
   document.getElementById("season-rules-actions").hidden = !data.thermostat || roles.every(r => r.in_config);
 }
@@ -1641,7 +1647,7 @@ async function loadSeasonRules() {
 async function saveSeasonRules(button) {
   const result = document.getElementById("season-rules-result");
   const rules = {};
-  document.querySelectorAll("#season-rules select:not([disabled])").forEach(select => {
+  document.querySelectorAll("#season-rules select").forEach(select => {
     rules[select.dataset.role] = rules[select.dataset.role] || {};
     rules[select.dataset.role][select.dataset.mode] = select.value;
   });
@@ -1672,14 +1678,11 @@ async function refreshSeasonRules(data) {
     let row = el.querySelector(`.season-rule[data-switch="${CSS.escape(rule.switch)}"]`);
     if (!row) {
       // A rule config.yaml gives a switch the panel doesn't manage.
-      el.insertAdjacentHTML("beforeend", seasonRuleRowHtml(rule.switch,
-        `<span class="hint-text">${escapeHtml(tr("climate.season_winter"))}: ${escapeHtml(ruleActionText(rule.heat, rule.normally_open))}
-         · ${escapeHtml(tr("climate.season_summer"))}: ${escapeHtml(ruleActionText(rule.cool, rule.normally_open))}</span>`,
-        tr("climate_admin.rule_in_config")));
+      el.insertAdjacentHTML("beforeend", seasonRuleRowHtml(rule.switch, RULE_FIXED_HTML, tr("climate_admin.rule_in_config")));
       row = el.lastElementChild;
     }
-    // A config.yaml rule for one of the panel's switches: show its values.
-    row.querySelectorAll("select[disabled]").forEach(select => { select.value = rule[select.dataset.mode]; });
+    const fixed = row.querySelector(".rule-fixed");
+    if (fixed) fixed.textContent = ruleFixedText(rule);
     let reading = {};
     try {
       reading = await (await fetch(`/api/sensors/${encodeURIComponent(rule.switch)}`)).json();
@@ -1764,8 +1767,7 @@ async function refreshSeasonRules(data) {
     linksEl.innerHTML = links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>${rows.join("")}` : "";
   }
   // A switch not doing what its rule says outranks the header's count.
-  setPill("extra-switches-summary", worst !== "ok" && !extraSwitchesRestartPending
-    ? pillHtml(worst, tr("climate_admin.pill_rule_check")) : extraSwitchesPill);
+  setPill("season-rules-summary", worst !== "ok" ? pillHtml(worst, tr("climate_admin.pill_rule_check")) : "");
 }
 
 function askSeason(mode) {

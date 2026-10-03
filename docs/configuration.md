@@ -358,7 +358,9 @@ default the one zone kept out of cooling, if there's exactly one - in
 summer only. Switching the dehumidifier on opens that valve at once, not
 at the next loop. The home page says it on both sides: the
 dehumidifier's tile ("uses the Bathrooms valve's water: on, it opens
-it") and the zone's card ("Dehumidifier on: valve open").
+it") and the zone's card ("Dehumidifier on: valve open"). The admin
+panel's *Season* section lists the link under *Links*, with whether the
+valve follows the dehumidifier right now.
 
 #### The whole plant, season by season
 
@@ -407,11 +409,13 @@ refused - it would only be undone on the next control cycle (every
 `poll_interval_seconds`). Diagnostic mode suspends every rule.
 
 The admin panel's two extra switches (bypass valve, dehumidifier) have
-the same rules without any of this: **Extra switches → Behaviour per
-season** in `/climate-admin`, starting from the ones above, applied as
-soon as they're saved - no restart. A switch config.yaml already gives
-a rule (here, or in the two sections below, or as an interlock follower)
-keeps that one, and the panel shows it read-only.
+the same rules without any of this: **Season → Behaviour per season**
+in `/climate-admin`, starting from the ones above, applied as soon as
+they're saved - no restart. A switch config.yaml already gives a rule
+(here, or in the two sections below, or as an interlock follower) keeps
+that one, and the panel shows it as text ("Winter: ... · Summer: ...").
+Either way each row says what the switch is doing now and whether
+that's what its rule wants.
 
 ### `mode_limited_switches`: a switch usable in one mode only
 

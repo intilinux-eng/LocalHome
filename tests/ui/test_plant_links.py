@@ -112,7 +112,7 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
     context, opened = _open(browser, plant, "/climate-admin")
     page = opened.page
     page.wait_for_selector("#season-rules .season-rule", state="attached", timeout=20000)
-    page.evaluate("document.getElementById('extra-switches').open = true")
+    page.evaluate("document.getElementById('season').open = true")
     assert eventually(page, lambda: "Ora chiusa" in page.inner_text("#season-rules"), timeout_ms=20000)
     # Written in config.yaml: listed once, without the panel's empty places beside them.
     names = page.locator("#season-rules .season-rule strong").all_inner_texts()
@@ -128,7 +128,7 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
 def test_the_admin_says_live_whether_the_valve_follows_the_dehumidifier(browser, plant):
     context, opened = _open(browser, plant, "/climate-admin")
     page = opened.page
-    page.evaluate("document.getElementById('extra-switches').open = true")
+    page.evaluate("document.getElementById('season').open = true")
     links = page.locator("#season-links")
     assert eventually(page, lambda: "Ora: Deumidificatore spento, valvola chiusa" in links.inner_text(), timeout_ms=20000)
     assert "Come previsto" in links.inner_text()
