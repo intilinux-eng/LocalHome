@@ -392,6 +392,8 @@ def test_build_climate_integrations_valve_shape_is_shelly_regardless_of_sensor_m
     assert valve.options["state_field"] == "output"
     assert valve.options["payload_on"] is True
     assert valve.options["payload_off"] is False
+    # What the Shelly takes on its command topic - not "True"/"False".
+    assert (valve.options["command_on"], valve.options["command_off"]) == ("on", "off")
     assert "stale_after_seconds" not in valve.options
     assert valve.options["availability_topic"] == "shellyplus1-CCCC/online"
 

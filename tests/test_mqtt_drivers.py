@@ -342,6 +342,22 @@ def test_sensor_without_a_cache_path_does_not_touch_disk(fake_connection, tmp_pa
     assert list(tmp_path.iterdir()) == []
 
 
+def test_a_shelly_relay_is_commanded_with_on_and_off_not_its_status_values(fake_connection):
+    """Its status says `"output": true`, its command topic takes "on"/"off":
+    "True"/"False" are ignored without a word - the valve never moved."""
+    driver = MqttSwitchDriver(
+        name="Rooms Valve", broker=BROKER,
+        state_topic="shellyplus1-XXXX/status/switch:0", command_topic="shellyplus1-XXXX/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False, command_on="on", command_off="off",
+    )
+    driver.turn_on()
+    driver.turn_off()
+    assert fake_connection.published == [("shellyplus1-XXXX/command/switch:0", "on"),
+                                         ("shellyplus1-XXXX/command/switch:0", "off")]
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+    assert driver.read()["is_on"] is True
+
+
 def test_switch_seeds_its_on_off_state_from_a_persisted_cache(fake_connection, tmp_path):
     cache_path = str(tmp_path / "mqtt_state_cache.json")
     first_run = MqttSwitchDriver(

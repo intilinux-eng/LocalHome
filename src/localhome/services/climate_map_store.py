@@ -447,6 +447,10 @@ def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) ->
         "state_field": "output",
         "payload_on": True,
         "payload_off": False,
+        # What the relay takes on its command topic - "True"/"False" (the
+        # payloads above as text) it ignores without a word.
+        "command_on": "on",
+        "command_off": "off",
         "dashboard_tab": "climate",
         # No stale_after_seconds: a relay only publishes on state change,
         # so a timeout here would wrongly flag a valve that's just been

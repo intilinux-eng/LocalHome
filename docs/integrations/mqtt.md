@@ -112,8 +112,10 @@ it overrides even a still-fresh regular reading, not just a stale one:
   state_topic: "shellyplus1pm-XXXXXX/status/switch:0"
   command_topic: "shellyplus1pm-XXXXXX/command/switch:0"
   state_field: "output"
-  payload_on: true
+  payload_on: true            # what the status says...
   payload_off: false
+  command_on: "on"            # ...and what the command topic takes
+  command_off: "off"
   availability_topic: "shellyplus1pm-XXXXXX/online"   # confirm with mosquitto_sub -t '<id>/#' -v
   fields:
     power_w: "apower"

@@ -9,6 +9,9 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
   payload_on / payload_off: the values that mean on/off, both for reading
                state_field and for what gets sent to command_topic
                (default "ON"/"OFF" - Tasmota/Zigbee2MQTT's convention)
+  command_on / command_off: what gets sent to command_topic, when it
+               isn't payload_on/off - a Shelly Gen2/Gen3 relay reports
+               `"output": true` but takes "on"/"off" on its command topic
   command_payload_field: if set, commands are sent as JSON
                `{command_payload_field: payload_on|payload_off}` (the
                Zigbee2MQTT convention, e.g. field "state") instead of the
@@ -54,6 +57,8 @@ class MqttSwitchDriver(SwitchDriver):
         payload_on: str = "ON",
         payload_off: str = "OFF",
         command_payload_field: str | None = None,
+        command_on: Any = None,
+        command_off: Any = None,
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
@@ -69,6 +74,8 @@ class MqttSwitchDriver(SwitchDriver):
         self._payload_on = payload_on
         self._payload_off = payload_off
         self._command_payload_field = command_payload_field
+        self._command_on = payload_on if command_on is None else command_on
+        self._command_off = payload_off if command_off is None else command_off
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
         self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
@@ -104,10 +111,10 @@ class MqttSwitchDriver(SwitchDriver):
         return self._state.get_received_at()
 
     def turn_on(self) -> None:
-        self._send(self._payload_on)
+        self._send(self._command_on)
 
     def turn_off(self) -> None:
-        self._send(self._payload_off)
+        self._send(self._command_off)
 
     def _send(self, value: str) -> None:
         self._state.publish(self._command_topic, command_payload(value, self._command_payload_field))
@@ -124,6 +131,8 @@ def _create(options: dict) -> MqttSwitchDriver:
         payload_on=options.get("payload_on", "ON"),
         payload_off=options.get("payload_off", "OFF"),
         command_payload_field=options.get("command_payload_field"),
+        command_on=options.get("command_on"),
+        command_off=options.get("command_off"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
         cache_path=state_cache_path(options),

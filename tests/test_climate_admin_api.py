@@ -711,7 +711,8 @@ def test_a_bypass_entered_only_in_the_panel_follows_the_season(tmp_path, fake_mq
         ("Bathroom Bypass Valve", "off", "on"), ("Dehumidifier", "off", "manual")]
 
     app.config["INTERLOCK"].tick()   # heating: both forced off
-    assert ("shellyplus1-EEEE/command/switch:0", "false") in [(t, str(p).lower()) for t, p in fake_mqtt.published]
+    # Exactly what a Shelly takes: "off", not "False".
+    assert ("shellyplus1-EEEE/command/switch:0", "off") in [(t, str(p)) for t, p in fake_mqtt.published]
     devices = {d["name"]: d for d in client.get("/api/devices").get_json()["sensors"]}
     assert devices["Bathroom Bypass Valve"]["controllable"] is False
     assert client.post("/api/sensors/Dehumidifier/on").get_json()["code"] == "switch_mode_controlled"
