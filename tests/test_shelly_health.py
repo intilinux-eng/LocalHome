@@ -258,7 +258,7 @@ def test_a_mains_shelly_that_restarted_is_counted(tmp_path):
     watcher.poll_once()
     assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 0
     clock.t += 3600
-    rpc.status["sys"]["uptime"] = 120                     # a power cut, 2 minutes ago
+    rpc.status["sys"].update(uptime=120, reset_reason=1)  # a power cut, 2 minutes ago
     watcher.poll_once()
     assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 1
     assert by_id(watcher, DIMMER)["booted_at"] == clock.t - 120
@@ -453,3 +453,21 @@ def test_settings_are_read_only_when_they_can_have_changed(tmp_path):
     rpc.status["sys"]["uptime"] += 300
     watcher.poll_once()
     assert by_id(watcher, RELAY)["settings_wrong"] == [] and rpc.calls.count("Shelly.GetConfig") == 3
+
+
+
+def test_a_restart_somebody_asked_for_isnt_a_problem(tmp_path):
+    """Seen on the production board: an update, settings changed in the
+    app and test restarts made a healthy Plus 1 "to check" for a week. The
+    Shelly says why it started - 3, a restart asked for - and only the
+    others (a power cut, a crash) count as unexpected."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    for reason in (3, 3, 1):                              # update, settings change, power cut
+        clock.t += 600
+        rpc.status["sys"].update(uptime=60, reset_reason=reason)
+        watcher.poll_once()
+    stats = by_id(watcher, RELAY)["stats"]
+    assert (stats["restarts_7d"], stats["restarts_wanted_7d"]) == (1, 2)

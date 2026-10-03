@@ -2449,7 +2449,13 @@ function shellyStatsHtml(d, data, now) {
     }
     if (d.voltage_v != null) rows.push(statRowHtml(tr("climate_admin.shelly_voltage"), `${Math.round(d.voltage_v)} V`));
     if (d.booted_at != null) rows.push(statRowHtml(tr("climate_admin.shelly_on_since"), sinceText(d.booted_at, now - d.booted_at)));
-    if (s.restarts_7d != null) rows.push(statRowHtml(tr("climate_admin.shelly_restarts_7d"), String(s.restarts_7d), s.restarts_7d > 0));
+    // Only the unexpected ones are a problem; the wanted ones (an update,
+    // a settings change) are said alongside, not in red.
+    if (s.restarts_7d != null) {
+      rows.push(statRowHtml(tr("climate_admin.shelly_restarts_7d"), s.restarts_wanted_7d
+        ? tr("climate_admin.shelly_restarts_split", { unexpected: s.restarts_7d, wanted: s.restarts_wanted_7d })
+        : String(s.restarts_7d), s.restarts_7d > 0));
+    }
     if (d.errors.length) rows.push(statRowHtml(tr("climate_admin.shelly_errors"), d.errors.join(", "), true));
   }
   const firmware = [d.model, d.firmware].filter(Boolean).join(" · ");

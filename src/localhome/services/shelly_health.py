@@ -62,6 +62,11 @@ MISSED_PER_DAY = 3
 # A device's start time, worked out from its uptime and our clock, moves
 # by a second or two between polls; a restart moves it by far more.
 RESTART_SLACK_SECONDS = 300
+# Why it last started (sys.reset_reason, the ESP32's own code): 3 is a
+# restart asked for - a firmware update, a settings change, a restart
+# from the app or over RPC. Anything else - 1 power on (the power went),
+# 4-7 a crash or a watchdog, 9 a brownout - is one nobody asked for.
+WANTED_RESET_REASONS = {3}
 DAY = 86400
 WEEK = 7 * DAY
 
@@ -389,7 +394,11 @@ class ShellyHealth:
         known = state["booted_at"]
         if known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
             if known is not None and booted > known:
-                self._record(state["id"], {"restart": 1}, ts=booted)
+                # Recorded by kind: only the unexpected ones are a sign of
+                # trouble (rows from before reasons were read, plain
+                # "restart", are left out of both counts).
+                wanted = _number(sys.get("reset_reason")) in WANTED_RESET_REASONS
+                self._record(state["id"], {"restart_wanted" if wanted else "restart_unexpected": 1}, ts=booted)
                 # A firmware update is one: its version and settings are
                 # asked again.
                 state["model"] = None
@@ -462,7 +471,8 @@ class ShellyHealth:
             # less than a week of reports behind it.
             stats["counted_since"] = reports[0] if reports else None
         else:
-            stats["restarts_7d"] = len(self._history(state["id"], "restart", now - WEEK))
+            stats["restarts_7d"] = len(self._history(state["id"], "restart_unexpected", now - WEEK))
+            stats["restarts_wanted_7d"] = len(self._history(state["id"], "restart_wanted", now - WEEK))
         return stats
 
     # ----------------------------------------------------------- output --
