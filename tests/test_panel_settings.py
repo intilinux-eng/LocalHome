@@ -139,5 +139,8 @@ def test_the_recorder_and_the_panel_keep_to_what_the_disk_allows(tmp_path, monke
     row = next(r for r in body["settings"] if r["key"] == "history_max_db_mb")
     assert (row["value"], row["max"], row["capped_to"]) == (1500, 400, 400)
     assert body["disk"]["total_bytes"] == 4 * GB
+    # The same disk the recorder watches, to hold the history if it fills.
+    assert app.config["RECORDER"].disk_stats()["total_bytes"] == 4 * GB
+    assert body["history"]["disk_hold_bytes"] is None
     assert client.post("/api/climate-admin/settings", json={"values": {"history_max_db_mb": 500}}).status_code == 400
     assert client.post("/api/climate-admin/settings", json={"values": {"history_max_db_mb": 350}}).status_code == 200

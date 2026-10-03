@@ -69,6 +69,12 @@ space plus what the history already takes), 2000 MB at most. That leaves
 room for the backup copy taken before a deletion, SQLite's temporary copy
 while the history is cleared, and the system. A larger value - here or
 saved in the panel - is used as that ceiling, with a warning in the log.
+If that disk runs low on space anyway (under 500 MB or 10% free,
+whatever filled it), the history stops growing: it's held at the size it
+has, its oldest days making room for new ones inside the file, until the
+disk has room again. The file doesn't shrink - giving SQLite's freed
+pages back takes a full copy of it, the space for which is what's
+missing - but it no longer takes any more.
 On the UNO Q the history lives in `/home/arduino`: about 1.9 GB of ceiling
 on the 32 GB eMMC model; a house with fifteen sensors writes about 4 MB a
 day, so 30 days take some 130 MB.

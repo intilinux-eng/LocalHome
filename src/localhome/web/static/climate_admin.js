@@ -1956,6 +1956,10 @@ function historyUsageHtml(maxMb) {
   parts.push(h.size_prune_ts
     ? tr("climate_admin.setting_history_cap_hit", { when: formatDay(h.size_prune_ts) })
     : tr("climate_admin.setting_history_cap_never"));
+  if (h.disk_hold_bytes) {
+    parts.push(tr("climate_admin.setting_history_disk_hold", {
+      size: formatMb(h.disk_hold_bytes / 1e6), since: formatDay(h.disk_hold_since) }));
+  }
   return `<span class="hint-text setting-usage">${escapeHtml(parts.join(" "))}</span>`;
 }
 

@@ -443,6 +443,74 @@ def test_the_last_day_is_never_removed_to_fit_the_cap(tmp_path):
 
 
 
+def _fill_days(store, first_day, days, now):
+    samples = {f"Sensor {i}": {"temperature_c": 20.0 + i, "humidity_pct": 50.0} for i in range(60)}
+    for day in range(first_day, first_day - days, -1):
+        for minute in range(0, 1440, 30):
+            store.record_many(now - day * 86400 + minute * 60, samples)
+
+
+def _logical_bytes(store):
+    """The database's own size, free pages included - what the file holds
+    once the WAL is checkpointed."""
+    conn = store._connect()
+    try:
+        return conn.execute("PRAGMA page_count").fetchone()[0] * conn.execute("PRAGMA page_size").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_a_disk_almost_full_holds_the_history_where_it_is(tmp_path):
+    """Whatever filled the disk, the history stops taking more of it: the
+    oldest days make room for the new ones inside the file."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        _fill_days(store, 20, 10, now)          # ten days, from 20 to 11 days ago
+        disk = {"low": True, "free_bytes": 300_000_000}
+        recorder = HistoryRecorder(manager=None, store=store, max_db_bytes=2_000_000_000)
+        recorder.disk_stats = lambda: disk
+        recorder._maybe_prune(now)
+        held = recorder.disk_hold_bytes
+        assert held == store.used_bytes() and recorder.disk_hold_since is not None
+        sizes = []
+        for day in range(10, 6, -1):            # four more days, an hourly check after each
+            _fill_days(store, day, 1, now)
+            recorder._last_size_check_ts = 0
+            recorder._maybe_prune(now)
+            assert store.used_bytes() <= held
+            sizes.append(_logical_bytes(store))
+        assert sizes[-1] <= sizes[0], "past the first check the file grows no more"
+        assert store.stats(now)["oldest_ts"] >= now - 20 * 86400 + 4 * 86400, "the oldest days went"
+
+        disk["low"] = False                     # room again: up to the ceiling as before
+        recorder._last_size_check_ts = 0
+        recorder._maybe_prune(now)
+        assert recorder.disk_hold_bytes is None and recorder.disk_hold_since is None
+        rows = store.stats(now)["rows"]
+        _fill_days(store, 6, 1, now)
+        recorder._last_size_check_ts = 0
+        recorder._maybe_prune(now)
+        assert store.stats(now)["rows"] > rows, "nothing removed once there's room"
+    finally:
+        store.close()
+
+
+def test_a_disk_with_room_and_no_ceiling_removes_nothing(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    try:
+        now = int(time.time())
+        _fill_days(store, 5, 3, now)
+        rows = store.stats(now)["rows"]
+        recorder = HistoryRecorder(manager=None, store=store, max_db_bytes=None)
+        recorder.disk_stats = lambda: {"low": False}
+        recorder._maybe_prune(now)
+        assert recorder.disk_hold_bytes is None
+        assert store.stats(now)["rows"] == rows
+    finally:
+        store.close()
+
+
 def test_nothing_is_recorded_while_the_clock_is_not_synchronized(tmp_path):
     """After a power-on without internet the board's clock is the evening
     before's: rows stamped with it would sit in the charts hours in the

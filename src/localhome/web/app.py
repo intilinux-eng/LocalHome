@@ -243,6 +243,7 @@ def create_app(config_path: str | None = None) -> Flask:
     # HistoryRecorder.clock_ready. Where that can't be known (a PC), it
     # records as always.
     recorder.clock_ready = lambda: system_status.clock_synced_fast() is not False
+    recorder.disk_stats = lambda: _history_disk(store)
 
     thermostat = None
     interlock = None
@@ -757,6 +758,8 @@ def _register_routes(app: Flask) -> None:
             "retention_days": recorder.retention_days,
             "max_bytes": recorder.max_db_bytes,
             "paused_for_clock": recorder.paused_for_clock,
+            "disk_hold_bytes": recorder.disk_hold_bytes,
+            "disk_hold_since": recorder.disk_hold_since,
             "stats_age_seconds": round(now - db_stats_cache["ts"]),
         }
 

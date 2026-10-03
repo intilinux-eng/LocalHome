@@ -537,6 +537,13 @@ class HistoryRecorder:
         # everything else in the cycle (the power-budget alert) goes on.
         self.clock_ready = None
         self.paused_for_clock = False
+        # Optional callable -> system_status.disk_stats() of the disk the
+        # history is on, set by create_app(): while that disk is low on
+        # space, whatever filled it, the history stops growing - see
+        # _check_disk().
+        self.disk_stats = None
+        self.disk_hold_bytes: int | None = None
+        self.disk_hold_since: float | None = None
 
     def start(self) -> None:
         if self._started:
@@ -619,14 +626,39 @@ class HistoryRecorder:
         self.last_write_ok_ts = time.monotonic()
         self._maybe_prune(now)
 
+    def _check_disk(self) -> None:
+        """A disk low on space holds the history at the size it has: from
+        then on its oldest days make room for the new ones inside the
+        file, which stops growing - SQLite reuses the pages a delete
+        frees. Giving them back to the disk would take a full copy of the
+        file, and the space for that is just what's missing. Let go once
+        the disk has room again."""
+        if self.disk_stats is None:
+            return
+        disk = self.disk_stats()
+        if disk.get("low"):
+            if self.disk_hold_bytes is None:
+                self.disk_hold_bytes = self.store.used_bytes()
+                self.disk_hold_since = time.time()
+                logger.warning("History disk almost full (%d MB free): the history is held at %d MB "
+                               "until there's room again", (disk.get("free_bytes") or 0) // 1_000_000,
+                               self.disk_hold_bytes // 1_000_000)
+        elif self.disk_hold_bytes is not None:
+            logger.info("History disk has room again: the history can grow up to its ceiling")
+            self.disk_hold_bytes = None
+            self.disk_hold_since = None
+
     def _maybe_prune(self, now: int) -> None:
-        if self.max_db_bytes and now - self._last_size_check_ts >= 3600:  # cheap: three PRAGMAs
+        if (self.max_db_bytes or self.disk_stats) and now - self._last_size_check_ts >= 3600:  # cheap: three PRAGMAs
             self._last_size_check_ts = now
             try:
-                removed = self.store.prune_to_size(self.max_db_bytes)
+                self._check_disk()
+                caps = [c for c in (self.max_db_bytes or None, self.disk_hold_bytes) if c is not None]
+                cap = min(caps) if caps else None
+                removed = self.store.prune_to_size(cap) if cap else 0
                 if removed:
                     logger.warning("History over its %d MB cap - removed its %d oldest rows",
-                                   self.max_db_bytes // 1_000_000, removed)
+                                   cap // 1_000_000, removed)
             except Exception:
                 logger.exception("Failed to enforce the history size cap")
         if now - self._last_prune_ts < 86400:  # once a day is plenty for a DELETE scan
