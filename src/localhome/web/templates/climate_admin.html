@@ -223,6 +223,13 @@
     <details class="admin-more" id="shelly-app-settings">
       <summary>{{ t.climate_admin.shelly_app_heading }}</summary>
       <p class="hint-text">{{ t.climate_admin.shelly_app_note }}</p>
+      <!-- The installer's guide, Italian, to keep and to pass on: see
+           static/guide/ and tools/build_guides.py. -->
+      <p class="guide-links">
+        <strong>{{ t.climate_admin.guide_plus1 }}</strong>
+        <a href="/static/guide/shelly-plus1-valvole.html" target="_blank" rel="noopener">{{ t.climate_admin.guide_open }}</a>
+        <a href="/static/guide/shelly-plus1-valvole.pdf" download="LocalHome - Shelly Plus 1 per le valvole di zona.pdf">{{ t.climate_admin.guide_pdf }}</a>
+      </p>
       <h4 class="shelly-guide-group">{{ t.climate_admin.shelly_app_all }}</h4>
       <dl class="shelly-guide-list">
         <dt>{{ t.climate_admin.shelly_app_mqtt_server | replace("{board}", board_host) }}</dt>

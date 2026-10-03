@@ -372,6 +372,11 @@ and logs "network back".
      line under the field), and again after the Shelly restarts: one
      set otherwise shows in *Devices*, by name, with the value it
      should have.
+     For the installer there's a guide in Italian - wiring diagram,
+     the Shelly app step by step, LocalHome - served by the board
+     itself: admin panel, *Devices* → *Setting up the Shellys*, "Open"
+     or "Download PDF" (`src/localhome/web/static/guide/`, the PDF
+     made by `tools/build_guides.py`).
 
   The panel's per-zone status then says whether the device is really
   being heard, and tells "not reachable yet" (a battery sensor that

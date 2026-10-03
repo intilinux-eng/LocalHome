@@ -93,3 +93,20 @@ def test_the_admin_api_answers_with_the_check(tmp_path):
     app.config["SHELLY_CHECK"] = check
     body = app.test_client().get(f"/api/climate-admin/shelly-check?id={RELAY}&role=valve").get_json()
     assert body["answered"] is True and [s["key"] for s in body["settings_wrong"]] == ["in_mode", "auto_off"]
+
+
+def test_the_installers_guide_is_served_and_linked_from_the_admin(tmp_path):
+    """The Plus 1 guide, HTML and PDF, from the board itself - always there,
+    for whoever installs a valve."""
+    config = tmp_path / "config.yaml"
+    config.write_text("web:\n  port: 5000\n  language: it\nintegrations: []\n", encoding="utf-8")
+    client = create_app(str(config)).test_client()
+    page = client.get("/climate-admin").get_data(as_text=True)
+    for path in ("/static/guide/shelly-plus1-valvole.html", "/static/guide/shelly-plus1-valvole.pdf"):
+        assert path in page
+        res = client.get(path)
+        assert res.status_code == 200 and len(res.data) > 2000, path
+    html = client.get("/static/guide/shelly-plus1-valvole.html").get_data(as_text=True)
+    for setting in ("Detached", "spegnersi quando è alimentato", "900 secondi", "ponte"):
+        assert setting in html
+    assert client.get("/static/guide/shelly-plus1-valvole.pdf").data.startswith(b"%PDF")

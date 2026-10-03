@@ -46,7 +46,7 @@ localhome-cli = "localhome.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"localhome.web" = ["templates/*.html", "static/*", "locales/*.json"]
+"localhome.web" = ["templates/*.html", "static/*", "static/guide/*", "locales/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
