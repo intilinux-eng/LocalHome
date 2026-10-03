@@ -71,7 +71,7 @@ from localhome.services.thermostat import MODES, ScheduleStore, ThermostatContro
 from localhome.errors import InputError
 from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
-from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore, day_night_of
+from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -696,22 +696,10 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/")
     def home():
-        # The redesigned home page - glance, tweak, plan; see static/home.js.
+        # The home page - glance, tweak, plan; see static/home.js.
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         return render_template("home.html", site_name=site_name(), t=app.config["TRANSLATIONS"],
                                lang=config.web_language)
-
-    @app.route("/classic")
-    def index():
-        manager: DeviceManager = app.config["MANAGER"]
-        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
-        return render_template(
-            "index.html",
-            site_name=site_name(),
-            cover_names=list(manager.covers),
-            t=app.config["TRANSLATIONS"],
-            lang=config.web_language,
-        )
 
     @app.route("/api/server-time")
     def api_server_time():
@@ -841,8 +829,6 @@ def _register_routes(app: Flask) -> None:
                 # or a test bench never passes for the real apartment.
                 "simulated": manager.driver_types.get(name) == "simulated",
             }
-            if name in interlock_followers:
-                entry["linked_valve"] = interlock_followers[name]
             entry.update(manager.ui_options.get(name, {}))
             if entry.get("presets"):
                 entry["presets"] = vmc_speeds.apply(entry["presets"], app.config["VMC_SPEEDS"].get())
@@ -1004,12 +990,7 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True)
 
     def vmc_answer(vmc: VmcScheduleController, schedule: dict | None = None):
-        """The program as both pages read it: the week, and - for the
-        classic page's two time fields - its day and night when it is one
-        (None for a week painted otherwise)."""
-        schedule = dict(schedule or vmc.store.get())
-        schedule.update(day_night_of(schedule["week"]) or {"day": None, "night": None})
-        return jsonify(ok=True, schedule=schedule, status=vmc.status())
+        return jsonify(ok=True, schedule=schedule or vmc.store.get(), status=vmc.status())
 
     @app.route("/api/vmc-schedule")
     def api_vmc_schedule_get():
@@ -1021,13 +1002,9 @@ def _register_routes(app: Flask) -> None:
     @app.route("/api/vmc-schedule", methods=["POST"])
     def api_vmc_schedule_save():
         """Only what the body names changes: {"enabled", "target"} turns it
-        on or off, {"week"} replaces the week, {"day", "night"} (the older
-        two-period form) replaces it with those two."""
+        on or off, {"week"} replaces the week."""
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
-        # A day or night of None is what this route answers for a painted
-        # week: sent back, it means "not changing them".
-        body = {k: v for k, v in _json_body().items()
-                if k in ("enabled", "target", "week") or (k in ("day", "night") and v is not None)}
+        body = {k: v for k, v in _json_body().items() if k in ("enabled", "target", "week")}
         try:
             schedule = vmc.store.update(body)
         except ValueError as exc:
@@ -1082,14 +1059,6 @@ def _register_routes(app: Flask) -> None:
             return _fail("not_a_power_meter", f"'{name}' doesn't measure its power", 404, name=name)
         return jsonify(ok=True, name=name, **energy_summary(app.config["HISTORY"], name))
 
-    @app.route("/api/sensors/<name>/peak-today")
-    def api_sensor_peak(name):
-        store: HistoryStore = app.config["HISTORY"]
-        field = request.args.get("field")
-        if not field:
-            return jsonify(ok=False, error="missing 'field' parameter"), 400
-        return jsonify(ok=True, **store.query_peak_today(name, field))
-
     @app.route("/api/climate/zones")
     def api_climate_zones():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
@@ -1130,7 +1099,7 @@ def _register_routes(app: Flask) -> None:
                 "battery_pct": sensor_reading.get("battery_pct"),
                 "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
-                # Tagged on the tile - see simulatedTagHtml() in app.js.
+                # Tagged on the zone's card ("simulated") - see home.js.
                 "sensor_simulated": manager.driver_types.get(zone.sensor) == "simulated",
                 # A value typed by hand (the admin panel's "manual" mode):
                 # the home page lets it be set from the zone's card.

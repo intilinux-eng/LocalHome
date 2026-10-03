@@ -164,7 +164,6 @@ def test_the_pages_know_the_bypass_is_normally_open_and_what_the_dehumidifier_op
     assert bagni["valve_driver"] == {"name": "Deumidificatore", "ok": True, "on": True}
     devices = {d["name"]: d for d in client.get("/api/devices").get_json()["sensors"]}
     assert devices["Valvola Bypass Bagni"]["normally_open"] is True
-    assert devices["Deumidificatore"]["linked_valve"] == "Bagni Valve"
     # In summer its Shelly is on: the valve closed.
     assert _valve(client, "Valvola Bypass Bagni") is True
 

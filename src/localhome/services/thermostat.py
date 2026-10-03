@@ -187,11 +187,11 @@ class ScheduleStore:
             return self.empty_week()
         # set_week() rejects a non-numeric value going forward, but this
         # sanitizes anything already on disk from before that check
-        # existed (or a hand-edited file) - without it, the dashboard
-        # round-trips the *whole* week on every save (see saveSchedule()
-        # in app.js), so one bad legacy cell would silently ride along on
-        # every future save of that zone and get rejected every time,
-        # with no way to fix it short of editing the JSON file by hand.
+        # existed (or a hand-edited file) - without it, the dashboard's
+        # grid (static/schedule_grid.js) loads that week to edit it, so one
+        # bad legacy cell would ride along on every future save of that
+        # zone and get rejected every time, with no way to fix it short
+        # of editing the JSON file by hand.
         # Reading it back as null instead means the very next save
         # overwrites it with a clean value for good.
         clean: dict[str, list] = {}

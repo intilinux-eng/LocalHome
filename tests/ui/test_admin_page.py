@@ -110,8 +110,8 @@ def test_a_refusal_is_explained_in_the_page_language(open_page, api):
     assert api("/api/climate-admin/map")["zones"][0]["sensor_mode"] == "simulated", "nothing saved"
 
 
-def test_both_pages_say_when_the_board_stops_answering(open_page):
-    pages = [open_page("/climate-admin", 390).page, open_page("/classic", 390).page]
+def test_the_admin_page_says_when_the_board_stops_answering(open_page):
+    pages = [open_page("/climate-admin", 390).page]
     for page in pages:
         page.wait_for_timeout(1500)
         assert page.locator("#connection-banner").is_hidden()

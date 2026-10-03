@@ -26,7 +26,7 @@
         <span class="brand-name">{{ site_name }}</span>
       </div>
       <!-- The board's own date, time and time zone, with a warning when it
-           disagrees with this phone - the classic page's clock, as it is. -->
+           disagrees with this phone (_server_clock.html). -->
       {% include "_server_clock.html" %}
       <a class="health" id="health" href="/climate-admin#system-status" data-state="unknown">
         <span class="health-dot" aria-hidden="true"></span>
@@ -64,8 +64,6 @@
 
     <footer class="foot">
       <a href="/climate-admin">{{ t.home.admin_link }}</a>
-      <span aria-hidden="true">·</span>
-      <a href="/classic">{{ t.home.classic_link }}</a>
     </footer>
   </div>
 

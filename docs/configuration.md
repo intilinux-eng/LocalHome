@@ -130,8 +130,8 @@ chosen level - a VMC, typically:
   running, but offers no on/off control.
 - `normally_open: true` on a `switch` that powers a normally open valve
   (one that closes when powered, like a bypass valve): its Shelly on
-  means the valve **closed**, and the home page, the classic page and
-  the admin panel say "closed"/"open" for it, not "on"/"off" - its
+  means the valve **closed**, and the home page and the admin panel
+  say "closed"/"open" for it, not "on"/"off" - its
   season rules too ("always closed (Shelly on)"). Nothing changes in
   what LocalHome commands; only how it's told.
 - `presets` on a `number` - one-tap buttons above its slider, each
@@ -471,10 +471,9 @@ the card saves by itself, and the control loop
 (`services/vmc_schedule.py`, every 60s) re-reads the file, so it takes
 effect without a restart.
 
-The older form - `"day": {"at": "07:00", "value": 50}, "night": {"at":
-"22:00", "value": 20}` in place of `week` - is still read, as the week
-it stands for, and is what the classic page (`/classic`) edits; a week
-painted otherwise is only switched on or off there.
+A file in the older form - `"day": {"at": "07:00", "value": 50},
+"night": {"at": "22:00", "value": 20}` in place of `week` - is still
+read, as the week it stands for.
 
 **The speeds themselves** - the percentages of night, day and boost - are
 set in the admin panel's VMC section (`config/vmc_speeds.json`), over
@@ -790,7 +789,7 @@ An unknown code falls back to `en` with a warning logged at startup.
 To add another language, copy `src/localhome/web/locales/en.json` to
 `<code>.json` in that same directory and translate the values - keep
 every `{placeholder}` (e.g. `{percent}`, `{error}`) exactly as it is,
-since app.js substitutes those at render time. No other file needs to
+since the pages substitute those at render time. No other file needs to
 change; `web.language: "<code>"` picks it up.
 
 ## Web auth (optional)

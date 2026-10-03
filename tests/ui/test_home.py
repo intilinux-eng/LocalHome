@@ -48,7 +48,7 @@ def test_the_home_page_lays_out_and_says_everything_in_italian(open_page, width,
     page = opened.page
     assert page.locator(".zone").count() == 2
     assert page.locator("#hero-title").inner_text().strip() not in ("", "Un attimo…")
-    # The board's clock, with its date and time zone, as on the classic page.
+    # The board's clock, with its date and time zone.
     assert eventually(page, lambda: page.locator("#server-clock-date").inner_text().strip() != "")
     assert "UTC" in page.locator("#server-clock-zone").inner_text()
     assert page.evaluate(UNTRANSLATED_JS) == []
@@ -100,9 +100,9 @@ def _open_plan(page, name):
     page.wait_for_timeout(800)
 
 
-def test_the_plan_is_the_classic_grid_and_one_click_paints_one_cell(open_page, api):
-    """The same grid as the classic page (static/schedule_grid.js), on the
-    zone's card: the empty-week note mustn't move it under the pointer."""
+def test_one_click_on_the_plan_paints_one_cell(open_page, api):
+    """The weekly grid (static/schedule_grid.js), on the zone's card: the
+    empty-week note mustn't move it under the pointer."""
     _set_week(api, ZONE_A, EMPTY_WEEK)
     opened = _open_home(open_page)
     page = opened.page
@@ -130,6 +130,28 @@ def test_the_cards_refresh_never_rebuilds_the_grid_under_a_stroke(open_page, api
     _card(page, ZONE_A).locator(".sched-cell[data-day='tue'][data-hour='9']").click()
     assert eventually(page, lambda: _week(api, ZONE_A)["tue"][9] is not None)
     assert opened.errors == []
+
+
+def test_two_phones_editing_one_week_both_keep_their_change(open_page, api):
+    """B opened the page before A's change; B's save used to send its whole,
+    older week and wipe A's hour."""
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    phone_a = _open_home(open_page).page
+    phone_b = _open_home(open_page).page
+    grid = f".zone[data-zone={_css_string(ZONE_A)}] .sched-cell[data-day='mon']"
+    for phone in (phone_a, phone_b):
+        phone.wait_for_selector(grid, timeout=20000)
+        phone.wait_for_timeout(1000)
+
+    phone_a.locator(f"{grid}[data-hour='8']").click()
+    assert eventually(phone_a, lambda: _week(api, ZONE_A)["mon"][8] is not None)
+    phone_b.locator(f"{grid}[data-hour='20']").click()
+    assert eventually(phone_b, lambda: _week(api, ZONE_A)["mon"][20] is not None)
+
+    monday = _week(api, ZONE_A)["mon"]
+    assert monday[8] is not None, "phone B's save wiped phone A's change"
+    shown = phone_b.locator(f"{grid}[data-hour='8']").get_attribute("data-value")
+    assert shown not in (None, ""), "phone B shows phone A's change once it has saved"
 
 
 def test_monday_is_copied_to_the_weekdays_from_the_plan(open_page, api):
@@ -225,12 +247,13 @@ def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
     assert _vmc(api)["schedule"]["week"]["mon"][10] == 25, "the week stays saved"
 
 
-def test_a_week_set_on_the_classic_page_shows_as_custom(open_page, api):
+def test_a_week_saved_otherwise_shows_as_custom(open_page, api):
     _reset_vmc(api)
     page = _open_home(open_page).page
     speed = page.get_attribute("#vmc-card [data-vmc-choice='work']", "data-device")
-    api("/api/vmc-schedule", {"enabled": True, "target": speed,
-                              "day": {"at": "09:00", "value": 50}, "night": {"at": "23:00", "value": 20}})
+    # Day 9-23: none of the ready-made weeks.
+    week = {d: [25] * 9 + [50] * 14 + [25] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    api("/api/vmc-schedule", {"enabled": True, "target": speed, "week": week})
     page.evaluate("refreshDevices()")
     assert eventually(page, lambda: page.get_attribute("#vmc-card [data-vmc-choice='custom']", "aria-checked") == "true")
     _reset_vmc(api)

@@ -68,8 +68,7 @@ def test_set_week_rejects_a_non_numeric_hour_value(tmp_path):
 
 def test_get_week_sanitizes_a_non_numeric_value_already_on_disk(tmp_path):
     # Complements the get_target() test below: get_week() is what the
-    # dashboard's schedule editor actually loads, and saveSchedule() in
-    # app.js always resubmits the *whole* week on any edit - if get_week()
+    # dashboard's schedule grid actually loads to edit - if get_week()
     # didn't clean this up, a single legacy bad cell would ride along on
     # every future save of that zone and get rejected every time, with no
     # way to fix it short of hand-editing the JSON file.

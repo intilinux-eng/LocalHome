@@ -1,9 +1,8 @@
 /* The weekly schedule grid: the palette, painting hours with a drag,
    copying Monday to the week or the whole week to another zone, and saving
-   only the hours that changed. Shared by both dashboards - the classic one
-   (app.js) and the home page (home.js) - so it works the same in both.
+   only the hours that changed - on the home page's zone cards (home.js).
 
-   Moved here as it was from app.js; it relies on what each page defines:
+   It relies on what the page defines:
    tr(), notify(), confirmAction(), slug(), jsArg(), escapeHtml(),
    apiError(data), zoneExcluded(zone), updateZoneNext(zone) and the
    climateZones / climateMode it keeps up to date. */

@@ -8,8 +8,7 @@
       button in a sheet.
 
    Everything is timed by the board's clock, not the phone's: schedules
-   run on the board, so "until 20:30" must mean the board's 20:30.
-   Same API as the classic page; nothing new on the server. */
+   run on the board, so "until 20:30" must mean the board's 20:30. */
 "use strict";
 
 // --------------------------------------------------------------- basics --
@@ -83,8 +82,7 @@ function errorText(error) {
 }
 
 // ------------------------------------------- what the shared grid needs --
-// static/schedule_grid.js - the weekly grid, the same as the classic
-// page's - relies on these, defined the way app.js defines them.
+// static/schedule_grid.js - the weekly grid - relies on these.
 
 let climateZones = [];
 let climateMode = "heat";
@@ -107,7 +105,7 @@ function jsArg(value) {
   return escapeAttr(JSON.stringify(String(value)));
 }
 
-// The server's refusal in this page's language (same as app.js's).
+// The server's refusal in this page's language.
 function apiError(data) {
   if (!data) return "";
   const params = Object.assign({}, data.params || {});
@@ -806,7 +804,7 @@ function closeSheet() {
 }
 
 // ---------------------------------------------------------- the plan --
-// Each card's week, right under its day: the classic page's own grid
+// Each card's week, right under its day: the weekly grid
 // (static/schedule_grid.js) - painted with a drag, copied to the week or
 // to another zone, saved as it's painted, only the hours that changed.
 // Built once per season and left alone: the card's live part above it is
@@ -910,7 +908,7 @@ function vmcRunning(speed) {
 }
 
 // Which choice the board is on: "manual", a ready-made program, or
-// "custom" - a week set elsewhere (the classic page's own day and night).
+// "custom" - a week saved otherwise (by the API, or an older file).
 function vmcChoice(speed) {
   const { program, programOn } = vmcRunning(speed);
   if (!programOn) return "manual";
@@ -1016,7 +1014,7 @@ async function onPlantClick(event) {
       if (boosting) await api("/api/vmc-schedule/boost/cancel", {});
       await api(`/api/sensors/${encodeURIComponent(target.dataset.device)}/set-value`, { value: Number(target.dataset.vmc) });
     } else if (target.dataset.vmcChoice === "manual") {
-      // No program: the week stays saved, unused, for the classic page.
+      // No program: the week stays saved, unused.
       await api("/api/vmc-schedule", { enabled: false });
     } else if (target.dataset.vmcChoice && speed) {
       // A program is its week, run on this VMC - picking one is what

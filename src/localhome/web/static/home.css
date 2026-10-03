@@ -689,9 +689,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .sheet-note { color: var(--text-2); font-size: 0.9rem; margin: 4px 0 14px; }
 
-/* The weekly grid (static/schedule_grid.js) - the classic page's own grid
-   and palette, in this page's colours: pick a temperature, then tap or
-   drag across the hours; it saves by itself. */
+/* The weekly grid (static/schedule_grid.js) and its palette: pick a
+   temperature, then tap or drag across the hours; it saves by itself. */
 .zone-plan .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 6px 0 12px; }
 .sched-season-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 12px; }
 .sched-palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }

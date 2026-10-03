@@ -112,18 +112,20 @@ integrations:
 
 ## 5. Make it show up correctly on the dashboard
 
-The frontend (`web/static/app.js`) renders a card per `kind`
-(`power_meter` / `climate` / `switch` / `number`) using a fixed set of
-known field names (`FIELD_META`). If your driver's `read()` dict uses
-fields the existing card already understands (`power_w`, `voltage_v`,
-`is_on`, ...), you get a working card for free. A field it doesn't
-recognize still shows up, just with its raw key as the label - add it to
-`FIELD_META` for a nicer label/unit/precision.
+The home page (`web/static/home.js`, `renderHouse()`) draws a card per
+`kind` from the fields it knows: a `switch` its on/off (and, with
+`power_w`, what it draws and its days - see services/energy.py), a
+`number` its slider, a `power_meter` its power, `voltage_v`,
+`current_a` and its days, a `climate` sensor its `temperature_c` and
+`humidity_pct` - or, with `co2_ppm`/`pm25_ugm3`/..., the air-quality
+card. If your driver's `read()` dict uses those names, you get a working
+card for free; a field the page doesn't know isn't shown - add it where
+the card is drawn.
 
 Adding a genuinely new *kind* (not cover/power_meter/climate/switch/number)
 - say, a binary door sensor - needs: a new value flowing through
-`DeviceManager.sensor_kinds`, a small render branch in
-`updateSensorCard()` in `app.js`, and probably a new interface in
+`DeviceManager.sensor_kinds`, a small render branch in `renderHouse()`
+in `home.js`, and probably a new interface in
 `core/interfaces.py` if the existing ones don't fit. That's a bigger
 change; open an issue to discuss the shape first if you're not sure.
 

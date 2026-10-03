@@ -11,7 +11,6 @@ from localhome.services.vmc_schedule import (
     DEFAULT_SCHEDULE,
     VmcScheduleController,
     VmcScheduleStore,
-    day_night_of,
     day_night_week,
     next_change,
     speed_at,
@@ -90,14 +89,6 @@ def test_day_and_night_is_a_week_to_the_hour():
     assert wrapped["mon"][0] == 50 and wrapped["mon"][1] == 20 and wrapped["mon"][9] == 50
 
 
-def test_a_week_says_whether_it_is_a_day_and_night_one():
-    assert day_night_of(day_night_week(SCHEDULE["day"], SCHEDULE["night"])) == {
-        "day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 20}}
-    assert day_night_of(week_of(sat=[(8, 23, 50)])) is None, "the days differ"
-    assert day_night_of({d: [20] * 7 + [100] + [50] * 14 + [20] * 2 for d in DAYS}) is None, "three speeds"
-    assert day_night_of({d: [50] * 24 for d in DAYS}) is None, "one speed"
-
-
 @pytest.mark.parametrize("when,expected", [
     (at(7), 50), (at(12, 30), 50), (at(21, 59), 50), (at(22), 20), (at(3), 20), (at(6, 59), 20),
 ])
@@ -156,8 +147,6 @@ def test_an_update_changes_only_what_it_names(tmp_path):
     store.update({"week": custom})
     store.update({"enabled": True, "target": "VMC Speed"})
     assert store.get()["week"] == custom, "turning it on keeps the week"
-    store.update({"day": {"at": "08:00", "value": 60}, "night": {"at": "23:00", "value": 30}})
-    assert day_night_of(store.get()["week"]) == {"day": {"at": "08:00", "value": 60}, "night": {"at": "23:00", "value": 30}}
 
 
 def test_an_unreadable_file_falls_back_to_the_defaults(tmp_path):
@@ -239,7 +228,7 @@ def test_status_for_the_dashboard(tmp_path):
 
     assert controller.status(now=at(12)) == {
         "enabled": True, "target": "VMC Speed", "value": 50, "until": "22:00",
-        "until_at": "2026-09-22T22:00", "next_value": 20, "period": "day",
+        "until_at": "2026-09-22T22:00", "next_value": 20,
     }
 
     controller.store.set({**SCHEDULE, "enabled": False})

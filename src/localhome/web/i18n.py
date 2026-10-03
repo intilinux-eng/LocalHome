@@ -3,7 +3,8 @@
 
 Add a new language by copying locales/en.json to locales/<code>.json
 and translating the values - every placeholder in curly braces (e.g.
-`{percent}`) is substituted by app.js at render time and must be kept.
+`{percent}`) is substituted by the pages' tr() at render time and must
+be kept.
 """
 from __future__ import annotations
 

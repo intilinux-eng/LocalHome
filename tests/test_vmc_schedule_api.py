@@ -12,8 +12,8 @@ web:
 integrations: []
 """
 
-SCHEDULE = {"enabled": True, "target": "VMC Speed",
-            "day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 20}}
+DAY_AND_NIGHT = {d: [20] * 7 + [50] * 15 + [20] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+SCHEDULE = {"enabled": True, "target": "VMC Speed", "week": DAY_AND_NIGHT}
 
 
 class FakeNumber:
@@ -42,7 +42,7 @@ def test_defaults_before_anything_is_saved(client):
 
     assert body["ok"] is True
     assert body["schedule"]["enabled"] is False
-    assert body["schedule"]["day"] == {"at": "07:00", "value": 50}
+    assert body["schedule"]["week"]["mon"][7] == 50 and body["schedule"]["week"]["mon"][22] == 25, "day 7-22"
     assert body["status"] == {"enabled": False}
 
 
@@ -60,10 +60,10 @@ def test_saving_applies_the_speed_right_away(client):
 def test_a_bad_schedule_is_refused_with_a_reason(client):
     c, number, _ = client
 
-    res = c.post("/api/vmc-schedule", json={**SCHEDULE, "day": {"at": "25:00", "value": 50}})
+    res = c.post("/api/vmc-schedule", json={**SCHEDULE, "week": {**DAY_AND_NIGHT, "mon": [20] * 23 + [150]}})
 
     assert res.status_code == 400
-    assert "07:00" in res.get_json()["error"]
+    assert res.get_json()["code"] == "vmc_week_invalid"
     assert number.values == []
 
 
@@ -74,7 +74,6 @@ def test_the_card_sees_the_running_program(client):
     body = c.get("/api/vmc-schedule").get_json()
 
     assert body["ok"] is True and body["status"]["enabled"] is True
-    assert body["status"]["period"] in ("day", "night")
     assert body["status"]["value"] in (50, 20)
     assert body["status"]["until"] in ("07:00", "22:00")
     assert body["schedule"]["target"] == "VMC Speed"
@@ -84,13 +83,12 @@ WEEK = {d: [20] * 7 + [100] + [50] * 11 + [100] + [50] * 2 + [20] * 2
         for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
 
 
-def test_a_painted_week_is_saved_and_the_classic_fields_say_it_isnt_two_periods(client):
+def test_a_painted_week_is_saved(client):
     c, _, tmp_path = client
 
     body = c.post("/api/vmc-schedule", json={"week": WEEK}).get_json()
 
     assert body["ok"] is True and body["schedule"]["week"] == WEEK
-    assert body["schedule"]["day"] is None and body["schedule"]["night"] is None
     assert json.loads((tmp_path / "vmc_schedule.json").read_text(encoding="utf-8"))["week"] == WEEK
 
 
@@ -139,9 +137,9 @@ def test_a_bad_boost_is_refused(client, bad):
     assert number.values == []
 
 
-def test_what_the_route_answered_sent_back_whole_keeps_a_painted_week(client):
-    """The home page's switch used to post the whole schedule it had read -
-    with "day": None for a painted week, which reset it to day and night."""
+def test_what_the_route_answered_sent_back_whole_keeps_the_week(client):
+    """A page posting back the whole schedule it read changes only what it
+    changed."""
     c, _, _ = client
     schedule = c.post("/api/vmc-schedule", json={"week": WEEK}).get_json()["schedule"]
 

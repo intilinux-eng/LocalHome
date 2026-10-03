@@ -4,11 +4,10 @@ boost.
 Mechanical ventilation runs continuously - what changes is how fast. The
 program is a week of hours, each with a speed (0 is off), like the
 programmers sold for these units: a quieter speed at night, a higher one
-by day, the maximum around a shower or cooking, off while away. The
-dashboard paints it on a grid, or starts from a ready-made one ("day and
-night", "away for work"...). The older two-period form - a day and a
-night speed with their start times, what the classic page edits - is
-still accepted and becomes that week.
+by day, the maximum around a shower or cooking. The home page offers
+ready-made ones ("day and night", "out at work"...). A file saved in the
+older two-period form - a day and a night speed with their start times -
+is still read, as the week it stands for.
 
 Deliberately *not* a thermostat: a speed is written when the program
 moves to a new one, and then left alone. Picking "Boost" by hand at
@@ -56,22 +55,6 @@ def day_night_week(day: dict, night: dict) -> dict[str, list[int]]:
         hours[hour] = day["value"]
         hour = (hour + 1) % 24
     return {d: list(hours) for d in DAYS}
-
-
-def day_night_of(week: dict) -> dict | None:
-    """The two-period form of a week, if it is one: every day alike, two
-    speeds, each in one stretch (wrapping over midnight) - else None. The
-    higher speed is the day's."""
-    first = week["mon"]
-    if any(week[d] != first for d in DAYS) or len(set(first)) != 2:
-        return None
-    starts = [h for h in range(24) if first[h] != first[h - 1]]
-    if len(starts) != 2:
-        return None
-    by_value = {first[h]: h for h in starts}
-    high, low = max(by_value), min(by_value)
-    return {"day": {"at": f"{by_value[high]:02d}:00", "value": high},
-            "night": {"at": f"{by_value[low]:02d}:00", "value": low}}
 
 
 DEFAULT_SCHEDULE = {
@@ -175,13 +158,9 @@ class VmcScheduleStore:
 
     def update(self, changes: dict) -> dict:
         """Only what `changes` names changes - a page turning the program
-        on doesn't send the week. `day`/`night` without a `week` replace
-        the week with their two periods."""
+        on doesn't send the week."""
         with self._lock:
-            merged = {**self.get(), **changes}
-            if "week" not in changes and (changes.get("day") or changes.get("night")):
-                merged.pop("week")
-            clean = validate(merged)
+            clean = validate({**self.get(), **changes})
             save_json_atomic(self.path, clean)
         return clean
 
@@ -386,8 +365,4 @@ class VmcScheduleController:
                        "until": change[0].strftime("%H:%M") if change else None,
                        "until_at": change[0].isoformat(timespec="minutes") if change else None,
                        "next_value": change[1] if change else None})
-        # The classic page's words for a two-period week.
-        two = day_night_of(week)
-        if two:
-            status["period"] = "day" if value == two["day"]["value"] else "night"
         return status

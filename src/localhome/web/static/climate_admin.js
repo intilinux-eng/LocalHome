@@ -1,6 +1,6 @@
 "use strict";
 
-// Same tiny translation helper as app.js, copied rather than shared -
+// Same tiny translation helper as home.js, copied rather than shared -
 // this page is a separate, occasional-use bundle on purpose (see
 // docs/configuration.md's climate_admin section).
 function tr(path, vars) {
@@ -14,8 +14,7 @@ function fmt(value, digits) {
   return typeof value === "number" ? value.toFixed(digits) : "--";
 }
 
-// Same compact age formatter as app.js, copied rather than shared -
-// see this file's own top comment.
+// A compact age, this page's own - see this file's own top comment.
 function formatAge(seconds) {
   if (seconds == null) return null;
   if (seconds < 60) return `${Math.floor(seconds)}s`;
@@ -229,9 +228,7 @@ function updateBoardOverview(data) {
       : tr(clock ? "climate_admin.ov_clock_ok" : "climate_admin.ov_clock_bad"));
 }
 
-// Same threshold as the main dashboard's app.js (LOW_BATTERY_PCT) -
-// copied rather than shared, matching this file's own "separate
-// bundle" convention (see the top of this file).
+// A battery this low is flagged.
 const LOW_BATTERY_PCT = 10;
 
 // ------------------------------------------------------------ config form ----
@@ -774,9 +771,7 @@ async function refreshVmcStatus() {
 // against the *saved* map by zone name, so a config edit not yet applied
 // (restart pending) never gets confused with the live-running mapping.
 
-// Same thresholds/labels as the main dashboard's app.js (wifiQuality/
-// wifiLabel) - copied rather than shared, matching this file's own
-// "separate bundle" convention (see the top of this file).
+// The usual Wi-Fi signal bands, in words.
 function wifiQuality(dbm) {
   if (dbm >= -60) return "good";
   if (dbm >= -75) return "fair";
@@ -824,10 +819,8 @@ function sensorStatusHtml(zone, mode) {
     let extra = "";
     if (zone.humidity_pct != null) extra += ` · ${fmt(zone.humidity_pct, 0)}%`;
     if (zone.battery_pct != null) {
-      // Same 10% threshold as the main dashboard's own low-battery
-      // popup (app.js) - highlighted here too so this page alone is
-      // enough to notice it, without needing that dashboard-only,
-      // session-scoped popup to still be around to have caught it.
+      // A low battery highlighted, so this page alone is enough to
+      // notice it.
       const batteryClass = zone.battery_pct <= LOW_BATTERY_PCT ? "admin-status bad" : "";
       const batteryText = `${tr("fields.battery_pct")} ${fmt(zone.battery_pct, 0)}%`;
       extra += ` · ${batteryClass ? `<span class="${batteryClass}">${batteryText}</span>` : batteryText}`;
@@ -885,8 +878,7 @@ function targetHtml(zone) {
 }
 
 // A cool_enabled:false zone (e.g. a condensation-prone bathroom) is
-// still shown here in every mode - unlike the main dashboard, which
-// just hides its card while cooling (see app.js) - because this page's
+// still shown here in every mode, because this page's
 // whole job is showing *why* a valve is in the state it's in, and
 // silently disappearing a configured zone would be more confusing, not
 // less. What it's *not* driven by needs saying instead: the thermostat
@@ -1290,7 +1282,7 @@ function escapeHtml(value) {
 
 // The fixed English names the panel gives its extra devices (see
 // services/climate_map_store.py), shown in the page's language - same
-// table as app.js's.
+// table as home.js's.
 const DISPLAY_NAMES = {
   "Outdoor Sensor": "climate.outdoor_name",
   "Bathroom Bypass Valve": "climate.bypass_name",
@@ -2240,7 +2232,7 @@ function watchLedMatrix() {
 }
 
 // ----------------------------------------------------------- connection ----
-// The same rule as the dashboard (app.js's updateConnectionBanner): two
+// Two
 // failed checks in a row and 15 s without an answer mean the board isn't
 // answering - and everything on this page is then the last known state,
 // which an installer watching it must not take for live. Checked on the

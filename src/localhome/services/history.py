@@ -27,8 +27,7 @@ RANGE_BUCKETS = {
 # An "off" shorter than this between two "on" samples isn't the system
 # switching off and on again: a LocalHome restart, or one odd reading,
 # leaves a gap of a sample or two, while a real valve cycle lasts far
-# longer. The dashboard's list of runs uses the same rule (MIN_OFF_SECONDS
-# in app.js), so its count agrees with on_stats().
+# longer.
 MIN_OFF_SECONDS = 300
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
