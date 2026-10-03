@@ -108,7 +108,6 @@ const VALVE_MODES = ["shelly", "simulated"];
 
 let savedMap = null; // last GET /api/climate-admin/map response
 let extraSwitchesRestartPending = false; // from the last GET /api/climate-admin/extra-switches
-let brokerRestartPending = false;   // saved from this page since it was loaded
 let settingsRestartPending = false; // from the last GET /api/climate-admin/settings
 let restartInProgress = false;
 let guideDecided = false;
@@ -151,7 +150,6 @@ function updateRestartBar() {
   if (!bar || restartInProgress) return;
   const waiting = [
     [savedMap && savedMap.restart_pending, "zones_heading"],
-    [brokerRestartPending, "broker_heading"],
     [extraSwitchesRestartPending, "extra_switches_heading"],
     [extraSensorRestartPending, "extra_sensor_heading"],
     [vmcRestartPending, "vmc_heading"],
@@ -333,98 +331,22 @@ function collectZonesFromForm() {
   });
 }
 
-// ------------------------------------------------------------ broker form ----
-// Editing config/mqtt_broker.json from the web - see
-// services/mqtt_broker_config.py. Loaded once (not on every poll tick,
-// unlike refreshBroker()'s reachability pill below) so it never
-// overwrites an in-progress edit out from under the operator.
+// ----------------------------------------------------------------- broker ----
+// Written by hand in config/mqtt_broker.json, then a restart: here only
+// where it is and whether with a user - whether it answers is
+// refreshBroker()'s, below.
 
 async function loadBroker() {
-  const res = await fetch("/api/climate-admin/broker");
-  const data = await res.json();
-  document.getElementById("broker-host").value = data.host || "";
-  document.getElementById("broker-port").value = data.port || "";
-  document.getElementById("broker-username").value = data.username || "";
-  document.getElementById("broker-change-password").checked = false;
-  document.getElementById("broker-password").value = "";
-  document.getElementById("broker-password-field").hidden = true;
-  document.getElementById("broker-password-toggle-label").textContent =
-    data.has_password ? tr("climate_admin.broker_change_password_label") : tr("climate_admin.broker_set_password_label");
-  // A user or password in use is worth seeing without unfolding anything.
-  const auth = data.username || data.has_password;
-  if (auth) document.getElementById("broker-auth").open = true;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/broker")).json();
+  } catch (e) {
+    return;   // offline: the connection banner says so already
+  }
   document.getElementById("broker-current").textContent = data.host
-    ? tr(auth ? "climate_admin.broker_current_auth" : "climate_admin.broker_current",
-      { address: `${data.host}:${data.port || 1883}`, user: data.username || "-" })
-    : tr("climate_admin.broker_not_configured");
-}
-
-function onChangePasswordToggle(checkbox) {
-  document.getElementById("broker-password-field").hidden = !checkbox.checked;
-}
-
-async function testBroker(button) {
-  const resultEl = document.getElementById("broker-test-result");
-  const host = document.getElementById("broker-host").value.trim();
-  const port = parseInt(document.getElementById("broker-port").value, 10);
-  resultEl.textContent = "";
-  button.disabled = true;
-  try {
-    const res = await fetch("/api/climate-admin/broker/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ host, port }),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
-      resultEl.className = "hint-text admin-error";
-      return;
-    }
-    resultEl.textContent = data.reachable ? tr("climate_admin.broker_ok") : `${tr("climate_admin.broker_down")} (${data.error})`;
-    resultEl.className = data.reachable ? "hint-text admin-success" : "hint-text admin-error";
-  } catch (e) {
-    resultEl.textContent = tr("sensors.request_failed");
-    resultEl.className = "hint-text admin-error";
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function saveBroker(button) {
-  const resultEl = document.getElementById("broker-save-result");
-  const changePassword = document.getElementById("broker-change-password").checked;
-  const body = {
-    host: document.getElementById("broker-host").value.trim(),
-    port: parseInt(document.getElementById("broker-port").value, 10),
-    username: document.getElementById("broker-username").value.trim(),
-    change_password: changePassword,
-  };
-  if (changePassword) body.password = document.getElementById("broker-password").value;
-  button.disabled = true;
-  try {
-    const res = await fetch("/api/climate-admin/broker", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      resultEl.textContent = tr("sensors.error_prefix") + apiError(data);
-      resultEl.className = "hint-text admin-error";
-      return;
-    }
-    resultEl.innerHTML = `${tr("climate_admin.broker_save_success")} ${restartButtonHtml()}`;
-    resultEl.className = "hint-text admin-success";
-    brokerRestartPending = true;
-    updateRestartBar();
-    await loadBroker();
-  } catch (e) {
-    resultEl.textContent = tr("sensors.request_failed");
-    resultEl.className = "hint-text admin-error";
-  } finally {
-    button.disabled = false;
-  }
+    ? tr(data.username ? "climate_admin.broker_current_auth" : "climate_admin.broker_current",
+      { address: `${data.host}:${data.port || 1883}`, user: data.username })
+    : tr("climate_admin.broker_none");
 }
 
 async function saveMap(button) {

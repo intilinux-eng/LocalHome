@@ -413,9 +413,9 @@ def test_manual_value_route_rejects_a_save_not_yet_loaded_by_this_process(tmp_pa
 
 
 # ------------------------------------------------------------ broker config ----
-# Editing config/mqtt_broker.json from the web - see
-# services/mqtt_broker_config.py. fake_mqtt's own broker file (host
-# "test-broker") is the starting point for the GET test below.
+# What the panel shows of config/mqtt_broker.json (written by hand) - see
+# services/mqtt_broker_config.py. fake_mqtt's own broker file has host
+# "test-broker".
 
 def test_get_broker_reflects_the_current_file(tmp_path):
     app = _app(tmp_path)
@@ -429,58 +429,10 @@ def test_get_broker_reflects_the_current_file(tmp_path):
     assert body["has_password"] is False
 
 
-def test_post_broker_saves_new_settings(tmp_path):
-    app = _app(tmp_path)
-    client = app.test_client()
-
-    res = client.post("/api/climate-admin/broker", json={
-        "host": "192.168.1.30", "port": 1884, "username": "mqtt_user", "change_password": False,
-    })
-
-    assert res.status_code == 200
-    body = res.get_json()
-    assert body["ok"] is True
-    assert body["restart_required"] is True
-    updated = client.get("/api/climate-admin/broker").get_json()
-    assert updated["host"] == "192.168.1.30"
-    assert updated["port"] == 1884
-    assert updated["username"] == "mqtt_user"
-
-
-def test_post_broker_rejects_a_missing_host(tmp_path):
-    app = _app(tmp_path)
-    client = app.test_client()
-
-    res = client.post("/api/climate-admin/broker", json={"host": "", "port": 1883})
-
-    assert res.status_code == 400
-    assert res.get_json()["ok"] is False
-
-
-def test_broker_test_route_reports_reachable_when_something_listens(tmp_path):
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(("127.0.0.1", 0))
-    server.listen(1)
-    host, port = server.getsockname()
-    app = _app(tmp_path)
-    client = app.test_client()
-
-    try:
-        body = client.post("/api/climate-admin/broker/test", json={"host": host, "port": port}).get_json()
-    finally:
-        server.close()
-
-    assert body["ok"] is True
-    assert body["reachable"] is True
-
-
-def test_broker_test_route_rejects_a_missing_port(tmp_path):
-    app = _app(tmp_path)
-    client = app.test_client()
-
-    res = client.post("/api/climate-admin/broker/test", json={"host": "192.168.1.21"})
-
-    assert res.status_code == 400
+def test_the_broker_is_not_changed_from_the_web(tmp_path):
+    client = _app(tmp_path).test_client()
+    assert client.post("/api/climate-admin/broker", json={"host": "x", "port": 1883}).status_code == 405
+    assert client.post("/api/climate-admin/broker/test", json={"host": "x", "port": 1883}).status_code in (404, 405)
 
 
 # ------------------------------------------------------- extra switches ----

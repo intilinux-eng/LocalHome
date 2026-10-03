@@ -47,8 +47,8 @@ from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudge
 from localhome.services import diagnostics, led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
-from localhome.services.mqtt_broker_config import get_broker, set_broker
-from localhome.services.mqtt_broker_status import check_broker, check_host_port
+from localhome.services.mqtt_broker_config import get_broker
+from localhome.services.mqtt_broker_status import check_broker
 from localhome.drivers.mqtt import base as mqtt_base, client as mqtt_client
 from localhome.drivers.mqtt.rpc import ShellyRpcClient
 from localhome.drivers.simulated import world as simulated_world
@@ -1380,40 +1380,6 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         broker_file = config.resolve("mqtt_broker.json")
         return jsonify(ok=True, **get_broker(broker_file))
-
-    @app.route("/api/climate-admin/broker", methods=["POST"])
-    def api_climate_admin_set_broker():
-        # Doing a full install from a tablet means never needing to open
-        # mqtt_broker.json by hand - see services/mqtt_broker_config.py.
-        # Same "changes need a restart" contract as the zone mapping
-        # below: DeviceManager only ever builds its MQTT client once, at
-        # process start.
-        config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
-        broker_file = config.resolve("mqtt_broker.json")
-        data = _json_body()
-        try:
-            set_broker(
-                broker_file,
-                data.get("host"),
-                data.get("port"),
-                data.get("username"),
-                data.get("password"),
-                bool(data.get("change_password")),
-            )
-        except ValueError as exc:
-            return _refusal(exc, 400)
-        return jsonify(ok=True, restart_required=True)
-
-    @app.route("/api/climate-admin/broker/test", methods=["POST"])
-    def api_climate_admin_test_broker():
-        # Tests whatever the operator just typed, before it's saved -
-        # same probe as broker-status above (services/mqtt_broker_status.py),
-        # just against unsaved values instead of the file on disk.
-        data = _json_body()
-        host, port = data.get("host"), data.get("port")
-        if not isinstance(host, str) or not host.strip() or not isinstance(port, int) or isinstance(port, bool):
-            return jsonify(ok=False, error="host and port are required"), 400
-        return jsonify(ok=True, **check_host_port(host.strip(), port))
 
     @app.route("/api/climate-admin/map")
     def api_climate_admin_get_map():

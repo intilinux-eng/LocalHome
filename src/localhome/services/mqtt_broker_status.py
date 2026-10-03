@@ -16,10 +16,7 @@ from localhome.util.jsonfile import load_json
 
 
 def check_host_port(host: str | None, port: int | None, timeout: float = 1.5) -> dict:
-    """The probe itself, split out from check_broker() below so the panel
-    can also test a host/port the operator just typed in - before saving
-    it to mqtt_broker.json - the same "verify before you commit to it"
-    idea as the rest of this panel (see services/climate_map_store.py)."""
+    """The probe itself: whether anything listens at host:port."""
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return {"reachable": True, "host": host, "port": port, "error": None}

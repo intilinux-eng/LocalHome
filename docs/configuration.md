@@ -549,7 +549,7 @@ The page opens on an **overview**: one tile each for the system status,
 the season, the zones, the MQTT broker, the board (uptime, clock) and
 the LED matrix, coloured by how they're doing and each a link to its
 section. Below it the sections come in four groups - *Plant* (season,
-zones), *Devices* (broker, extra switches, outdoor sensor, VMC), *Board*
+zones), *Devices* (Shellys and MQTT broker, extra switches, outdoor sensor, VMC), *Board*
 (system status, LED matrix, settings) and *Tools* (diagnostic mode,
 maintenance, how it works) - each a card whose header says its state
 even when closed. A sticky bar of links follows the scroll. Two notices
@@ -572,10 +572,11 @@ Per zone:
   so the whole control loop (sensor → thermostat → valve) can be
   verified before any relay is actually wired.
 
-The MQTT broker connection (`config/mqtt_broker.json`) is also editable
-from this page - host, port, username, and password (never read back
-out once saved), with a "test connection" check against whatever's
-currently typed in, before saving it. And two more fixed, standalone
+The MQTT broker connection (`config/mqtt_broker.json`) is written by
+hand, once at installation (see [integrations/mqtt.md](integrations/mqtt.md)),
+then a restart: the page only shows where the broker is, whether with a
+user (never the password), and whether it answers - next to what each
+Shelly says about itself. And two more fixed, standalone
 Shelly Plus 1 switches with no sensor or schedule of their own - a
 bathroom bypass valve and a dehumidifier - are mappable the same way;
 if `thermostat.interlocks`/`mode_switches` above already control one of

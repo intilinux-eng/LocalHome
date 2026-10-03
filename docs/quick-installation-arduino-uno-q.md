@@ -97,12 +97,12 @@ ss -ltn | grep 1883      # -> 0.0.0.0:1883 and [::]:1883
   LAN. Anyone on the same Wi-Fi can then read and publish MQTT on this
   board, the valves' commands included. To add a password later: a user
   created with `mosquitto_passwd`, the same credentials in every Shelly
-  and in the admin panel's MQTT broker section - see
+  and in `config/mqtt_broker.json` - see
   [integrations/mqtt.md](integrations/mqtt.md).
 
 Checked on this board: from a PC on the LAN, an MQTT connection with no
-credentials is accepted over both IPv4 and IPv6. The admin panel's MQTT
-broker section says "reachable" as well.
+credentials is accepted over both IPv4 and IPv6. The admin panel's
+"Shellys and MQTT broker" section says "reachable" as well.
 
 Nothing in the installation depends on the board's IP address - the
 router's DHCP can move it freely: LocalHome reaches the broker as
