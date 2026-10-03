@@ -588,11 +588,12 @@ def test_at_rest_nothing_is_sent(fake_connection, monotonic):
 def test_a_relay_resting_on_is_held_off(fake_connection, monotonic):
     valve = _valve(hold_seconds=600, rest_state="on")
     valve.turn_off()
-    valve.turn_on()
     _status(fake_connection, False)
     monotonic["t"] += 200
-    valve.read()
-    assert [p for _, p in fake_connection.published] == ["off,600", "on", "off,600"]
+    valve.read()                                   # off: held off, renewed
+    valve.turn_on()
+    valve.read()                                   # still says off: not renewed
+    assert [p for _, p in fake_connection.published] == ["off,600", "off,600", "on"]
 
 
 def test_a_renewal_that_fails_doesnt_hide_the_reading(fake_connection, monotonic, caplog):
@@ -615,3 +616,35 @@ def test_without_a_hold_the_commands_are_plain(fake_connection, monotonic):
     monotonic["t"] += 120
     valve.read()
     assert [p for _, p in fake_connection.published] == ["on"]
+
+
+
+def test_switched_off_it_isnt_turned_back_on_by_a_reading_from_before(fake_connection, monotonic):
+    """Seen on the production board in diagnostic mode: "Close", then the
+    valve open again. The device is re-read right after the command, before
+    the relay has said it's off: that reading still says on, and renewing
+    it sent "on,900" straight back."""
+    valve = _valve(hold_seconds=900)
+    valve.turn_on()
+    _status(fake_connection, True)
+    valve.read()
+    valve.turn_off()
+    assert valve.read()["is_on"] is True          # the relay hasn't confirmed yet
+    monotonic["t"] += 600
+    valve.read()
+    assert [p for _, p in fake_connection.published] == ["on,900", "off"]
+    _status(fake_connection, False)                # now it has
+    assert valve.read()["is_on"] is False
+    assert [p for _, p in fake_connection.published] == ["on,900", "off"]
+
+
+def test_switched_on_again_after_off_it_is_held_again(fake_connection, monotonic):
+    valve = _valve(hold_seconds=900)
+    valve.turn_on()
+    valve.turn_off()
+    _status(fake_connection, False)
+    valve.turn_on()
+    _status(fake_connection, True)
+    monotonic["t"] += 300
+    valve.read()
+    assert [p for _, p in fake_connection.published] == ["on,900", "off", "on,900", "on,900"]

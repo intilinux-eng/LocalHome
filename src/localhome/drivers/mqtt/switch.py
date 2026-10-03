@@ -99,6 +99,11 @@ class MqttSwitchDriver(SwitchDriver):
         self._rest_on = rest_state == "on"
         self._renewed_at: float | None = None
         self._renew_failed = False
+        # What LocalHome last told it - None until it says anything. Only
+        # that is renewed: right after "off" a reading can still say on
+        # (the relay hasn't confirmed yet), and renewing that would turn
+        # it straight back on.
+        self._commanded: bool | None = None
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
         self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
@@ -119,9 +124,10 @@ class MqttSwitchDriver(SwitchDriver):
             value = extract_path(payload, path)
             if value is not None:
                 reading[field] = value
-        # Out of rest, whoever put it there: LocalHome holds it while it
-        # runs - after a restart too, before the relay's timer runs out.
-        if self._hold_seconds and reading["is_on"] != self._rest_on:
+        # Out of rest: LocalHome holds it while it runs - what it last
+        # commanded, or, after a restart of LocalHome (nothing commanded
+        # yet), whatever it finds, before the relay's timer runs out.
+        if self._hold_seconds and reading["is_on"] != self._rest_on and self._commanded in (None, reading["is_on"]):
             self._renew(reading["is_on"])
         return reading
 
@@ -160,10 +166,12 @@ class MqttSwitchDriver(SwitchDriver):
 
     def turn_on(self) -> None:
         self._send(self._held_command(True))
+        self._commanded = True
         self._renewed_at = time.monotonic() if self._hold_seconds and not self._rest_on else None
 
     def turn_off(self) -> None:
         self._send(self._held_command(False))
+        self._commanded = False
         self._renewed_at = time.monotonic() if self._hold_seconds and self._rest_on else None
 
     def _send(self, value: str) -> None:
