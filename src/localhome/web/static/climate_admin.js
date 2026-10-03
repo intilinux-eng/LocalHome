@@ -261,7 +261,8 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-sensor-id-field"${z.sensor_mode !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.sensor_device_id_label")}</label>
-        <input type="text" class="zone-sensor-device-id" value="${escapeHtml(z.sensor_device_id || "")}" placeholder="shellyht-XXXXXXXXXXXX">
+        <input type="text" class="zone-sensor-device-id" value="${escapeHtml(z.sensor_device_id || "")}" placeholder="shellyht-XXXXXXXXXXXX" onchange="checkShelly(this, 'sensor')">
+        <p class="hint-text shelly-check" aria-live="polite"></p>
       </div>
       <p class="hint-text zone-manual-hint"${z.sensor_mode !== "manual" ? " hidden" : ""}>${tr("climate_admin.manual_mode_hint")}</p>
       <div class="admin-field">
@@ -270,7 +271,8 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-valve-id-field"${(z.valve_mode || "shelly") !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.valve_device_id_label")}</label>
-        <input type="text" class="zone-valve-device-id" value="${escapeHtml(z.valve_device_id || "")}" placeholder="shellyplus1-XXXXXXXXXXXX">
+        <input type="text" class="zone-valve-device-id" value="${escapeHtml(z.valve_device_id || "")}" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'valve')">
+        <p class="hint-text shelly-check" aria-live="polite"></p>
       </div>
       <label class="admin-checkbox">
         <input type="checkbox" class="zone-cool-enabled" ${z.cool_enabled !== false ? "checked" : ""}>
@@ -2364,6 +2366,49 @@ function signalText(dbm) {
 function signalRow(label, stats) {
   if (!stats) return "";
   return statRowHtml(label, tr("climate_admin.shelly_signal_stats", { avg: stats.avg, min: stats.min }));
+}
+
+// ------------------------------------------------------ check at insertion --
+// The Shelly whose id was just typed: there or not, and the settings its
+// role needs that it has otherwise - asked at once over MQTT, before any
+// save or restart, nothing changed on it (services/shelly_check.py).
+
+async function checkShelly(input, role) {
+  const out = input.parentElement.querySelector(".shelly-check");
+  if (!out) return;
+  const id = input.value.trim();
+  out.className = "hint-text shelly-check";
+  if (!id) {
+    out.textContent = "";
+    return;
+  }
+  out.textContent = tr("climate_admin.check_running");
+  let data;
+  try {
+    data = await (await fetch(`/api/climate-admin/shelly-check?id=${encodeURIComponent(id)}&role=${role}`)).json();
+  } catch (e) {
+    out.textContent = tr("sensors.request_failed");
+    return;
+  }
+  if (input.value.trim() !== id) return;   // typed again meanwhile
+  const wrong = data.settings_wrong || [];
+  const good = data.answered && !wrong.length && !data.settings_error;
+  out.classList.add(good ? "admin-success" : data.battery ? "shelly-check-info" : "admin-error");
+  out.innerHTML = `${escapeHtml(shellyCheckText(data))} <a href="#" class="shelly-check-again"
+    onclick="checkShelly(this.closest('.admin-field').querySelector('input'), '${role}'); return false;">${escapeHtml(tr("climate_admin.check_again"))}</a>`;
+}
+
+function shellyCheckText(data) {
+  if (!data.ok) return tr(data.reason === "id" ? "climate_admin.check_bad_id" : "sensors.request_failed");
+  if (data.battery) return tr("climate_admin.check_battery");
+  if (!data.answered) return tr(data.reason === "no_broker" ? "climate_admin.check_no_broker" : "climate_admin.check_silent");
+  const found = tr("climate_admin.check_found", { model: data.model || "Shelly", firmware: data.firmware || "?" });
+  const wrong = data.settings_wrong || [];
+  if (wrong.length) {
+    return `${found} ${tr("climate_admin.check_fix", { settings: wrong.map(s => `${tr(`climate_admin.shelly_setting_${s.key}`)}: `
+      + tr("climate_admin.shelly_setting_change", { now: shellySettingValue(s.key, s.value), want: shellySettingValue(s.key, s.expected) })).join("; ") })}`;
+  }
+  return `${found} ${tr(data.settings_error ? "climate_admin.check_settings_unread" : "climate_admin.check_settings_ok")}`;
 }
 
 // A setting a valve's Shelly needs otherwise - in the Shelly app's own

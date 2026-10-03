@@ -274,7 +274,8 @@
       <div class="admin-zone-card" id="extra-switch-form">
         <div class="admin-field">
           <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
-          <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+          <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'bypass')">
+          <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <label class="admin-checkbox">
           <input type="checkbox" id="extra-bypass-normally-open" checked>
@@ -282,7 +283,8 @@
         </label>
         <div class="admin-field">
           <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
-          <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX">
+          <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'dehumidifier')">
+          <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <div class="admin-field">
           <label for="extra-dehumidifier-zone">{{ t.climate_admin.extra_dehumidifier_zone }}</label>
@@ -313,7 +315,8 @@
         </div>
         <div class="admin-field" id="extra-outdoor-sensor-id-field">
           <label for="extra-outdoor-sensor-id">{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
-          <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX">
+          <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX" onchange="checkShelly(this, 'outdoor')">
+          <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <div class="admin-zone-status" id="extra-sensor-status"></div>
       </div>
@@ -340,7 +343,8 @@
         </div>
         <div class="admin-field" id="extra-vmc-id-field">
           <label for="extra-vmc-id">{{ t.climate_admin.vmc_label }}</label>
-          <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX">
+          <input type="text" id="extra-vmc-id" placeholder="shelly0110dimg3-XXXXXXXXXXXX" onchange="checkShelly(this, 'vmc')">
+          <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <p class="hint-text" id="vmc-suggestion" hidden></p>
         <div class="admin-zone-status" id="vmc-status"></div>

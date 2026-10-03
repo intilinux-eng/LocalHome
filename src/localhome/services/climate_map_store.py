@@ -440,7 +440,7 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
 VALVE_HOLD_SECONDS = 900
 
 
-def _valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> dict:
+def valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> dict:
     device_id = zone["valve_device_id"].strip()
     return {
         "name": valve_name,
@@ -500,7 +500,7 @@ def _sensor_integration(zone: dict, sensor_name: str, broker_file: str, manual_s
 def _valve_integration(zone: dict, valve_name: str, broker_file: str) -> Integration:
     mode = zone.get("valve_mode", "shelly")
     if mode == "shelly":
-        return Integration("switch", "mqtt_json", _valve_integration_options(zone, valve_name, broker_file))
+        return Integration("switch", "mqtt_json", valve_integration_options(zone, valve_name, broker_file))
     if mode == "simulated":
         # Fully controllable through the same generic on/off route the
         # live status page's manual test buttons already use - lets the
@@ -533,14 +533,14 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
     switch only if its device id is set - a fresh apartment that hasn't
     wired one yet simply doesn't get an integration for it, same as an
     unmanaged zone. Reuses the exact same Shelly relay shape a zone's
-    valve already uses (_valve_integration_options() above), just keyed
+    valve already uses (valve_integration_options() above), just keyed
     by the fixed field name instead of "valve_device_id"."""
     integrations: list[Integration] = []
     for key, display_name in EXTRA_SWITCH_FIELDS.items():
         device_id = (extra_switches or {}).get(key)
         if device_id:
             zone_shaped = {"valve_device_id": device_id}
-            options = _valve_integration_options(zone_shaped, display_name, broker_file)
+            options = valve_integration_options(zone_shaped, display_name, broker_file)
             if key == "bypass_valve_device_id":
                 if (extra_switches or {}).get(BYPASS_NORMALLY_OPEN_KEY, True):
                     options["normally_open"] = True
@@ -628,7 +628,7 @@ def _blank_zone() -> dict:
 
 
 def _device_id_from_topic(topic) -> str | None:
-    """The inverse of _shelly_sensor_options()/_valve_integration_options()
+    """The inverse of _shelly_sensor_options()/valve_integration_options()
     above: every topic this project's Shelly drivers use starts with
     "<device_id>/..." - state_topic is a list for the multi-topic sensor
     shape, a plain string for the valve, so take whichever comes first."""

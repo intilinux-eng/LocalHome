@@ -487,6 +487,11 @@
 .device-role .sec-pills { font-weight: 400; }
 .settings-extra { margin-top: 16px; }
 
+/* Under a Shelly id field: what the device said when the id went in. */
+.shelly-check { margin: 4px 0 0; }
+.shelly-check:empty { display: none; }
+.shelly-check-again { margin-left: 4px; white-space: nowrap; }
+
 /* What to set in the Shelly app: the setting, then why. */
 .shelly-guide-group { margin: 14px 0 4px; font-size: 0.9rem; }
 .shelly-guide-list { margin: 0; }

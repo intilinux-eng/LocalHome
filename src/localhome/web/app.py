@@ -65,6 +65,7 @@ from localhome.services.interlock import (
 from localhome.services.self_restart import is_supported, schedule_restart
 from localhome.services.service_watchdog import ServiceWatchdog
 from localhome.services import shelly_health
+from localhome.services.shelly_check import ShellyCheck
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
 from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
@@ -1369,6 +1370,15 @@ def _register_routes(app: Flask) -> None:
 
     broker_status = BrokerStatus(app.config["LOCALHOME_CONFIG"].resolve("mqtt_broker.json"),
                                  connection_up=mqtt_client.connection_up)
+    app.config.setdefault("SHELLY_CHECK", ShellyCheck(app.config["LOCALHOME_CONFIG"].resolve("mqtt_broker.json")))
+
+    @app.route("/api/climate-admin/shelly-check")
+    def api_climate_admin_shelly_check():
+        """The Shelly whose id was just typed in the panel: there or not,
+        and the settings its role needs that it has otherwise - asked at
+        once, before any save or restart. See services/shelly_check.py."""
+        check: ShellyCheck = app.config["SHELLY_CHECK"]
+        return jsonify(**check.check(request.args.get("id", ""), request.args.get("role", "")))
 
     @app.route("/api/climate-admin/broker-status")
     def api_climate_admin_broker_status():
