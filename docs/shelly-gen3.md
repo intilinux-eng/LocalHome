@@ -285,8 +285,12 @@ relay has been silent for longer than its hold. Nothing is renewed from
 what's on disk before the answer, or 2 s without one; unanswered (the
 Shelly not connected yet, right after the board starts), it's asked
 again after 1, 2, 4 minutes, then every 5, and at once when it says it's
-online. The time noted is the last hold heard plus its 15 minutes, by the
-board's clock - not the Shelly's, which may have none without internet.
+online. The time noted is when the last hold started plus its 15
+minutes: the start as the Shelly says it (`timer_started_at`) when its
+clock agrees with the board's, else when LocalHome heard it - the Shelly
+may have no clock without internet. And once the Shelly answers, its hold
+is renewed at once: a renewal sent before - right after the board
+started, the Shelly not connected yet - may never have reached it.
 A command before the Shelly has been heard - the thermostat sends one
 blind while a valve has no reading yet - goes right after a
 `status_update`: the Shelly takes them in order, so its answer still
@@ -304,6 +308,9 @@ open by a cooling zone:
 | broker restarted, LocalHome on | Shelly back in 2 s, nothing asked or sent, renewals on schedule |
 | the Shelly restarted (`Shelly.Reboot`) while on | back on in 9 s (`source: init`, Auto OFF's timer rearmed); asked once back online, renewed on schedule, nothing noted |
 | the Shelly without power for 3 min | the broker noticed after 85 s (MQTT keepalive), LocalHome said "not answering" 35 s later; powered again it starts **off** (`init` - off at power-on), asked 3 s after it was back online, opened again 7 s after |
+| the board itself without power for 17 min (unplugged), the valve open | the Shelly closed it by its timer exactly 15 min after the last renewal; the board back, the notice said 13:42, opened again |
+| the whole house without power - the Shelly back first, then the board | the Shelly back off (`init`), the board up 1 min later: asked, opened again 12 s after the board was back |
+| the board unplugged and back within the hold | never closed. The renewal at start reached nobody - the Shelly reconnected a minute later - and the next came 5 min after it: 7 min to spare here, not if the board had been off for nearly 15. Now renewed as soon as the Shelly answers |
 | the Shelly without power for 5 s | its "offline" and "online" 50 ms apart, too quick for any reading to see: it stayed off until the next renewal (37 s here, up to 5 min). Now it's asked when it says "online" after its last state - opened again 11 s after it was back. The Shelly health check asks it at once too, so the restart is counted |
 
 Until the broker notices a Shelly gone - up to 90 s without power - LocalHome

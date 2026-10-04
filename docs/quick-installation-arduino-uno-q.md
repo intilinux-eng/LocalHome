@@ -275,7 +275,12 @@ reboot they did, with the time - it survives reboots.
 but stops passing it the other devices' connections - pings get through,
 the page, SSH and the Shellys' MQTT don't. It happened on the home router
 (5 GHz on radar channel 100 at the time), between devices on the same
-radio, in both bands, until the router was restarted. So:
+radio, in both bands, until the router was restarted. Seen again on
+2026-10-04 right after the board was powered on: the PC and a phone got
+pings but no connection, while a Shelly already connected kept working;
+the reconnect two minutes in didn't clear it, unplugging the board did.
+The watchdog can't see that state while some Shelly is still connected.
+So:
 
 - The watchdog re-activates the Wi-Fi once two minutes after every boot,
   and whenever the Shellys that stay connected to the broker all drop
