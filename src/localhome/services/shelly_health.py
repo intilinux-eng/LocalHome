@@ -59,6 +59,11 @@ FIRST_POLL_SECONDS = 20
 # A device that didn't answer is asked again this soon, once - often it
 # was only restarting (a firmware update: "shutting down in 2267 ms").
 RETRY_SECONDS = 30
+# A mains Shelly back online after being offline is asked at once, this
+# long after - time to finish starting - not at the next check: seen on
+# the production board, two power cuts 5 minutes apart and one restart
+# counted, no check having caught it up between them.
+BACK_ONLINE_SETTLE_SECONDS = 10
 # A Shelly switches its output off by itself at about 90°C.
 HOT_C = 80
 MISSED_PER_DAY = 3
@@ -256,6 +261,7 @@ class ShellyHealth:
         # a battery sensor said before this start, until it wakes again.
         self._reading_of = reading_of
         self._lock = threading.Lock()
+        self._wake = threading.Event()      # a device back online: check now
         self._rpc_for = rpc_for
         self._rpc: dict[str, Any] = {}
         self._devices: dict[str, dict] = {}
@@ -326,7 +332,13 @@ class ShellyHealth:
         self._note_report(state)
 
     def _on_online(self, state: dict, data: Any) -> None:
-        state["online"] = str(data).strip().lower() == "true"
+        online = str(data).strip().lower() == "true"
+        # Back after being offline - a power cut, maybe only seconds: its
+        # "offline" and "online" can come 50 ms apart. Asked at once, its
+        # restart isn't left for a check that may come after the next one.
+        if online and state["online"] is False:
+            self._wake.set()
+        state["online"] = online
 
     def _note_report(self, state: dict) -> None:
         now = self.clock()
@@ -554,11 +566,14 @@ class ShellyHealth:
             retried = False
             while True:
                 failed = False
+                self._wake.clear()
                 try:
                     failed = self.poll_once()
                 except Exception:
                     logger.exception("Shelly health check failed")
-                # Once soon after a device didn't answer, then the usual pace.
+                # Once soon after a device didn't answer, then the usual pace
+                # - or sooner, when one is back online.
                 retried = failed and not retried
-                time.sleep(retry if retried else every)
+                if self._wake.wait(retry if retried else every):
+                    time.sleep(BACK_ONLINE_SETTLE_SECONDS)
         threading.Thread(target=loop, daemon=True, name="shelly-health").start()

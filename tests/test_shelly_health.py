@@ -504,3 +504,33 @@ def test_a_setting_changed_in_the_app_is_read_again_when_the_revision_moves(tmp_
     watcher.poll_once()
     assert rpc.calls.count("Shelly.GetConfig") == 2
     assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []
+
+
+def test_a_mains_shelly_back_online_is_asked_at_once(tmp_path, monkeypatch):
+    """Seen on the production board: two power cuts 5 minutes apart, one
+    restart counted - no check came between them. Back online after
+    being offline (however briefly: "offline" and "online" 50 ms apart),
+    it's asked at once, not at the next 5-minute check."""
+    import threading
+    import time as _time
+    import localhome.services.shelly_health as module
+    monkeypatch.setattr(module, "BACK_ONLINE_SETTLE_SECONDS", 0)
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    broker.publish(f"{DIMMER}/online", "true")             # LocalHome starting: just its state
+    assert not watcher._wake.is_set()
+    polled = threading.Event()
+    original = watcher.poll_once
+    watcher.poll_once = lambda: (original(), polled.set())[0]
+    watcher.start(every=3600, first=0, retry=3600)
+    assert polled.wait(5)
+    polled.clear()
+    clock.t += 3600
+    rpc.status["sys"].update(uptime=8, reset_reason=1)     # 5 s without power
+    broker.publish(f"{DIMMER}/online", "false")
+    broker.publish(f"{DIMMER}/online", "true")
+    assert polled.wait(5), "asked at once, not in an hour"
+    deadline = _time.time() + 5
+    while by_id(watcher, DIMMER)["stats"]["restarts_7d"] != 1 and _time.time() < deadline:
+        _time.sleep(0.05)
+    assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 1
