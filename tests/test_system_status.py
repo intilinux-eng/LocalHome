@@ -591,10 +591,18 @@ def test_a_pc_without_any_of_it_gets_nothing_made_up(tmp_path):
 
 
 
-def test_a_valve_closed_by_its_safety_timer_is_said_for_a_day():
+def test_the_safety_timers_of_the_last_72_hours_are_recent_events_not_problems(tmp_path):
+    """Every one in the log, newest first, each at the time it happened -
+    over by now, so not with the problems."""
+    log = str(tmp_path / "watchdog.log")
     now = time.time()
-    devices = [{"name": "Stanze Valve", "ok": True, "error": None, "safety_rest_at": now - 3600},
-               {"name": "Bagni Valve", "ok": True, "error": None, "safety_rest_at": now - 2 * 86400}]
-    found = [p for p in system_status.problems(devices, [], {"low": False}) if p["code"] == "valve_safety_timer"]
-    assert [p["subject"] for p in found] == ["Stanze Valve"]
-    assert found[0]["detail"] == time.strftime("%d/%m %H:%M", time.localtime(now - 3600))
+    system_status.append_event(log, "safety_timer", "Stanze Valve", at=now - 4 * 86400)   # too old
+    system_status.append_event(log, "safety_timer", "Stanze Valve", at=now - 3600)
+    system_status.append_event(log, "healthy")                                           # a watchdog's
+    system_status.append_event(log, "safety_timer", "Bagni Valve", at=now - 600)
+    recent = system_status.recent_events(log, now=now)
+    assert [(e["code"], e["subject"]) for e in recent] == [("safety_timer", "Bagni Valve"), ("safety_timer", "Stanze Valve")]
+    assert abs(recent[1]["at"] - (now - 3600)) < 1
+    assert system_status.recent_events(str(tmp_path / "none.log")) == []
+    devices = [{"name": "Stanze Valve", "ok": True, "error": None, "seconds_since_update": 5}]
+    assert system_status.problems(devices, [], {"low": False}) == []

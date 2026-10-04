@@ -215,14 +215,16 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
 
 
 def test_a_shellys_safety_timer_is_said_in_system_status_and_in_the_history(open_page, api):
-    """Its hold ran out: in the problems for a day, with the time, and in
-    the watchdog history under "Shelly" - each with the device's own name
-    as the page shows it, any name escaped."""
+    """Its hold ran out: for 72 hours in its own neutral box, with the
+    time - not with the problems, it's over - and in the watchdog history
+    under "Shelly"; each with the device's own name as the page shows it,
+    any name escaped."""
     import json as _json
     status = api("/api/system-status")
-    status["problems"] = [
-        {"code": "valve_safety_timer", "subject": "Dehumidifier", "detail": "04/10 09:22"},
-        {"code": "valve_safety_timer", "subject": f"{ZONE_B} Valve", "detail": "04/10 09:23"}]
+    status["problems"] = []
+    status["recent"] = [
+        {"code": "safety_timer", "subject": "Dehumidifier", "at": 1791098539.0},
+        {"code": "safety_timer", "subject": f"{ZONE_B} Valve", "at": 1791098599.0}]
     status["watchdog_history"] = [
         {"when": "2026-10-04 09:22:19", "source": "shelly", "code": "safety_timer", "values": "Dehumidifier"},
         {"when": "2026-10-04 09:23:19", "source": "shelly", "code": "safety_timer", "values": f"{ZONE_B} Valve"}]
@@ -234,9 +236,11 @@ def test_a_shellys_safety_timer_is_said_in_system_status_and_in_the_history(open
     page.evaluate("document.getElementById('system-status').open = true")
     assert eventually(page, lambda: "timer di sicurezza" in page.inner_text("#system-status"))
     text = page.inner_text("#system-status")
-    assert "Deumidificatore: è scattato il timer di sicurezza dello Shelly" in text
-    assert "04/10 09:22" in text
-    assert text.count("è scattato il timer di sicurezza dello Shelly") == 4, "twice in the problems, twice in the history"
+    assert "Successo nelle ultime 72 ore" in page.inner_text("#system-recent")
+    assert "Deumidificatore: è scattato il timer di sicurezza dello Shelly" in page.inner_text("#system-recent")
+    assert page.locator("#system-problems").is_hidden(), "not a problem: it's over"
+    assert "Nessuna anomalia" in page.inner_text("#system-status-summary")
+    assert text.count("è scattato il timer di sicurezza dello Shelly") == 4, "twice in the box, twice in the history"
     assert f"{ZONE_B} Valve: è scattato" in text
     assert page.locator("#system-status img[src='x']").count() == 0, "a name is text, never markup"
     history = page.locator("#system-status li", has_text="comando non rinnovato").first

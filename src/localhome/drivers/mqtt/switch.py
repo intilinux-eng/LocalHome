@@ -28,7 +28,8 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
   event_log:   a held relay back at rest by its own timer - nobody
                renewed it - is written here ("safety_timer <name>", at the
                time it happened), and its reading carries that time
-               (safety_rest_at) - see services/system_status.py.
+               (safety_rest_at). System status shows the log's of the
+               last 72 hours - services/system_status.py's recent_events().
   command_payload_field: if set, commands are sent as JSON
                `{command_payload_field: payload_on|payload_off}` (the
                Zigbee2MQTT convention, e.g. field "state") instead of the

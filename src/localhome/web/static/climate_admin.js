@@ -1495,6 +1495,21 @@ function renderSystemProblems(problems) {
   summary.innerHTML = `<span class="admin-status bad">${escapeHtml(problemsCountText(problems.length))}</span>`;
 }
 
+// Over now, worth knowing: a safety timer that acted, in the last 72
+// hours - neutral, not counted with the problems.
+function renderSystemRecent(events) {
+  const box = document.getElementById("system-recent");
+  if (!box) return;
+  box.hidden = !events.length;
+  box.innerHTML = events.length ? `
+    <strong>${tr("climate_admin.system_recent_heading")}</strong>
+    <ul>${events.map(e => {
+      const text = tr(`climate_admin.system_recent_${e.code}`, { subject: displayName(e.subject) });
+      return `<li>${escapeHtml(text.startsWith("climate_admin.") ? `${e.code} ${e.subject}` : text)}
+        <div class="admin-problem-detail">${escapeHtml(formatWhen(e.at))}</div></li>`;
+    }).join("")}</ul>` : "";
+}
+
 async function refreshSystemStatus(force) {
   if (!force && Date.now() - systemStatusFetchedAt < SYSTEM_STATUS_INTERVAL_MS) return;
   systemStatusFetchedAt = Date.now();
@@ -1503,6 +1518,7 @@ async function refreshSystemStatus(force) {
     const data = await res.json();
     if (!data.ok) return;
     renderSystemProblems(data.problems || []);
+    renderSystemRecent(data.recent || []);
     document.getElementById("system-status-body").innerHTML = systemStatusHtml(data);
     updateBoardOverview(data);
     deviceStatus = [...(data.devices || [])];

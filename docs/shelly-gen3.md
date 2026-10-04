@@ -270,9 +270,10 @@ Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
 device for whatever LocalHome doesn't cover.
 
 When the timer does run out, the relay's status says so - `"source":
-"timer"` instead of `"mqtt"` - and LocalHome lists it in System status for
-a day, with the time, and in the Watchdog history (it's written in
-`watchdog.log`). It means LocalHome went quiet for 15 minutes: the board
+"timer"` instead of `"mqtt"` - and LocalHome shows it in System status
+for 72 hours, with the time, under "In the last 72 hours" - apart from the
+problems: by then it's over - and in the Watchdog history (it's written
+in `watchdog.log`). It means LocalHome went quiet for 15 minutes: the board
 stopped, LocalHome did, or the network did.
 
 The catch is hearing it. The broker keeps only `<id>/online`, not the

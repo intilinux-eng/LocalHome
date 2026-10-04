@@ -430,6 +430,10 @@
 .admin-problems ul { margin: 8px 0; padding-left: 18px; }
 .admin-problems li + li { margin-top: 6px; }
 .admin-problems a { color: var(--bad); font-weight: 600; }
+/* Over now, worth knowing: neutral, not the problems' red. */
+.admin-recent { margin: 0 0 16px; padding: 14px 16px; border-radius: var(--radius-s); background: var(--surface-2); font-size: 0.9rem; }
+.admin-recent ul { margin: 8px 0; padding-left: 18px; }
+.admin-recent li + li { margin-top: 6px; }
 .admin-problem-detail { color: var(--text-3); font-size: 0.8rem; overflow-wrap: anywhere; }
 
 .admin-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin-bottom: 14px; }

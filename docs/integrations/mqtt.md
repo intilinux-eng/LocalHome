@@ -136,7 +136,7 @@ state at start, when it's back online and when a held relay has been
 silent for longer than its hold - instead of trusting the state kept
 from before. With `event_log` (a file path), a held relay found back at
 rest by its own timer is written there as `safety_timer <name>`, at the
-time it happened, and shown in System status for a day. The admin panel
+time it happened, and shown in System status for 72 hours. The admin panel
 sets both for the relays it builds.
 
 Only point this at a device that's expected to stay connected the

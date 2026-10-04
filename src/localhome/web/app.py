@@ -783,6 +783,8 @@ def _register_routes(app: Flask) -> None:
             # watchdogs have done - LocalHome's own and the Wi-Fi one.
             protections=health["protections"],
             watchdog_history=system_status.watchdog_history(config.resolve("watchdog.log")),
+            # What's over now but worth knowing: a safety timer that acted.
+            recent=system_status.recent_events(config.resolve("watchdog.log")),
             software=app.config["SOFTWARE_VERSION"],
             network=health["network"],
             storage=health["storage"],
