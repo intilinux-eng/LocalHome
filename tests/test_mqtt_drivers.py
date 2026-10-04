@@ -694,10 +694,12 @@ def clock(monkeypatch):
     return now
 
 
-def _say(fake_connection, on, source="mqtt", timer=None):
+def _say(fake_connection, on, source="mqtt", timer=None, started=1_791_000_000.0):
+    """By default its hold started at a time far from the tests' clock - a
+    Shelly whose own clock isn't set."""
     payload = {"id": 0, "source": source, "output": on}
     if timer:
-        payload.update(timer_started_at=1_791_000_000.0, timer_duration=float(timer))
+        payload.update(timer_started_at=started, timer_duration=float(timer))
     fake_connection.deliver(TOPIC, json.dumps(payload))
 
 
@@ -911,3 +913,45 @@ def test_back_online_too_quickly_to_be_seen_offline_it_is_asked(fake_connection,
     monotonic["t"] += 20
     valve.read()
     assert _sent(fake_connection) == ["status_update"], "answered: not asked again"
+
+
+def test_the_time_is_the_devices_own_start_of_the_hold_when_its_clock_agrees(fake_connection, clock, tmp_path):
+    """Seen on the production board: the last message heard was an answer
+    20 s into the hold, not the renewal that started it - "heard + hold"
+    noted it 20 s late. The Shelly's own start of the hold, when its clock
+    agrees with the board's, is right."""
+    valve = _shelly_valve(tmp_path)
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900, started=t0 - 20)
+    clock["t"] += 2000
+    _say(fake_connection, False, source="timer")
+    assert valve.read()["safety_rest_at"] == t0 - 20 + 900
+
+
+def test_a_renewal_that_couldnt_reach_it_is_sent_again_as_soon_as_it_answers(fake_connection, clock, monotonic, tmp_path):
+    """Seen on the production board after a power cut: LocalHome started
+    before the Shelly was back on the broker - asked, no answer, renewed
+    from what it knew, and that renewal reached nobody. The Shelly back,
+    asked and answering, its hold is renewed at once, not 5 minutes after
+    the one that was lost - which could be after the hold ran out."""
+    before = _shelly_valve(tmp_path)
+    _say(fake_connection, True, timer=900)
+    before.read()
+    fake_connection.subscribers.clear()
+    fake_connection.published.clear()
+    clock["t"] += 600
+    valve = _shelly_valve(tmp_path, availability_topic="shellyplus1-XXXX/online")
+    assert valve.read()["is_on"] is True
+    assert _sent(fake_connection) == ["status_update", "on,900"], "asked, then held from what it knew"
+    clock["t"] += 70
+    monotonic["t"] += 70
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    _answers(fake_connection, True, timer=900)
+    clock["t"] += 20
+    monotonic["t"] += 20
+    valve.read()
+    assert _sent(fake_connection) == ["status_update", "on,900", "status_update", "on,900"]
+    monotonic["t"] += 20
+    valve.read()
+    assert len(_sent(fake_connection)) == 4, "then at the usual pace"
+

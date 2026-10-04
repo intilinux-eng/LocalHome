@@ -140,6 +140,7 @@ class MqttSwitchDriver(SwitchDriver):
         self._new_message = threading.Event()
         self._asks = 0                                 # unanswered, in a row
         self._asked_at: float | None = None            # monotonic
+        self._awaiting_answer = False                  # asked, not answered yet
         self._online_asked_at: float | None = None     # its availability message, when last asked
         # When its own timer last put it back at rest - kept in event_log,
         # so a restart of LocalHome doesn't forget it.
@@ -217,6 +218,7 @@ class MqttSwitchDriver(SwitchDriver):
                 return
         self._asked_at, self._online_asked_at = now, online_at
         self._asks += 1
+        self._awaiting_answer = True
         self._new_message.clear()
         try:
             self._send(self._status_command)
@@ -238,10 +240,19 @@ class MqttSwitchDriver(SwitchDriver):
         A held relay that went from anything else to "at rest, by its
         timer" ("source": "timer" on a Shelly) wasn't renewed for its whole
         hold - LocalHome stopped, or couldn't reach it. Noted at the time
-        it happened: its last hold heard, plus that hold's length - by
-        LocalHome's own clock, not the device's - or now, if that isn't
-        known."""
+        it happened: when its last hold started plus that hold's length -
+        the start as the device says it (`timer_started_at`) when that
+        agrees with LocalHome's clock, else when LocalHome heard it - or
+        now, if neither is known.
+
+        The answer to a question (_ask()) is followed by a renewal at
+        once: one sent before it - right after a restart, the device not
+        connected yet - may never have reached it, and the next one would
+        come 5 minutes later, maybe after the hold ran out."""
         self._asks = 0
+        if self._awaiting_answer:
+            self._awaiting_answer = False
+            self._renewed_at = None
         self._heard.set()
         self._new_message.set()
         if not self._hold_seconds or previous is None:
@@ -249,10 +260,19 @@ class MqttSwitchDriver(SwitchDriver):
         if not self._at_rest_by_timer(payload) or self._at_rest_by_timer(previous):
             return            # not so, or already so - asked again after a restart
         at = received_at
-        duration = previous.get("timer_duration") if isinstance(previous, dict) else None
-        if (previous_at is not None and self._is_on(previous) != self._rest_on
-                and isinstance(duration, (int, float)) and not isinstance(duration, bool)):
-            at = min(received_at, previous_at + duration)
+        duration = _seconds(previous.get("timer_duration")) if isinstance(previous, dict) else None
+        if previous_at is not None and self._is_on(previous) != self._rest_on and duration is not None:
+            # Seen on the production board: the last message heard was an
+            # answer 20 s into the hold, not the renewal that started it -
+            # "heard + hold" was 20 s late. The device's own start of the
+            # hold is right, when its clock is (it may have none without
+            # internet): then it started before it was heard, by less than
+            # the hold.
+            started = _seconds(previous.get("timer_started_at"))
+            if started is not None and -60 <= previous_at - started <= duration + 60:
+                at = min(received_at, started + duration)
+            else:
+                at = min(received_at, previous_at + duration)
         self._note_safety_rest(at)
 
     def _note_safety_rest(self, at: float) -> None:
@@ -363,3 +383,8 @@ def _create(options: dict) -> MqttSwitchDriver:
 
 
 register_driver("switch", "mqtt_json")(_create)
+
+
+def _seconds(value: Any) -> float | None:
+    """A number of seconds from a device's JSON - not a bool, which is an int."""
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
