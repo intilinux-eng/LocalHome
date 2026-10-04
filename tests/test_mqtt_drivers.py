@@ -673,26 +673,188 @@ def test_just_commanded_it_reads_as_commanded_until_the_device_says_otherwise(fa
     assert valve.read()["is_on"] is False, "past the wait, what the device last said"
 
 
+# ------------------------------------------------- asked, and its timer ----
+# A Shelly relay is asked for its state (status_command) when what's known
+# of it may be from before: at start, back online, or held and silent for
+# longer than its hold. And a held relay put back at rest by its own timer
+# is noted - on the message that says so, at the time it happened.
 
-def test_back_at_rest_by_its_own_timer_is_said_with_the_time(fake_connection, monkeypatch):
-    """The hold ran out - nobody renewed it - and the Shelly reports
-    "source": "timer". Until something else moves it, the reading says
-    when; a command from LocalHome ("source": "mqtt") clears it."""
+TOPIC = "shellyplus1-XXXX/status/switch:0"
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """One wall clock for the driver and the messages' arrival times; the
+    wait for an answer that doesn't come, none."""
     import localhome.drivers.mqtt.switch as switch_module
     now = {"t": 2_000_000_000.0}
     monkeypatch.setattr(switch_module.time, "time", lambda: now["t"])
     monkeypatch.setattr("localhome.drivers.mqtt.base.time.time", lambda: now["t"])
-    valve = _valve(hold_seconds=900)
-    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True, "source": "mqtt"}))
+    monkeypatch.setattr(switch_module, "ANSWER_WAIT_SECONDS", 0)
+    return now
+
+
+def _say(fake_connection, on, source="mqtt", timer=None):
+    payload = {"id": 0, "source": source, "output": on}
+    if timer:
+        payload.update(timer_started_at=1_791_000_000.0, timer_duration=float(timer))
+    fake_connection.deliver(TOPIC, json.dumps(payload))
+
+
+def _answers(fake_connection, on, source="mqtt", timer=None):
+    """The Shelly answers "status_update" at once, as a Plus 1 does."""
+    publish = fake_connection.publish
+
+    def answering(topic, payload, qos=0, retain=False):
+        publish(topic, payload, qos, retain)
+        if payload == "status_update":
+            _say(fake_connection, on, source, timer)
+    fake_connection.publish = answering
+
+
+def _sent(fake_connection):
+    return [payload for _, payload in fake_connection.published]
+
+
+def _shelly_valve(tmp_path, **options):
+    return _valve(hold_seconds=900, status_command="status_update", event_log=str(tmp_path / "watchdog.log"),
+                  cache_path=str(tmp_path / "mqtt_state_cache.json"), **options)
+
+
+def _logged(tmp_path):
+    path = tmp_path / "watchdog.log"
+    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+
+def test_back_at_rest_by_its_own_timer_is_noted_at_the_time_it_happened(fake_connection, clock, tmp_path):
+    """Its hold ran out - nobody renewed it - and the Shelly says
+    "source": "timer". The time is the last hold heard plus its length, by
+    LocalHome's clock; kept after LocalHome commands it again, and after a
+    restart of LocalHome - in the event log, where the watchdogs write."""
+    valve = _shelly_valve(tmp_path)
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900)
     assert "safety_rest_at" not in valve.read()
-    now["t"] += 900
-    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": False, "source": "timer"}))
-    closed_at = now["t"]
-    now["t"] += 600
-    assert valve.read()["safety_rest_at"] == closed_at
-    assert valve.read()["safety_rest_at"] == closed_at, "the time it happened, not each reading's"
-    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True, "source": "mqtt"}))
-    assert "safety_rest_at" not in valve.read()
-    plain = _valve()
-    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": False, "source": "timer"}))
-    assert "safety_rest_at" not in plain.read(), "only a held relay has a safety timer"
+    clock["t"] += 1000                               # heard only now - LocalHome was away
+    _say(fake_connection, False, source="timer")
+    assert valve.read()["safety_rest_at"] == t0 + 900
+    _say(fake_connection, True, timer=900)           # on again
+    assert valve.read()["safety_rest_at"] == t0 + 900, "it happened, whatever came next"
+    assert len(_logged(tmp_path)) == 1 and _logged(tmp_path)[0].endswith(" safety_timer Rooms Valve")
+    again = _shelly_valve(tmp_path)                  # LocalHome restarted
+    assert again._safety_rest_at == t0 + 900
+
+
+def test_a_relay_that_ran_out_while_localhome_was_stopped_is_found_out_at_start(fake_connection, clock, tmp_path):
+    """LocalHome stopped for an hour, its broker on: the relay went back to
+    rest by its timer and LocalHome missed it. At start, what's on disk
+    says on - asked first, it isn't held from that, and what happened is
+    noted, at the time it did."""
+    before = _shelly_valve(tmp_path)
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900)
+    before.read()
+    fake_connection.subscribers.clear()
+    fake_connection.published.clear()
+    clock["t"] += 3600
+    _answers(fake_connection, False, source="timer")
+    valve = _shelly_valve(tmp_path)
+    reading = valve.read()
+    assert _sent(fake_connection) == ["status_update"], "asked, and not turned back on from the disk"
+    assert reading["is_on"] is False and reading["safety_rest_at"] == t0 + 900
+
+
+def test_a_relay_still_on_after_a_restart_is_asked_then_held(fake_connection, clock, tmp_path):
+    before = _shelly_valve(tmp_path)
+    _say(fake_connection, True, timer=900)
+    before.read()
+    fake_connection.subscribers.clear()
+    fake_connection.published.clear()
+    clock["t"] += 120
+    _answers(fake_connection, True, timer=900)
+    valve = _shelly_valve(tmp_path)
+    assert valve.read()["is_on"] is True
+    assert _sent(fake_connection) == ["status_update", "on,900"]
+    assert "safety_rest_at" not in valve.read() and _logged(tmp_path) == []
+
+
+def test_the_same_rest_heard_again_isnt_noted_twice(fake_connection, clock, tmp_path):
+    valve = _shelly_valve(tmp_path)
+    _say(fake_connection, True, timer=900)
+    clock["t"] += 900
+    _say(fake_connection, False, source="timer")
+    clock["t"] += 300
+    _say(fake_connection, False, source="timer")     # its answer to a status_update
+    assert len(_logged(tmp_path)) == 1
+
+
+def test_only_a_held_relay_has_a_safety_timer(fake_connection, clock, tmp_path):
+    bypass = _valve(status_command="status_update", event_log=str(tmp_path / "watchdog.log"))
+    _say(fake_connection, True)
+    _say(fake_connection, False, source="timer")
+    assert "safety_rest_at" not in bypass.read() and _logged(tmp_path) == []
+
+
+def test_unanswered_it_is_asked_less_and_less_often_and_at_once_when_back(fake_connection, clock, monotonic, tmp_path):
+    """Right after the board itself started, the Shelly may not be
+    connected yet: asked again after 1, 2, 4 minutes, then every 5 - and
+    at once when it says it's online."""
+    valve = _shelly_valve(tmp_path, availability_topic="shellyplus1-XXXX/online")
+    asked_at = []
+    for second in range(0, 900, 20):
+        monotonic["t"] = 5000.0 + second
+        before = len(fake_connection.published)
+        with pytest.raises(RuntimeError, match="no MQTT message"):
+            valve.read()
+        if len(fake_connection.published) > before:
+            asked_at.append(second)
+    assert asked_at == [0, 60, 180, 420, 720]
+    clock["t"] += 1
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    _answers(fake_connection, False, source="init")
+    monotonic["t"] += 20
+    assert valve.read()["is_on"] is False
+    assert _sent(fake_connection) == ["status_update"] * 6
+    for _ in range(10):                              # answered: not asked again
+        monotonic["t"] += 300
+        valve.read()
+    assert _sent(fake_connection) == ["status_update"] * 6
+
+
+def test_back_online_it_is_asked_before_its_hold_is_renewed(fake_connection, clock, monotonic, tmp_path):
+    """Its Wi-Fi dropped for longer than the hold: back online, it's asked
+    what it is before anything is renewed - it's off by its timer, so
+    that's noted, and nothing turns it back on from what it said before."""
+    valve = _shelly_valve(tmp_path, availability_topic="shellyplus1-XXXX/online")
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    valve.turn_on()
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900)
+    valve.read()
+    fake_connection.deliver("shellyplus1-XXXX/online", "false")
+    with pytest.raises(RuntimeError, match="offline"):
+        valve.read()
+    clock["t"] += 1500
+    monotonic["t"] += 1500
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    _answers(fake_connection, False, source="timer")
+    fake_connection.published.clear()
+    reading = valve.read()
+    assert _sent(fake_connection) == ["status_update"]
+    assert reading["is_on"] is False and reading["safety_rest_at"] == t0 + 900
+
+
+def test_held_and_silent_for_longer_than_its_hold_it_is_asked(fake_connection, clock, monotonic, tmp_path):
+    """LocalHome's own connection to the broker gone for a while: what it
+    knows says on, but nothing has come for longer than the hold - asked
+    first, then renewed only if it's still on."""
+    valve = _shelly_valve(tmp_path)
+    valve.turn_on()
+    _say(fake_connection, True, timer=900)
+    valve.read()
+    fake_connection.published.clear()
+    clock["t"] += 1000
+    monotonic["t"] += 1000
+    _answers(fake_connection, True, timer=900)       # someone else held it
+    valve.read()
+    assert _sent(fake_connection) == ["status_update", "on,900"]

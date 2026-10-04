@@ -20,6 +20,15 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
                goes back to rest on its own; while it runs, it never
                drops (measured on a Plus 1: each renewal restarts the
                timer, the output stays on - docs/shelly-gen3.md).
+  status_command: what makes the device report its state on the status
+               topic, sent to command_topic ("status_update" on a Shelly
+               Gen2/Gen3): at start - the last state kept on disk is from
+               before - and when it's back online, before anything is
+               renewed from what it said then.
+  event_log:   a held relay back at rest by its own timer - nobody
+               renewed it - is written here ("safety_timer <name>", at the
+               time it happened), and its reading carries that time
+               (safety_rest_at) - see services/system_status.py.
   command_payload_field: if set, commands are sent as JSON
                `{command_payload_field: payload_on|payload_off}` (the
                Zigbee2MQTT convention, e.g. field "state") instead of the
@@ -45,6 +54,7 @@ Example - a Zigbee2MQTT smartplug:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any
 
@@ -53,6 +63,7 @@ from localhome.core.registry import register_driver
 from localhome.drivers.mqtt.base import Availability, MqttJsonState, command_payload, require_payload
 from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
+from localhome.util.eventlog import append_event, event_time, read_events
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +76,15 @@ RENEWALS_PER_HOLD = 3
 # since, a reading says what was commanded rather than the state before.
 # Past it, whatever the device last said - it may not have heard.
 CONFIRM_SECONDS = 15
+# Asking the device for its state (status_command): a Plus 1 answers in
+# 10 ms, so a reading waits for it this long at most. Unanswered - not
+# connected yet, say, right after the board itself has started - it's
+# asked again 1, 2, 4 minutes later, then every 5: never more, and at
+# once when it says it's online again.
+ANSWER_WAIT_SECONDS = 2.0
+ASK_AGAIN_SECONDS = 60
+ASK_AGAIN_MAX_SECONDS = 300
+SAFETY_TIMER_EVENT = "safety_timer"
 
 
 class MqttSwitchDriver(SwitchDriver):
@@ -83,6 +103,8 @@ class MqttSwitchDriver(SwitchDriver):
         command_off: Any = None,
         hold_seconds: float | None = None,
         rest_state: str = "off",
+        status_command: str | None = None,
+        event_log: str | None = None,
         poll_interval_seconds: float = 20.0,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
@@ -110,10 +132,21 @@ class MqttSwitchDriver(SwitchDriver):
         # it straight back on.
         self._commanded: bool | None = None
         self._commanded_at: float | None = None   # wall clock, as the MQTT receive time
-        # When the relay was found back at rest by its own timer - the hold
-        # ran out because nobody renewed it (see read()).
-        self._timer_rest_at: float | None = None
-        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
+        self._status_command = status_command
+        # Set by any message from the device since this started, or since
+        # it was last seen offline: until then, what's known of it may be
+        # from before (see _current()).
+        self._heard = threading.Event()
+        self._new_message = threading.Event()
+        self._asks = 0                                 # unanswered, in a row
+        self._asked_at: float | None = None            # monotonic
+        self._online_asked_at: float | None = None     # its availability message, when last asked
+        # When its own timer last put it back at rest - kept in event_log,
+        # so a restart of LocalHome doesn't forget it.
+        self._event_log = event_log
+        self._safety_rest_at: float | None = self._last_safety_rest()
+        self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path,
+                                    on_message=self._on_status)
         self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
     def read(self) -> dict[str, Any]:
@@ -125,7 +158,10 @@ class MqttSwitchDriver(SwitchDriver):
         # only way this ever notices it went offline.
         offline_reason = self._availability.offline_reason()
         if offline_reason is not None:
+            self._heard.clear()        # back online, it's asked first
             raise RuntimeError(offline_reason)
+        if self._status_command and not self._current():
+            self._ask()
         payload = require_payload(self._state)
         raw_state = extract_path(payload, self._state_field)
         reading: dict[str, Any] = {"ok": True, "name": self.name, "is_on": raw_state == self._payload_on}
@@ -133,17 +169,8 @@ class MqttSwitchDriver(SwitchDriver):
             value = extract_path(payload, path)
             if value is not None:
                 reading[field] = value
-        # Back at rest by its own timer ("source": "timer" on a Shelly): the
-        # hold ran out - LocalHome said nothing for hold_seconds. Said with
-        # the time the relay reported it, until something else moves it.
-        timed_out = (self._hold_seconds and isinstance(payload, dict) and payload.get("source") == "timer"
-                     and reading["is_on"] == self._rest_on)
-        if timed_out:
-            if self._timer_rest_at is None:
-                self._timer_rest_at = self._state.get_received_at() or time.time()
-            reading["safety_rest_at"] = self._timer_rest_at
-        else:
-            self._timer_rest_at = None
+        if self._safety_rest_at is not None:
+            reading["safety_rest_at"] = self._safety_rest_at
         if (self._commanded_at is not None and (self._state.get_received_at() or 0) <= self._commanded_at
                 and time.time() - self._commanded_at < CONFIRM_SECONDS):
             reading["is_on"] = self._commanded
@@ -153,6 +180,91 @@ class MqttSwitchDriver(SwitchDriver):
         if self._hold_seconds and reading["is_on"] != self._rest_on and self._commanded in (None, reading["is_on"]):
             self._renew(reading["is_on"])
         return reading
+
+    def _current(self) -> bool:
+        """Whether what's known of the device is what it is now: it has
+        spoken since LocalHome started (or since it was back online) - and,
+        held out of rest, within its hold: silent for longer, its timer has
+        run out by now, or someone else is holding it."""
+        if not self._heard.is_set():
+            return False
+        if not self._hold_seconds:
+            return True
+        payload, received_at = self._state.get_payload(), self._state.get_received_at()
+        if payload is None or received_at is None or self._is_on(payload) == self._rest_on:
+            return True
+        return time.time() - received_at <= self._hold_seconds
+
+    def _ask(self) -> None:
+        """Ask the device for its state and wait a moment for the answer -
+        not more often than ASK_AGAIN_SECONDS, doubling while unanswered,
+        unless it has just said it's online. Its answer goes through
+        _on_status() like any message."""
+        now = time.monotonic()
+        online_at = self._availability.received_at()
+        if self._asks and online_at == self._online_asked_at:
+            wait = min(ASK_AGAIN_SECONDS * 2 ** (self._asks - 1), ASK_AGAIN_MAX_SECONDS)
+            if now - self._asked_at < wait:
+                return
+        self._asked_at, self._online_asked_at = now, online_at
+        self._asks += 1
+        self._new_message.clear()
+        try:
+            self._send(self._status_command)
+        except Exception as exc:
+            # No broker yet: asked again later, said once.
+            if self._asks == 1:
+                logger.info("%s: couldn't ask for its state yet - %s", self.name, exc)
+            return
+        self._new_message.wait(ANSWER_WAIT_SECONDS)
+
+    def _is_on(self, payload: Any) -> bool:
+        return extract_path(payload, self._state_field) == self._payload_on
+
+    def _at_rest_by_timer(self, payload: Any) -> bool:
+        return isinstance(payload, dict) and payload.get("source") == "timer" and self._is_on(payload) == self._rest_on
+
+    def _on_status(self, previous: Any, previous_at: float | None, payload: Any, received_at: float) -> None:
+        """Every message from the device, as it comes (the MQTT thread).
+        A held relay that went from anything else to "at rest, by its
+        timer" ("source": "timer" on a Shelly) wasn't renewed for its whole
+        hold - LocalHome stopped, or couldn't reach it. Noted at the time
+        it happened: its last hold heard, plus that hold's length - by
+        LocalHome's own clock, not the device's - or now, if that isn't
+        known."""
+        self._asks = 0
+        self._heard.set()
+        self._new_message.set()
+        if not self._hold_seconds or previous is None:
+            return            # nothing to compare with - when it happened is unknown
+        if not self._at_rest_by_timer(payload) or self._at_rest_by_timer(previous):
+            return            # not so, or already so - asked again after a restart
+        at = received_at
+        duration = previous.get("timer_duration") if isinstance(previous, dict) else None
+        if (previous_at is not None and self._is_on(previous) != self._rest_on
+                and isinstance(duration, (int, float)) and not isinstance(duration, bool)):
+            at = min(received_at, previous_at + duration)
+        self._note_safety_rest(at)
+
+    def _note_safety_rest(self, at: float) -> None:
+        if self._safety_rest_at is not None and abs(at - self._safety_rest_at) < 60:
+            return
+        self._safety_rest_at = at
+        logger.warning("%s: back at rest by its own safety timer at %s - its hold wasn't renewed",
+                       self.name, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(at)))
+        if self._event_log:
+            try:
+                append_event(self._event_log, SAFETY_TIMER_EVENT, self.name, at=at)
+            except OSError as exc:
+                logger.warning("%s: couldn't write it to %s - %s", self.name, self._event_log, exc)
+
+    def _last_safety_rest(self) -> float | None:
+        if not self._event_log:
+            return None
+        times = [event_time(e) for e in read_events(self._event_log, "")
+                 if e["code"] == SAFETY_TIMER_EVENT and e["values"] == self.name]
+        times = [t for t in times if t is not None]
+        return max(times) if times else None
 
     def _renew(self, on: bool) -> None:
         now = time.monotonic()
@@ -216,6 +328,8 @@ def _create(options: dict) -> MqttSwitchDriver:
         command_off=options.get("command_off"),
         hold_seconds=options.get("hold_seconds"),
         rest_state=options.get("rest_state", "off"),
+        status_command=options.get("status_command"),
+        event_log=options.get("event_log"),
         poll_interval_seconds=options.get("poll_interval_seconds", 20.0),
         stale_after_seconds=options.get("stale_after_seconds"),
         cache_path=state_cache_path(options),

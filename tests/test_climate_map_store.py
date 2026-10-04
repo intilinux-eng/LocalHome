@@ -163,6 +163,20 @@ def test_a_valve_and_the_dehumidifier_are_held_the_bypass_not_yet():
     assert roles == {"Bathroom Bypass Valve": "bypass", "Dehumidifier": "dehumidifier"} and valve["shelly_role"] == "valve"
 
 
+def test_every_shelly_relay_asks_for_its_state_and_logs_where_the_watchdogs_do(tmp_path):
+    """What's on disk is from before a restart: each relay is asked first.
+    A safety timer that acted goes in the watchdog log, next to the broker
+    file like the rest of the config."""
+    broker_file = str(tmp_path / "mqtt_broker.json")
+    relays = [i.options for i in build_extra_switch_integrations(VALID_EXTRA_SWITCHES, broker_file)]
+    relays += [i.options for i in build_climate_integrations([VALID_ZONES[1]], broker_file, "manual_override.json")
+               if i.kind == "switch"]
+    assert len(relays) == 3
+    for options in relays:
+        assert options["status_command"] == "status_update"
+        assert options["event_log"] == str(tmp_path / "watchdog.log")
+
+
 def test_build_extra_switch_integrations_skips_an_unset_field():
     integrations = build_extra_switch_integrations({"bypass_valve_device_id": None, "dehumidifier_device_id": None}, "mqtt_broker.json")
     assert integrations == []

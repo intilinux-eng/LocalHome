@@ -225,3 +225,13 @@ def test_the_admin_page_lists_the_last_ten_watchdog_actions(tmp_path):
     history = system_status.watchdog_history(str(log), str(tmp_path / "none.log"), str(tmp_path / "none2.log"))
     assert len(history) == 10
     assert history[0]["when"] == "2026-10-15 12:00:00" and history[-1]["when"] == "2026-10-06 12:00:00"
+
+
+def test_a_shellys_safety_timer_is_in_the_history_as_the_shellys(tmp_path):
+    mine = str(tmp_path / "watchdog.log")
+    system_status.append_event(mine, "healthy")
+    system_status.append_event(mine, "safety_timer", "Stanze Valve", at=946_684_800.0)
+    history = system_status.watchdog_history(mine, str(tmp_path / "none.log"), str(tmp_path / "none2.log"))
+    timer = next(e for e in history if e["code"] == "safety_timer")
+    assert timer["source"] == "shelly" and timer["values"] == "Stanze Valve"
+    assert history[-1] is timer, "dated when it happened, not when it was written"

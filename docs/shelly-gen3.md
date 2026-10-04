@@ -271,8 +271,22 @@ device for whatever LocalHome doesn't cover.
 
 When the timer does run out, the relay's status says so - `"source":
 "timer"` instead of `"mqtt"` - and LocalHome lists it in System status for
-a day: "closed by its safety timer", with the time. It means LocalHome
-went quiet for 15 minutes: the board stopped, or the network did.
+a day, with the time, and in the Watchdog history (it's written in
+`watchdog.log`). It means LocalHome went quiet for 15 minutes: the board
+stopped, LocalHome did, or the network did.
+
+The catch is hearing it. The broker keeps only `<id>/online`, not the
+relay's status, and when the board stops so does the broker on it - the
+status saying "timer" reaches nobody. And the state LocalHome kept on
+disk still says on. So LocalHome asks: `status_update` on the command
+topic makes the Shelly publish its status (answered in 10 ms on the
+Plus 1) - at start, when the Shelly is back online, and when a held
+relay has been silent for longer than its hold. Nothing is renewed from
+what's on disk before the answer, or 2 s without one; unanswered (the
+Shelly not connected yet, right after the board starts), it's asked
+again after 1, 2, 4 minutes, then every 5, and at once when it says it's
+online. The time noted is the last hold heard plus its 15 minutes, by the
+board's clock - not the Shelly's, which may have none without internet.
 
 The bathrooms' **bypass** is the exception: normally open, closed by
 LocalHome all summer, and if the board stops it must stay as it is -

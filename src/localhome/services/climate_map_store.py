@@ -458,6 +458,11 @@ def valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> 
         # every 5 minutes - if the board goes, the valve closes within 15
         # minutes by itself (drivers/mqtt/switch.py).
         "hold_seconds": VALVE_HOLD_SECONDS,
+        # Asked for its state at start and when back online - what's kept
+        # on disk is from before - and its safety timer, if it ever acts,
+        # written where the watchdogs write (drivers/mqtt/switch.py).
+        "status_command": "status_update",
+        "event_log": os.path.join(os.path.dirname(broker_file), "watchdog.log"),
         # What it is - the settings its Shelly is checked against follow
         # (services/shelly_health.py's expected_settings()).
         "shelly_role": "valve",

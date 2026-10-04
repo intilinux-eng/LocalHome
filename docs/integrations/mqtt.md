@@ -131,6 +131,14 @@ whose rest is *on* takes `rest_state: "on"` (then `off,<hold_seconds>`
 is what's held). Measured, with the device settings that go with it, in
 [shelly-gen3.md](../shelly-gen3.md#plus-1-relay).
 
+`status_command: "status_update"` makes LocalHome ask the relay for its
+state at start, when it's back online and when a held relay has been
+silent for longer than its hold - instead of trusting the state kept
+from before. With `event_log` (a file path), a held relay found back at
+rest by its own timer is written there as `safety_timer <name>`, at the
+time it happened, and shown in System status for a day. The admin panel
+sets both for the relays it builds.
+
 Only point this at a device that's expected to stay connected the
 whole time it's working - a mains-powered relay/switch, say. A
 *battery* sensor that sleeps between reports (most Shelly H&T's, in

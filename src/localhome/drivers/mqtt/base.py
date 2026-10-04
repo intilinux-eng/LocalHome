@@ -23,6 +23,7 @@ class MqttJsonState:
         state_topic: str,
         stale_after_seconds: float | None = None,
         cache_path: str | None = None,
+        on_message=None,
     ):
         self._lock = threading.Lock()
         self._payload: Any = None  # a dict for JSON payloads, a str otherwise
@@ -39,6 +40,12 @@ class MqttJsonState:
         self._broker = broker
         self._topic = state_topic
         self._cache_path = cache_path
+        # Optional: called with (previous payload, its received_at, payload,
+        # received_at) on every message from the device - not the cached
+        # one - for a driver that wants to see each change, not just the
+        # latest at its next reading. The cached payload is the first
+        # "previous".
+        self._on_message_hook = on_message
         if cache_path is not None:
             cached = load_cached(cache_path, broker, state_topic)
             if cached is not None:
@@ -56,10 +63,13 @@ class MqttJsonState:
             data = payload.decode(errors="replace")
         received_at = time.time()
         with self._lock:
+            previous, previous_at = self._payload, self._received_at
             self._payload = data
             self._received_at = received_at
         if self._cache_path is not None:
             save_cached(self._cache_path, self._broker, self._topic, data, received_at)
+        if self._on_message_hook is not None:
+            self._on_message_hook(previous, previous_at, data, received_at)
 
     def get_payload(self) -> Any:
         with self._lock:
@@ -123,6 +133,11 @@ class Availability:
         if str(payload).strip().lower() == self._available_payload.strip().lower():
             return None
         return f"marked offline on its availability topic (last payload: {payload!r})"
+
+    def received_at(self) -> float | None:
+        """When its availability topic last said anything - a device saying
+        "online" again is a new time here. None without a topic."""
+        return None if self._state is None else self._state.get_received_at()
 
 
 def require_payload(state: MqttJsonState) -> Any:

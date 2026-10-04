@@ -19,6 +19,8 @@ import threading
 import time
 from typing import Any
 
+from localhome.util import eventlog
+
 # When this process started, as close to it as this module gets: it's
 # imported while create_app() builds everything else. Monotonic, never
 # the wall clock: the UNO Q has no battery-backed clock, so it boots
@@ -741,46 +743,24 @@ def board_protections(env=os.environ) -> dict | None:
     return {"items": items}
 
 
-# The watchdogs' event logs - one line per action, "<date> <time> <code>
-# [values...]", rare enough to live on disk and survive the reboots they
-# are about. The admin panel words each code in its own language.
-EVENT_LOG_KEEP = 200
-
-
-def append_event(path: str, code: str, *values) -> None:
-    """One line in an event log, keeping the last EVENT_LOG_KEEP."""
-    line = " ".join([time.strftime("%Y-%m-%d %H:%M:%S"), code, *[str(v) for v in values]])
-    try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        lines = []
-    lines = (lines + [line])[-EVENT_LOG_KEEP:]
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-
-
-def read_events(path: str, source: str) -> list[dict]:
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        return []
-    events = []
-    for line in lines:
-        parts = line.split(" ", 3)
-        if len(parts) >= 3:
-            events.append({"when": f"{parts[0]} {parts[1]}", "source": source, "code": parts[2],
-                           "values": parts[3] if len(parts) == 4 else ""})
-    return events
+# The watchdogs' event logs - see util/eventlog.py. The names stay here,
+# where the watchdogs and the tests have always found them.
+EVENT_LOG_KEEP, append_event, read_events = eventlog.EVENT_LOG_KEEP, eventlog.append_event, eventlog.read_events
+# Written to LocalHome's log by a Shelly relay's driver, not a watchdog:
+# its own safety timer put it back at rest (drivers/mqtt/switch.py).
+SHELLY_EVENT_CODES = {"safety_timer"}
 
 
 def watchdog_history(localhome_log: str, wifi_log: str = WIFI_WATCHDOG_LOG,
                      service_log: str = SERVICE_WATCHDOG_LOG, limit: int = 10) -> list[dict]:
-    """Both watchdogs' actions, newest first - the last `limit`, what the
-    admin page lists. The diagnostics zip carries the whole logs."""
+    """Both watchdogs' actions, and the Shelly relays' safety timers,
+    newest first - the last `limit`, what the admin page lists. The
+    diagnostics zip carries the whole logs."""
     events = (read_events(localhome_log, "localhome") + read_events(service_log, "localhome")
               + read_events(wifi_log, "wifi"))
+    for event in events:
+        if event["code"] in SHELLY_EVENT_CODES:
+            event["source"] = "shelly"
     return sorted(events, key=lambda e: e["when"], reverse=True)[:limit]
 
 
