@@ -303,6 +303,12 @@ open by a cooling zone:
 | LocalHome stopped 14 min right after a renewal | renewed at start with 44 s left on the timer: never off, nothing noted |
 | broker restarted, LocalHome on | Shelly back in 2 s, nothing asked or sent, renewals on schedule |
 | the Shelly restarted (`Shelly.Reboot`) while on | back on in 9 s (`source: init`, Auto OFF's timer rearmed); asked once back online, renewed on schedule, nothing noted |
+| the Shelly without power for 3 min | the broker noticed after 85 s (MQTT keepalive), LocalHome said "not answering" 35 s later; powered again it starts **off** (`init` - off at power-on), asked 3 s after it was back online, opened again 7 s after |
+| the Shelly without power for 5 s | its "offline" and "online" 50 ms apart, too quick for any reading to see: it stayed off until the next renewal (37 s here, up to 5 min). Now it's asked when it says "online" after its last state - opened again 11 s after it was back. The Shelly health check asks it at once too, so the restart is counted |
+
+Until the broker notices a Shelly gone - up to 90 s without power - LocalHome
+can't know: nothing is said on a power cut, only the broker's keepalive
+finds out.
 
 The bathrooms' **bypass** is the exception: normally open, closed by
 LocalHome all summer, and if the board stops it must stay as it is -
