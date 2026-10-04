@@ -188,6 +188,15 @@ class MqttSwitchDriver(SwitchDriver):
         run out by now, or someone else is holding it."""
         if not self._heard.is_set():
             return False
+        # Back online since it last said its state: it reconnected - maybe
+        # after a power cut that restarted it at rest. Seen on the
+        # production board with 5 s without power: its "offline" and
+        # "online" 50 ms apart, too quick for any reading to see it
+        # offline, the relay off and LocalHome sure it was on until the
+        # next renewal.
+        online_at, status_at = self._availability.received_at(), self._state.get_received_at()
+        if online_at is not None and (status_at is None or online_at > status_at):
+            return False
         if not self._hold_seconds:
             return True
         payload, received_at = self._state.get_payload(), self._state.get_received_at()

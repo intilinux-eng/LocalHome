@@ -882,3 +882,32 @@ def test_a_command_before_it_has_been_heard_asks_first(fake_connection, clock, t
     valve.turn_off()
     assert _sent(fake_connection)[-1] == "off", "heard since: just the command"
     assert _sent(fake_connection).count("status_update") == 1
+
+
+def test_back_online_too_quickly_to_be_seen_offline_it_is_asked(fake_connection, clock, monotonic, tmp_path):
+    """Seen on the production board: 5 s without power. The broker said
+    "offline" and "online" 50 ms apart - no reading saw it offline - and
+    the Shelly came back at rest ("source": "init"), LocalHome sure it
+    was on until the next renewal. Online since its last state: asked."""
+    valve = _shelly_valve(tmp_path, availability_topic="shellyplus1-XXXX/online")
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    valve.turn_on()
+    _say(fake_connection, True, timer=900)
+    valve.read()
+    fake_connection.published.clear()
+    clock["t"] += 60
+    monotonic["t"] += 60
+    valve.read()
+    assert _sent(fake_connection) == [], "nothing new: nothing asked"
+    clock["t"] += 5
+    fake_connection.deliver("shellyplus1-XXXX/online", "false")
+    fake_connection.deliver("shellyplus1-XXXX/online", "true")
+    _answers(fake_connection, False, source="init")
+    clock["t"] += 15
+    monotonic["t"] += 15
+    reading = valve.read()
+    assert _sent(fake_connection) == ["status_update"]
+    assert reading["is_on"] is False and "safety_rest_at" not in reading, "a restart, not its timer"
+    monotonic["t"] += 20
+    valve.read()
+    assert _sent(fake_connection) == ["status_update"], "answered: not asked again"
