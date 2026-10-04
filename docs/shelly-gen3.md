@@ -267,6 +267,11 @@ it every 5 minutes while the valve should be open
 Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
 device for whatever LocalHome doesn't cover.
 
+When the timer does run out, the relay's status says so - `"source":
+"timer"` instead of `"mqtt"` - and LocalHome lists it in System status for
+a day: "closed by its safety timer", with the time. It means LocalHome
+went quiet for 15 minutes: the board stopped, or the network did.
+
 The bathrooms' **bypass** is the exception: normally open, closed by
 LocalHome all summer, and if the board stops it must stay as it is -
 closed in summer, open in winter. So no hold: plain `on`/`off`, and on the

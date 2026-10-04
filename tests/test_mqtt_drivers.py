@@ -671,3 +671,28 @@ def test_just_commanded_it_reads_as_commanded_until_the_device_says_otherwise(fa
     valve.turn_on()
     now["t"] += switch_module.CONFIRM_SECONDS + 1  # and never answers
     assert valve.read()["is_on"] is False, "past the wait, what the device last said"
+
+
+
+def test_back_at_rest_by_its_own_timer_is_said_with_the_time(fake_connection, monkeypatch):
+    """The hold ran out - nobody renewed it - and the Shelly reports
+    "source": "timer". Until something else moves it, the reading says
+    when; a command from LocalHome ("source": "mqtt") clears it."""
+    import localhome.drivers.mqtt.switch as switch_module
+    now = {"t": 2_000_000_000.0}
+    monkeypatch.setattr(switch_module.time, "time", lambda: now["t"])
+    monkeypatch.setattr("localhome.drivers.mqtt.base.time.time", lambda: now["t"])
+    valve = _valve(hold_seconds=900)
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True, "source": "mqtt"}))
+    assert "safety_rest_at" not in valve.read()
+    now["t"] += 900
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": False, "source": "timer"}))
+    closed_at = now["t"]
+    now["t"] += 600
+    assert valve.read()["safety_rest_at"] == closed_at
+    assert valve.read()["safety_rest_at"] == closed_at, "the time it happened, not each reading's"
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True, "source": "mqtt"}))
+    assert "safety_rest_at" not in valve.read()
+    plain = _valve()
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": False, "source": "timer"}))
+    assert "safety_rest_at" not in plain.read(), "only a held relay has a safety timer"

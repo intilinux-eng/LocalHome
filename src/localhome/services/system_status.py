@@ -658,6 +658,7 @@ def device_health(manager) -> list[dict]:
                 "ok": bool(reading.get("ok")),
                 "error": None if reading.get("ok") else reading.get("error"),
                 "seconds_since_update": reading.get("seconds_since_update"),
+                "safety_rest_at": reading.get("safety_rest_at"),
             }
         )
     return devices
@@ -878,6 +879,9 @@ def _short_error(error: str) -> str:
     return error.split(" Available kind/type combinations:")[0].strip()
 
 
+SAFETY_TIMER_SHOWN_SECONDS = 86400
+
+
 def problems(
     devices: list[dict], failed: list[dict], disk: dict, loops: list[dict] = (), storage: dict | None = None,
     cpu_temp_c: float | None = None, network: dict | None = None, host: dict | None = None,
@@ -932,6 +936,15 @@ def problems(
             waiting = waiting_since_boot(device.get("seconds_since_update"), device.get("error"), uptime)
             code = "device_not_heard_yet" if waiting else "device_offline"
             found.append({"code": code, "subject": device["name"], "detail": device["error"]})
+    # A valve put back to rest by its own safety timer: LocalHome went
+    # quiet long enough for the hold to run out (drivers/mqtt/switch.py).
+    # Said for a day, with the time - then it's history.
+    now = time.time()
+    for device in devices:
+        at = device.get("safety_rest_at")
+        if at and now - at < SAFETY_TIMER_SHOWN_SECONDS:
+            found.append({"code": "valve_safety_timer", "subject": device["name"],
+                          "detail": time.strftime("%d/%m %H:%M", time.localtime(at))})
     # What the Shellys say about themselves: too hot, a weak signal, battery
     # reports that didn't get through - see services/shelly_health.py.
     found += shelly

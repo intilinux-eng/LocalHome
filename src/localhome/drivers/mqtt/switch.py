@@ -110,6 +110,9 @@ class MqttSwitchDriver(SwitchDriver):
         # it straight back on.
         self._commanded: bool | None = None
         self._commanded_at: float | None = None   # wall clock, as the MQTT receive time
+        # When the relay was found back at rest by its own timer - the hold
+        # ran out because nobody renewed it (see read()).
+        self._timer_rest_at: float | None = None
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
         self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
 
@@ -130,7 +133,19 @@ class MqttSwitchDriver(SwitchDriver):
             value = extract_path(payload, path)
             if value is not None:
                 reading[field] = value
-        if self._commanded_at is not None and (self._state.get_received_at() or 0) <= self._commanded_at                 and time.time() - self._commanded_at < CONFIRM_SECONDS:
+        # Back at rest by its own timer ("source": "timer" on a Shelly): the
+        # hold ran out - LocalHome said nothing for hold_seconds. Said with
+        # the time the relay reported it, until something else moves it.
+        timed_out = (self._hold_seconds and isinstance(payload, dict) and payload.get("source") == "timer"
+                     and reading["is_on"] == self._rest_on)
+        if timed_out:
+            if self._timer_rest_at is None:
+                self._timer_rest_at = self._state.get_received_at() or time.time()
+            reading["safety_rest_at"] = self._timer_rest_at
+        else:
+            self._timer_rest_at = None
+        if (self._commanded_at is not None and (self._state.get_received_at() or 0) <= self._commanded_at
+                and time.time() - self._commanded_at < CONFIRM_SECONDS):
             reading["is_on"] = self._commanded
         # Out of rest: LocalHome holds it while it runs - what it last
         # commanded, or, after a restart of LocalHome (nothing commanded

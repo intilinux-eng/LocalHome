@@ -588,3 +588,13 @@ def test_a_cpu_slowed_down_by_heat_is_a_problem(tmp_path):
 def test_a_pc_without_any_of_it_gets_nothing_made_up(tmp_path):
     hardware = system_status.board_hardware(str(tmp_path / "s"), str(tmp_path / "p"), str(tmp_path / "r"))
     assert hardware == {"model": None, "serial": None, "soc": None, "temps": {}, "throttle_c": None}
+
+
+
+def test_a_valve_closed_by_its_safety_timer_is_said_for_a_day():
+    now = time.time()
+    devices = [{"name": "Stanze Valve", "ok": True, "error": None, "safety_rest_at": now - 3600},
+               {"name": "Bagni Valve", "ok": True, "error": None, "safety_rest_at": now - 2 * 86400}]
+    found = [p for p in system_status.problems(devices, [], {"low": False}) if p["code"] == "valve_safety_timer"]
+    assert [p["subject"] for p in found] == ["Stanze Valve"]
+    assert found[0]["detail"] == time.strftime("%d/%m %H:%M", time.localtime(now - 3600))
