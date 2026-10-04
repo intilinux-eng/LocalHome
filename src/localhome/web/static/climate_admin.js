@@ -1908,8 +1908,21 @@ function settingFieldHtml(s) {
       <label>${escapeHtml(label)} <span class="setting-range">${s.type === "choice" ? "" : `${s.min}–${s.max}`}</span></label>
       ${input}
       <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
+      ${s.key === "sensor_failsafe_hours" ? failsafeExampleHtml(Number(s.value)) : ""}
       ${s.key === "history_max_db_mb" ? historyDiskHtml(s) + historyUsageHtml(Number(s.capped_to || s.value)) : ""}
     </div>`;
+}
+
+// What the failsafe's hours mean in practice: an H&T reads as unreachable
+// after 4 hours without a report (its stale_after_seconds - see
+// climate_map_store.py), and the hours count from there.
+const SENSOR_UNREACHABLE_HOURS = 4;
+
+function failsafeExampleHtml(hours) {
+  if (!Number.isFinite(hours)) return "";
+  const show = n => n.toLocaleString(LOCALE, { maximumFractionDigits: 1 });
+  return `<span class="hint-text setting-help">${escapeHtml(tr("climate_admin.setting_sensor_failsafe_example",
+    { hours: show(hours), total: show(hours + SENSOR_UNREACHABLE_HOURS) }))}</span>`;
 }
 
 // A name is the one setting someone can get wrong in a way the box
