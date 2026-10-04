@@ -287,6 +287,22 @@ Shelly not connected yet, right after the board starts), it's asked
 again after 1, 2, 4 minutes, then every 5, and at once when it says it's
 online. The time noted is the last hold heard plus its 15 minutes, by the
 board's clock - not the Shelly's, which may have none without internet.
+A command before the Shelly has been heard - the thermostat sends one
+blind while a valve has no reading yet - goes right after a
+`status_update`: the Shelly takes them in order, so its answer still
+says what it was.
+
+Measured on the production board (2026-10-04), the Stanze Plus 1 held
+open by a cooling zone:
+
+| Case | Result |
+|---|---|
+| LocalHome restarted (a deploy), four times | `status_update`, answered in 40 ms, then `on,900`: never off |
+| LocalHome stopped 17 min, broker on | off by its timer at 15 min; at start asked, found off by `timer`, noted at the right time, opened again within a second |
+| LocalHome stopped, broker too from minute 9 to 16.5 - the board stopped | the "timer" status reached nobody; the Shelly back 8 s after the broker, asked, noted at the right time, opened again |
+| LocalHome stopped 14 min right after a renewal | renewed at start with 44 s left on the timer: never off, nothing noted |
+| broker restarted, LocalHome on | Shelly back in 2 s, nothing asked or sent, renewals on schedule |
+| the Shelly restarted (`Shelly.Reboot`) while on | back on in 9 s (`source: init`, Auto OFF's timer rearmed); asked once back online, renewed on schedule, nothing noted |
 
 The bathrooms' **bypass** is the exception: normally open, closed by
 LocalHome all summer, and if the board stops it must stay as it is -
