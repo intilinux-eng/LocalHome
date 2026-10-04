@@ -1366,7 +1366,9 @@ function protectionRows(protections) {
 // One watchdog action in words: the log keeps a code and its values.
 function watchdogEventText(event) {
   const values = event.values ? event.values.split(" ") : [];
-  const vars = { a: values[0] || "", b: values[1] || "", all: event.values };
+  // A Shelly's safety timer names the device, as the rest of the page does.
+  const vars = { a: values[0] || "", b: values[1] || "",
+    all: event.code === "safety_timer" ? displayName(event.values) : event.values };
   if (event.code === "back") {
     const seconds = Number(values[0]);
     vars.a = seconds < 60 ? `${seconds}s` : formatDuration(seconds);
