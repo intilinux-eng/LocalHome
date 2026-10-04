@@ -26,6 +26,7 @@
   th, td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--line); }
   th { font-size: 0.85rem; color: var(--text-2); font-weight: 600; }
   td:first-child { font-weight: 600; width: 34%; }
+  .cases td:first-child { width: 26%; }
   code { font: 0.9em ui-monospace, Consolas, monospace; background: var(--soft); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
   .value { color: var(--ok); font-weight: 600; }
   .diagram svg { width: 100%; height: auto; display: block; margin: 12px 0; }
@@ -72,18 +73,33 @@ continuerebbe a scaldare, d'estate nei bagni i pannelli a soffitto farebbero con
 restare aperta <strong>ripete il comando ogni 5 minuti</strong>. Ogni ripetizione fa ripartire i 15 minuti da capo senza che il relè si
 stacchi: la valvola non si accorge di niente (provato su uno Shelly Plus 1 vero). Se i comandi smettono di arrivare, lo Shelly
 la chiude da solo.</p>
-<table>
-  <tr><th>Cosa succede</th><th>La valvola</th></tr>
-  <tr><td>Tutto normale</td><td>Resta aperta finché serve; LocalHome la chiude quando non serve più.</td></tr>
-  <tr><td>Si perde qualche comando (Wi-Fi debole)</td><td>Niente: ne arriva uno ogni 5 minuti, ne basta uno ogni 15.</td></tr>
+<table class="cases">
+  <tr><th>Cosa succede</th><th>La valvola</th><th>Cosa vedi in LocalHome</th></tr>
+  <tr><td>Tutto normale</td><td>Resta aperta finché serve; LocalHome la chiude quando non serve più.</td><td>-</td></tr>
+  <tr><td>Si perde qualche comando (Wi-Fi debole)</td><td>Niente: ne arriva uno ogni 5 minuti, ne basta uno ogni 15.</td><td>-</td></tr>
+  <tr><td>LocalHome o la scheda si riavviano, per meno di 15 minuti (un aggiornamento)</td>
+      <td>Niente: appena riparte, LocalHome chiede allo Shelly com'è e rinnova il comando prima che scadano i 15 minuti.</td><td>-</td></tr>
   <tr><td>La scheda si spegne, si blocca o resta senza rete per più di 15 minuti</td>
-      <td>Lo Shelly la <strong>chiude da solo</strong> entro 15 minuti dall'ultimo comando. Quando la scheda torna, LocalHome la riapre se serve.</td></tr>
-  <tr><td>Manca la corrente e poi torna</td>
-      <td>Lo Shelly riparte con la valvola chiusa, poi decide LocalHome - impostazione <em>stato all'accensione: spento</em>.</td></tr>
+      <td>Lo Shelly la <strong>chiude da solo</strong> entro 15 minuti dall'ultimo comando. Quando la scheda torna, LocalHome chiede
+          allo Shelly com'è e la riapre se serve.</td>
+      <td>In <strong>Stato sistema</strong>, per un giorno: <em>è scattato il timer di sicurezza dello Shelly</em>, con l'ora;
+          poi resta nello <strong>Storico watchdog</strong>.</td></tr>
+  <tr><td>Lo Shelly resta senza corrente, anche solo per pochi secondi</td>
+      <td>Si chiude: senza corrente il relè è aperto. Quando la corrente torna, lo Shelly riparte spento; LocalHome se ne
+          accorge appena si ricollega e la riapre se serve, in pochi secondi.</td>
+      <td>Dopo circa un minuto e mezzo la valvola risulta <em>non risponde</em>: prima LocalHome non può saperlo, lo Shelly
+          senza corrente non avvisa. Nei dati dello Shelly (Dispositivi) un riavvio in più.</td></tr>
+  <tr><td>Manca la corrente in tutta la casa e poi torna</td>
+      <td>Lo Shelly riparte con la valvola chiusa, poi decide LocalHome - impostazione <em>stato all'accensione: spento</em>.</td><td>-</td></tr>
   <tr><td>Lo Shelly si riavvia (un aggiornamento, un guasto) con la valvola aperta</td>
-      <td>Dimentica il comando a tempo, ma lo <em>spegnimento automatico a 15 minuti</em> la chiude comunque se LocalHome non la riconferma.</td></tr>
-  <tr><td>Un filo o un disturbo sul morsetto SW</td><td>Non la muove - impostazione <em>tipo relè: Detached</em>.</td></tr>
+      <td>Dimentica il comando a tempo, ma lo <em>spegnimento automatico a 15 minuti</em> la chiude comunque se LocalHome non la
+          riconferma. LocalHome gli chiede com'è appena si ricollega.</td>
+      <td>Nei dati dello Shelly (Dispositivi) un riavvio in più.</td></tr>
+  <tr><td>Un filo o un disturbo sul morsetto SW</td><td>Non la muove - impostazione <em>tipo relè: Detached</em>.</td><td>-</td></tr>
 </table>
+<p>Provati il 4 ottobre 2026 con uno Shelly Plus 1 vero sulla scheda di produzione: riavvii di LocalHome (anche a 44 secondi
+dalla scadenza dei 15 minuti), LocalHome fermo 17 minuti, scheda ferma con il server MQTT spento, riavvio del server MQTT,
+riavvio dello Shelly, Shelly senza corrente per 3 minuti e per 5 secondi.</p>
 <p>Le impostazioni della sezione 4 servono a questo; il resto lo fa LocalHome.</p>
 
 <h2>1. Collegamento</h2>
@@ -242,7 +258,7 @@ d'estate chiusa, d'inverno aperta. Per questo niente comando a tempo, e nello Sh
 </table>
 <p>Anche per il bypass LocalHome controlla queste impostazioni e dice cosa manca.</p>
 
-<footer>LocalHome - guida aggiornata al 3 ottobre 2026, provata su Shelly Plus 1 firmware 1.7.5.</footer>
+<footer>LocalHome - guida aggiornata al 4 ottobre 2026, provata su Shelly Plus 1 firmware 1.7.5.</footer>
 </main>
 </body>
 </html>
