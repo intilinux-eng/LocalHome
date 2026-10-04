@@ -237,8 +237,10 @@ In the Shelly app, besides the [MQTT settings](#mqtt-settings-that-work):
 LocalHome reads these back from every relay it commands
 (`Shelly.GetConfig` over MQTT), together with MQTT control and "Generic
 status update" being on - only when they can have changed: at its first
-answer, after the Shelly restarts (an update can reset them), and every
-5 minutes while one is wrong, so a fix shows. The admin panel also asks
+answer, after the Shelly restarts (an update can reset them), and when
+the configuration revision the Shelly reports in its status (`sys.cfg_rev`,
+one more with every setting saved) moves - a change in the app is checked
+within 5 minutes at no extra cost. The admin panel also asks
 the moment a Shelly's id is typed in. Anything set otherwise shows in the
 admin panel - the device's row in *Devices* says which setting, what it
 is and what it should be, in the app's own words, and *System status*

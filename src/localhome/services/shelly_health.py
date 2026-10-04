@@ -16,9 +16,12 @@ Two ways in, one per kind of device:
   5 minutes, with one Shelly.GetStatus over MQTT. A relay LocalHome
   commands is also asked for its settings (Shelly.GetConfig) - only when
   they can have changed: at its first answer, after it restarts (an
-  update can reset them), and while one is wrong, until it's fixed. The
-  ones a valve needs - see expected_settings() - and that aren't so are
-  said by name, for whoever fixes them in the Shelly app.
+  update can reset them), and when its configuration revision (sys
+  cfg_rev, in the status already asked) moves - a setting changed in the
+  app. A device that doesn't report the revision is asked again while one
+  is wrong, until it's fixed. The ones a valve needs - see
+  expected_settings() - and that aren't so are said by name, for whoever
+  fixes them in the Shelly app.
 
 The devices come from the integrations themselves (shelly_devices()),
 whether written in config.yaml or built by the admin panel - and a
@@ -267,6 +270,7 @@ class ShellyHealth:
                 "booted_at": None, "update": None, "restart_required": False,
                 "model": None, "firmware": None,
                 "expect": dict(device.get("expect") or {}), "settings_wrong": [], "settings_read": False,
+                "cfg_rev": None,
                 "battery_pct": None, "battery_v": None, "external_power": None, "last_report_at": None,
             }
             self._devices[device["id"]] = state
@@ -358,7 +362,8 @@ class ShellyHealth:
                         state["model"], state["firmware"] = info.get("model"), info.get("ver")
                 except Exception:
                     pass        # asked again at the next check
-            if state["expect"] and (not state["settings_read"] or state["settings_wrong"]):
+            if state["expect"] and (not state["settings_read"]
+                                    or (state["settings_wrong"] and state["cfg_rev"] is None)):
                 try:
                     config = rpc.call("Shelly.GetConfig")
                 except Exception:
@@ -395,6 +400,12 @@ class ShellyHealth:
             return
         update = _dig(sys, "available_updates", "stable", "version")
         state["update"] = update if isinstance(update, str) else None
+        # A setting changed (in the app, or anywhere): read them again.
+        rev = sys.get("cfg_rev")
+        if rev is not None and state["cfg_rev"] is not None and rev != state["cfg_rev"]:
+            state["settings_read"] = False
+        if rev is not None:
+            state["cfg_rev"] = rev
         state["restart_required"] = bool(sys.get("restart_required"))
         uptime = _number(sys.get("uptime"))
         if uptime is None or state["battery"]:

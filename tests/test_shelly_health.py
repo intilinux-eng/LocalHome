@@ -440,7 +440,8 @@ def test_a_device_restarting_for_an_update_is_asked_again_and_its_new_firmware_r
 
 def test_settings_are_read_only_when_they_can_have_changed(tmp_path):
     """First answer, then not again while all is right - only while one is
-    wrong (so a fix shows), and after a restart of the Shelly."""
+    wrong (so a fix shows), and after a restart of the Shelly. (A device
+    that doesn't report its configuration revision.)"""
     status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000}, "wifi": {"rssi": -57}}
     right = json.loads(json.dumps(RELAY_CONFIG))
     right["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)
@@ -480,3 +481,26 @@ def test_a_restart_somebody_asked_for_isnt_a_problem(tmp_path):
         watcher.poll_once()
     stats = by_id(watcher, RELAY)["stats"]
     assert (stats["restarts_7d"], stats["restarts_wanted_7d"]) == (1, 2)
+
+
+
+def test_a_setting_changed_in_the_app_is_read_again_when_the_revision_moves(tmp_path):
+    """The status asked every 5 minutes carries the configuration revision:
+    settings are read again when it moves, and only then - wrong or not."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000, "cfg_rev": 21}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
+    for _ in range(3):                                    # wrong, but nothing changed: not asked again
+        clock.t += 300
+        rpc.status["sys"]["uptime"] += 300
+        watcher.poll_once()
+    assert rpc.calls.count("Shelly.GetConfig") == 1
+    rpc.config["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)   # fixed in the app
+    rpc.status["sys"]["cfg_rev"] = 23
+    clock.t += 300
+    rpc.status["sys"]["uptime"] += 300
+    watcher.poll_once()
+    assert rpc.calls.count("Shelly.GetConfig") == 2
+    assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []
