@@ -858,3 +858,27 @@ def test_held_and_silent_for_longer_than_its_hold_it_is_asked(fake_connection, c
     _answers(fake_connection, True, timer=900)       # someone else held it
     valve.read()
     assert _sent(fake_connection) == ["status_update", "on,900"]
+
+
+def test_a_command_before_it_has_been_heard_asks_first(fake_connection, clock, tmp_path):
+    """Seen on the production board: LocalHome back after the board had
+    stopped, the thermostat sent "on,900" blind - the valve had no reading
+    yet - before the driver asked. Had the Shelly been connected, that
+    would have wiped out its timer's "source": "timer". Asked first, in
+    the same breath: its answer comes before the command takes effect."""
+    before = _shelly_valve(tmp_path)
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900)
+    before.read()
+    fake_connection.subscribers.clear()
+    fake_connection.published.clear()
+    clock["t"] += 3600
+    _answers(fake_connection, False, source="timer")
+    valve = _shelly_valve(tmp_path)
+    valve.turn_on()
+    assert _sent(fake_connection) == ["status_update", "on,900"]
+    assert valve.read()["safety_rest_at"] == t0 + 900
+    _say(fake_connection, True, timer=900)
+    valve.turn_off()
+    assert _sent(fake_connection)[-1] == "off", "heard since: just the command"
+    assert _sent(fake_connection).count("status_update") == 1

@@ -299,12 +299,27 @@ class MqttSwitchDriver(SwitchDriver):
         # freshness display.
         return self._state.get_received_at()
 
+    def _ask_first(self) -> None:
+        """A command before the device has been heard since LocalHome
+        started (or came back online) - the thermostat sends one blind
+        while a valve has no reading yet: ask first, in the same breath.
+        The device takes them in order, so its answer says what it was
+        before the command changes it - a safety timer that acted
+        included, which the command would otherwise wipe out."""
+        if self._status_command and not self._heard.is_set():
+            try:
+                self._send(self._status_command)
+            except Exception:
+                pass                 # the command itself will say why
+
     def turn_on(self) -> None:
+        self._ask_first()
         self._send(self._held_command(True))
         self._commanded, self._commanded_at = True, time.time()
         self._renewed_at = time.monotonic() if self._hold_seconds and not self._rest_on else None
 
     def turn_off(self) -> None:
+        self._ask_first()
         self._send(self._held_command(False))
         self._commanded, self._commanded_at = False, time.time()
         self._renewed_at = time.monotonic() if self._hold_seconds and self._rest_on else None
