@@ -202,11 +202,14 @@ def test_silence_counts_only_after_devices_were_there():
 def test_every_battery_sensor_silent_at_once_is_the_network():
     names = {"Stanze Sensor", "Bagni Sensor"}
     late = [{"name": "Stanze Sensor", "seconds_since_update": 9000}, {"name": "Bagni Sensor", "seconds_since_update": 8200}]
-    assert system_status.battery_sensors_silent(late, names, uptime_seconds=20000)
+    assert system_status.battery_sensors_silent(late, names, uptime_seconds=20000, listening_seconds=20000)
     one_fine = [late[0], {"name": "Bagni Sensor", "seconds_since_update": 600}]
-    assert not system_status.battery_sensors_silent(one_fine, names, uptime_seconds=20000)
+    assert not system_status.battery_sensors_silent(one_fine, names, uptime_seconds=20000, listening_seconds=20000)
     assert not system_status.battery_sensors_silent(late, names, uptime_seconds=3000), "just booted"
-    assert not system_status.battery_sensors_silent(late, set(), uptime_seconds=20000)
+    assert not system_status.battery_sensors_silent(late, set(), uptime_seconds=20000, listening_seconds=20000)
+    assert not system_status.battery_sensors_silent(late, names, uptime_seconds=20000, listening_seconds=1000), \
+        "LocalHome just started: what came while it was stopped, it couldn't hear"
+    assert not system_status.battery_sensors_silent(late, names, uptime_seconds=20000), "its own age by default"
 
 
 def test_devices_not_reaching_the_board_is_a_problem_and_rt_on_the_matrix():

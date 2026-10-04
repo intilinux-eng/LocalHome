@@ -824,12 +824,20 @@ class LanWatch:
         return now - self.silent_since
 
 
-def battery_sensors_silent(devices: list[dict], battery_names: set[str], uptime_seconds: float | None) -> bool:
+def battery_sensors_silent(devices: list[dict], battery_names: set[str], uptime_seconds: float | None,
+                           listening_seconds: float | None = None) -> bool:
     """Every battery sensor past its 2-hour report, by a margin - they all
     report on their own, so all of them silent at once is the network,
-    not the sensors. Not in the first 2 h 15 min after a boot."""
+    not the sensors. Not in the first 2 h 15 min after a boot, nor after
+    LocalHome itself started (`listening_seconds`, its age by default): a
+    report that came while it was stopped never reached it - their
+    reports aren't kept by the broker. Seen on the production board after
+    a 16-minute stop: both reports missed, "RT" on a network that was
+    fine."""
     sensors = [d for d in devices if d["name"] in battery_names]
-    if not sensors or (uptime_seconds is not None and uptime_seconds < BATTERY_SILENT_SECONDS):
+    listening = process_age_seconds() if listening_seconds is None else listening_seconds
+    if not sensors or listening < BATTERY_SILENT_SECONDS or (
+            uptime_seconds is not None and uptime_seconds < BATTERY_SILENT_SECONDS):
         return False
     return all(d.get("seconds_since_update") is None or d["seconds_since_update"] > BATTERY_SILENT_SECONDS
                for d in sensors)
