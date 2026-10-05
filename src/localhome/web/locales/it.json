@@ -839,6 +839,8 @@
     "next_change": "Poi {target} {when}",
     "humidity": "Umidità",
     "dew_point": "rugiada {value}°",
+    "reading_temp": "temperatura",
+    "dew_point_long": "Punto di rugiada {value}°",
     "updated": "aggiornato {age}",
     "battery": "batteria {pct}%",
     "ran_today": "oggi ha scaldato {time}",

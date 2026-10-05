@@ -228,6 +228,11 @@ function fmtAge(seconds) {
   return tr("home.h_ago", { h: fmt(seconds / 3600, seconds < 36000 ? 1 : 0) });
 }
 
+// The same bands as humidityWord(), for the colour of its label.
+function rhLevel(rh) {
+  return rh < 30 ? "dry" : rh > 60 ? "humid" : "ok";
+}
+
 function humidityWord(rh) {
   if (rh < 30) return tr("home.rh_dry");
   if (rh > 60) return tr("home.rh_humid");
@@ -370,27 +375,37 @@ function fillZone(card, zone, climate) {
   card.dataset.active = status.active ? "true" : "false";
   card.dataset.zone = zone.name;
 
+  // The two readings side by side, large: the temperature, and the
+  // humidity with what it means.
   const temp = zone.temperature_c != null
     ? `<span class="now-value">${fmt(zone.temperature_c)}</span><span class="now-unit">°</span>`
     : `<span class="now-missing">--</span>`;
+  const readings = `<div class="readings">
+      <div class="reading"><div class="reading-value">${temp}</div><div class="reading-label">${esc(tr("home.reading_temp"))}</div></div>
+      ${zone.humidity_pct != null ? `<div class="reading reading-rh" data-rh="${rhLevel(zone.humidity_pct)}">
+        <div class="reading-value"><span class="now-value">${fmt(zone.humidity_pct, 0)}</span><span class="now-unit">%</span></div>
+        <div class="reading-label">${ICONS.drop}${esc(humidityWord(zone.humidity_pct))}</div></div>` : ""}
+    </div>`;
+  // The extras, one a row with its icon: on the right of the readings, or
+  // under them in two columns on a narrow card.
+  const fact = (icon, html, extra = "") => `<div class="fact${extra}"><span class="fact-icon">${icon}</span><span class="fact-text">${html}</span></div>`;
   const facts = [];
   const excluded = mode === "cool" && !zone.cool_enabled;
   if (zone.valve_driver) {
-    facts.push(`<div class="fact${zone.valve_driver.on ? " fact-rule" : ""}">${esc(tr(zone.valve_driver.on ? "home.fact_driven_on" : "home.fact_driven_off",
-      { name: displayName(zone.valve_driver.name) }))}</div>`);
+    facts.push(fact(ICONS.link, esc(tr(zone.valve_driver.on ? "home.fact_driven_on" : "home.fact_driven_off",
+      { name: displayName(zone.valve_driver.name) })), zone.valve_driver.on ? " fact-rule" : ""));
   }
   if (zone.target_c != null && !excluded) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
-    facts.push(`<div class="fact">${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}</div>`);
+    facts.push(fact(ICONS.target, `${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}`));
     const rule = climate.away_until && !zone.override ? "" : valveRule(zone, climate);
-    if (rule) facts.push(`<div class="fact fact-rule">${esc(rule)}</div>`);
+    if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
   if (change && !zone.override && !climate.away_until && !excluded) {
-    facts.push(`<div class="fact">${esc(tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }))}</div>`);
+    facts.push(fact(ICONS.clock, esc(tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }))));
   }
-  if (zone.humidity_pct != null) {
-    const dew = mode === "cool" && zone.dew_point_c != null ? ` · ${tr("home.dew_point", { value: fmt(zone.dew_point_c) })}` : "";
-    facts.push(`<div class="fact">${esc(tr("home.humidity"))} <b>${fmt(zone.humidity_pct, 0)}%</b> · ${esc(humidityWord(zone.humidity_pct))}${esc(dew)}</div>`);
+  if (mode === "cool" && zone.humidity_pct != null && zone.dew_point_c != null) {
+    facts.push(fact(ICONS.drop, esc(tr("home.dew_point_long", { value: fmt(zone.dew_point_c) }))));
   }
 
   const foot = [];
@@ -408,8 +423,8 @@ function fillZone(card, zone, climate) {
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
     </div>
     <div class="zone-main">
-      <div class="now">${temp}</div>
-      <div class="zone-facts">${facts.join("")}</div>
+      ${readings}
+      ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
     </div>
     <div class="ribbon">
       ${ribbonSvg(zone, week, history, mode)}
@@ -767,6 +782,11 @@ const ICONS = {
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
   snow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6L4 18M9 3l3 3 3-3M9 21l3-3 3 3"/></svg>`,
   suitcase: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`,
+  drop: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>`,
+  flow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,
   leaf: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20c0-9 6-15 16-16-1 10-7 16-16 16z"/><path d="M4 20l8-8"/></svg>`,
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>`,
   wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,

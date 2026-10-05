@@ -839,6 +839,8 @@
     "next_change": "Then {target} {when}",
     "humidity": "Humidity",
     "dew_point": "dew point {value}°",
+    "reading_temp": "temperature",
+    "dew_point_long": "Dew point {value}°",
     "updated": "updated {age}",
     "battery": "battery {pct}%",
     "ran_today": "heated {time} today",
