@@ -279,6 +279,7 @@ on 2026-10-05 on the production board, no load, its MQTT prefix changed to
 | `off,20`, `off,20.0`, `off,5` | **ignored** - no status, the relay stays on. `Switch.Set` with `on: false, toggle_after: 20` works (HTTP and RPC over MQTT): off, back on by itself 20 s later. So LocalHome holds a relay off - one whose rest is on - with that RPC, on both generations |
 | restart while on (`Shelly.Reboot`) | back in 9 s, on (`source: init`) with Auto OFF's timer; `reset_reason` 3 |
 | settings (`Switch.GetConfig`) | the same keys as the Plus 1, checked the same way |
+| without power for 2 min, the valve open | the broker noticed after 90 s; powered again it starts **off** (`init`) and, unlike the Plus 1, publishes its status by itself; LocalHome opened it again 29 s after it was back |
 
 Same wiring (L, N, SW, I, O), same app settings. Everything a zone valve
 relies on behaves as on the Plus 1; only "held off" needed the RPC.
