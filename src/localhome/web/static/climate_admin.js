@@ -1555,6 +1555,15 @@ function seasonEffects(mode, data) {
         : tr("climate_admin.season_zone_excluded", { zone: escapeHtml(z.name) }));
     });
   }
+  // Every device the season decides on - what the home page doesn't say
+  // (it shows only what's switched by hand): a valve's Shelly said as such.
+  (effects.rules || []).forEach(rule => {
+    const action = rule[mode];
+    if (!action) return;
+    const what = ruleActionText(action, rule.normally_open)
+      + (action === "manual" ? ` - ${tr("climate_admin.season_rule_from_home")}` : "");
+    items.push(`${escapeHtml(displayName(rule.switch))}: ${escapeHtml(what)}`);
+  });
   items.push(tr(`climate_admin.season_schedule_${mode}`));
   return items;
 }

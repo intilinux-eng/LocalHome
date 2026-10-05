@@ -78,35 +78,36 @@ def _valve_on(base, name):
     return call(base, f"/api/sensors/{urllib.parse.quote(name, safe='')}")["is_on"]
 
 
-def test_the_bypass_says_closed_and_the_dehumidifier_what_it_opens(browser, plant):
+def test_the_home_page_has_the_dehumidifier_up_top_and_none_of_the_plants_valves(browser, plant):
+    """The home is for whoever lives there: the dehumidifier, switched by
+    hand in summer, up top; the bypass moving with the season and the
+    valve the dehumidifier opens are the admin panel's."""
     context, opened = _open(browser, plant)
     page = opened.page
-    page.wait_for_selector("#plant:not([hidden]) .tile", timeout=20000)
+    page.wait_for_selector("#season-devices:not([hidden]) .season-device", timeout=20000)
     page.wait_for_timeout(1500)
-    tiles = {t.locator(".tile-name").inner_text(): t for t in page.locator("#plant-body .tile").all()}
-    bypass = tiles["Valvola Bypass Bagni"]
-    assert bypass.locator(".dot-state").inner_text() == "chiusa", "its Shelly is on in summer: the valve closed"
-    assert "normalmente aperta" in bypass.inner_text()
-    # The dehumidifier is on the card of the zone whose valve it opens, not a tile of its own.
-    assert "Deumidificatore" not in tiles
-    driver = page.locator(".zone", has_text=ZONE_B).locator(".driver")
-    assert "Deumidificatore" in driver.inner_text() and "apre la valvola di questa zona" in driver.inner_text()
+    device = page.locator("#season-devices .season-device")
+    assert device.count() == 1 and "Deumidificatore" in device.inner_text()
+    assert page.locator("#plant-body .tile", has_text="Bypass").count() == 0
+    assert page.locator("#plant-body .tile", has_text="Deumidificatore").count() == 0
+    assert "Deumidificatore" not in page.locator(".zone", has_text=ZONE_B).inner_text()
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
     context.close()
 
 
-def test_switching_the_dehumidifier_on_opens_the_bathrooms_valve_and_says_so(browser, plant):
+def test_switching_the_dehumidifier_on_up_top_opens_the_bathrooms_valve_unsaid(browser, plant):
     context, opened = _open(browser, plant)
     page = opened.page
-    switch = ".driver button[data-switch='Deumidificatore']"
+    switch = "#season-devices button[data-switch='Deumidificatore']"
     page.wait_for_selector(switch, timeout=20000)
     page.click(switch)
-    assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is True)
+    assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is True), "it still opens the valve"
+    assert eventually(page, lambda: page.locator("#season-devices .season-device").get_attribute("data-on") == "true")
     card = page.locator(".zone", has_text=ZONE_B)
-    assert eventually(page, lambda: "Deumidificatore acceso: valvola aperta" in card.locator(".zone-head").inner_text(),
-                      timeout_ms=30000)
-    assert card.locator(".driver").get_attribute("data-on") == "true"
+    page.wait_for_timeout(1500)
+    assert "Esclusa d'estate" in card.locator(".zone-head").inner_text(), "the bathrooms aren't cooling for it"
+    assert ZONE_B not in page.inner_text("#hero-title")
     page.click(switch)
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is False)
     assert opened.errors == []
@@ -125,6 +126,12 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
     assert page.locator("#season-rules-actions").is_hidden()
     assert "sempre chiusa (Shelly acceso)" in page.inner_text("#season-rules")
     assert eventually(page, lambda: "Deumidificatore acceso" in page.inner_text("#season-links"))
+    # Each season's card says what happens to every device in it - the home page doesn't.
+    summer = page.inner_text("#season-cards .season-cool")
+    assert "Valvola Bypass Bagni: sempre chiusa (Shelly acceso)" in summer
+    assert "Deumidificatore: a scelta - lo accende chi abita la casa, dalla home" in summer
+    winter = page.inner_text("#season-cards .season-heat")
+    assert "Valvola Bypass Bagni: sempre aperta (Shelly spento)" in winter and "Deumidificatore: sempre spento" in winter
     assert page.evaluate(UNTRANSLATED_JS) == []
     assert opened.errors == []
     context.close()

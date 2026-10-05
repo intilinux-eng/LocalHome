@@ -240,6 +240,29 @@ a { color: inherit; }
 
 .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
+/* What this season has switched by hand (the dehumidifier, in summer):
+   up top, its switch large, lit while it runs. */
+.season-devices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.season-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 260px;
+  max-width: 380px;
+  padding: 10px 12px 10px 14px;
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.season-device[data-on="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.season-device-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.season-device[data-on="true"] .season-device-icon { background: var(--surface); }
+.season-device-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+.season-device-text { display: grid; gap: 2px; min-width: 0; flex: 1; font-size: 0.86rem; color: var(--text-2); }
+.season-device-text b { font-size: 1rem; color: var(--text); font-weight: 650; }
+.season-device-text span::first-letter { text-transform: uppercase; }
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -494,24 +517,6 @@ a { color: inherit; }
   background: var(--accent-soft);
   font-size: 0.9rem;
 }
-
-/* The device driving the zone's valve (a dehumidifier, in summer): on
-   the zone's card, its switch large, lit while it runs. */
-.driver {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 4px 0 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-}
-.driver[data-on="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
-.driver-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--surface); color: var(--accent); }
-.driver-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
-.driver-text { display: grid; gap: 2px; min-width: 0; flex: 1; font-size: 0.86rem; color: var(--text-2); }
-.driver-text b { font-size: 1rem; color: var(--text); font-weight: 650; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */
 .excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }

@@ -309,9 +309,6 @@ function zoneStatus(zone, climate) {
   const mode = climate.mode;
   // Held open by another device (a dehumidifier drawing its water
   // through this valve) - even in a zone that sits out the cooling.
-  if (zone.valve_driver && zone.valve_driver.on) {
-    return { tone: "active", text: tr("home.st_driven", { name: displayName(zone.valve_driver.name) }), active: true };
-  }
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
   // Its Shelly not answering - unplugged, out of the Wi-Fi: whatever the
   // thermostat decides, the valve won't follow. Seen: a cooling target
@@ -328,25 +325,6 @@ function zoneStatus(zone, climate) {
   if (zone.valve_on) return { tone: "active", text: tr(mode === "cool" ? "home.st_cooling" : "home.st_heating"), active: true };
   const reached = targetReached(zone, climate);
   return { tone: "ok", text: tr(reached ? "home.st_reached" : "home.st_idle"), reached };
-}
-
-// The device that opens this zone's valve right now (a dehumidifier
-// drawing its water through the bathrooms' valve, in summer): its switch
-// on the zone's own card, where it acts - not a lone tile at the bottom.
-function driverHtml(zone) {
-  const driver = zone.valve_driver;
-  if (!driver) return "";
-  const device = deviceByName(driver.name);
-  const reading = state.readings[driver.name] || {};
-  const on = reading.is_on != null ? !!reading.is_on : !!driver.on;
-  const control = device && device.controllable
-    ? `<button class="switch" type="button" role="switch" data-switch="${esc(driver.name)}" aria-checked="${on}" aria-label="${esc(displayName(driver.name))}"></button>`
-    : "";
-  return `<div class="driver" data-on="${on}">
-      <span class="driver-icon">${ICONS.drop}</span>
-      <span class="driver-text"><b>${esc(displayName(driver.name))}</b><span>${esc(tr(on ? "home.driver_on" : "home.driver_off"))}</span></span>
-      ${control}
-    </div>`;
 }
 
 function zoneId(name) {
@@ -388,7 +366,11 @@ function fillZone(card, zone, climate) {
   const mode = climate.mode;
   const status = zoneStatus(zone, climate);
   const week = (state.weeks[zone.name] || {})[mode];
-  const history = state.history[zone.name] || { temps: [], runs: [] };
+  const excludedNow = climate.mode === "cool" && !zone.cool_enabled;
+  // Out of the season, its valve only opens for another device (the
+  // dehumidifier's water): not this zone running - no runs, no hours.
+  const seen = state.history[zone.name] || { temps: [], runs: [] };
+  const history = excludedNow ? { temps: seen.temps, runs: [] } : seen;
   const now = boardNow();
   const change = nextChange(week, now);
   card.dataset.active = status.active ? "true" : "false";
@@ -433,7 +415,7 @@ function fillZone(card, zone, climate) {
   if (age) sensorBits.push(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age }));
   if (zone.battery_pct != null) sensorBits.push(tr("home.battery", { pct: Math.round(zone.battery_pct) }));
   if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
-  const hoursToday = (state.onHours[zone.name] || {}).today;
+  const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
   card.querySelector(".zone-live").innerHTML = `
@@ -450,7 +432,6 @@ function fillZone(card, zone, climate) {
       <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
       <div class="ribbon-readout">${legendHtml()}</div>
     </div>
-    ${driverHtml(zone)}
     <div class="quick">${quickHtml(zone, climate, change)}</div>
     ${zone.sensor_manual ? manualHtml(zone) : ""}
     <div class="zone-foot">${foot.join(" · ")}</div>`;
@@ -681,22 +662,6 @@ function clampTarget(value) {
 }
 
 async function onZoneClick(event) {
-  // The switch of the device that drives a zone's valve (driverHtml()).
-  const toggle = event.target.closest("button[data-switch]");
-  if (toggle) {
-    toggle.disabled = true;
-    try {
-      const on = toggle.getAttribute("aria-checked") !== "true";
-      await api(`/api/sensors/${encodeURIComponent(toggle.dataset.switch)}/${on ? "on" : "off"}`, {});
-      await refreshDevices();
-      await refreshClimate();
-    } catch (e) {
-      notify(errorText(e));
-    } finally {
-      toggle.disabled = false;
-    }
-    return;
-  }
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest(".zone");
   if (!button || !card) return;
@@ -779,9 +744,6 @@ function renderHero() {
 // One zone's state in a few words, for the line under the title.
 function zoneLine(zone, climate) {
   const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
-  if (zone.valve_driver && zone.valve_driver.on) {
-    return tr("home.line_driven", { zone: zone.name, name: displayName(zone.valve_driver.name) });
-  }
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
   if (zone.valve_ok === false) return tr("home.line_valve_offline", { zone: zone.name });
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
@@ -906,36 +868,49 @@ function deviceByName(name) {
 }
 
 function renderPlant() {
-  const climate = state.climate;
   const tiles = [];
   const vmcSpeed = (state.devices ? state.devices.sensors : []).find(d => d.kind === "number" && d.paired_switch && (d.presets || []).length);
   if (vmcSpeed) tiles.push(vmcTile(vmcSpeed));
-  const rules = (climate && climate.season_effects && climate.season_effects.rules) || [];
-  // One that drives a zone's valve now is on that zone's card instead.
-  const onZoneCards = new Set(((climate && climate.zones) || []).filter(z => z.valve_driver).map(z => z.valve_driver.name));
-  rules.forEach(rule => {
-    const device = deviceByName(rule.switch);
-    if (!device || onZoneCards.has(rule.switch)) return;
-    const reading = state.readings[rule.switch] || {};
-    const what = rule[climate.mode];
-    // A normally open valve: its Shelly on means closed - said as such,
-    // and its dot lit while water can pass, like any open valve.
-    const no = !!rule.normally_open;
-    const state_ = no ? tr(reading.is_on ? "home.valve_closed" : "home.valve_open") : tr(reading.is_on ? "home.on" : "home.off_state");
-    const control = what === "manual" && device.controllable
-      ? `<button class="switch" type="button" role="switch" data-switch="${esc(rule.switch)}" aria-checked="${!!reading.is_on}" aria-label="${esc(displayName(rule.switch))}"></button>`
-      : `<span class="dot-state" data-on="${no ? !reading.is_on : !!reading.is_on}">${esc(state_)}</span>`;
-    // What it opens with it: the valve a dehumidifier draws its water through.
-    const link = ((climate.season_effects || {}).links || []).find(l => l.leader === rule.switch);
-    const linkZone = link && (link.zone || displayName(link.follower));
-    const notes = [tr(`home.rule_${what}_${climate.mode}${no ? "_no" : ""}`)];
-    if (no) notes.push(tr("home.normally_open_note"));
-    if (link) notes.push(tr(reading.is_on && (!link.mode || link.mode === climate.mode) ? "home.link_open" : "home.link_note", { zone: linkZone }));
-    tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${esc(displayName(rule.switch))}</span>${control}</div>
-      ${notes.map(n => `<div class="tile-note">${esc(n)}</div>`).join("")}</div>`);
-  });
   document.getElementById("plant").hidden = !tiles.length;
   document.getElementById("plant-body").innerHTML = tiles.join("");
+  renderSeasonDevices();
+}
+
+// What this season has to be switched by hand (the dehumidifier, in
+// summer): up top, a switch each. How the plant follows them - a valve
+// opened for its water, a bypass moving with the season - is the admin
+// panel's: nothing a home needs to see.
+function renderSeasonDevices() {
+  const host = document.getElementById("season-devices");
+  const climate = state.climate;
+  const rules = (climate && climate.season_effects && climate.season_effects.rules) || [];
+  const cards = rules.filter(rule => rule[climate.mode] === "manual").map(rule => {
+    const device = deviceByName(rule.switch);
+    if (!device || !device.controllable) return "";
+    const on = !!(state.readings[rule.switch] || {}).is_on;
+    return `<div class="season-device" data-on="${on}">
+        <span class="season-device-icon">${ICONS.drop}</span>
+        <span class="season-device-text"><b>${esc(displayName(rule.switch))}</b><span>${esc(tr(on ? "home.on" : "home.off_state"))}</span></span>
+        <button class="switch" type="button" role="switch" data-switch="${esc(rule.switch)}" aria-checked="${on}" aria-label="${esc(displayName(rule.switch))}"></button>
+      </div>`;
+  }).filter(Boolean);
+  host.hidden = !cards.length;
+  host.innerHTML = cards.join("");
+}
+
+async function onSeasonDeviceClick(event) {
+  const toggle = event.target.closest("button[data-switch]");
+  if (!toggle) return;
+  toggle.disabled = true;
+  try {
+    const on = toggle.getAttribute("aria-checked") !== "true";
+    await api(`/api/sensors/${encodeURIComponent(toggle.dataset.switch)}/${on ? "on" : "off"}`, {});
+    await refreshDevices();
+  } catch (e) {
+    notify(errorText(e));
+  } finally {
+    toggle.disabled = false;
+  }
 }
 
 // ------------------------------------------------------------- the VMC --
@@ -1495,9 +1470,6 @@ async function refreshDevices() {
     return;
   }
   renderOutdoor();
-  // A zone's card carries the switch of the device driving its valve
-  // (driverHtml()), known only once the devices are in.
-  if (state.climate) renderZones();
   renderPlant();
   renderHouse();
 }
@@ -1520,6 +1492,7 @@ async function refreshProblems() {
 document.getElementById("zones").addEventListener("click", onZoneClick);
 document.getElementById("zones").addEventListener("submit", onManualSubmit);
 document.getElementById("plant-body").addEventListener("click", onPlantClick);
+document.getElementById("season-devices").addEventListener("click", onSeasonDeviceClick);
 document.getElementById("house-body").addEventListener("click", onHouseClick);
 document.getElementById("house-body").addEventListener("change", onHouseChange);
 document.getElementById("away-chip").addEventListener("click", openAway);
