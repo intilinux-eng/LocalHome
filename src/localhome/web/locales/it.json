@@ -61,7 +61,7 @@
     "mode_note": "Condiviso da entrambe le zone - un'unica centrale invia acqua calda o fredda a entrambe le valvole.",
     "target_off": "Spento",
     "no_target": "nessun obiettivo",
-    "schedule_hint": "Scegli una temperatura, poi tocca o trascina sulle ore. Si salva da solo.",
+    "schedule_hint": "Scegli una temperatura, poi tocca o trascina sulle ore; tocca di nuovo un'ora per toglierla. Si salva da solo.",
     "schedule_heading_heat": "Programmazione invernale",
     "schedule_heading_cool": "Programmazione estiva",
     "schedule_empty_heat": "Nessuna programmazione invernale per questa zona: in riscaldamento il sistema resta spento finché non dipingi le fasce orarie.",

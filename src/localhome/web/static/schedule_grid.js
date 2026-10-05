@@ -232,6 +232,7 @@ function buildScheduleGrid(zoneId, week) {
 // page instead: painting on touch-down would paint whatever cell a scroll
 // started on. A mouse or a pen paints at once, any direction.
 let pendingTap = null;   // {zoneId, cell, x, y} - a finger down, not yet a tap or a drag
+let strokeValue = null;  // what this stroke paints - decided by its first cell (startStroke)
 
 function wireScheduleGrid(grid, zoneId) {
   if (grid.dataset.wired) return;
@@ -251,14 +252,14 @@ function wireScheduleGrid(grid, zoneId) {
     }
     e.preventDefault();
     isPainting = true;
-    paintCell(zoneId, cell);
+    startStroke(zoneId, cell);
   });
   grid.addEventListener("pointermove", e => {
     if (pendingTap) {
       const dx = Math.abs(e.clientX - pendingTap.x), dy = Math.abs(e.clientY - pendingTap.y);
       if (dx >= 8 && dx > dy) {
         isPainting = true;
-        paintCell(pendingTap.zoneId, pendingTap.cell);
+        startStroke(pendingTap.zoneId, pendingTap.cell);
         pendingTap = null;
       } else if (dy >= 8) {
         pendingTap = null;        // a scroll, not a stroke
@@ -267,13 +268,13 @@ function wireScheduleGrid(grid, zoneId) {
     }
     if (!isPainting) return;
     const cell = cellAt(e);
-    if (cell) paintCell(zoneId, cell);
+    if (cell) paintCell(zoneId, cell, strokeValue);
   });
   grid.addEventListener("pointerup", () => {
     if (pendingTap) {
       const tap = pendingTap;
       pendingTap = null;
-      paintCell(tap.zoneId, tap.cell);
+      startStroke(tap.zoneId, tap.cell);
     }
   });
 }
@@ -296,12 +297,25 @@ function endStroke() {
 document.addEventListener("pointerup", endStroke);
 document.addEventListener("pointercancel", endStroke);
 
-function paintCell(zoneId, cell) {
+// A tap or a stroke's first cell decides what it paints: an hour that
+// already has the chosen temperature is cleared - a second tap undoes the
+// first, no trip to the palette's OFF - anything else gets the chosen one.
+// The rest of a stroke paints the same, never alternating along the way.
+function startStroke(zoneId, cell) {
   const zone = climateZones.find(z => slug(z.name) === zoneId);
   const week = zone && scheduleWeeks[zone.name];
   if (!week) return;
-  applyCellStyle(cell, paintValue);
-  week[cell.dataset.day][Number(cell.dataset.hour)] = paintValue;
+  const current = week[cell.dataset.day][Number(cell.dataset.hour)];
+  strokeValue = paintValue != null && current === paintValue ? null : paintValue;
+  paintCell(zoneId, cell, strokeValue);
+}
+
+function paintCell(zoneId, cell, value) {
+  const zone = climateZones.find(z => slug(z.name) === zoneId);
+  const week = zone && scheduleWeeks[zone.name];
+  if (!week) return;
+  applyCellStyle(cell, value);
+  week[cell.dataset.day][Number(cell.dataset.hour)] = value;
   scheduleSave(zone.name);
 }
 

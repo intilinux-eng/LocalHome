@@ -509,3 +509,31 @@ def test_on_a_desktop_the_hours_run_across_and_a_mouse_drag_paints_a_range(open_
     assert eventually(page, lambda: [_week(api, ZONE_A)["tue"][h] is not None for h in range(7, 13)]
                       == [False, True, True, True, True, False])
     assert opened.errors == []
+
+
+def test_a_second_tap_clears_an_hour_and_a_stroke_does_what_its_first_cell_decides(phone, api):
+    """No trip to the palette's OFF: a tap on an hour that already has the
+    chosen temperature clears it. A stroke started on such an hour clears
+    every hour it crosses; started elsewhere it paints them all."""
+    opened, context = phone
+    page = opened.page
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    page.reload()
+    _open_plan(page, ZONE_A)
+    cell = _cell(page, ZONE_A, "fri", 9)
+    cell.scroll_into_view_if_needed()
+    page.touchscreen.tap(*_center(cell))
+    assert eventually(page, lambda: _week(api, ZONE_A)["fri"][9] is not None)
+    page.wait_for_timeout(300)
+    page.touchscreen.tap(*_center(cell))
+    assert eventually(page, lambda: _week(api, ZONE_A)["fri"][9] is None), "a second tap clears it"
+    row = [_cell(page, ZONE_A, d, 21) for d in ("mon", "tue", "wed")]
+    row[0].scroll_into_view_if_needed()
+    _touch_stroke(context, page, _center(row[0]), _center(row[2]))
+    assert eventually(page, lambda: [_week(api, ZONE_A)[d][21] is not None for d in ("mon", "tue", "wed")] == [True] * 3)
+    page.wait_for_timeout(300)
+    _touch_stroke(context, page, _center(row[0]), _center(row[2]))
+    assert eventually(page, lambda: [_week(api, ZONE_A)[d][21] for d in ("mon", "tue", "wed")] == [None] * 3), \
+        "started on a painted hour, the stroke clears"
+    assert opened.errors == []
+

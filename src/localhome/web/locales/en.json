@@ -61,7 +61,7 @@
     "mode_note": "Shared by both zones - one central plant sends either hot or cold water to both valves.",
     "target_off": "Off",
     "no_target": "no target",
-    "schedule_hint": "Pick a temperature, then tap or drag across the hours. It saves by itself.",
+    "schedule_hint": "Pick a temperature, then tap or drag across the hours; tap an hour again to clear it. It saves by itself.",
     "schedule_heading_heat": "Winter schedule",
     "schedule_heading_cool": "Summer schedule",
     "schedule_empty_heat": "No winter schedule for this zone yet: while heating, the system stays off until you paint some hours.",
