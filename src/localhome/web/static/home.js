@@ -268,7 +268,8 @@ function bands(day) {
 
 function valveRule(zone, climate) {
   const h = climate.hysteresis_c;
-  if (zone.target_c == null || zone.temperature_c == null || h == null || !zone.sensor_ok) return null;
+  // A valve that doesn't answer won't do what the rule says.
+  if (zone.target_c == null || zone.temperature_c == null || h == null || !zone.sensor_ok || !zone.valve_ok) return null;
   const cool = climate.mode === "cool";
   if (zone.valve_on) {
     return tr(cool ? "home.runs_until_cool" : "home.runs_until_heat",
@@ -286,6 +287,17 @@ function gapText(zone) {
   return tr(gap < 0 ? "home.gap_below" : "home.gap_above", { value: fmt(Math.abs(gap)) });
 }
 
+// Its target reached: on the side the season wants it, within the
+// hysteresis. Cooling, at or below the target - 24.3° with a 24° target is
+// above it, even if the valve waits for 24.5° to open again (seen: it said
+// "just right"); heating, at or above. To the tenth the sensor reports.
+function targetReached(zone, climate) {
+  if (zone.target_c == null || zone.temperature_c == null) return false;
+  const h = climate.hysteresis_c || 0.5;
+  const gap = Math.round((zone.temperature_c - zone.target_c) * 10) / 10;
+  return climate.mode === "cool" ? gap <= 0 && gap >= -h : gap >= 0 && gap <= h;
+}
+
 // ----------------------------------------------------------- the zones --
 
 function zoneStatus(zone, climate) {
@@ -296,6 +308,10 @@ function zoneStatus(zone, climate) {
     return { tone: "active", text: tr("home.st_driven", { name: displayName(zone.valve_driver.name) }), active: true };
   }
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
+  // Its Shelly not answering - unplugged, out of the Wi-Fi: whatever the
+  // thermostat decides, the valve won't follow. Seen: a cooling target
+  // below the room's, the valve offline, and the card said "resting".
+  if (zone.valve_ok === false) return { tone: "warn", text: tr("home.st_valve_offline") };
   if (zone.sensor_failsafe_active) return { tone: "warn", text: tr("home.st_failsafe") };
   if (zone.sensor_manual && !zone.sensor_ok) return { tone: "warn", text: tr("home.st_manual_waiting") };
   // The board just came up: the sensor hasn't reported since - not a fault.
@@ -305,8 +321,8 @@ function zoneStatus(zone, climate) {
   if (climate.away_until && !zone.override) return { tone: "off", text: tr("home.st_away") };
   if (zone.target_c == null) return { tone: "off", text: tr("home.st_off") };
   if (zone.valve_on) return { tone: "active", text: tr(mode === "cool" ? "home.st_cooling" : "home.st_heating"), active: true };
-  const near = Math.abs(zone.temperature_c - zone.target_c) <= (climate.hysteresis_c || 0.5);
-  return { tone: "ok", text: tr(near ? "home.st_reached" : "home.st_idle") };
+  const reached = targetReached(zone, climate);
+  return { tone: "ok", text: tr(reached ? "home.st_reached" : "home.st_idle"), reached };
 }
 
 function zoneId(name) {
@@ -698,7 +714,7 @@ function renderHero() {
   else if (climate.away_until) title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
   else if (active.length) title = tr(cool ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
   else if (running.length && off.length === running.length) title = tr(cool ? "home.hero_all_off_cool" : "home.hero_all_off_heat");
-  else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).tone === "ok")) title = tr("home.hero_all_ok");
+  else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).reached)) title = tr("home.hero_all_ok");
   else title = tr(cool ? "home.hero_idle_cool" : "home.hero_idle_heat");
   const detail = climate.away_until ? tr("home.hero_away_detail") : zones.map(z => zoneLine(z, climate)).join(" · ");
   document.getElementById("hero-title").textContent = title;
@@ -716,6 +732,7 @@ function zoneLine(zone, climate) {
     return tr("home.line_driven", { zone: zone.name, name: displayName(zone.valve_driver.name) });
   }
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
+  if (zone.valve_ok === false) return tr("home.line_valve_offline", { zone: zone.name });
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
   if (zone.target_c == null) {
@@ -724,10 +741,11 @@ function zoneLine(zone, climate) {
     return until ? tr("home.line_off_until", { zone: zone.name, until: untilText(until) }) : tr("home.line_off", { zone: zone.name });
   }
   if (zoneStatus(zone, climate).active) return tr("home.line_on", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
-  // Resting: within the hysteresis of its target, or past it - 26° with a
-  // 20° heating target isn't "at temperature", it's well above.
+  // Resting: at its target on the season's side (targetReached()), or
+  // past it - 26° with a 20° heating target isn't "at temperature", and
+  // neither is 24.3° with a 24° cooling one.
+  if (targetReached(zone, climate)) return tr("home.line_ok", { zone: zone.name, temp });
   const diff = zone.temperature_c != null ? zone.temperature_c - zone.target_c : 0;
-  if (Math.abs(diff) <= (climate.hysteresis_c || 0.5)) return tr("home.line_ok", { zone: zone.name, temp });
   return tr(diff > 0 ? "home.line_above" : "home.line_below", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
 }
 

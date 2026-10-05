@@ -351,3 +351,73 @@ def test_a_plug_that_measures_its_power_shows_its_days_with_its_switch(open_page
     tile.locator("[data-energy-range=month]").click()
     assert page.locator(".tile.energy[data-sensor='Scrivania'] .energy-total").inner_text().startswith("Questo mese")
     assert opened.errors == []
+
+
+# What a zone's card says, against the thermostat's rule (services/
+# thermostat.py's decide(), the same in both seasons mirrored): the page's
+# words, from the readings - faked here, to set each case exactly.
+STATUS_CASES = [
+    # mode, room, target, valve open, valve answering -> the card's status, the rule line (or None)
+    ("cool", 23.8, 24.0, False, True, "Temperatura giusta", "Riparte sopra 24,5°"),
+    ("cool", 24.3, 24.0, False, True, "In pausa", "Riparte sopra 24,5°"),   # above it, within the band: not "just right"
+    ("cool", 24.3, 24.0, True, True, "Sta raffrescando", "Raffresca fino a 23,5°"),
+    ("cool", 22.0, 24.0, False, True, "In pausa", "Riparte sopra 24,5°"),
+    ("heat", 20.3, 20.0, False, True, "Temperatura giusta", "Riparte sotto 19,5°"),
+    ("heat", 19.8, 20.0, False, True, "In pausa", "Riparte sotto 19,5°"),  # below it, within the band
+    ("heat", 19.8, 20.0, True, True, "Sta scaldando", "Scalda fino a 20,5°"),
+    ("cool", 27.5, 25.9, False, False, "La valvola non risponde", None),  # seen: a Shelly unplugged, "resting"
+]
+
+
+def _fake_zones(page, api, mode, zones):
+    """/api/climate/zones as the server says it, with these zones' readings
+    replaced - {name: (room, target, valve open, valve answering)}."""
+    import json as _json
+    data = api("/api/climate/zones")
+    data["mode"] = mode
+    data["away_until"] = None
+    for zone in data["zones"]:
+        if zone["name"] in zones:
+            room, target, valve_on, valve_ok = zones[zone["name"]]
+            zone.update(temperature_c=room, target_c=target, valve_on=valve_on, valve_ok=valve_ok,
+                        valve_error=None if valve_ok else "marked offline on its availability topic",
+                        sensor_ok=True, sensor_failsafe_active=False, sensor_waiting=False,
+                        override=None, valve_driver=None, cool_enabled=True)
+    page.unroute("**/api/climate/zones")
+    page.route("**/api/climate/zones", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=_json.dumps(data)))
+    page.reload()
+    page.wait_for_selector(".zone", timeout=20000)
+    page.wait_for_timeout(600)
+
+
+@pytest.mark.parametrize("mode,room,target,valve_on,valve_ok,status,rule", STATUS_CASES)
+def test_a_zone_says_where_it_stands_in_both_seasons(open_page, api, mode, room, target, valve_on, valve_ok, status, rule):
+    """Seen on the production board, cooling: a target below the room's,
+    and the card said "just right" - within the band the valve waits for,
+    but above the target - or "resting" with its Shelly unplugged."""
+    opened = _open_home(open_page)
+    page = opened.page
+    _fake_zones(page, api, mode, {ZONE_A: (room, target, valve_on, valve_ok), ZONE_B: (target, target, False, True)})
+    live = _card(page, ZONE_A).locator(".zone-live").inner_text()
+    assert status in _card(page, ZONE_A).locator(".zone-head").inner_text()
+    if rule:
+        assert rule in live
+    else:
+        assert "Riparte" not in live and "fino a" not in live, "no rule a valve that doesn't answer would follow"
+    assert opened.errors == []
+
+
+def test_the_top_says_every_zone_reached_its_target_only_when_it_has(open_page, api):
+    opened = _open_home(open_page)
+    page = opened.page
+    _fake_zones(page, api, "cool", {ZONE_A: (24.3, 24.0, False, True), ZONE_B: (23.9, 24.0, False, True)})
+    assert page.inner_text("#hero-title") != "Tutte le zone hanno raggiunto l'obiettivo"
+    detail = page.inner_text("#hero-detail")
+    assert f"{ZONE_A} 24,3°, sopra l'obiettivo di 24°" in detail and f"{ZONE_B} 23,9°, in temperatura" in detail
+    _fake_zones(page, api, "cool", {ZONE_A: (23.7, 24.0, False, True), ZONE_B: (23.9, 24.0, False, True)})
+    assert page.inner_text("#hero-title") == "Tutte le zone hanno raggiunto l'obiettivo"
+    _fake_zones(page, api, "cool", {ZONE_A: (23.7, 24.0, False, False), ZONE_B: (23.9, 24.0, False, True)})
+    assert page.inner_text("#hero-title") != "Tutte le zone hanno raggiunto l'obiettivo"
+    assert f"{ZONE_A}: la valvola non risponde" in page.inner_text("#hero-detail")
+    assert opened.errors == []
