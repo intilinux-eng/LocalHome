@@ -280,6 +280,7 @@ on 2026-10-05 on the production board, no load, its MQTT prefix changed to
 | restart while on (`Shelly.Reboot`) | back in 9 s, on (`source: init`) with Auto OFF's timer; `reset_reason` 3 |
 | settings (`Switch.GetConfig`) | the same keys as the Plus 1, checked the same way |
 | without power for 2 min, the valve open | the broker noticed after 90 s; powered again it starts **off** (`init`) and, unlike the Plus 1, publishes its status by itself; LocalHome opened it again 29 s after it was back |
+| the board unplugged for 15 min, the valve open | off by itself exactly 15 min after the last renewal, `source: timer`; the board back, the Gen3 sent first a status queued from before the stop, then the current one - noted at the end of its hold (its own timer start + 900 s), opened again 26 s after it was back |
 
 Same wiring (L, N, SW, I, O), same app settings. Everything a zone valve
 relies on behaves as on the Plus 1; only "held off" needed the RPC.
