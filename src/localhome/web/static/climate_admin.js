@@ -2509,6 +2509,15 @@ function shellyStatsHtml(d, data, now) {
         ? tr("climate_admin.shelly_restarts_split", { unexpected: s.restarts_7d, wanted: s.restarts_wanted_7d })
         : String(s.restarts_7d), s.restarts_7d > 0));
     }
+    // Its relay's own counters - a Gen3 keeps them, a Plus 1 doesn't.
+    if (s.switch_ons_24h != null) {
+      rows.push(statRowHtml(tr("climate_admin.shelly_switch_ons_24h"), String(Math.round(s.switch_ons_24h)),
+        s.switch_ons_24h > data.switch_ons_24h_max));
+    }
+    if (s.on_seconds_today != null) {
+      rows.push(statRowHtml(tr("climate_admin.shelly_on_today"), s.on_seconds_today >= 60
+        ? formatDuration(s.on_seconds_today) : tr("climate_admin.shelly_on_today_none")));
+    }
     if (d.errors.length) rows.push(statRowHtml(tr("climate_admin.shelly_errors"), d.errors.join(", "), true));
   }
   const firmware = [d.model, d.firmware].filter(Boolean).join(" · ");

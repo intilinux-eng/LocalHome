@@ -38,6 +38,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime
 import threading
 import time
 from typing import Any, Callable
@@ -67,6 +68,12 @@ BACK_ONLINE_SETTLE_SECONDS = 10
 # A Shelly switches its output off by itself at about 90°C.
 HOT_C = 80
 MISSED_PER_DAY = 3
+# A zone valve on a radiant system opens a few times a day - its thermal
+# actuator alone takes minutes to open. More switch-ons than this in 24
+# hours (2 an hour) is short-cycling: a hysteresis too narrow, a sensor
+# jumping, or something else switching it. Counted by the device itself
+# (a Gen3's switch:0.counts); a Plus 1 doesn't count.
+SWITCH_ONS_24H_MAX = 48
 # A device's start time, worked out from its uptime and our clock, moves
 # by a second or two between polls; a restart moves it by far more.
 RESTART_SLACK_SECONDS = 300
@@ -191,6 +198,24 @@ def simulated_devices(integrations) -> list[dict]:
             found.append({"id": SIMULATED_PREFIX + options["name"], "names": [options["name"]],
                           "battery": True, "simulated": True})
     return sorted(found, key=lambda d: d["names"][0].lower())
+
+
+def counted_increase(rows: list[tuple[int, float]], since: float) -> float | None:
+    """How much a device's own counter grew since `since`, from its
+    recorded values (oldest first): from the last one at or before `since`
+    - or the first one, when counting started later - adding each rise; a
+    drop is the counter reset, counted again from 0. None without any."""
+    if not rows:
+        return None
+    before = [value for ts, value in rows if ts <= since]
+    previous = before[-1] if before else rows[0][1]
+    total = 0.0
+    for ts, value in rows:
+        if ts <= since:
+            continue
+        total += value - previous if value >= previous else value
+        previous = value
+    return total
 
 
 def missed_reports(reports: list[float], starts: list[float], since: float, now: float,
@@ -414,7 +439,12 @@ class ShellyHealth:
         state["device_temp_c"] = max(temps) if temps else None
         state["errors"], state["voltage_v"] = sorted(set(errors)), voltage
         self._read_sys(state, status.get("sys"))
-        self._record(state["id"], {k: v for k, v in (("wifi_rssi_dbm", rssi), ("device_temp_c", state["device_temp_c"]))
+        # Its relay's own counters, when it keeps them (a Gen3): kept across
+        # its restarts, reset only on request - differences are what count.
+        switch_ons = _number(_dig(status, "switch:0", "counts", "switch_on"))
+        on_time = _number(_dig(status, "switch:0", "counts", "on_time"))
+        self._record(state["id"], {k: v for k, v in (("wifi_rssi_dbm", rssi), ("device_temp_c", state["device_temp_c"]),
+                                                      ("relay_switch_ons", switch_ons), ("relay_on_seconds", on_time))
                                    if v is not None})
 
     def _read_sys(self, state: dict, sys: Any) -> None:
@@ -515,6 +545,12 @@ class ShellyHealth:
         else:
             stats["restarts_7d"] = len(self._history(state["id"], "restart_unexpected", now - WEEK))
             stats["restarts_wanted_7d"] = len(self._history(state["id"], "restart_wanted", now - WEEK))
+            # The relay's own count, when it keeps one: None otherwise.
+            stats["switch_ons_24h"] = counted_increase(
+                self._history(state["id"], "relay_switch_ons", now - DAY - POLL_SECONDS), now - DAY)
+            midnight = datetime.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            stats["on_seconds_today"] = counted_increase(
+                self._history(state["id"], "relay_on_seconds", midnight - POLL_SECONDS), midnight)
         return stats
 
     # ----------------------------------------------------------- output --
@@ -557,6 +593,8 @@ class ShellyHealth:
             # every report through for weeks. Reports that don't arrive are.
             if device["battery"] and stats.get("missed_24h", 0) >= MISSED_PER_DAY:
                 found.append({"code": "device_reports_missed", "subject": name, "detail": str(stats["missed_24h"])})
+            if (stats.get("switch_ons_24h") or 0) > SWITCH_ONS_24H_MAX:
+                found.append({"code": "relay_short_cycling", "subject": name, "detail": str(round(stats["switch_ons_24h"]))})
             if device["settings_wrong"]:
                 keys = [s["key"] for s in device["settings_wrong"]]
                 found.append({"code": "shelly_settings", "subject": name, "detail": ", ".join(keys), "settings": keys})

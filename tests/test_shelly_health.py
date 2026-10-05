@@ -5,6 +5,7 @@ subscribe and an RPC played by the test, and the real history database."""
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from localhome.config import Integration
 from localhome.services import shelly_health
@@ -551,3 +552,45 @@ def test_a_mains_shelly_back_online_is_asked_at_once(tmp_path, monkeypatch):
     while by_id(watcher, DIMMER)["stats"]["restarts_7d"] != 1 and _time.time() < deadline:
         _time.sleep(0.05)
     assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 1
+
+
+def test_a_gen3_relays_own_counters_give_its_switch_ons_and_on_time(tmp_path):
+    """A Shelly 1 Gen3 counts its relay (switch:0.counts, kept across its
+    restarts): its switch-ons in the last 24 hours and its on time today,
+    from the differences - a reset counted again from 0. A Plus 1 has no
+    counts: nothing said."""
+    status = {"switch:0": {"id": 0, "output": True, "counts": {"switch_on": 100, "on_time": 5000}},
+              "sys": {"uptime": 50000, "cfg_rev": 1}, "wifi": {"rssi": -50}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    clock = Clock(datetime(2026, 10, 5, 8, 0).timestamp())
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc, clock=clock)
+    watcher.poll_once()
+    for switch_ons, on_time in ((103, 5600), (2, 400), (5, 1000)):   # the second: counters reset
+        clock.t += 3600
+        rpc.status["sys"]["uptime"] += 3600
+        rpc.status["switch:0"]["counts"].update(switch_on=switch_ons, on_time=on_time)
+        watcher.poll_once()
+    stats = by_id(watcher, RELAY)["stats"]
+    assert stats["switch_ons_24h"] == 3 + 2 + 3
+    assert stats["on_seconds_today"] == 600 + 400 + 600
+    assert watcher.problems() == [] or all(p["code"] != "relay_short_cycling" for p in watcher.problems())
+    plus1 = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000}, "wifi": {"rssi": -50}}
+    other, *_ = health(tmp_path / "p", [valve_integration()], rpc=RelayRpc(plus1, RELAY_CONFIG))
+    other.poll_once()
+    assert by_id(other, RELAY)["stats"]["switch_ons_24h"] is None and by_id(other, RELAY)["stats"]["on_seconds_today"] is None
+
+
+def test_too_many_switch_ons_in_a_day_is_short_cycling(tmp_path):
+    status = {"switch:0": {"id": 0, "output": True, "counts": {"switch_on": 10, "on_time": 0}},
+              "sys": {"uptime": 50000, "cfg_rev": 1}, "wifi": {"rssi": -50}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    for _ in range(4):
+        clock.t += 3600
+        rpc.status["sys"]["uptime"] += 3600
+        rpc.status["switch:0"]["counts"]["switch_on"] += 15
+        watcher.poll_once()
+    found = [p for p in watcher.problems() if p["code"] == "relay_short_cycling"]
+    assert found == [{"code": "relay_short_cycling", "subject": "Stanze Valve", "detail": "60"}]
+
