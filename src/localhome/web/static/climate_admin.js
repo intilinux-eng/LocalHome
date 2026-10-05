@@ -2472,7 +2472,8 @@ function shellyStatsHtml(d, data, now) {
   rows.push(signalRow(tr("climate_admin.shelly_signal_24h"), s.signal_24h));
   rows.push(signalRow(tr("climate_admin.shelly_signal_7d"), s.signal_7d));
   if (d.battery) {
-    if (d.battery_pct != null) {
+    // On USB-C its battery isn't what keeps it going: not shown.
+    if (d.battery_pct != null && !d.external_power) {
       rows.push(statRowHtml(tr("fields.battery_pct"), d.battery_v != null
         ? tr("climate_admin.shelly_battery_value", { pct: Math.round(d.battery_pct), volts: d.battery_v.toFixed(2) })
         : `${Math.round(d.battery_pct)}%`, d.battery_pct <= LOW_BATTERY_PCT));
@@ -2586,7 +2587,7 @@ function deviceRowHtml(row) {
       + (s.simulated ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "")
     : `<span class="admin-pill">${escapeHtml(row.devices[0].kind)}</span>`;
   const meta = s ? [s.wifi_rssi_dbm != null ? `${Math.round(s.wifi_rssi_dbm)} dBm` : "",
-    s.battery && s.battery_pct != null ? `${Math.round(s.battery_pct)}%` : ""].filter(Boolean).join(" · ") : "";
+    s.battery && s.battery_pct != null && !s.external_power ? `${Math.round(s.battery_pct)}%` : ""].filter(Boolean).join(" · ") : "";
   const ages = row.devices.map(d => d.seconds_since_update).filter(age => age != null);
   const age = !row.devices.length ? ""
     : ages.length ? tr("climate_admin.system_device_age", { age: formatAge(Math.min(...ages)) })

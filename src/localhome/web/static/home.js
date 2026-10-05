@@ -411,9 +411,13 @@ function fillZone(card, zone, climate) {
   const foot = [];
   // A typed value isn't a reading: no "updated a moment ago" under it.
   const age = zone.sensor_manual ? "" : fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
-  // A value the sensor hasn't confirmed since: the last one saved, and how old.
-  if (age) foot.push(esc(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age })));
-  if (zone.battery_pct != null) foot.push(esc(tr("home.battery", { pct: Math.round(zone.battery_pct) })));
+  // The sensor's, said as such - the hours run today after it are the
+  // valve's. A value it hasn't confirmed since: the last one saved, and
+  // how old. No battery for one on USB-C (the server leaves it out).
+  const sensorBits = [];
+  if (age) sensorBits.push(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age }));
+  if (zone.battery_pct != null) sensorBits.push(tr("home.battery", { pct: Math.round(zone.battery_pct) }));
+  if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
   const hoursToday = (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
@@ -604,7 +608,7 @@ function wireRibbon(card, zone, week, history, mode) {
 function quickHtml(zone, climate, change) {
   const mode = climate.mode;
   if (mode === "cool" && !zone.cool_enabled) {
-    return `<span class="tile-note">${esc(tr("home.excluded_note"))}</span>`;
+    return `<div class="excluded-note">${ICONS.snow}<span>${esc(tr("home.excluded_note"))}</span></div>`;
   }
   const pending = state.pending[zone.name];
   if (pending) {
@@ -852,6 +856,8 @@ function fillPlan(card, zone) {
   const plan = card.querySelector(".zone-plan");
   const excluded = zoneExcluded(zone);
   plan.hidden = excluded;
+  // No week to plan this season: the card's live part takes the full width.
+  card.dataset.plan = excluded ? "none" : "week";
   if (excluded || plan.dataset.mode === climateMode) return;
   plan.dataset.mode = climateMode;
   plan.innerHTML = schedulePaneHtml(zone, slug(zone.name));

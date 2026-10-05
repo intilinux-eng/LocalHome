@@ -221,6 +221,8 @@ a { color: inherit; }
 .zone-plan { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 @media (min-width: 960px) {
   .zone { display: grid; grid-template-columns: minmax(380px, 480px) minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  /* No week to plan this season (a zone left out of the cooling): all the width. */
+  .zone[data-plan="none"] { display: block; }
   .zone-plan { margin-top: 0; padding-top: 0; border-top: 0; padding-left: 28px; border-left: 1px solid var(--line); min-height: 100%; }
 }
 
@@ -442,6 +444,10 @@ a { color: inherit; }
   background: var(--accent-soft);
   font-size: 0.9rem;
 }
+
+/* A zone left out of the season: said plainly, where the controls would be. */
+.excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
+.excluded-note svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .zone-foot {
   display: flex;

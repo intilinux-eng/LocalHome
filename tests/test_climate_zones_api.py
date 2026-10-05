@@ -334,3 +334,20 @@ def test_a_temporary_target_from_the_dashboard(tmp_path):
                        ({"target": 21}, "override_hours_invalid")):
         assert client.post(f"/api/climate/zones/{name}/override", json=body).get_json()["code"] == code
     assert client.post("/api/climate/zones/Nowhere/override", json={"target": 21, "hours": 1}).status_code == 404
+
+
+def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):
+    """Its devicepower says it's on external power: its battery isn't what
+    keeps it going, and isn't shown."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    cache = app.config["MANAGER"].pollers["Room Sensor"].cache
+    client = app.test_client()
+    cache.set({"ok": True, "name": "Room Sensor", "temperature_c": 21.0, "battery_pct": 89, "external_power": False})
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["battery_pct"] == 89
+    cache.set({"ok": True, "name": "Room Sensor", "temperature_c": 21.0, "battery_pct": 89, "external_power": True})
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["battery_pct"] is None
+

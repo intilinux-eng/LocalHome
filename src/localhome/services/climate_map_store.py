@@ -409,7 +409,12 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
             "humidity_pct": "rh",
             "battery_pct": "battery.percent",
             "wifi_rssi_dbm": "rssi",
+            # Powered over USB-C: its battery isn't what keeps it going, and
+            # isn't shown (web/app.py's zones).
+            "external_power": "external.present",
         },
+        # The numbers only, as before: whether it's on USB isn't history.
+        "history_fields": ["temperature_c", "humidity_pct", "battery_pct", "wifi_rssi_dbm"],
         # 4h - just under 2x the 2h heartbeat these devices promise
         # (confirmed live overnight: both real H&T sensors landed every
         # heartbeat within a minute of exactly 2h, no exceptions once

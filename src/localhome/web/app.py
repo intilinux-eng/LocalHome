@@ -1121,7 +1121,8 @@ def _register_routes(app: Flask) -> None:
                 "temperature_c": temperature_c,
                 "humidity_pct": humidity_pct,
                 "dew_point_c": dew_point,
-                "battery_pct": sensor_reading.get("battery_pct"),
+                # Not shown for an H&T powered over USB-C.
+                "battery_pct": None if sensor_reading.get("external_power") is True else sensor_reading.get("battery_pct"),
                 "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
                 # Tagged on the zone's card ("simulated") - see home.js.
