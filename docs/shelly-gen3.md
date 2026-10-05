@@ -266,6 +266,23 @@ it every 5 minutes while the valve should be open
 | the same with Auto OFF set | comes back on with Auto OFF's timer, then off ✓ |
 | `on,60` renewals with Auto OFF at 30 s | the command's timer wins, on past the 30 s, no drop ✓ |
 
+The same on a **Shelly 1 Gen3** (S3SW-001X16EU, firmware 2.0.1), measured
+on 2026-10-05 on the production board, no load, its MQTT prefix changed to
+`shelly1g3-stanze` in the app, Auto OFF at 900 s:
+
+| Test | Result |
+|---|---|
+| `status_update`; `True` | answered with its status and source; ignored |
+| `on,30` renewed every 10 s for 50 s | **never drops**, the timer restarts each time |
+| renewals stop | off by itself 29 s after the last one, `source: timer` - the command's timer wins over Auto OFF |
+| a plain `on` | held by Auto OFF's 900 s |
+| `off,20`, `off,20.0`, `off,5` | **ignored** - no status, the relay stays on. `Switch.Set` with `on: false, toggle_after: 20` works (HTTP and RPC over MQTT): off, back on by itself 20 s later. So LocalHome holds a relay off - one whose rest is on - with that RPC, on both generations |
+| restart while on (`Shelly.Reboot`) | back in 9 s, on (`source: init`) with Auto OFF's timer; `reset_reason` 3 |
+| settings (`Switch.GetConfig`) | the same keys as the Plus 1, checked the same way |
+
+Same wiring (L, N, SW, I, O), same app settings. Everything a zone valve
+relies on behaves as on the Plus 1; only "held off" needed the RPC.
+
 Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
 device for whatever LocalHome doesn't cover.
 

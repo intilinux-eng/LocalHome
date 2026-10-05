@@ -156,7 +156,7 @@
     "sensor_label": "Sensore",
     "valve_label": "Valvola",
     "extra_switches_heading": "Interruttori extra",
-    "extra_switches_note": "Valvola bypass bagni e deumidificatore: due Shelly Plus 1 senza zona né sensore. Lascia vuoto quello non collegato.",
+    "extra_switches_note": "Valvola bypass bagni e deumidificatore: due Shelly Plus 1 o 1 Gen3 senza zona né sensore. Lascia vuoto quello non collegato.",
     "extra_switches_note_more": "Se thermostat.interlocks/mode_switches in config.yaml controllano già uno di questi con un nome diverso, aggiorna quella voce a \"Bathroom Bypass Valve\"/\"Dehumidifier\": questo pannello usa sempre esattamente quei nomi.",
     "extra_bypass_valve_label": "ID dispositivo valvola bypass bagni",
     "extra_dehumidifier_label": "ID dispositivo deumidificatore",
