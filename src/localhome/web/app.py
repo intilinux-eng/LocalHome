@@ -42,6 +42,7 @@ from localhome.services.climate_map_store import (
     panel_season_rules,
     snapshot_from_config,
 )
+from localhome.services.dehumidifier import DehumidifierTimer
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services import diagnostics, led_matrix, panel_settings
@@ -351,6 +352,52 @@ def create_app(config_path: str | None = None) -> Flask:
         interlock.start()
     vmc.start()
 
+    def command_switch(name: str, on: bool) -> None:
+        """A switch on or off as the home page does it: its card says so at
+        once, and a valve it opens with it follows now, not a minute later."""
+        switch = manager.switches[name]
+        switch.turn_on() if on else switch.turn_off()
+        manager.pollers[name].cache.merge({"is_on": on})
+        _wake_poller(manager, name)
+        if interlock is not None and name in interlock_followers:
+            interlock.tick()
+
+    def dehumidifier_switch() -> str | None:
+        """The admin panel's dehumidifier - or else, written in config.yaml,
+        a season switch that opens a zone's valve for its water: what a
+        radiant system's dehumidifier is."""
+        panel = EXTRA_SWITCH_FIELDS["dehumidifier_device_id"]
+        if panel in manager.switches:
+            return panel
+        leaders = {link.leader for link in interlock_links}
+        return next((rule["switch"] for rule in season_rules()
+                     if rule["switch"] in leaders and rule["switch"] in manager.switches), None)
+
+    def dehumidifier_allowed(name: str) -> bool:
+        """Switched by hand in this season - a summer device - and not in
+        the diagnostic mode, where whoever installs it switches what they like."""
+        if thermostat is None:
+            return True
+        if thermostat.schedule_store.get_diagnostic_mode():
+            return False
+        mode = thermostat.schedule_store.get_mode()
+        rule = next((r for r in season_rules() if r["switch"] == name), None)
+        return rule is None or rule[mode] == "manual"
+
+    # The dehumidifier, on by hand for a while - never by itself; off when
+    # the time is up or the first cooled zone's air is dry enough
+    # (services/dehumidifier.py).
+    dehumidifier = None
+    dehumidifier_name = dehumidifier_switch()
+    if dehumidifier_name:
+        cooled = [zone for zone in (thermostat.zones if thermostat else []) if zone.cool_enabled]
+        dehumidifier = DehumidifierTimer(
+            manager, dehumidifier_name, cooled[0].sensor if cooled else None,
+            config.resolve("dehumidifier.json"), command=command_switch,
+            allowed=lambda: dehumidifier_allowed(dehumidifier_name),
+            humidity_zone=cooled[0].name if cooled else None)
+        dehumidifier.start()
+
     app.config["LOCALHOME_CONFIG"] = config
     app.config["TRANSLATIONS"] = load_translations(config.web_language)
     app.config["MANAGER"] = manager
@@ -363,6 +410,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
     app.config["VMC_SCHEDULE"] = vmc
+    app.config["DEHUMIDIFIER"] = dehumidifier
     # The VMC's night/day/boost speeds as set in the admin panel, laid over
     # its device's presets - see services/vmc_speeds.py.
     app.config["VMC_SPEEDS"] = vmc_speeds.VmcSpeedStore(config.resolve("vmc_speeds.json"))
@@ -1054,6 +1102,39 @@ def _register_routes(app: Flask) -> None:
             return _refusal(exc, 400)
         return vmc_answer(vmc)
 
+    @app.route("/api/dehumidifier")
+    def api_dehumidifier():
+        """The dehumidifier switched on by hand for a while: on until when,
+        the reference humidity, the thresholds - None without one."""
+        timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
+        return jsonify(ok=True, dehumidifier=timer.status() if timer else None)
+
+    @app.route("/api/dehumidifier/on", methods=["POST"])
+    def api_dehumidifier_on():
+        """{"hours": 1, 2 or 4}: on for that long. Refused (409) with the
+        air dry enough, or out of its season."""
+        timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
+        if timer is None:
+            return _fail("no_dehumidifier", "no dehumidifier configured", 404)
+        try:
+            status = timer.switch_on(_json_body().get("hours"))
+        except InputError as exc:
+            return _refusal(exc, 400 if exc.code == "dehumidifier_hours_invalid" else 409)
+        except Exception as exc:
+            return jsonify(ok=False, error=str(exc)), 502
+        return jsonify(ok=True, dehumidifier=status)
+
+    @app.route("/api/dehumidifier/off", methods=["POST"])
+    def api_dehumidifier_off():
+        timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
+        if timer is None:
+            return _fail("no_dehumidifier", "no dehumidifier configured", 404)
+        try:
+            status = timer.switch_off()
+        except Exception as exc:
+            return jsonify(ok=False, error=str(exc)), 502
+        return jsonify(ok=True, dehumidifier=status)
+
     @app.route("/api/vmc-schedule/boost/cancel", methods=["POST"])
     def api_vmc_boost_cancel():
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
@@ -1173,6 +1254,8 @@ def _register_routes(app: Flask) -> None:
             # What the season does besides the zones: every switch that
             # follows it, and what it does in each season.
             season_effects={"rules": app.config["SEASON_RULES"](), "links": app.config["SEASON_LINKS"]()},
+            # On by hand for a while, never by itself - see services/dehumidifier.py.
+            dehumidifier=app.config["DEHUMIDIFIER"].status() if app.config.get("DEHUMIDIFIER") else None,
             zones=zones,
         )
 

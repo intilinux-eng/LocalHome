@@ -262,6 +262,14 @@ a { color: inherit; }
 .season-device-text { display: grid; gap: 2px; min-width: 0; flex: 1; font-size: 0.86rem; color: var(--text-2); }
 .season-device-text b { font-size: 1rem; color: var(--text); font-weight: 650; }
 .season-device-text span::first-letter { text-transform: uppercase; }
+/* The dehumidifier: on for a while - its durations, or Off, under its name. */
+.season-device-dehum { flex-wrap: wrap; max-width: 460px; }
+.season-device-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-3); }
+.season-device-rh svg { width: 11px; height: 11px; fill: var(--cool); }
+.season-device-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; padding-left: 52px; }
+.season-device-for { font-size: 0.82rem; color: var(--text-2); margin-right: 2px; }
+.season-device-controls .chip { min-height: 38px; padding: 6px 14px; }
+.season-device-controls .chip:disabled { opacity: 0.45; }
 
 .chip {
   display: inline-flex;

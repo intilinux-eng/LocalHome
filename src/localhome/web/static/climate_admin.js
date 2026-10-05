@@ -1560,8 +1560,12 @@ function seasonEffects(mode, data) {
   (effects.rules || []).forEach(rule => {
     const action = rule[mode];
     if (!action) return;
-    const what = ruleActionText(action, rule.normally_open)
-      + (action === "manual" ? ` - ${tr("climate_admin.season_rule_from_home")}` : "");
+    const dehum = data.dehumidifier && data.dehumidifier.switch === rule.switch ? data.dehumidifier : null;
+    const fromHome = dehum
+      ? tr("climate_admin.season_rule_dehumidifier", { zone: displayName(dehum.humidity_zone || "?"),
+          stop: Math.round(dehum.stop_below), start: Math.round(dehum.start_from) })
+      : tr("climate_admin.season_rule_from_home");
+    const what = ruleActionText(action, rule.normally_open) + (action === "manual" ? ` - ${fromHome}` : "");
     items.push(`${escapeHtml(displayName(rule.switch))}: ${escapeHtml(what)}`);
   });
   items.push(tr(`climate_admin.season_schedule_${mode}`));

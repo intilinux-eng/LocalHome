@@ -887,6 +887,7 @@ function renderSeasonDevices() {
   const cards = rules.filter(rule => rule[climate.mode] === "manual").map(rule => {
     const device = deviceByName(rule.switch);
     if (!device || !device.controllable) return "";
+    if (state.dehumidifier && state.dehumidifier.switch === rule.switch) return dehumidifierCard(rule.switch, state.dehumidifier);
     const on = !!(state.readings[rule.switch] || {}).is_on;
     return `<div class="season-device" data-on="${on}">
         <span class="season-device-icon">${ICONS.drop}</span>
@@ -898,7 +899,41 @@ function renderSeasonDevices() {
   host.innerHTML = cards.join("");
 }
 
+// The dehumidifier: on for a while, never by itself - it draws a lot of
+// power (services/dehumidifier.py). With the air dry enough it isn't
+// started, and says why.
+function dehumidifierCard(name, d) {
+  const on = d.on === true;
+  const dry = d.humidity != null && d.humidity < d.start_from;
+  const note = on
+    ? (d.until_at ? tr("home.dehum_on_until", { until: untilText(boardDate(d.until_at)) }) : tr("home.on"))
+    : dry ? tr("home.dehum_dry", { rh: d.humidity, start: Math.round(d.start_from) }) : tr("home.off_state");
+  const humidity = d.humidity != null ? `<span class="season-device-rh">${ICONS.drop}${esc(tr("home.dehum_rh", { rh: d.humidity }))}</span>` : "";
+  const controls = on
+    ? `<button class="chip" type="button" data-dehum-off>${esc(tr("home.dehum_off"))}</button>`
+    : `<span class="season-device-for">${esc(tr("home.dehum_for"))}</span>`
+      + d.durations.map(h => `<button class="chip" type="button" data-dehum-hours="${h}"${dry ? " disabled" : ""}>${esc(tr("home.vmc_hours", { h }))}</button>`).join("");
+  return `<div class="season-device season-device-dehum" data-on="${on}">
+      <span class="season-device-icon">${ICONS.drop}</span>
+      <span class="season-device-text"><b>${esc(displayName(name))}</b><span>${esc(note)}</span>${humidity}</span>
+      <span class="season-device-controls">${controls}</span>
+    </div>`;
+}
+
 async function onSeasonDeviceClick(event) {
+  const dehum = event.target.closest("button[data-dehum-hours], button[data-dehum-off]");
+  if (dehum) {
+    dehum.disabled = true;
+    try {
+      if (dehum.hasAttribute("data-dehum-off")) await api("/api/dehumidifier/off", {});
+      else await api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) });
+      await refreshDevices();
+    } catch (e) {
+      notify(errorText(e));
+      dehum.disabled = false;
+    }
+    return;
+  }
   const toggle = event.target.closest("button[data-switch]");
   if (!toggle) return;
   toggle.disabled = true;
@@ -1466,6 +1501,8 @@ async function refreshDevices() {
     if (state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)) {
       state.vmc = await api("/api/vmc-schedule").catch(() => null);
     }
+    const dehumidifier = await api("/api/dehumidifier").catch(() => null);
+    state.dehumidifier = dehumidifier ? dehumidifier.dehumidifier : null;
   } catch (e) {
     return;
   }
