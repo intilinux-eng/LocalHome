@@ -81,6 +81,14 @@ WEEK = 7 * DAY
 # Gen2/Gen3 ids end in the device's full MAC; Gen1 ids (6 hex digits)
 # don't speak the RPC this relies on.
 SHELLY_ID = re.compile(r"^shelly[a-z0-9]*-[0-9a-f]{12}$", re.IGNORECASE)
+# But the id is only the default of its MQTT prefix, which the Shelly app
+# lets anyone change - seen: "shelly1g3-stanze". What gives a Gen2/Gen3
+# away whatever its prefix is its topics' shape: "<prefix>/status/
+# <component>:<n>", "<prefix>/command/switch:<n>". And its RPC over MQTT
+# answers on that same prefix.
+GEN2_TOPIC = re.compile(r"^([^/+#\s]+)/(?:status/[a-z0-9_]+:\d+|command/switch:\d+)$")
+# Any MQTT prefix one could type: one topic level, no wildcards, no spaces.
+MQTT_PREFIX = re.compile(r"^[^/+#\s]+$")
 # The components whose "temperature" is the device's own, not a reading
 # (a `temperature:N` component *is* a reading - an H&T's, an add-on's).
 POWERED_COMPONENTS = {"switch", "light", "cover", "rgb", "rgbw", "cct", "pm1", "em", "em1"}
@@ -153,13 +161,15 @@ def shelly_devices(integrations) -> list[dict]:
         topics = options.get("state_topic")
         topics = topics if isinstance(topics, list) else [topics]
         topics = [t for t in topics + [options.get("command_topic")] if isinstance(t, str)]
-        ids = [t.split("/", 1)[0] for t in topics]
-        if isinstance(options.get("device_id"), str):
-            ids.append(options["device_id"].strip())
+        ids = [t.split("/", 1)[0] for t in topics if GEN2_TOPIC.match(t) or SHELLY_ID.match(t.split("/", 1)[0])]
+        # An RPC driver's device id (a Shelly dimmer's) - not another
+        # brand's (a Tuya's is a device_id too).
+        device_id = options.get("device_id")
+        if isinstance(device_id, str) and MQTT_PREFIX.match(device_id.strip()) and (
+                str(getattr(integration, "type", "")).startswith("shelly") or SHELLY_ID.match(device_id.strip())):
+            ids.append(device_id.strip())
         battery = any("/status/devicepower" in t for t in topics)
         for device_id in dict.fromkeys(ids):
-            if not SHELLY_ID.match(device_id):
-                continue
             device = found.setdefault(device_id, {"id": device_id, "names": [], "battery": False, "expect": {}})
             device["expect"].update(expected_settings(integration))
             name = options.get("name")

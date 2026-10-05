@@ -97,6 +97,23 @@ def by_id(watcher, device_id):
 
 # --------------------------------------------------------------- devices --
 
+def test_a_shelly_whose_mqtt_prefix_was_changed_is_found_by_its_topics():
+    """Seen on the production board: "shelly1g3-stanze", set in the Shelly
+    app - left out, and with it the check of its settings. A Gen2/Gen3 is
+    known by its topics' shape; another brand's isn't taken for one."""
+    found = shelly_devices([
+        Integration("switch", "mqtt_json", {"name": "Stanze Valve", "state_topic": "shelly1g3-stanze/status/switch:0",
+                                            "command_topic": "shelly1g3-stanze/command/switch:0", "hold_seconds": 900}),
+        Integration("switch", "mqtt_json", {"name": "Tasmota", "state_topic": "stat/plug/POWER",
+                                            "command_topic": "cmnd/plug/POWER"}),
+        Integration("switch", "mqtt_json", {"name": "Z2M", "state_topic": "zigbee2mqtt/Lamp",
+                                            "command_topic": "zigbee2mqtt/Lamp/set"}),
+        Integration("climate", "tuya_air", {"name": "Aria", "device_id": "bf1234567890abcdef"}),
+    ])
+    assert [(d["id"], d["names"]) for d in found] == [("shelly1g3-stanze", ["Stanze Valve"])]
+    assert found[0]["expect"]["auto_off"] == 900
+
+
 def test_the_shellys_are_found_in_the_integrations_whoever_wrote_them():
     found = shelly_devices([
         ht_integration(),

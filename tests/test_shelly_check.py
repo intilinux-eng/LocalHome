@@ -68,11 +68,29 @@ def test_a_battery_sensor_isnt_asked(tmp_path):
     assert made == [] and rpc.calls == []
 
 
-def test_a_typo_isnt_sent_anywhere(tmp_path):
+def test_what_cant_be_a_prefix_isnt_sent_anywhere(tmp_path):
     check, made = _check(tmp_path, FakeRpc())
-    assert check.check("shellyplus1-fce8c0", "valve") == {"ok": False, "reason": "id"}
+    for typo in ("shellyplus1 c0ffee000001", "shellyplus1/c0ffee000001", "shelly#1", ""):
+        assert check.check(typo, "valve") == {"ok": False, "reason": "id"}, typo
     assert check.check(RELAY, "toaster") == {"ok": False, "reason": "role"}
     assert made == []
+
+
+def test_a_prefix_changed_in_the_app_is_asked_like_an_id(tmp_path):
+    """Seen on the production board: a Shelly 1 Gen3 whose MQTT prefix the
+    installer set to "shelly1g3-stanze" - refused as "not an id", and its
+    missing timer never said. Its RPC answers on that prefix."""
+    rpc = FakeRpc()
+    check, made = _check(tmp_path, rpc)
+    result = check.check("shelly1g3-stanze", "valve")
+    assert result["answered"] is True and [s["key"] for s in result["settings_wrong"]]
+    assert made == ["shelly1g3-stanze"]
+
+
+def test_silent_and_not_an_ids_shape_says_both_what_it_could_be(tmp_path):
+    check, _ = _check(tmp_path, FakeRpc(silent=True))
+    assert check.check("shellyplus1-fce8c0", "valve")["standard_id"] is False     # a typo, or a prefix
+    assert check.check(RELAY, "valve")["standard_id"] is True
 
 
 def test_no_broker_no_question(tmp_path):

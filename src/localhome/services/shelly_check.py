@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from localhome.config import Integration
 from localhome.drivers.mqtt.client import load_broker_config
-from localhome.services.shelly_health import SHELLY_ID, expected_settings, settings_wrong
+from localhome.services.shelly_health import MQTT_PREFIX, SHELLY_ID, expected_settings, settings_wrong
 
 # Roles the admin panel types a Shelly id for, and which of them are
 # relays to compare against what the panel builds for them.
@@ -52,7 +52,9 @@ class ShellyCheck:
         device_id = (device_id or "").strip()
         if role not in ROLES:
             return {"ok": False, "reason": "role"}
-        if not SHELLY_ID.match(device_id):
+        # Any MQTT prefix is asked - the app lets it be changed from the id
+        # (seen: "shelly1g3-stanze"); only what can't be one isn't sent.
+        if not MQTT_PREFIX.match(device_id):
             return {"ok": False, "reason": "id"}
         if role in BATTERY_ROLES:
             return {"ok": True, "answered": None, "battery": True}
@@ -62,7 +64,9 @@ class ShellyCheck:
             client = self._client(device_id)
             info = client.call("Shelly.GetDeviceInfo")
         except Exception as exc:
-            return {"ok": True, "answered": False, "reason": "silent", "error": str(exc)}
+            # Not an id's shape: a typo, or a prefix that isn't this one.
+            return {"ok": True, "answered": False, "reason": "silent", "error": str(exc),
+                    "standard_id": bool(SHELLY_ID.match(device_id))}
         result = {"ok": True, "answered": True, "model": info.get("app") or info.get("model"),
                   "firmware": info.get("ver"), "settings_wrong": []}
         integration = role_integration(role, device_id)

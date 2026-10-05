@@ -2426,7 +2426,10 @@ async function checkShelly(input, role) {
 function shellyCheckText(data) {
   if (!data.ok) return tr(data.reason === "id" ? "climate_admin.check_bad_id" : "sensors.request_failed");
   if (data.battery) return tr("climate_admin.check_battery");
-  if (!data.answered) return tr(data.reason === "no_broker" ? "climate_admin.check_no_broker" : "climate_admin.check_silent");
+  if (!data.answered) {
+    if (data.reason === "no_broker") return tr("climate_admin.check_no_broker");
+    return tr(data.standard_id === false ? "climate_admin.check_silent_prefix" : "climate_admin.check_silent");
+  }
   const found = tr("climate_admin.check_found", { model: data.model || "Shelly", firmware: data.firmware || "?" });
   const wrong = data.settings_wrong || [];
   if (wrong.length) {
