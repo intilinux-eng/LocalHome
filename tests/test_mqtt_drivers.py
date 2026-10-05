@@ -962,3 +962,25 @@ def test_a_renewal_that_couldnt_reach_it_is_sent_again_as_soon_as_it_answers(fak
     valve.read()
     assert len(_sent(fake_connection)) == 4, "then at the usual pace"
 
+
+def test_a_command_isnt_shown_as_obeyed_when_the_one_before_went_unanswered(fake_connection, clock, tmp_path):
+    """Seen on the production board, a Shelly 1 Gen3 just unplugged: the
+    broker didn't know yet, the thermostat sent "on,900" again every tick,
+    and each was shown as obeyed for 15 s - the page flipping between open
+    and closed. One unanswered command is shown; the next isn't, until the
+    device speaks again."""
+    import localhome.drivers.mqtt.switch as switch_module
+    valve = _shelly_valve(tmp_path)
+    _say(fake_connection, False)
+    clock["t"] += 1
+    valve.turn_on()
+    assert valve.read()["is_on"] is True, "just commanded: shown as commanded"
+    clock["t"] += switch_module.CONFIRM_SECONDS + 5
+    assert valve.read()["is_on"] is False, "no answer: what it last said"
+    valve.turn_on()                                  # sent again - nobody answers
+    assert valve.read()["is_on"] is False, "two unanswered: likely gone, not shown as obeyed"
+    clock["t"] += 1
+    _say(fake_connection, True, timer=900)           # it's back and answers
+    valve.turn_off()
+    assert valve.read()["is_on"] is False
+

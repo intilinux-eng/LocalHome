@@ -135,6 +135,12 @@ class MqttSwitchDriver(SwitchDriver):
         # it straight back on.
         self._commanded: bool | None = None
         self._commanded_at: float | None = None   # wall clock, as the MQTT receive time
+        # Commands sent since the device last said anything: past one, it's
+        # likely gone - unplugged, the broker not knowing yet (up to 90 s,
+        # its keepalive) - and the thermostat sends again every tick. Seen
+        # on the production board: each one shown as obeyed for 15 s, the
+        # page flipping between open and closed for a minute and a half.
+        self._unanswered = 0
         self._status_command = status_command
         # Set by any message from the device since this started, or since
         # it was last seen offline: until then, what's known of it may be
@@ -176,7 +182,7 @@ class MqttSwitchDriver(SwitchDriver):
         if self._safety_rest_at is not None:
             reading["safety_rest_at"] = self._safety_rest_at
         if (self._commanded_at is not None and (self._state.get_received_at() or 0) <= self._commanded_at
-                and time.time() - self._commanded_at < CONFIRM_SECONDS):
+                and time.time() - self._commanded_at < CONFIRM_SECONDS and self._unanswered <= 1):
             reading["is_on"] = self._commanded
         # Out of rest: LocalHome holds it while it runs - what it last
         # commanded, or, after a restart of LocalHome (nothing commanded
@@ -253,6 +259,7 @@ class MqttSwitchDriver(SwitchDriver):
         connected yet - may never have reached it, and the next one would
         come 5 minutes later, maybe after the hold ran out."""
         self._asks = 0
+        self._unanswered = 0
         if self._awaiting_answer:
             self._awaiting_answer = False
             self._renewed_at = None
@@ -348,12 +355,14 @@ class MqttSwitchDriver(SwitchDriver):
         self._ask_first()
         self._send(self._held_command(True))
         self._commanded, self._commanded_at = True, time.time()
+        self._unanswered += 1
         self._renewed_at = time.monotonic() if self._hold_seconds and not self._rest_on else None
 
     def turn_off(self) -> None:
         self._ask_first()
         self._send(self._held_command(False))
         self._commanded, self._commanded_at = False, time.time()
+        self._unanswered += 1
         self._renewed_at = time.monotonic() if self._hold_seconds and self._rest_on else None
 
     def _send(self, value: str) -> None:
