@@ -158,11 +158,13 @@ function schedulePaneHtml(zone, id) {
         <p class="hint-text">${tr("climate.schedule_hint")}</p>
         <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
 
-        <div class="sched-hour-axis-wrap">
-          <div class="sched-hour-axis">${hourAxisHtml()}</div>
-          <span class="sched-hour-axis-end">24h</span>
+        <div class="sched-wrap">
+          <div class="sched-hour-axis-wrap">
+            <div class="sched-hour-axis">${hourAxisHtml()}</div>
+            <span class="sched-hour-axis-end">24h</span>
+          </div>
+          <div class="sched-grid" id="sched-${id}"></div>
         </div>
-        <div class="sched-grid" id="sched-${id}"></div>
 
         <div class="zone-actions">
           <span class="copy-label">${tr("climate.copy_label")}</span>
@@ -191,10 +193,14 @@ function buildScheduleGrid(zoneId, week) {
   const dayLabels = tr("climate.days");
   const { dayKey: nowDayKey, hour: nowHour } = scheduleNow();
 
+  // Each cell carries its place in the turned grid (--c, --r): hours across
+  // on a wide card, the DOM's order; on a narrow one the stylesheet turns
+  // it - hours down, days across - and the hour labels show.
   DAY_KEYS.forEach((dayKey, d) => {
     const label = document.createElement("span");
     label.className = "sched-day-label" + (dayKey === nowDayKey ? " now" : "");
     label.textContent = dayLabels[d] || dayKey;
+    label.style.setProperty("--c", d + 2);
     grid.appendChild(label);
 
     for (let h = 0; h < 24; h++) {
@@ -202,16 +208,72 @@ function buildScheduleGrid(zoneId, week) {
       cell.className = "sched-cell" + (dayKey === nowDayKey && h === nowHour ? " now" : "");
       cell.dataset.day = dayKey;
       cell.dataset.hour = String(h);
+      cell.style.setProperty("--c", d + 2);
+      cell.style.setProperty("--r", h + 2);
       applyCellStyle(cell, week[dayKey][h]);
-      cell.addEventListener("pointerdown", e => {
-        e.preventDefault();
-        isPainting = true;
-        paintCell(zoneId, cell);
-      });
-      cell.addEventListener("pointerenter", () => {
-        if (isPainting) paintCell(zoneId, cell);
-      });
       grid.appendChild(cell);
+    }
+  });
+  for (let h = 0; h < 24; h++) {
+    const label = document.createElement("span");
+    label.className = "sched-hour-label" + (h === nowHour ? " now" : "");
+    label.textContent = String(h).padStart(2, "0");
+    label.style.setProperty("--r", h + 2);
+    grid.appendChild(label);
+  }
+  wireScheduleGrid(grid, zoneId);
+}
+
+// Strokes, on the grid itself: the cell under the pointer is looked up as
+// it moves - a finger stays captured by the cell it started on, so a
+// pointerenter on the next one never came and a drag painted one hour.
+// On the turned grid (a phone) a finger paints on a tap or a sideways
+// drag - the same hour across days - and an up-down swipe scrolls the
+// page instead: painting on touch-down would paint whatever cell a scroll
+// started on. A mouse or a pen paints at once, any direction.
+let pendingTap = null;   // {zoneId, cell, x, y} - a finger down, not yet a tap or a drag
+
+function wireScheduleGrid(grid, zoneId) {
+  if (grid.dataset.wired) return;
+  grid.dataset.wired = "1";
+  const cellAt = e => {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el && el.closest(".sched-cell");
+    return cell && grid.contains(cell) ? cell : null;
+  };
+  grid.addEventListener("pointerdown", e => {
+    const cell = e.target.closest(".sched-cell");
+    if (!cell) return;
+    const turned = getComputedStyle(grid).getPropertyValue("--turned").trim() === "1";
+    if (e.pointerType === "touch" && turned) {
+      pendingTap = { zoneId, cell, x: e.clientX, y: e.clientY };
+      return;
+    }
+    e.preventDefault();
+    isPainting = true;
+    paintCell(zoneId, cell);
+  });
+  grid.addEventListener("pointermove", e => {
+    if (pendingTap) {
+      const dx = Math.abs(e.clientX - pendingTap.x), dy = Math.abs(e.clientY - pendingTap.y);
+      if (dx >= 8 && dx > dy) {
+        isPainting = true;
+        paintCell(pendingTap.zoneId, pendingTap.cell);
+        pendingTap = null;
+      } else if (dy >= 8) {
+        pendingTap = null;        // a scroll, not a stroke
+      }
+      return;
+    }
+    if (!isPainting) return;
+    const cell = cellAt(e);
+    if (cell) paintCell(zoneId, cell);
+  });
+  grid.addEventListener("pointerup", () => {
+    if (pendingTap) {
+      const tap = pendingTap;
+      pendingTap = null;
+      paintCell(tap.zoneId, tap.cell);
     }
   });
 }
@@ -222,6 +284,7 @@ function buildScheduleGrid(zoneId, week) {
 // got painted too - two cells for one click.
 function endStroke() {
   isPainting = false;
+  pendingTap = null;
   if (!strokeZone) return;
   const zoneName = strokeZone;
   strokeZone = null;

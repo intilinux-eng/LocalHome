@@ -421,3 +421,91 @@ def test_the_top_says_every_zone_reached_its_target_only_when_it_has(open_page, 
     assert page.inner_text("#hero-title") != "Tutte le zone hanno raggiunto l'obiettivo"
     assert f"{ZONE_A}: la valvola non risponde" in page.inner_text("#hero-detail")
     assert opened.errors == []
+
+
+# ------------------------------------------------- the week on a phone ----
+# A cell of the week was 9 px wide on a phone - too small for a finger. On
+# a phone (or a touch screen up to a tablet's) the grid turns: hours down,
+# days across; a tap paints an hour, a sideways drag the same hour across
+# days, an up-down swipe scrolls. A mouse keeps the hours across.
+
+@pytest.fixture
+def phone(browser, server):
+    from .helpers import Opened
+    context = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+    opened = Opened(context.new_page())
+    opened.page.goto(server + "/")
+    opened.page.wait_for_selector(".zone", timeout=20000)
+    yield opened, context
+    context.close()
+
+
+def _center(locator):
+    box = locator.bounding_box()
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+
+def _cell(page, name, day, hour):
+    return _card(page, name).locator(f".sched-cell[data-day='{day}'][data-hour='{hour}']")
+
+
+def _touch_stroke(context, page, start, end, steps=8):
+    """A finger from start to end, as touch events - pointerType "touch"."""
+    cdp = context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": start[0], "y": start[1]}]})
+    for i in range(1, steps + 1):
+        x = start[0] + (end[0] - start[0]) * i / steps
+        y = start[1] + (end[1] - start[1]) * i / steps
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
+
+def test_on_a_phone_the_week_turns_and_its_hours_are_finger_sized(phone, api):
+    opened, _ = phone
+    page = opened.page
+    _open_plan(page, ZONE_A)
+    first, next_hour, next_day = (_cell(page, ZONE_A, "mon", 0), _cell(page, ZONE_A, "mon", 1), _cell(page, ZONE_A, "tue", 0))
+    box = first.bounding_box()
+    assert box["width"] >= 30 and box["height"] >= 28, box
+    assert next_hour.bounding_box()["y"] > box["y"], "hours down"
+    assert next_day.bounding_box()["x"] > box["x"], "days across"
+    assert _card(page, ZONE_A).locator(".sched-hour-label").first.is_visible()
+    assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
+def test_on_a_phone_a_tap_paints_an_hour_a_sideways_drag_the_same_hour_and_a_swipe_nothing(phone, api):
+    opened, context = phone
+    page = opened.page
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    page.reload()
+    _open_plan(page, ZONE_A)
+    _cell(page, ZONE_A, "thu", 7).scroll_into_view_if_needed()
+    page.touchscreen.tap(*_center(_cell(page, ZONE_A, "thu", 7)))
+    assert eventually(page, lambda: _week(api, ZONE_A)["thu"][7] is not None)
+    _cell(page, ZONE_A, "mon", 19).scroll_into_view_if_needed()
+    _touch_stroke(context, page, _center(_cell(page, ZONE_A, "mon", 19)), _center(_cell(page, ZONE_A, "wed", 19)))
+    assert eventually(page, lambda: [_week(api, ZONE_A)[d][19] is not None for d in ("mon", "tue", "wed", "thu")]
+                      == [True, True, True, False])
+    _cell(page, ZONE_A, "sat", 2).scroll_into_view_if_needed()
+    _touch_stroke(context, page, _center(_cell(page, ZONE_A, "sat", 2)), _center(_cell(page, ZONE_A, "sat", 6)))
+    page.wait_for_timeout(1500)
+    assert all(v is None for v in _week(api, ZONE_A)["sat"]), "a swipe up or down scrolls, it doesn't paint"
+    assert opened.errors == []
+
+
+def test_on_a_desktop_the_hours_run_across_and_a_mouse_drag_paints_a_range(open_page, api):
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    opened = _open_home(open_page, width=1280)
+    page = opened.page
+    _open_plan(page, ZONE_A)
+    first = _cell(page, ZONE_A, "mon", 0)
+    assert _cell(page, ZONE_A, "mon", 1).bounding_box()["x"] > first.bounding_box()["x"], "hours across"
+    assert not _card(page, ZONE_A).locator(".sched-hour-label").first.is_visible()
+    start, end = _center(_cell(page, ZONE_A, "tue", 8)), _center(_cell(page, ZONE_A, "tue", 11))
+    page.mouse.move(*start)
+    page.mouse.down()
+    page.mouse.move(*end, steps=10)
+    page.mouse.up()
+    assert eventually(page, lambda: [_week(api, ZONE_A)["tue"][h] is not None for h in range(7, 13)]
+                      == [False, True, True, True, True, False])
+    assert opened.errors == []

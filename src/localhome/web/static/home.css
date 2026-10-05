@@ -798,6 +798,31 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .sched-cell.off { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--surface-3) 3px 6px); }
 .sched-cell.now::after { content: ""; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
 @media (hover: hover) { .sched-cell:hover { filter: brightness(1.12); } }
+
+/* On a phone - or any touch screen up to a tablet's - the week turns:
+   hours down, days across - a cell 9 px wide becomes one a finger can
+   hit. A mouse keeps the 24 hours across. Its cells are placed by their
+   --c/--r (schedule_grid.js); --turned tells the script a finger paints
+   on a tap or a sideways drag there, and swipes up-down scroll. */
+.sched-hour-label { display: none; }
+@media (max-width: 600px), (pointer: coarse) and (max-width: 1100px) {
+  .sched-hour-axis-wrap { display: none; }
+  .sched-grid {
+    --turned: 1;
+    grid-template-columns: 28px repeat(7, minmax(0, 1fr));
+    grid-template-rows: auto repeat(24, 30px);
+    gap: 3px 4px;
+    touch-action: pan-y;
+  }
+  .sched-grid > .sched-day-label { grid-column: var(--c); grid-row: 1; justify-content: center; padding: 0 0 4px; }
+  .sched-grid > .sched-cell { grid-column: var(--c); grid-row: var(--r); height: auto; border-radius: 6px; }
+  .sched-hour-label {
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;
+    grid-column: 1; grid-row: var(--r);
+    font-size: 0.68rem; color: var(--text-3); font-variant-numeric: tabular-nums;
+  }
+  .sched-hour-label.now { color: var(--accent); font-weight: 700; }
+}
 .zone-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
 .zone-actions + .zone-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .copy-label { font-size: 0.84rem; color: var(--text-3); }
