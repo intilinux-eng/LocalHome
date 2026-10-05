@@ -586,6 +586,9 @@ def test_at_rest_nothing_is_sent(fake_connection, monotonic):
 
 
 def test_a_relay_resting_on_is_held_off(fake_connection, monotonic):
+    """Held off as RPC Switch.Set on its prefix: a Shelly 1 Gen3 (fw 2.0.1)
+    ignores "off,N" on its command topic - measured - and both
+    generations take the RPC."""
     valve = _valve(hold_seconds=600, rest_state="on")
     valve.turn_off()
     _status(fake_connection, False)
@@ -593,7 +596,11 @@ def test_a_relay_resting_on_is_held_off(fake_connection, monotonic):
     valve.read()                                   # off: held off, renewed
     valve.turn_on()
     valve.read()                                   # still says off: not renewed
-    assert [p for _, p in fake_connection.published] == ["off,600", "off,600", "on"]
+    topics = [t for t, _ in fake_connection.published]
+    assert topics == ["shellyplus1-XXXX/rpc", "shellyplus1-XXXX/rpc", "shellyplus1-XXXX/command/switch:0"]
+    held = json.loads(fake_connection.published[0][1])
+    assert held["method"] == "Switch.Set" and held["params"] == {"id": 0, "on": False, "toggle_after": 600}
+    assert fake_connection.published[2][1] == "on"
 
 
 def test_a_renewal_that_fails_doesnt_hide_the_reading(fake_connection, monotonic, caplog):

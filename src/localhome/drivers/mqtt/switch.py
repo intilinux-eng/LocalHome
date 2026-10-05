@@ -18,7 +18,7 @@ config.yaml options (in addition to sensor.py's broker_file/fields):
                by itself - and the command is renewed while LocalHome
                runs, every hold_seconds/3. If LocalHome stops, the relay
                goes back to rest on its own; while it runs, it never
-               drops (measured on a Plus 1: each renewal restarts the
+               drops (measured on a Plus 1 and a 1 Gen3: each renewal restarts the
                timer, the output stays on - docs/shelly-gen3.md).
   status_command: what makes the device report its state on the status
                topic, sent to command_topic ("status_update" on a Shelly
@@ -54,7 +54,9 @@ Example - a Zigbee2MQTT smartplug:
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -355,7 +357,26 @@ class MqttSwitchDriver(SwitchDriver):
         self._renewed_at = time.monotonic() if self._hold_seconds and self._rest_on else None
 
     def _send(self, value: str) -> None:
+        held_off = self._held_off_rpc(value)
+        if held_off is not None:
+            self._state.publish(*held_off)
+            return
         self._state.publish(self._command_topic, command_payload(value, self._command_payload_field))
+
+    def _held_off_rpc(self, value: Any) -> tuple[str, str] | None:
+        """A relay held off - its rest is on - as RPC Switch.Set on the
+        Shelly's own prefix: measured on a Shelly 1 Gen3 (fw 2.0.1), its
+        command topic ignores "off,N" without a word, which a Plus 1 takes,
+        while Switch.Set with toggle_after works on both. "on,N" stays on
+        the command topic: both take it. None for anything else."""
+        if not (self._hold_seconds and isinstance(value, str) and value.startswith(f"{self._command_off},")):
+            return None
+        shape = re.match(r"^(.+)/command/switch:(\d+)$", self._command_topic or "")
+        if not shape:
+            return None
+        body = {"id": 1, "src": "localhome-hold", "method": "Switch.Set",
+                "params": {"id": int(shape.group(2)), "on": False, "toggle_after": self._hold_seconds}}
+        return f"{shape.group(1)}/rpc", json.dumps(body)
 
 
 def _create(options: dict) -> MqttSwitchDriver:
