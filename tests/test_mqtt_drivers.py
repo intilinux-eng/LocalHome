@@ -984,3 +984,17 @@ def test_a_command_isnt_shown_as_obeyed_when_the_one_before_went_unanswered(fake
     valve.turn_off()
     assert valve.read()["is_on"] is False
 
+
+def test_a_status_queued_by_the_device_doesnt_move_the_time_off(fake_connection, clock, tmp_path):
+    """Seen on the production board with a Shelly 1 Gen3: the board
+    stopped, the hold ran out; when the board was back the Gen3 first sent
+    a status queued from before - on, its hold started 16 minutes earlier -
+    then "off, by its timer". Noted at the end of that hold, not when heard."""
+    valve = _shelly_valve(tmp_path)
+    t0 = clock["t"]
+    _say(fake_connection, True, timer=900, started=t0)
+    clock["t"] += 1000
+    _say(fake_connection, True, timer=900, started=t0)        # the queued one, heard only now
+    _say(fake_connection, False, source="timer")
+    assert valve.read()["safety_rest_at"] == t0 + 900
+

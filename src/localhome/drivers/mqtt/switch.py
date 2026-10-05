@@ -88,6 +88,9 @@ ANSWER_WAIT_SECONDS = 2.0
 ASK_AGAIN_SECONDS = 60
 ASK_AGAIN_MAX_SECONDS = 300
 SAFETY_TIMER_EVENT = "safety_timer"
+# A hold's end the device reports is believed up to this long before it
+# said so: a Shelly without a clock (no internet) reports 1970s times.
+MAX_HOLD_AGE_SECONDS = 7 * 86400
 
 
 class MqttSwitchDriver(SwitchDriver):
@@ -274,12 +277,14 @@ class MqttSwitchDriver(SwitchDriver):
         if previous_at is not None and self._is_on(previous) != self._rest_on and duration is not None:
             # Seen on the production board: the last message heard was an
             # answer 20 s into the hold, not the renewal that started it -
-            # "heard + hold" was 20 s late. The device's own start of the
-            # hold is right, when its clock is (it may have none without
-            # internet): then it started before it was heard, by less than
-            # the hold.
+            # "heard + hold" was 20 s late - and, with a Shelly 1 Gen3, a
+            # message from before the board stopped, queued by the device
+            # and sent when it was back, 16 minutes after its hold started.
+            # The device's own start of the hold is right when its clock is
+            # (it may have none without internet): its end then lies before
+            # it said it was over, and not days before.
             started = _seconds(previous.get("timer_started_at"))
-            if started is not None and -60 <= previous_at - started <= duration + 60:
+            if started is not None and received_at - MAX_HOLD_AGE_SECONDS <= started + duration <= received_at + 60:
                 at = min(received_at, started + duration)
             else:
                 at = min(received_at, previous_at + duration)
