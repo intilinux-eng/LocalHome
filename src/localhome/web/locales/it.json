@@ -933,6 +933,8 @@
     "line_driven": "{zone}: valvola aperta, {name} acceso",
     "fact_driven_on": "Valvola aperta perché {name} è acceso",
     "fact_driven_off": "La valvola si apre quando {name} è acceso",
+    "driver_on": "Acceso: la valvola di questa zona è aperta per la sua acqua",
+    "driver_off": "Spento - acceso, apre la valvola di questa zona",
     "energy_peak_today": "Picco oggi {value} {when}",
     "energy_today": "oggi {kwh} kWh",
     "energy_yesterday": "ieri {kwh} kWh",

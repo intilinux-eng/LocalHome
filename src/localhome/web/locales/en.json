@@ -933,6 +933,8 @@
     "line_driven": "{zone}: valve open, {name} on",
     "fact_driven_on": "Valve open because {name} is on",
     "fact_driven_off": "The valve opens while {name} is on",
+    "driver_on": "On: this zone's valve is open for its water",
+    "driver_off": "Off - switched on, it opens this zone's valve",
     "energy_peak_today": "Peak today {value} {when}",
     "energy_today": "today {kwh} kWh",
     "energy_yesterday": "yesterday {kwh} kWh",

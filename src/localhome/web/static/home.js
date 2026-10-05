@@ -330,6 +330,25 @@ function zoneStatus(zone, climate) {
   return { tone: "ok", text: tr(reached ? "home.st_reached" : "home.st_idle"), reached };
 }
 
+// The device that opens this zone's valve right now (a dehumidifier
+// drawing its water through the bathrooms' valve, in summer): its switch
+// on the zone's own card, where it acts - not a lone tile at the bottom.
+function driverHtml(zone) {
+  const driver = zone.valve_driver;
+  if (!driver) return "";
+  const device = deviceByName(driver.name);
+  const reading = state.readings[driver.name] || {};
+  const on = reading.is_on != null ? !!reading.is_on : !!driver.on;
+  const control = device && device.controllable
+    ? `<button class="switch" type="button" role="switch" data-switch="${esc(driver.name)}" aria-checked="${on}" aria-label="${esc(displayName(driver.name))}"></button>`
+    : "";
+  return `<div class="driver" data-on="${on}">
+      <span class="driver-icon">${ICONS.drop}</span>
+      <span class="driver-text"><b>${esc(displayName(driver.name))}</b><span>${esc(tr(on ? "home.driver_on" : "home.driver_off"))}</span></span>
+      ${control}
+    </div>`;
+}
+
 function zoneId(name) {
   return "zone-" + name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
 }
@@ -391,10 +410,6 @@ function fillZone(card, zone, climate) {
   const fact = (icon, html, extra = "") => `<div class="fact${extra}"><span class="fact-icon">${icon}</span><span class="fact-text">${html}</span></div>`;
   const facts = [];
   const excluded = mode === "cool" && !zone.cool_enabled;
-  if (zone.valve_driver) {
-    facts.push(fact(ICONS.link, esc(tr(zone.valve_driver.on ? "home.fact_driven_on" : "home.fact_driven_off",
-      { name: displayName(zone.valve_driver.name) })), zone.valve_driver.on ? " fact-rule" : ""));
-  }
   if (zone.target_c != null && !excluded) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
     facts.push(fact(ICONS.target, `${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}`));
@@ -435,6 +450,7 @@ function fillZone(card, zone, climate) {
       <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
       <div class="ribbon-readout">${legendHtml()}</div>
     </div>
+    ${driverHtml(zone)}
     <div class="quick">${quickHtml(zone, climate, change)}</div>
     ${zone.sensor_manual ? manualHtml(zone) : ""}
     <div class="zone-foot">${foot.join(" · ")}</div>`;
@@ -665,6 +681,22 @@ function clampTarget(value) {
 }
 
 async function onZoneClick(event) {
+  // The switch of the device that drives a zone's valve (driverHtml()).
+  const toggle = event.target.closest("button[data-switch]");
+  if (toggle) {
+    toggle.disabled = true;
+    try {
+      const on = toggle.getAttribute("aria-checked") !== "true";
+      await api(`/api/sensors/${encodeURIComponent(toggle.dataset.switch)}/${on ? "on" : "off"}`, {});
+      await refreshDevices();
+      await refreshClimate();
+    } catch (e) {
+      notify(errorText(e));
+    } finally {
+      toggle.disabled = false;
+    }
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   const card = event.target.closest(".zone");
   if (!button || !card) return;
@@ -778,8 +810,10 @@ function renderOutdoor() {
   const reading = state.readings["Outdoor Sensor"];
   if (!reading || reading.temperature_c == null) { chip.hidden = true; return; }
   chip.hidden = false;
-  const rh = reading.humidity_pct != null ? ` · ${fmt(reading.humidity_pct, 0)}%` : "";
-  chip.innerHTML = `${ICONS.leaf}<span>${esc(tr("home.outside"))} <b>${fmt(reading.temperature_c)}°</b>${esc(rh)}</span>`;
+  const rh = reading.humidity_pct != null
+    ? `<span class="outdoor-rh">${ICONS.drop}${fmt(reading.humidity_pct, 0)}% ${esc(tr("home.humidity").toLowerCase())}</span>` : "";
+  chip.innerHTML = `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}</span>
+    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${rh}`;
 }
 
 const ICONS = {
@@ -789,7 +823,6 @@ const ICONS = {
   drop: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/></svg>`,
   target: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>`,
   flow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/></svg>`,
-  clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
   link: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,
   leaf: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20c0-9 6-15 16-16-1 10-7 16-16 16z"/><path d="M4 20l8-8"/></svg>`,
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>`,
@@ -878,9 +911,11 @@ function renderPlant() {
   const vmcSpeed = (state.devices ? state.devices.sensors : []).find(d => d.kind === "number" && d.paired_switch && (d.presets || []).length);
   if (vmcSpeed) tiles.push(vmcTile(vmcSpeed));
   const rules = (climate && climate.season_effects && climate.season_effects.rules) || [];
+  // One that drives a zone's valve now is on that zone's card instead.
+  const onZoneCards = new Set(((climate && climate.zones) || []).filter(z => z.valve_driver).map(z => z.valve_driver.name));
   rules.forEach(rule => {
     const device = deviceByName(rule.switch);
-    if (!device) return;
+    if (!device || onZoneCards.has(rule.switch)) return;
     const reading = state.readings[rule.switch] || {};
     const what = rule[climate.mode];
     // A normally open valve: its Shelly on means closed - said as such,
@@ -1460,6 +1495,9 @@ async function refreshDevices() {
     return;
   }
   renderOutdoor();
+  // A zone's card carries the switch of the device driving its valve
+  // (driverHtml()), known only once the devices are in.
+  if (state.climate) renderZones();
   renderPlant();
   renderHouse();
 }

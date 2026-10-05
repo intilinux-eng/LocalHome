@@ -25,9 +25,6 @@
       <div class="brand">
         <span class="brand-name">{{ site_name }}</span>
       </div>
-      <!-- The board's own date, time and time zone, with a warning when it
-           disagrees with this phone (_server_clock.html). -->
-      {% include "_server_clock.html" %}
       <a class="health" id="health" href="/climate-admin#system-status" data-state="unknown">
         <span class="health-dot" aria-hidden="true"></span>
         <span id="health-text">{{ t.home.health_checking }}</span>
@@ -37,14 +34,21 @@
     <div class="server-clock-warning" id="server-clock-warning" hidden></div>
     <div class="offline" id="offline" role="status" aria-live="polite" hidden></div>
 
-    <section class="hero" aria-live="polite">
-      <p class="hero-season" id="hero-season"></p>
-      <h1 class="hero-title" id="hero-title">{{ t.home.loading }}</h1>
-      <p class="hero-detail" id="hero-detail"></p>
-      <div class="hero-actions">
-        <a class="chip chip-season" id="season-chip" href="/climate-admin#season" title="{{ t.home.season_hint }}"></a>
-        <button class="chip" id="outdoor-chip" type="button" hidden></button>
-        <button class="chip chip-away" id="away-chip" type="button"></button>
+    <section class="hero">
+      <div class="hero-main" aria-live="polite">
+        <p class="hero-season" id="hero-season"></p>
+        <h1 class="hero-title" id="hero-title">{{ t.home.loading }}</h1>
+        <p class="hero-detail" id="hero-detail"></p>
+        <div class="hero-actions">
+          <a class="chip chip-season" id="season-chip" href="/climate-admin#season" title="{{ t.home.season_hint }}"></a>
+          <button class="chip chip-away" id="away-chip" type="button"></button>
+        </div>
+      </div>
+      <!-- Now: the board's own date, time and time zone, with a warning when
+           it disagrees with this phone (_server_clock.html), and outside. -->
+      <div class="hero-now">
+        {% include "_server_clock.html" %}
+        <button class="outdoor" id="outdoor-chip" type="button" hidden></button>
       </div>
     </section>
 

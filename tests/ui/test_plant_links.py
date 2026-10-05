@@ -87,7 +87,10 @@ def test_the_bypass_says_closed_and_the_dehumidifier_what_it_opens(browser, plan
     bypass = tiles["Valvola Bypass Bagni"]
     assert bypass.locator(".dot-state").inner_text() == "chiusa", "its Shelly is on in summer: the valve closed"
     assert "normalmente aperta" in bypass.inner_text()
-    assert ZONE_B in tiles["Deumidificatore"].inner_text()
+    # The dehumidifier is on the card of the zone whose valve it opens, not a tile of its own.
+    assert "Deumidificatore" not in tiles
+    driver = page.locator(".zone", has_text=ZONE_B).locator(".driver")
+    assert "Deumidificatore" in driver.inner_text() and "apre la valvola di questa zona" in driver.inner_text()
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
     context.close()
@@ -96,13 +99,15 @@ def test_the_bypass_says_closed_and_the_dehumidifier_what_it_opens(browser, plan
 def test_switching_the_dehumidifier_on_opens_the_bathrooms_valve_and_says_so(browser, plant):
     context, opened = _open(browser, plant)
     page = opened.page
-    page.wait_for_selector("#plant-body button[data-switch='Deumidificatore']", timeout=20000)
-    page.click("#plant-body button[data-switch='Deumidificatore']")
+    switch = ".driver button[data-switch='Deumidificatore']"
+    page.wait_for_selector(switch, timeout=20000)
+    page.click(switch)
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is True)
     card = page.locator(".zone", has_text=ZONE_B)
     assert eventually(page, lambda: "Deumidificatore acceso: valvola aperta" in card.locator(".zone-head").inner_text(),
                       timeout_ms=30000)
-    page.click("#plant-body button[data-switch='Deumidificatore']")
+    assert card.locator(".driver").get_attribute("data-on") == "true"
+    page.click(switch)
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is False)
     assert opened.errors == []
     context.close()

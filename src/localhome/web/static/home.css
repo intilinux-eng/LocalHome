@@ -88,20 +88,13 @@ a { color: inherit; }
 .top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "brand health" "clock clock";
+  grid-template-areas: "brand health";
   align-items: center;
   gap: 10px 12px;
   margin-bottom: 18px;
 }
 .top .brand { grid-area: brand; }
 .top .health { grid-area: health; }
-.top .server-clock { grid-area: clock; justify-self: start; }
-.top .server-clock-date { display: block; }
-.top .server-clock-date-short { display: none; }
-.top .server-clock-zone { display: block; }
-@media (min-width: 720px) {
-  .top { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "brand clock health"; }
-}
 
 .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .brand-name { font-weight: 650; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -170,7 +163,63 @@ a { color: inherit; }
 
 /* --------------------------------------------------------------- hero -- */
 
-.hero { margin: 6px 2px 22px; }
+.hero { display: grid; gap: 18px; margin: 6px 2px 22px; }
+@media (min-width: 820px) {
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(250px, 290px); align-items: start; }
+}
+
+/* Now: the board's clock - time large, the whole date - and outside,
+   in one panel; side by side on a phone, one over the other beside the
+   title on a wider screen. */
+.hero-now {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+@media (min-width: 820px) { .hero-now { grid-auto-flow: row; } }
+.hero-now .server-clock {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.hero-now .server-clock-time { font-size: 2.5rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1; }
+.hero-now .server-clock-meta { gap: 2px; font-size: 0.86rem; color: var(--text-2); }
+.hero-now .server-clock-date { display: block; font-weight: 550; }
+.hero-now .server-clock-date-short { display: none; }
+.hero-now .server-clock-zone { display: block; font-size: 0.72rem; color: var(--text-3); }
+.hero-now .server-clock.is-warning .server-clock-time { color: var(--warn); }
+
+.outdoor {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 75%);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (min-width: 820px) { .outdoor { border-left: 0; border-top: 1px solid var(--line); } }
+.outdoor-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+.outdoor-label svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.outdoor-value { font-size: 2.2rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.outdoor-value small { font-size: 0.55em; color: var(--text-3); vertical-align: super; }
+.outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
+.outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
 .hero-season {
   margin: 0 0 6px;
   color: var(--accent);
@@ -243,7 +292,7 @@ a { color: inherit; }
   background: var(--accent);
 }
 
-.zone-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zone-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
 .zone-name { margin: 0; font-size: 1.12rem; font-weight: 650; }
 
 .state {
@@ -254,8 +303,9 @@ a { color: inherit; }
   border-radius: 999px;
   background: var(--surface-2);
   font-size: 0.82rem;
+  line-height: 1.25;
   color: var(--text-2);
-  white-space: nowrap;
+  max-width: 100%;
 }
 .state[data-tone="active"] { background: var(--accent-soft); }
 .state[data-tone="ok"] { background: color-mix(in srgb, var(--ok) 12%, transparent); }
@@ -444,6 +494,24 @@ a { color: inherit; }
   background: var(--accent-soft);
   font-size: 0.9rem;
 }
+
+/* The device driving the zone's valve (a dehumidifier, in summer): on
+   the zone's card, its switch large, lit while it runs. */
+.driver {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.driver[data-on="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.driver-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--surface); color: var(--accent); }
+.driver-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+.driver-text { display: grid; gap: 2px; min-width: 0; flex: 1; font-size: 0.86rem; color: var(--text-2); }
+.driver-text b { font-size: 1rem; color: var(--text); font-weight: 650; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */
 .excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
