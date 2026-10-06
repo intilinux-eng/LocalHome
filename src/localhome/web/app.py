@@ -13,8 +13,10 @@ import io
 import logging
 import math
 import os
+import signal
 import socket
 import subprocess
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -1918,6 +1920,11 @@ def main() -> None:
     host = "127.0.0.1" if config.web_host in ("0.0.0.0", "", "::") else config.web_host
     ServiceWatchdog(f"http://{host}:{config.web_port}/api/server-time", lambda: _loops(app),
                     event_log=config.resolve("watchdog.log")).start()
+    # Stopped by systemd - a restart, an update: a normal exit, so what's
+    # still only in memory is written first (the MQTT devices' last
+    # payloads - drivers/mqtt/state_cache.py). Python's default for
+    # SIGTERM is to die on the spot.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     serve(app, listen=listen_addresses(config.web_host, config.web_port), threads=WEB_THREADS, ident="LocalHome")
 
 

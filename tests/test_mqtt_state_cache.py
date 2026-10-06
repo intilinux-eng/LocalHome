@@ -5,8 +5,10 @@ thermostat leaving a valve alone during what would otherwise be a
 several-hour "no message yet" blackout after every restart).
 """
 import json
+import time
 
-from localhome.drivers.mqtt.state_cache import load_cached, save_cached
+from localhome.drivers.mqtt import state_cache
+from localhome.drivers.mqtt.state_cache import flush, load_cached, save_cached
 
 BROKER = {"host": "192.168.1.21", "port": 1883}
 
@@ -53,6 +55,7 @@ def test_saving_again_overwrites_rather_than_growing_the_file(tmp_path):
     save_cached(cache_path, BROKER, "shelly/status/temperature:0", {"tC": 21.0}, 2000.0)
 
     assert load_cached(cache_path, BROKER, "shelly/status/temperature:0") == ({"tC": 21.0}, 2000.0)
+    flush()
     with open(cache_path, encoding="utf-8") as f:
         assert len(json.load(f)) == 1
 
@@ -71,7 +74,9 @@ def test_a_missing_directory_is_created_on_save(tmp_path):
     cache_path = str(tmp_path / "nested" / "mqtt_state_cache.json")
 
     save_cached(cache_path, BROKER, "shelly/status/temperature:0", {"tC": 21.5}, 1000.0)
+    flush()
 
+    assert (tmp_path / "nested" / "mqtt_state_cache.json").exists()
     assert load_cached(cache_path, BROKER, "shelly/status/temperature:0") == ({"tC": 21.5}, 1000.0)
 
 
@@ -90,3 +95,56 @@ def test_the_newest_reading_wins_across_addresses(tmp_path):
     save_cached(path, {"host": "b"}, "t", {"v": 2}, 200.0)
 
     assert load_cached(path, {"host": "c"}, "t") == ({"v": 2}, 200.0)
+
+
+# ------------------------------------------------ off the MQTT thread ----
+# save_cached() runs on every MQTT message, in the MQTT client's network
+# thread. It used to read, write and fsync the whole file each time: a
+# slow disk held that thread - on the production board, right after a
+# boot, LocalHome's connection went 90 s without a keepalive and the
+# broker dropped it.
+
+def test_a_message_never_waits_for_the_disk(tmp_path, monkeypatch):
+    cache_path = str(tmp_path / "mqtt_state_cache.json")
+    monkeypatch.setattr(state_cache, "save_json_atomic", lambda path, data: time.sleep(1.5))
+    started = time.monotonic()
+    save_cached(cache_path, BROKER, "shelly/status/switch:0", {"output": True}, 1000.0)
+    assert time.monotonic() - started < 0.2
+    assert load_cached(cache_path, BROKER, "shelly/status/switch:0") == ({"output": True}, 1000.0),         "read back at once, before it's on disk"
+
+
+def test_the_file_follows_by_itself(tmp_path):
+    cache_path = tmp_path / "mqtt_state_cache.json"
+    save_cached(str(cache_path), BROKER, "shelly/status/switch:0", {"output": True}, 1000.0)
+    deadline = time.monotonic() + state_cache.FLUSH_SECONDS * 2 + 1
+    while not cache_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert json.loads(cache_path.read_text(encoding="utf-8"))["192.168.1.21:1883/shelly/status/switch:0"]["payload"] == {"output": True}
+
+
+def test_many_messages_are_one_write(tmp_path, monkeypatch):
+    cache_path = str(tmp_path / "mqtt_state_cache.json")
+    flush()
+    writes = []
+    real = state_cache.save_json_atomic
+    monkeypatch.setattr(state_cache, "save_json_atomic", lambda path, data: (writes.append(path), real(path, data)))
+    for i in range(50):
+        save_cached(cache_path, BROKER, f"shelly/status/{i % 5}", {"n": i}, 1000.0 + i)
+    flush()
+    assert writes == [cache_path]
+    assert load_cached(cache_path, BROKER, "shelly/status/4") == ({"n": 49}, 1049.0), "the newest of each topic"
+
+
+def test_a_write_that_failed_is_tried_again(tmp_path, monkeypatch):
+    cache_path = str(tmp_path / "mqtt_state_cache.json")
+    real = state_cache.save_json_atomic
+
+    def full_disk(path, data):
+        raise OSError("No space left on device")
+    monkeypatch.setattr(state_cache, "save_json_atomic", full_disk)
+    save_cached(cache_path, BROKER, "shelly/status/switch:0", {"output": True}, 1000.0)
+    flush()
+    monkeypatch.setattr(state_cache, "save_json_atomic", real)
+    flush()
+    with open(cache_path, encoding="utf-8") as f:
+        assert "192.168.1.21:1883/shelly/status/switch:0" in json.load(f)

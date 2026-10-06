@@ -31,21 +31,39 @@ schedules.json/positions.json, so a power cut mid-write can't corrupt it.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import threading
+import time
 from typing import Any
 
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
 
-# Guards the whole read-modify-write cycle below, not just one file - a
-# handful of topics across a couple of cache files is little enough
-# traffic that one lock is simpler than one per path, and still fully
-# safe within this single process (the project's existing JSON stores
-# make the same single-process trade-off - see services/position_control.py).
+# Written at most this often, by a thread of its own. save_cached() is
+# called on every MQTT message, in the MQTT client's network thread: a
+# read, a write and an fsync of the whole file each time held that thread
+# for as long as the disk took - seen on the production board right after
+# a boot, LocalHome's connection went 90 s without a keepalive and the
+# broker dropped it (valve commands wait on that same thread). Now the
+# message only updates memory; the file follows within these seconds, the
+# newest payload of each topic in one write. A power cut loses at most
+# that much - a reading the device sends again anyway.
+FLUSH_SECONDS = 5.0
+
+# Guards the file's read-modify-write cycle - one lock for every path is
+# simpler than one per path, and still fully safe within this single
+# process (the project's existing JSON stores make the same trade-off -
+# see services/position_control.py).
 _lock = threading.Lock()
+# What's waiting to be written: path -> {key: entry}. Its own lock, so a
+# message never waits on a write in progress.
+_pending: dict[str, dict[str, dict]] = {}
+_pending_lock = threading.Lock()
+_dirty = threading.Event()
+_writer: threading.Thread | None = None
 
 
 def _key(broker: dict, topic: str) -> str:
@@ -61,10 +79,12 @@ def _read_all(cache_path: str) -> dict:
 
 def load_cached(cache_path: str, broker: dict, topic: str) -> tuple[Any, float] | None:
     """Returns (payload, received_at) if this topic has a cached value
-    from a previous run, or None (a fresh setup, or a cache that
-    predates this topic being added)."""
+    from a previous run (or from this one, not on disk yet), or None (a
+    fresh setup, or a cache that predates this topic being added)."""
     with _lock:
         data = _read_all(cache_path)
+    with _pending_lock:
+        data.update(_pending.get(cache_path, {}))
     entry = data.get(_key(broker, topic))
     if entry is None:
         # Same topic under a different broker address - the broker was
@@ -80,10 +100,47 @@ def load_cached(cache_path: str, broker: dict, topic: str) -> tuple[Any, float] 
 
 
 def save_cached(cache_path: str, broker: dict, topic: str, payload: Any, received_at: float) -> None:
-    with _lock:
-        data = _read_all(cache_path)
-        data[_key(broker, topic)] = {"payload": payload, "received_at": received_at}
+    """Keeps this payload as the topic's last one - in memory at once, on
+    disk within FLUSH_SECONDS (flush() writes it now). Never touches the
+    disk itself: it's called from the MQTT thread."""
+    global _writer
+    with _pending_lock:
+        _pending.setdefault(cache_path, {})[_key(broker, topic)] = {"payload": payload, "received_at": received_at}
+        if _writer is None or not _writer.is_alive():
+            _writer = threading.Thread(target=_write_loop, daemon=True, name="mqtt-state-cache")
+            _writer.start()
+    _dirty.set()
+
+
+def flush() -> None:
+    """Writes whatever is waiting, now - one atomic write per file."""
+    with _pending_lock:
+        work = dict(_pending)
+        _pending.clear()
+    for cache_path, entries in work.items():
+        with _lock:
+            data = _read_all(cache_path)
+            data.update(entries)
+            try:
+                save_json_atomic(cache_path, data)
+            except OSError:
+                logger.exception("Failed to persist MQTT state cache to %s - will retry with the next message", cache_path)
+                with _pending_lock:
+                    for key, entry in entries.items():
+                        _pending.setdefault(cache_path, {}).setdefault(key, entry)
+
+
+# Stopping (web/app.py turns systemd's SIGTERM into a normal exit): what's
+# waiting is written before going.
+atexit.register(flush)
+
+
+def _write_loop() -> None:
+    while True:
+        _dirty.wait()
+        time.sleep(FLUSH_SECONDS)        # what else comes meanwhile goes in the same write
+        _dirty.clear()
         try:
-            save_json_atomic(cache_path, data)
-        except OSError:
-            logger.exception("Failed to persist MQTT state cache to %s - will retry on the next message", cache_path)
+            flush()
+        except Exception:
+            logger.exception("MQTT state cache: write failed, will retry")
