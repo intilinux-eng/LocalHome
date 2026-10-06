@@ -132,7 +132,7 @@ function pillHtml(state, text) {
 
 function setPill(id, html) {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+  if (el) morph(el, html);
 }
 
 // An outdoor sensor's or VMC's header: its source, coloured by whether
@@ -512,12 +512,12 @@ async function refreshExtraSensorStatus() {
   if (!slot) return;
   const mode = document.getElementById("extra-outdoor-sensor-mode").value;
   if (mode === "none" || (mode === "shelly" && !document.getElementById("extra-outdoor-sensor-id").value.trim())) {
-    slot.innerHTML = "";
+    morph(slot, "");
     return;
   }
   if (extraSensorRestartPending) {
     setPill("extra-sensor-summary", rolePillHtml(mode, true, null));
-    slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+    morph(slot, `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`);
     return;
   }
   try {
@@ -532,7 +532,7 @@ async function refreshExtraSensorStatus() {
       wifi_rssi_dbm: reading.wifi_rssi_dbm,
       sensor_last_value_age_seconds: reading.last_value_age_seconds,
     };
-    slot.innerHTML = `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, mode)}</div>`;
+    morph(slot, `<div>${tr("climate_admin.sensor_label")}: ${sensorStatusHtml(zoneShaped, mode)}</div>`);
     setPill("extra-sensor-summary", rolePillHtml(mode, false, reading.ok ? "ok" : "neutral"));
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
@@ -657,11 +657,11 @@ async function refreshVmcStatus() {
   const vmcMode = document.getElementById("extra-vmc-mode").value;
   if (vmcMode === "none" || (vmcMode === "shelly"
       && (!document.getElementById("extra-vmc-id").value.trim() || !document.getElementById("vmc-suggestion").hidden))) {
-    slot.innerHTML = "";
+    morph(slot, "");
     return;
   }
   if (vmcRestartPending) {
-    slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+    morph(slot, `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`);
     setPill("vmc-summary", rolePillHtml(vmcMode, true, null));
     return;
   }
@@ -674,8 +674,8 @@ async function refreshVmcStatus() {
     const speed = await speedRes.json();
     setPill("vmc-summary", rolePillHtml(vmcMode, false, sw.ok ? "ok" : "bad"));
     if (!sw.ok) {
-      slot.innerHTML = `<div><span class="admin-status bad">${tr("climate_admin.vmc_offline")}</span> ${tr("climate_admin.vmc_offline_hint")}</div>`
-        + (sw.error ? `<div class="admin-problem-detail">${escapeHtml(sw.error)}</div>` : "");
+      morph(slot, `<div><span class="admin-status bad">${tr("climate_admin.vmc_offline")}</span> ${tr("climate_admin.vmc_offline_hint")}</div>`
+        + (sw.error ? `<div class="admin-problem-detail">${escapeHtml(sw.error)}</div>` : ""));
       return;
     }
     const state = sw.is_on ? tr("climate_admin.vmc_on") : tr("climate_admin.vmc_off");
@@ -684,7 +684,7 @@ async function refreshVmcStatus() {
     const badge = vmcMode === "simulated"
       ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>`
       : `<span class="admin-status ok">${tr("climate_admin.vmc_reachable")}</span>`;
-    slot.innerHTML = `<div>${badge} ${state}${speedText}</div>`;
+    morph(slot, `<div>${badge} ${state}${speedText}</div>`);
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -1010,7 +1010,7 @@ async function refreshDiagnosticSection(data) {
   if (section && diagnosticModeEnabled && !wasEnabled) section.open = true;
   if (!container) return;
   if (!diagnosticModeEnabled) {
-    container.innerHTML = "";
+    morph(container, "");
     return;
   }
   // A valve - a zone's, or a normally open one like the bypass - is
@@ -1026,8 +1026,8 @@ async function refreshDiagnosticSection(data) {
       rows.push({ ...row, isOn: false, ok: false });
     }
   }
-  container.innerHTML = `<p class="hint-text">${tr("climate_admin.diag_contact_note")}</p>`
-    + `<div class="admin-diagnostic-grid">${rows.map(diagnosticRowHtml).join("")}</div>`;
+  morph(container, `<p class="hint-text">${tr("climate_admin.diag_contact_note")}</p>`
+    + `<div class="admin-diagnostic-grid">${rows.map(diagnosticRowHtml).join("")}</div>`);
 }
 
 async function refreshStatus() {
@@ -1042,7 +1042,7 @@ async function refreshStatus() {
   try {
     const res = await fetch("/api/climate/zones");
     const data = await res.json();
-    document.getElementById("mode-away-line").innerHTML = modeAwayLineHtml(data);
+    morph(document.getElementById("mode-away-line"), modeAwayLineHtml(data));
     renderSeason(data);
     await refreshSeasonRules(data);
     await refreshDiagnosticSection(data);
@@ -1060,11 +1060,11 @@ async function refreshStatus() {
       const slot = document.getElementById(`zone-status-${index}`);
       if (!slot) return;
       if (restartPending) {
-        slot.innerHTML = `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`;
+        morph(slot, `<p class="admin-restart-pending-inline">${tr("climate_admin.restart_pending")} ${restartButtonHtml()}</p>`);
         return;
       }
       const zone = byName[mapEntry.name];
-      slot.innerHTML = zone ? zoneStatusInnerHtml(zone, mapEntry, data.mode) : `<p class="hint-text">${tr("climate_admin.status_none")}</p>`;
+      morph(slot, zone ? zoneStatusInnerHtml(zone, mapEntry, data.mode) : `<p class="hint-text">${tr("climate_admin.status_none")}</p>`);
     });
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place and
@@ -1086,14 +1086,14 @@ async function refreshBroker() {
     // No mqtt_broker.json at all: nothing to reach yet - an installation
     // with only simulated devices, not a broker that's down.
     if (!data.host) {
-      el.innerHTML = pillHtml("idle", tr("climate_admin.broker_not_configured"));
+      morph(el, pillHtml("idle", tr("climate_admin.broker_not_configured")));
       if (hint) hint.hidden = true;
       setTile("ov-broker", "idle", tr("climate_admin.broker_not_configured"), "");
       return;
     }
     const where = `${data.host}:${data.port || "?"}`;
     const text = tr(data.reachable ? "climate_admin.broker_ok" : "climate_admin.broker_down");
-    el.innerHTML = `${pillHtml(data.reachable ? "ok" : "bad", text)} <span class="sec-note">${escapeHtml(where)}</span>`;
+    morph(el, `${pillHtml(data.reachable ? "ok" : "bad", text)} <span class="sec-note">${escapeHtml(where)}</span>`);
     if (hint) hint.hidden = !!data.reachable;
     setTile("ov-broker", data.reachable ? "ok" : "bad", text, where);
   } catch (e) {
@@ -1485,14 +1485,14 @@ function renderSystemProblems(problems) {
   const summary = document.getElementById("system-status-summary");
   if (!problems.length) {
     box.hidden = true;
-    summary.innerHTML = `<span class="admin-status ok">${tr("climate_admin.system_all_ok")}</span>`;
+    morph(summary, `<span class="admin-status ok">${tr("climate_admin.system_all_ok")}</span>`);
     return;
   }
   box.hidden = false;
-  box.innerHTML = `
+  morph(box, `
     <strong>${tr("climate_admin.system_problems_heading", { count: problems.length })}</strong>
-    <ul>${problems.map(problemHtml).join("")}</ul>`;
-  summary.innerHTML = `<span class="admin-status bad">${escapeHtml(problemsCountText(problems.length))}</span>`;
+    <ul>${problems.map(problemHtml).join("")}</ul>`);
+  morph(summary, `<span class="admin-status bad">${escapeHtml(problemsCountText(problems.length))}</span>`);
 }
 
 // Over now, worth knowing: a safety timer that acted, in the last 72
@@ -1501,13 +1501,13 @@ function renderSystemRecent(events) {
   const box = document.getElementById("system-recent");
   if (!box) return;
   box.hidden = !events.length;
-  box.innerHTML = events.length ? `
+  morph(box, events.length ? `
     <strong>${tr("climate_admin.system_recent_heading")}</strong>
     <ul>${events.map(e => {
       const text = tr(`climate_admin.system_recent_${e.code}`, { subject: displayName(e.subject) });
       return `<li>${escapeHtml(text.startsWith("climate_admin.") ? `${e.code} ${e.subject}` : text)}
         <div class="admin-problem-detail">${escapeHtml(formatWhen(e.at))}</div></li>`;
-    }).join("")}</ul>` : "";
+    }).join("")}</ul>` : "");
 }
 
 async function refreshSystemStatus(force) {
@@ -1519,7 +1519,7 @@ async function refreshSystemStatus(force) {
     if (!data.ok) return;
     renderSystemProblems(data.problems || []);
     renderSystemRecent(data.recent || []);
-    document.getElementById("system-status-body").innerHTML = systemStatusHtml(data);
+    morph(document.getElementById("system-status-body"), systemStatusHtml(data));
     updateBoardOverview(data);
     deviceStatus = [...(data.devices || [])];
     renderDevices();
@@ -1575,7 +1575,7 @@ function seasonEffects(mode, data) {
 function renderSeason(data) {
   const el = document.getElementById("season-cards");
   if (!el || !data || !data.mode) return;
-  el.innerHTML = ["heat", "cool"].map(mode => {
+  morph(el, ["heat", "cool"].map(mode => {
     const active = data.mode === mode;
     const action = active
       ? `<span class="season-active-pill">${tr("climate_admin.season_active")}</span>`
@@ -1592,7 +1592,7 @@ function renderSeason(data) {
         </div>
         <ul class="season-effects">${seasonEffects(mode, data).map(i => `<li>${i}</li>`).join("")}</ul>
       </div>`;
-  }).join("");
+  }).join(""));
 }
 
 // ---------------------------------------------------------- season rules --
@@ -1730,7 +1730,7 @@ async function refreshSeasonRules(data) {
     const nowKey = rule.normally_open ? (reading.is_on ? "rule_now_closed" : "rule_now_open")
       : (reading.is_on ? "rule_now_on" : "rule_now_off");
     const now = reading.ok ? `${tr(`climate_admin.${nowKey}`)} ` : "";
-    row.querySelector(".rule-live").innerHTML = `${escapeHtml(now)}${pillHtml(state, text)}`;
+    morph(row.querySelector(".rule-live"), `${escapeHtml(now)}${pillHtml(state, text)}`);
   }
   // What one switch opens with it - the valve a dehumidifier draws its
   // water through - and whether it holds right now: the valve on with its
@@ -1779,7 +1779,7 @@ async function refreshSeasonRules(data) {
         <span class="admin-pill">${escapeHtml(tr(`climate_admin.link_when_${link.mode || "always"}`))}</span>
         <span class="rule-live">${live}</span></div>`);
     }
-    linksEl.innerHTML = links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>${rows.join("")}` : "";
+    morph(linksEl, links.length ? `<h3 class="admin-subheading">${escapeHtml(tr("climate_admin.links_heading"))}</h3>${rows.join("")}` : "");
   }
   // A switch not doing what its rule says outranks the header's count.
   setPill("season-rules-summary", worst !== "ok" ? pillHtml(worst, tr("climate_admin.pill_rule_check")) : "");
@@ -2195,7 +2195,7 @@ async function refreshLedMatrix() {
   const running = data.status === "running";
   const ledState = running ? "ok" : data.status === "no_router" || data.status === "off" ? "idle" : "bad";
   const ledShort = tr(`climate_admin.led_status_short_${data.status}`);
-  document.getElementById("led-matrix-summary").innerHTML = pillHtml(ledState, ledShort);
+  morph(document.getElementById("led-matrix-summary"), pillHtml(ledState, ledShort));
   setTile("ov-led", ledState, ledShort.charAt(0).toUpperCase() + ledShort.slice(1),
     running && data.screen ? ledNowText(data.screen, data.state) : "");
   const status = document.getElementById("led-matrix-status");
@@ -2204,21 +2204,21 @@ async function refreshLedMatrix() {
   // (a PC, a Raspberry Pi) isn't a fault.
   status.className = `hint-text ${data.status === "no_sketch" || data.status === "error" ? "admin-error" : ""}`;
   if (data.screen) {
-    document.getElementById("led-matrix-mirror").innerHTML = ledGridHtml(data.screen.frame, "large");
+    morph(document.getElementById("led-matrix-mirror"), ledGridHtml(data.screen.frame, "large"));
     document.getElementById("led-matrix-now").textContent = ledNowText(data.screen, data.state);
   }
   if (!ledLegendDrawn && data.legend) {
     ledLegendDrawn = true;
-    document.getElementById("led-matrix-legend").innerHTML = data.legend.map(entry => `
+    morph(document.getElementById("led-matrix-legend"), data.legend.map(entry => `
       <div class="led-legend-item">
         ${ledGridHtml(entry.frame, "small")}
         <div>
           <strong>${escapeHtml(tr(`climate_admin.led_legend_${entry.key}_title`))}</strong>
           <span class="hint-text">${escapeHtml(tr(`climate_admin.led_legend_${entry.key}`))}</span>
         </div>
-      </div>`).join("");
-    document.getElementById("led-matrix-codes").innerHTML = data.codes.map(code => `
-      <div class="led-code"><code>${escapeHtml(code)}</code><span>${escapeHtml(ledCodeMeaning(code))}</span></div>`).join("");
+      </div>`).join(""));
+    morph(document.getElementById("led-matrix-codes"), data.codes.map(code => `
+      <div class="led-code"><code>${escapeHtml(code)}</code><span>${escapeHtml(ledCodeMeaning(code))}</span></div>`).join(""));
   }
 }
 
@@ -2651,10 +2651,10 @@ function renderDevices() {
   const list = document.getElementById("device-list");
   if (!list || !deviceStatus) return;
   const rows = deviceRows();
-  list.innerHTML = rows.length
+  morph(list, rows.length
     ? deviceGroups(rows).map(g => (g.title ? `<li class="device-group">${escapeHtml(g.title)}</li>` : "")
       + g.rows.map(deviceRowHtml).join("")).join("")
-    : `<li class="hint-text">${escapeHtml(tr("climate_admin.devices_none"))}</li>`;
+    : `<li class="hint-text">${escapeHtml(tr("climate_admin.devices_none"))}</li>`);
   const bad = rows.filter(r => r.state === "bad").length;
   const check = rows.filter(r => r.state === "neutral").length;
   setPill("devices-summary", !rows.length ? ""
