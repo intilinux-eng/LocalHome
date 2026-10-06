@@ -697,7 +697,7 @@
     "internal_error": "Errore interno della scheda: i dettagli sono nel suo log.",
     "dehumidifier_hours_invalid": "Durata non valida: scegli tra {choices} ore.",
     "dehumidifier_not_now": "Il deumidificatore non si accende a mano in questa stagione.",
-    "dehumidifier_humidity_low": "Umidità {humidity}%: l'aria è già asciutta, non serve accenderlo (parte da {start_from}%).",
+    "dehumidifier_humidity_low": "Umidità {value}%: l'aria è già asciutta, non serve accenderlo (parte da {min}%).",
     "no_dehumidifier": "Nessun deumidificatore configurato.",
     "request_invalid": "Richiesta non valida.",
     "no_thermostat": "Nessun termostato configurato.",

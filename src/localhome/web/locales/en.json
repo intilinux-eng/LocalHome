@@ -697,7 +697,7 @@
     "internal_error": "Internal error on the board: the details are in its log.",
     "dehumidifier_hours_invalid": "Not a valid duration: pick {choices} hours.",
     "dehumidifier_not_now": "The dehumidifier isn't switched by hand in this season.",
-    "dehumidifier_humidity_low": "Humidity {humidity}%: the air is dry enough, no need to switch it on (it starts from {start_from}%).",
+    "dehumidifier_humidity_low": "Humidity {value}%: the air is dry enough, no need to switch it on (it starts from {min}%).",
     "no_dehumidifier": "No dehumidifier configured.",
     "request_invalid": "Invalid request.",
     "no_thermostat": "No thermostat is configured.",

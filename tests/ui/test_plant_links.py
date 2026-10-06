@@ -54,7 +54,15 @@ history:
 def plant(start_server):
     # The config's braces are YAML's, not str.format's - only {port} is filled later.
     config = CONFIG.replace("{follower}", f"{ZONE_B} Valve".replace("'", "''"))
-    return start_server([dict(SIMULATED_ZONE, name=ZONE_A), dict(SIMULATED_ZONE, name=ZONE_B, cool_enabled=False)], config)
+    # The first cooled zone's humidity decides on the dehumidifier: typed by
+    # hand here, exact, instead of a simulated one wandering about 50%.
+    return start_server([dict(SIMULATED_ZONE, name=ZONE_A, sensor_mode="manual"),
+                         dict(SIMULATED_ZONE, name=ZONE_B, cool_enabled=False)], config)
+
+
+def _humidity(base, value):
+    call(base, f"/api/climate-admin/zones/{urllib.parse.quote(ZONE_A, safe='')}/manual-value",
+         {"temperature_c": 26.0, "humidity_pct": value})
 
 
 def call(base, path, body=None):
@@ -96,20 +104,39 @@ def test_the_home_page_has_the_dehumidifier_up_top_and_none_of_the_plants_valves
     context.close()
 
 
-def test_switching_the_dehumidifier_on_up_top_opens_the_bathrooms_valve_unsaid(browser, plant):
+def test_the_dehumidifier_is_switched_on_for_a_while_up_top_and_opens_the_bathrooms_valve_unsaid(browser, plant):
+    """On for 1, 2 or 4 hours - it draws a lot of power - until when, and
+    Off; the valve it opens for its water is none of the home's business."""
+    _humidity(plant, 60)
     context, opened = _open(browser, plant)
     page = opened.page
-    switch = "#season-devices button[data-switch='Deumidificatore']"
-    page.wait_for_selector(switch, timeout=20000)
-    page.click(switch)
+    one_hour = "#season-devices button[data-dehum-hours='1']"
+    page.wait_for_selector(one_hour, timeout=20000)
+    page.click(one_hour)
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is True), "it still opens the valve"
-    assert eventually(page, lambda: page.locator("#season-devices .season-device").get_attribute("data-on") == "true")
+    device = page.locator("#season-devices .season-device")
+    assert eventually(page, lambda: device.get_attribute("data-on") == "true")
+    assert "Acceso fino alle" in device.inner_text()
     card = page.locator(".zone", has_text=ZONE_B)
     page.wait_for_timeout(1500)
     assert "Esclusa d'estate" in card.locator(".zone-head").inner_text(), "the bathrooms aren't cooling for it"
     assert ZONE_B not in page.inner_text("#hero-title")
-    page.click(switch)
+    page.click("#season-devices button[data-dehum-off]")
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is False)
+    assert opened.errors == []
+    context.close()
+
+
+def test_the_dehumidifier_isnt_started_with_the_air_dry_enough(browser, plant):
+    _humidity(plant, 44)
+    context, opened = _open(browser, plant)
+    page = opened.page
+    page.wait_for_selector("#season-devices .season-device", timeout=20000)
+    assert eventually(page, lambda: "non serve" in page.inner_text("#season-devices"))
+    assert page.locator("#season-devices button[data-dehum-hours='1']").is_disabled()
+    res = call(plant, "/api/dehumidifier")["dehumidifier"]
+    assert res["humidity"] == 44 and res["on"] is False
+    _humidity(plant, 60)
     assert opened.errors == []
     context.close()
 

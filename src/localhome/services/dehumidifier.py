@@ -84,7 +84,7 @@ class DehumidifierTimer:
         humidity = self.humidity()
         if humidity is not None and humidity < START_FROM_PCT:
             raise InputError("dehumidifier_humidity_low", f"humidity {humidity:.0f}% - dry enough",
-                             humidity=round(humidity), start_from=round(START_FROM_PCT))
+                             value=round(humidity), min=round(START_FROM_PCT))
         with self._lock:
             self._command(self.switch, True)
             self._save({"until": self.clock() + hours * 3600, "stopped": None})

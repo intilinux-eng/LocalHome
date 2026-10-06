@@ -887,7 +887,7 @@ function renderSeasonDevices() {
   const cards = rules.filter(rule => rule[climate.mode] === "manual").map(rule => {
     const device = deviceByName(rule.switch);
     if (!device || !device.controllable) return "";
-    if (state.dehumidifier && state.dehumidifier.switch === rule.switch) return dehumidifierCard(rule.switch, state.dehumidifier);
+    if (climate.dehumidifier && climate.dehumidifier.switch === rule.switch) return dehumidifierCard(rule.switch, climate.dehumidifier);
     const on = !!(state.readings[rule.switch] || {}).is_on;
     return `<div class="season-device" data-on="${on}">
         <span class="season-device-icon">${ICONS.drop}</span>
@@ -928,6 +928,7 @@ async function onSeasonDeviceClick(event) {
       if (dehum.hasAttribute("data-dehum-off")) await api("/api/dehumidifier/off", {});
       else await api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) });
       await refreshDevices();
+      await refreshClimate();
     } catch (e) {
       notify(errorText(e));
       dehum.disabled = false;
@@ -1501,8 +1502,6 @@ async function refreshDevices() {
     if (state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)) {
       state.vmc = await api("/api/vmc-schedule").catch(() => null);
     }
-    const dehumidifier = await api("/api/dehumidifier").catch(() => null);
-    state.dehumidifier = dehumidifier ? dehumidifier.dehumidifier : null;
   } catch (e) {
     return;
   }
