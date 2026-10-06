@@ -200,7 +200,8 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     assert f"{ZONE_A} Sensor" in items[1] and f"{ZONE_A} Valve" in items[2]
     assert items[3].strip().lower() == f"zona {ZONE_B}".lower()
     assert "altri dispositivi" in [i.strip().lower() for i in items]
-    assert "tutti ok" in page.inner_text("#devices-summary")
+    # Right after the server starts a device may not have answered yet.
+    assert eventually(page, lambda: "tutti ok" in page.inner_text("#devices-summary"))
     shelly = page.locator("#device-list details.device-row", has_text=ZONE_A).first
     assert "a batteria" in shelly.locator("summary").inner_text()
     shelly.locator("summary").click()
