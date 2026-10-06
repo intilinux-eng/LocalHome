@@ -275,3 +275,23 @@ def test_a_silent_bathroom_sensor_doesnt_close_it_in_summer(board):
     for _ in range(3):
         _settle(app)
     assert _valve(client) is True
+
+
+# ------------------------------------------------- its settings, the panel's --
+
+def test_its_settings_are_saved_checked_and_in_force_at_once(board):
+    """The admin panel's thresholds and ways to switch it on: refused with
+    a code the page words, in force without a restart, and the defaults
+    back on request."""
+    app, client = board
+    body = client.get("/api/dehumidifier/settings").get_json()
+    assert body["configured"] and body["settings"]["stop_below"] == 50 and body["settings"]["start_from"] == 55
+    refused = client.post("/api/dehumidifier/settings", json={"stop_below": 50, "start_from": 51})
+    assert refused.status_code == 400 and refused.get_json()["code"] == "dehumidifier_start_above_stop"
+    saved = client.post("/api/dehumidifier/settings", json={"stop_below": 45, "start_from": 50, "durations": [0.5, 2]})
+    assert saved.get_json()["ok"]
+    status = client.get("/api/dehumidifier").get_json()["dehumidifier"]
+    assert (status["stop_below"], status["start_from"], status["durations"]) == (45, 50, [0.5, 2])
+    assert client.get("/api/climate/zones").get_json()["dehumidifier"]["durations"] == [0.5, 2]
+    client.post("/api/dehumidifier/settings", json={"reset": True})
+    assert client.get("/api/dehumidifier").get_json()["dehumidifier"]["stop_below"] == 50

@@ -1561,15 +1561,132 @@ function seasonEffects(mode, data) {
     const action = rule[mode];
     if (!action) return;
     const dehum = data.dehumidifier && data.dehumidifier.switch === rule.switch ? data.dehumidifier : null;
-    const fromHome = dehum
-      ? tr("climate_admin.season_rule_dehumidifier", { zone: displayName(dehum.humidity_zone || "?"),
-          stop: Math.round(dehum.stop_below), start: Math.round(dehum.start_from) })
-      : tr("climate_admin.season_rule_from_home");
+    const fromHome = dehum ? dehumidifierRuleText(dehum) : tr("climate_admin.season_rule_from_home");
     const what = ruleActionText(action, rule.normally_open) + (action === "manual" ? ` - ${fromHome}` : "");
     items.push(`${escapeHtml(displayName(rule.switch))}: ${escapeHtml(what)}`);
   });
   items.push(tr(`climate_admin.season_schedule_${mode}`));
   return items;
+}
+
+// -------------------------------------------------------- dehumidifier --
+// Its thresholds and the ways it's switched on (services/dehumidifier.py),
+// effective at once - no restart. The summer card says what they make of
+// it, in one line.
+
+function hoursLabel(h) {
+  return h < 1 ? tr("climate_admin.dehum_minutes", { m: Math.round(h * 60) }) : tr("climate_admin.dehum_hours", { h });
+}
+
+function listWords(items) {
+  if (items.length < 2) return items.join("");
+  return `${items.slice(0, -1).join(", ")} ${tr("climate_admin.dehum_or")} ${items[items.length - 1]}`;
+}
+
+function dehumidifierRuleText(d) {
+  const stop = Math.round(d.stop_below), start = Math.round(d.start_from);
+  const ways = (d.durations || []).map(hoursLabel);
+  if (d.until_target) ways.push(tr("climate_admin.dehum_way_target", { stop, max: d.target_max_hours }));
+  const auto = d.auto || {};
+  const byItself = auto.enabled
+    ? tr("climate_admin.dehum_rule_auto", { start, window: dehumWindowText(auto.from_hour, auto.to_hour), max: auto.max_hours_day })
+    : tr("climate_admin.dehum_rule_never_alone");
+  return tr("climate_admin.dehum_rule", { ways: listWords(ways), alone: byItself, zone: displayName(d.humidity_zone || "?"), stop, start });
+}
+
+function dehumWindowText(from, to) {
+  return from === 0 && to === 24 ? tr("climate_admin.dehum_all_day")
+    : tr("climate_admin.dehum_window", { from: String(from).padStart(2, "0"), to: String(to).padStart(2, "0") });
+}
+
+async function loadDehumSettings() {
+  const box = document.getElementById("dehum-settings");
+  if (!box) return;
+  let data;
+  try {
+    data = await (await fetch("/api/dehumidifier/settings")).json();
+  } catch (e) {
+    return;
+  }
+  box.hidden = !data.configured;
+  if (!data.configured) return;
+  const s = data.settings, r = data.ranges;
+  const num = (key, extra = "") => `<input type="number" data-dehum="${key}" min="${r[key][0]}" max="${r[key][1]}" step="1" value="${s[key]}"${extra}>`;
+  box.innerHTML = `
+    <h3 class="admin-subheading">${escapeHtml(tr("climate_admin.dehum_heading"))}</h3>
+    <p class="hint-text">${escapeHtml(tr("climate_admin.dehum_note"))}</p>
+    <div class="admin-zone-card">
+      <div class="dehum-grid">
+        <div class="admin-field">
+          <label>${escapeHtml(tr("climate_admin.setting_stop_below"))}</label>
+          <span class="dehum-pct">${num("stop_below")}%</span>
+          <span class="hint-text">${escapeHtml(tr("climate_admin.dehum_stop_help"))}</span>
+        </div>
+        <div class="admin-field">
+          <label>${escapeHtml(tr("climate_admin.setting_start_from"))}</label>
+          <span class="dehum-pct">${num("start_from")}%</span>
+          <span class="hint-text">${escapeHtml(tr("climate_admin.dehum_start_help"))}</span>
+        </div>
+      </div>
+      <div class="admin-field" style="margin-top:14px">
+        <label>${escapeHtml(tr("climate_admin.dehum_durations"))}</label>
+        <div class="dehum-choices">${data.duration_choices.map(h => `<label><input type="checkbox" data-dehum-duration="${h}"${s.durations.includes(h) ? " checked" : ""}> ${escapeHtml(hoursLabel(h))}</label>`).join("")}</div>
+        <label class="dehum-check"><input type="checkbox" data-dehum="until_target"${s.until_target ? " checked" : ""}>
+          ${escapeHtml(tr("climate_admin.dehum_until_target"))} ${num("target_max_hours")} ${escapeHtml(tr("climate_admin.dehum_hours_short"))}</label>
+      </div>
+      <div class="dehum-auto">
+        <label class="dehum-check dehum-check-long"><input type="checkbox" data-dehum="auto"${s.auto ? " checked" : ""} onchange="syncDehumAuto()">
+          <span>${escapeHtml(tr("climate_admin.dehum_auto"))}</span></label>
+        <div class="dehum-auto-fields" id="dehum-auto-fields">
+          ${escapeHtml(tr("climate_admin.dehum_auto_from"))} ${num("auto_from_hour")}
+          ${escapeHtml(tr("climate_admin.dehum_auto_to"))} ${num("auto_to_hour")}
+          ${escapeHtml(tr("climate_admin.dehum_auto_max"))} ${num("auto_max_hours_day")} ${escapeHtml(tr("climate_admin.dehum_auto_max_unit"))}
+        </div>
+        <p class="hint-text">${escapeHtml(tr("climate_admin.dehum_auto_help"))}</p>
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" type="button" onclick="saveDehumSettings(this)">${escapeHtml(tr("climate_admin.dehum_save"))}</button>
+        <button class="tbtn" type="button" onclick="saveDehumSettings(this, true)">${escapeHtml(tr("climate_admin.dehum_reset"))}</button>
+      </div>
+      <p class="hint-text" id="dehum-settings-result"></p>
+    </div>`;
+  syncDehumAuto();
+}
+
+function syncDehumAuto() {
+  const on = document.querySelector('#dehum-settings [data-dehum="auto"]');
+  const fields = document.getElementById("dehum-auto-fields");
+  if (!on || !fields) return;
+  fields.setAttribute("aria-disabled", String(!on.checked));
+  fields.querySelectorAll("input").forEach(i => { i.disabled = !on.checked; });
+}
+
+async function saveDehumSettings(button, reset = false) {
+  const box = document.getElementById("dehum-settings");
+  const result = document.getElementById("dehum-settings-result");
+  const body = { durations: [...box.querySelectorAll("[data-dehum-duration]")].filter(i => i.checked).map(i => Number(i.dataset.dehumDuration)) };
+  box.querySelectorAll("[data-dehum]").forEach(i => { body[i.dataset.dehum] = i.type === "checkbox" ? i.checked : Number(i.value); });
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/dehumidifier/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reset ? { reset: true } : body) });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
+      result.className = "hint-text admin-error";
+      return;
+    }
+    await loadDehumSettings();
+    const after = document.getElementById("dehum-settings-result");
+    after.textContent = tr(reset ? "climate_admin.dehum_reset_done" : "climate_admin.dehum_saved");
+    after.className = "hint-text admin-success";
+    refreshStatus();
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderSeason(data) {
@@ -2683,6 +2800,7 @@ loadMap();
 loadBroker();
 loadExtraSwitches();
 loadSeasonRules();
+loadDehumSettings();
 loadExtraSensor();
 loadVmc();
 loadVmcSpeeds();

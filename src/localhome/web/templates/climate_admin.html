@@ -168,6 +168,9 @@
       <button class="tbtn open" onclick="saveSeasonRules(this)">{{ t.climate_admin.rules_save }}</button>
     </div>
     <p class="hint-text" id="season-rules-result"></p>
+    <!-- The dehumidifier's thresholds and the ways it's switched on -
+         effective at once: see the dehumidifier section of climate_admin.js. -->
+    <div class="dehum-settings" id="dehum-settings" hidden></div>
   </details>
 
   <details class="admin-details" id="zones" data-nav="zones">

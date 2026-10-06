@@ -127,17 +127,73 @@ def test_the_dehumidifier_is_switched_on_for_a_while_up_top_and_opens_the_bathro
     context.close()
 
 
-def test_the_dehumidifier_isnt_started_with_the_air_dry_enough(browser, plant):
-    _humidity(plant, 44)
+def test_the_dehumidifier_is_off_and_not_offered_with_the_air_dry_enough(browser, plant):
+    """Below its start threshold (55% by default) it can't be switched on:
+    the card says it's off, the humidity and from when it would be - no
+    buttons to tap for nothing."""
+    _humidity(plant, 52)
     context, opened = _open(browser, plant)
     page = opened.page
     page.wait_for_selector("#season-devices .season-device", timeout=20000)
-    assert eventually(page, lambda: "non serve" in page.inner_text("#season-devices"))
-    assert page.locator("#season-devices button[data-dehum-hours='1']").is_disabled()
+    card = page.locator("#season-devices .season-device-dehum")
+    assert eventually(page, lambda: card.get_attribute("data-state") == "disabled")
+    assert "Disattivato: umidità 52%, si può accendere dal 55%" in card.inner_text()
+    assert card.locator("button").count() == 0
     res = call(plant, "/api/dehumidifier")["dehumidifier"]
-    assert res["humidity"] == 44 and res["on"] is False
+    assert res["humidity"] == 52 and res["on"] is False
     _humidity(plant, 60)
     assert opened.errors == []
+    context.close()
+
+
+def test_the_dehumidifier_runs_until_the_room_is_dry_enough(browser, plant):
+    _humidity(plant, 60)
+    context, opened = _open(browser, plant)
+    page = opened.page
+    target = "#season-devices button[data-dehum-target]"
+    page.wait_for_selector(target, timeout=20000)
+    assert page.inner_text(target) == "Fino al 50%"
+    page.click(target)
+    card = page.locator("#season-devices .season-device-dehum")
+    assert eventually(page, lambda: card.get_attribute("data-on") == "true")
+    assert "Acceso finché l'umidità scende al 50%" in card.inner_text()
+    assert call(plant, "/api/dehumidifier")["dehumidifier"]["mode"] == "target"
+    page.click("#season-devices button[data-dehum-off]")
+    assert eventually(page, lambda: card.get_attribute("data-on") == "false")
+    assert opened.errors == []
+    context.close()
+
+
+def test_the_dehumidifiers_thresholds_are_set_in_the_admin_and_in_force_at_once(browser, plant):
+    """The season section: the thresholds, the durations, "until the
+    target" and the automatic switching on (off by default) - saved, no
+    restart, and the home page follows."""
+    _humidity(plant, 60)
+    context, opened = _open(browser, plant, "/climate-admin")
+    page = opened.page
+    page.evaluate("document.getElementById('season').open = true")
+    box = page.locator("#dehum-settings")
+    page.wait_for_selector("#dehum-settings [data-dehum='stop_below']", timeout=20000)
+    assert box.locator("[data-dehum='auto']").is_checked() is False
+    assert box.locator("#dehum-auto-fields input").first.is_disabled(), "the automatic's hours wait for it to be on"
+    box.locator("[data-dehum='stop_below']").fill("48")
+    box.locator("[data-dehum='start_from']").fill("49")
+    box.locator("button.open").click()
+    assert eventually(page, lambda: "2 punti" in box.inner_text()), "refused, in words"
+    box.locator("[data-dehum='start_from']").fill("53")
+    box.locator("[data-dehum-duration='0.5']").check()
+    box.locator("button.open").click()
+    assert eventually(page, lambda: "vale da subito" in page.inner_text("#dehum-settings"))
+    assert eventually(page, lambda: "fino al 48%" in page.inner_text("#season-cards")), "the summer card says it"
+    home, home_opened = _open(browser, plant)
+    home_page = home_opened.page
+    home_page.wait_for_selector("#season-devices button[data-dehum-target]", timeout=20000)
+    assert home_page.inner_text("#season-devices button[data-dehum-target]") == "Fino al 48%"
+    assert home_page.locator("#season-devices button[data-dehum-hours='0.5']").inner_text() == "30 min"
+    call(plant, "/api/dehumidifier/settings", {"reset": True})
+    # The refused save is a 400 the browser notes on its own.
+    assert [e for e in opened.errors if "status of 400" not in e] == [] and home_opened.errors == []
+    home.close()
     context.close()
 
 
@@ -156,7 +212,8 @@ def test_the_admin_says_closed_open_and_lists_the_link(browser, plant):
     # Each season's card says what happens to every device in it - the home page doesn't.
     summer = page.inner_text("#season-cards .season-cool")
     assert "Valvola Bypass Bagni: sempre chiusa (Shelly acceso)" in summer
-    assert "Deumidificatore: a scelta - lo accende chi abita la casa, dalla home" in summer
+    assert ("Deumidificatore: a scelta - si accende dalla home per 1 h, 2 h, 4 h o fino al 50% (al massimo 8 h); "
+            "mai da solo; si spegne da solo sotto il 50%") in summer
     winter = page.inner_text("#season-cards .season-heat")
     assert "Valvola Bypass Bagni: sempre aperta (Shelly spento)" in winter and "Deumidificatore: sempre spento" in winter
     assert page.evaluate(UNTRANSLATED_JS) == []

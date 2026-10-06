@@ -44,7 +44,7 @@ from localhome.services.climate_map_store import (
     panel_season_rules,
     snapshot_from_config,
 )
-from localhome.services.dehumidifier import DehumidifierTimer
+from localhome.services.dehumidifier import DehumidifierSettingsStore, DehumidifierTimer
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
 from localhome.services import diagnostics, led_matrix, panel_settings
@@ -386,10 +386,13 @@ def create_app(config_path: str | None = None) -> Flask:
         rule = next((r for r in season_rules() if r["switch"] == name), None)
         return rule is None or rule[mode] == "manual"
 
-    # The dehumidifier, on by hand for a while - never by itself; off when
-    # the time is up or the first cooled zone's air is dry enough
-    # (services/dehumidifier.py).
+    # The dehumidifier: on from the home page for a while or until the air
+    # is dry enough - by itself only if the admin panel says so; off when
+    # the time is up or the first cooled zone's air is dry enough. Its
+    # thresholds and ways to switch it on are the panel's, read at every
+    # check (services/dehumidifier.py).
     dehumidifier = None
+    dehumidifier_settings = DehumidifierSettingsStore(config.resolve("dehumidifier_settings.json"))
     dehumidifier_name = dehumidifier_switch()
     if dehumidifier_name:
         cooled = [zone for zone in (thermostat.zones if thermostat else []) if zone.cool_enabled]
@@ -397,7 +400,7 @@ def create_app(config_path: str | None = None) -> Flask:
             manager, dehumidifier_name, cooled[0].sensor if cooled else None,
             config.resolve("dehumidifier.json"), command=command_switch,
             allowed=lambda: dehumidifier_allowed(dehumidifier_name),
-            humidity_zone=cooled[0].name if cooled else None)
+            humidity_zone=cooled[0].name if cooled else None, settings=dehumidifier_settings.get)
         dehumidifier.start()
 
     app.config["LOCALHOME_CONFIG"] = config
@@ -413,6 +416,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["INTERLOCK"] = interlock
     app.config["VMC_SCHEDULE"] = vmc
     app.config["DEHUMIDIFIER"] = dehumidifier
+    app.config["DEHUMIDIFIER_SETTINGS"] = dehumidifier_settings
     # The VMC's night/day/boost speeds as set in the admin panel, laid over
     # its device's presets - see services/vmc_speeds.py.
     app.config["VMC_SPEEDS"] = vmc_speeds.VmcSpeedStore(config.resolve("vmc_speeds.json"))
@@ -1122,18 +1126,48 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/dehumidifier/on", methods=["POST"])
     def api_dehumidifier_on():
-        """{"hours": 1, 2 or 4}: on for that long. Refused (409) with the
-        air dry enough, or out of its season."""
+        """{"hours": one of the offered durations} or {"until": "target"}:
+        on for that long, or until the room is dry enough. Refused (409)
+        with the air dry enough, or out of its season."""
         timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
         if timer is None:
             return _fail("no_dehumidifier", "no dehumidifier configured", 404)
+        body = _json_body()
         try:
-            status = timer.switch_on(_json_body().get("hours"))
+            status = timer.switch_on(body.get("hours"), until=body.get("until"))
         except InputError as exc:
             return _refusal(exc, 400 if exc.code == "dehumidifier_hours_invalid" else 409)
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 502
         return jsonify(ok=True, dehumidifier=status)
+
+    @app.route("/api/dehumidifier/settings")
+    def api_dehumidifier_settings():
+        """Its thresholds and the ways it can be switched on - the admin
+        panel's; the defaults, and the durations one can offer."""
+        from localhome.services import dehumidifier as dehum
+        store: DehumidifierSettingsStore = app.config["DEHUMIDIFIER_SETTINGS"]
+        return jsonify(ok=True, settings=store.get(), defaults=dehum.DEFAULTS, ranges=dehum.RANGES,
+                       duration_choices=list(dehum.DURATION_CHOICES), configured=app.config["DEHUMIDIFIER"] is not None)
+
+    @app.route("/api/dehumidifier/settings", methods=["POST"])
+    def api_dehumidifier_settings_save():
+        """Only what the body names changes; `{"reset": true}` puts the
+        defaults back. Takes effect at once - no restart."""
+        store: DehumidifierSettingsStore = app.config["DEHUMIDIFIER_SETTINGS"]
+        body = _json_body()
+        try:
+            if body.get("reset") is True:
+                from localhome.services.dehumidifier import DEFAULTS
+                settings = store.set(dict(DEFAULTS))
+            else:
+                settings = store.set(body)
+        except InputError as exc:
+            return _refusal(exc, 400)
+        timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
+        if timer is not None:
+            timer.tick()        # a lower stop threshold switches it off now, not in 30 s
+        return jsonify(ok=True, settings=settings, dehumidifier=timer.status() if timer else None)
 
     @app.route("/api/dehumidifier/off", methods=["POST"])
     def api_dehumidifier_off():

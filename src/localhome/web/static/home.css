@@ -283,6 +283,12 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .season-device-for { font-size: 0.82rem; color: var(--text-2); margin-right: 2px; }
 .season-device-controls .chip { min-height: 38px; padding: 6px 14px; }
 .season-device-controls .chip:disabled { opacity: 0.45; }
+/* Dry enough: off, and it can't be switched on - said, not offered. */
+.season-device-dehum[data-state="disabled"] .season-device-icon { opacity: 0.45; }
+.season-device-dehum[data-state="disabled"] .season-device-text > span { color: var(--text-2); }
+.season-device-auto { display: flex; align-items: center; gap: 6px; flex-basis: 100%; padding-left: 52px;
+  font-size: 0.8rem; color: var(--text-3); }
+.season-device-auto svg { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
 
 .chip {
   display: inline-flex;

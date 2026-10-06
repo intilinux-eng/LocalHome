@@ -395,6 +395,20 @@
 .season-effects { margin: 12px 0 0; padding-left: 18px; font-size: 0.86rem; color: var(--text-2); }
 .season-card.active .season-effects { color: var(--text); }
 .season-changed { margin: 10px 0 0; font-size: 0.8rem; color: var(--text-3); }
+/* The dehumidifier's thresholds and ways to switch it on. */
+.dehum-settings { margin-top: 18px; }
+.dehum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 18px; }
+.dehum-pct { display: flex; align-items: center; gap: 8px; }
+.dehum-settings input[type="number"] { width: 5.5em !important; flex: none; }
+.dehum-settings input[type="checkbox"] { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+.dehum-choices { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.dehum-choices label, .dehum-check { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-weight: 500; color: var(--text); }
+.dehum-check { margin-top: 10px; }
+.dehum-check-long { flex-wrap: nowrap; align-items: flex-start; }
+.dehum-check-long input { margin-top: 2px; }
+.dehum-auto { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.dehum-auto-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.dehum-auto-fields[aria-disabled="true"] { opacity: 0.5; }
 .season-effects li + li { margin-top: 4px; }
 
 .season-confirm, .maint-confirm {

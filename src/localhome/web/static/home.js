@@ -955,33 +955,61 @@ function renderSeasonDevices() {
   morph(host, cards.join(""));
 }
 
-// The dehumidifier: on for a while, never by itself - it draws a lot of
-// power (services/dehumidifier.py). With the air dry enough it isn't
-// started, and says why.
+// The dehumidifier: on for a while or until the room is dry enough (the
+// admin panel's thresholds and choices - services/dehumidifier.py); by
+// itself only if the panel says so. With the air dry enough it can't be
+// switched on, and says so: "off", the humidity, from when it would.
 function dehumidifierCard(name, d) {
   const on = d.on === true;
-  const dry = d.humidity != null && d.humidity < d.start_from;
-  const note = on
-    ? (d.until_at ? tr("home.dehum_on_until", { until: untilText(boardDate(d.until_at)) }) : tr("home.on"))
-    : dry ? tr("home.dehum_dry", { rh: d.humidity, start: Math.round(d.start_from) }) : tr("home.off_state");
-  const humidity = d.humidity != null ? `<span class="season-device-rh">${ICONS.drop}${esc(tr("home.dehum_rh", { rh: d.humidity }))}</span>` : "";
-  const controls = on
-    ? `<button class="chip" type="button" data-dehum-off>${esc(tr("home.dehum_off"))}</button>`
-    : `<span class="season-device-for">${esc(tr("home.dehum_for"))}</span>`
-      + d.durations.map(h => `<button class="chip" type="button" data-dehum-hours="${h}"${dry ? " disabled" : ""}>${esc(tr("home.vmc_hours", { h }))}</button>`).join("");
-  return `<div class="season-device season-device-dehum" data-on="${on}">
+  const dry = !on && d.humidity != null && d.humidity < d.start_from;
+  const auto = d.auto || {};
+  const until = d.until_at ? untilText(boardDate(d.until_at)) : "";
+  const stop = Math.round(d.stop_below), start = Math.round(d.start_from);
+  let note;
+  if (on) {
+    note = d.mode === "auto" ? tr("home.dehum_on_auto", { stop, until })
+      : d.mode === "target" ? tr("home.dehum_on_target", { stop, until })
+      : until ? tr("home.dehum_on_until", { until }) : tr("home.on");
+  } else if (dry) {
+    note = tr(auto.enabled ? "home.dehum_disabled_auto" : "home.dehum_disabled", { rh: d.humidity, start });
+  } else {
+    note = tr("home.off_state");
+  }
+  const humidity = d.humidity != null && !dry ? `<span class="season-device-rh">${ICONS.drop}${esc(tr("home.dehum_rh", { rh: d.humidity }))}</span>` : "";
+  const label = h => (h < 1 ? tr("home.vmc_minutes", { m: Math.round(h * 60) }) : tr("home.vmc_hours", { h }));
+  let controls = "";
+  if (on) {
+    controls = `<button class="chip" type="button" data-dehum-off>${esc(tr("home.dehum_off"))}</button>`;
+  } else if (!dry) {
+    controls = `<span class="season-device-for">${esc(tr("home.dehum_for"))}</span>`
+      + d.durations.map(h => `<button class="chip" type="button" data-dehum-hours="${h}">${esc(label(h))}</button>`).join("")
+      + (d.until_target ? `<button class="chip" type="button" data-dehum-target>${esc(tr("home.dehum_until_target", { stop }))}</button>` : "");
+  }
+  // On by itself: when, or why not now.
+  let autoNote = "";
+  if (auto.enabled && !on) {
+    const window = auto.from_hour === 0 && auto.to_hour === 24 ? tr("home.dehum_auto_all_day")
+      : tr("home.dehum_auto_window", { from: String(auto.from_hour).padStart(2, "0"), to: String(auto.to_hour).padStart(2, "0") });
+    autoNote = auto.paused_until_at
+      ? tr("home.dehum_auto_paused", { until: untilText(boardDate(auto.paused_until_at)) })
+      : auto.used_today_seconds >= auto.max_hours_day * 3600 - 60 ? tr("home.dehum_auto_done", { h: auto.max_hours_day })
+      : tr("home.dehum_auto_on", { start, window });
+  }
+  return `<div class="season-device season-device-dehum" data-on="${on}" data-state="${on ? "on" : dry ? "disabled" : "off"}">
       <span class="season-device-icon">${ICONS.drop}</span>
       <span class="season-device-text"><b>${esc(displayName(name))}</b><span>${esc(note)}</span>${humidity}</span>
-      <span class="season-device-controls">${controls}</span>
+      ${controls ? `<span class="season-device-controls">${controls}</span>` : ""}
+      ${autoNote ? `<span class="season-device-auto">${ICONS.clock}<span>${esc(autoNote)}</span></span>` : ""}
     </div>`;
 }
 
 async function onSeasonDeviceClick(event) {
-  const dehum = event.target.closest("button[data-dehum-hours], button[data-dehum-off]");
+  const dehum = event.target.closest("button[data-dehum-hours], button[data-dehum-target], button[data-dehum-off]");
   if (dehum) {
     const host = dehum.closest(".season-device");
     asked.climate++;
     const done = await act(dehum, () => (dehum.hasAttribute("data-dehum-off") ? api("/api/dehumidifier/off", {})
+      : dehum.hasAttribute("data-dehum-target") ? api("/api/dehumidifier/on", { until: "target" })
       : api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) })));
     if (done && state.climate) {
       state.climate.dehumidifier = done.dehumidifier;
