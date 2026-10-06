@@ -1632,6 +1632,8 @@ document.getElementById("sheet").addEventListener("click", e => state.sheet && s
 document.getElementById("sheet-close").addEventListener("click", closeSheet);
 document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.sheet) closeSheet(); });
+// Safari shows :active on a tap only when the page listens to touches.
+document.addEventListener("touchstart", () => {}, { passive: true });
 
 // Back to the page - from another app, the phone woken up: what it shows
 // is brought up to date at once and in place, not after the next round,
