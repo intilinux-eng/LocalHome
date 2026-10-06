@@ -3,35 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shelly Plus 1 / 1 Gen3 per le valvole di zona - LocalHome</title>
-<!-- The installer's guide to a zone valve's Shelly Plus 1: wiring, the
-     Shelly app's settings (with its own screens, the right choice marked)
-     and the admin panel - served by the board and downloadable from the
-     admin panel (Devices). Self-contained but for the screenshots next to
-     it: it has to open on a phone with no network, and prints from the
-     browser. The settings match services/shelly_health.py's
-     expected_settings(), which checks them. -->
+<title>Shelly 1 Gen3 per valvole e deumidificatore - LocalHome</title>
+<!-- The installer's guide to the plant's Shelly relays (Shelly 1 Gen3, the
+     default; a Plus 1 is the same): wiring, the Shelly app's settings (its
+     own screens, the right choice marked), the admin panel and how to read
+     its device report - served by the board and linked from the admin
+     panel (Devices). Self-contained but for the screenshots next to it: it
+     opens on a phone with no network and prints from the browser. Kept
+     short on purpose. The settings match services/shelly_health.py's
+     expected_settings(); the report's rows climate_admin.js's shellyStatsHtml(). -->
 <style>
   :root { --text: #1f2328; --text-2: #4b5260; --line: #d8dbe0; --soft: #f3f4f6;
-          --ok: #1a7f37; --no: #cf222e; }
+          --ok: #1a7f37; --no: #cf222e; --warn: #9a6700; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #fff; color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; background: #fff; color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 4px; }
-  h2 { font-size: 1.15rem; margin: 30px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
-  p, li { margin: 6px 0; }
-  .sub { color: var(--text-2); margin: 0 0 18px; }
-  .box { background: var(--soft); border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.93rem; }
-  th, td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 1.15rem; margin: 28px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 18px 0 6px; }
+  p, li { margin: 5px 0; }
+  .sub { color: var(--text-2); margin: 0 0 16px; }
+  .box { background: var(--soft); border-radius: 10px; padding: 10px 14px; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 0.93rem; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 6px; border-bottom: 1px solid var(--line); }
   th { font-size: 0.85rem; color: var(--text-2); font-weight: 600; }
-  td:first-child { font-weight: 600; width: 34%; }
-  .cases td:first-child { width: 26%; }
+  td:first-child { font-weight: 600; width: 36%; }
   code { font: 0.9em ui-monospace, Consolas, monospace; background: var(--soft); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
   .value { color: var(--ok); font-weight: 600; }
+  .pill { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 0.85em; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: #dafbe1; color: var(--ok); }
+  .pill.check { background: #fff8c5; color: var(--warn); }
+  .pill.bad { background: #ffebe9; color: var(--no); }
   .diagram svg { width: 100%; height: auto; display: block; margin: 12px 0; }
   ol.steps { padding-left: 22px; }
-  /* A screen of the Shelly app, the right choice marked on it. */
+  .print { float: right; margin: 0 0 8px 12px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+           background: #fff; color: var(--text); font: inherit; font-size: 0.9rem; cursor: pointer; }
+  /* A screen of the Shelly app or of LocalHome, the right choice marked on it. */
   .shot { position: relative; max-width: 360px; margin: 12px auto; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
           container-type: inline-size; }
   /* The value to set, written over the one the screenshot was taken with. */
@@ -42,76 +49,55 @@
   .mark span { position: absolute; right: 6px; top: -2px; transform: translateY(-50%); padding: 1px 8px; border-radius: 999px;
                background: var(--ok); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; }
   .mark.no span { background: var(--no); }
-  footer { margin-top: 36px; color: var(--text-2); font-size: 0.85rem; }
+  /* Two screens side by side, each its own height: the marks on one are
+     placed on its picture, not on a box stretched to the other's. */
+  .pair { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-start; }
+  .pair .shot { flex: 1 1 280px; margin: 8px 0; }
+  footer { margin-top: 32px; color: var(--text-2); font-size: 0.85rem; }
   @media print {
-    body { font-size: 11pt; }
+    body { font-size: 10.5pt; }
     main { max-width: none; padding: 0; }
-    h2 { break-after: avoid; }
-    .box, table, .diagram, figure { break-inside: avoid; }
+    .print { display: none; }
+    h2, h3 { break-after: avoid; }
+    .box, table, .diagram, figure, tr { break-inside: avoid; }
+    .shot { max-width: 300px; }
+    .pair, .keep { break-inside: avoid; }
+    .pair .shot { flex: 0 1 230px; max-width: 230px; }
   }
-  @page { size: A4; margin: 16mm 14mm; }
+  @page { size: A4; margin: 15mm 14mm; }
 </style>
 </head>
 <body>
 <main>
 
-<h1>Shelly Plus 1 o 1 Gen3 per le valvole di zona</h1>
-<p class="sub">Collegamento, impostazioni nell'app Shelly e configurazione in LocalHome, per le due zone: Stanze e Bagni.
-Uno Shelly Plus 1 per zona; le valvole di zona sono normalmente chiuse (alimentate = aperte).</p>
+<button class="print" type="button" onclick="window.print()">Stampa / PDF</button>
+<h1>Shelly 1 Gen3 per valvole e deumidificatore</h1>
+<p class="sub">Collegamento, app Shelly, LocalHome e stato dei dispositivi. Uno Shelly per valvola di zona, deumidificatore e
+bypass bagni. Valvole di zona normalmente chiuse.</p>
 
-<div class="box">
-  <strong>Non serve ricordarsi tutte le impostazioni.</strong> Quando inserisci lo Shelly in LocalHome, il pannello di
-  amministrazione lo interroga e ti dice <strong>cosa manca da configurare e con quale valore</strong>, con le stesse parole
-  dell'app Shelly. Correggi nell'app finché dice <em>Impostazioni a posto ✓</em> - vedi la sezione 5.
-</div>
+<div class="box"><strong>Gen3 o Plus 1: stesso collegamento, stesse impostazioni.</strong> Il Gen3 conta in più le accensioni
+del relè. Non serve ricordarsi le impostazioni: LocalHome interroga lo Shelly e dice cosa correggere (sezione 5).</div>
 
-<h2>Perché: il comando a tempo</h2>
-<p>Uno Shelly mantiene l'ultimo comando ricevuto, anche quando chi l'ha dato non c'è più. Se la scheda LocalHome si
-spegnesse con una valvola aperta, senza precauzioni la valvola resterebbe aperta per ore o giorni: d'inverno la zona
-continuerebbe a scaldare, d'estate nei bagni i pannelli a soffitto farebbero condensa.</p>
-<p>Per questo LocalHome non dice mai allo Shelly "accendi", ma <strong>"accendi per 15 minuti"</strong>, e finché la valvola deve
-restare aperta <strong>ripete il comando ogni 5 minuti</strong>. Ogni ripetizione fa ripartire i 15 minuti da capo senza che il relè si
-stacchi: la valvola non si accorge di niente (provato su uno Shelly Plus 1 vero). Se i comandi smettono di arrivare, lo Shelly
-la chiude da solo.</p>
-<table class="cases">
-  <tr><th>Cosa succede</th><th>La valvola</th><th>Cosa vedi in LocalHome</th></tr>
-  <tr><td>Tutto normale</td><td>Resta aperta finché serve; LocalHome la chiude quando non serve più.</td><td>-</td></tr>
-  <tr><td>Si perde qualche comando (Wi-Fi debole)</td><td>Niente: ne arriva uno ogni 5 minuti, ne basta uno ogni 15.</td><td>-</td></tr>
-  <tr><td>LocalHome o la scheda si riavviano, per meno di 15 minuti (un aggiornamento)</td>
-      <td>Niente: appena riparte, LocalHome chiede allo Shelly com'è e rinnova il comando prima che scadano i 15 minuti.</td><td>-</td></tr>
-  <tr><td>La scheda si spegne, si blocca o resta senza rete per più di 15 minuti</td>
-      <td>Lo Shelly la <strong>chiude da solo</strong> entro 15 minuti dall'ultimo comando. Quando la scheda torna, LocalHome chiede
-          allo Shelly com'è e la riapre se serve.</td>
-      <td>In <strong>Stato sistema</strong>, per 72 ore, nel riquadro <em>Successo nelle ultime 72 ore</em>: è scattato il
-          timer di sicurezza dello Shelly, con l'ora. Resta anche nello <strong>Storico watchdog</strong>.</td></tr>
-  <tr><td>Lo Shelly resta senza corrente, anche solo per pochi secondi</td>
-      <td>Si chiude: senza corrente il relè è aperto. Quando la corrente torna, lo Shelly riparte spento; LocalHome se ne
-          accorge appena si ricollega e la riapre se serve, in pochi secondi.</td>
-      <td>Dopo circa un minuto e mezzo la valvola risulta <em>non risponde</em>: prima LocalHome non può saperlo, lo Shelly
-          senza corrente non avvisa. Nei dati dello Shelly (Dispositivi) un riavvio in più.</td></tr>
-  <tr><td>Manca la corrente in tutta la casa e poi torna</td>
-      <td>Lo Shelly riparte con la valvola chiusa, poi decide LocalHome - impostazione <em>stato all'accensione: spento</em>.</td><td>-</td></tr>
-  <tr><td>Lo Shelly si riavvia (un aggiornamento, un guasto) con la valvola aperta</td>
-      <td>Dimentica il comando a tempo, ma lo <em>spegnimento automatico a 15 minuti</em> la chiude comunque se LocalHome non la
-          riconferma. LocalHome gli chiede com'è appena si ricollega.</td>
-      <td>Nei dati dello Shelly (Dispositivi) un riavvio in più.</td></tr>
-  <tr><td>Un filo o un disturbo sul morsetto SW</td><td>Non la muove - impostazione <em>tipo relè: Detached</em>.</td><td>-</td></tr>
+<h2>Perché il comando a tempo</h2>
+<p>LocalHome non dice "accendi" ma <strong>"accendi per 15 minuti"</strong>, ripetuto ogni 5 minuti. Se la scheda si ferma, lo
+Shelly chiude la valvola da solo entro 15 minuti.</p>
+<table>
+  <tr><th>Cosa succede</th><th>Risultato</th></tr>
+  <tr><td>Scheda o LocalHome fermi meno di 15 min</td><td>Niente: al riavvio il comando viene rinnovato.</td></tr>
+  <tr><td>Scheda ferma più di 15 min</td><td>Lo Shelly chiude; al ritorno LocalHome riapre se serve. Avviso in
+      <em>Successo nelle ultime 72 ore</em>.</td></tr>
+  <tr><td>Shelly senza corrente</td><td>Valvola chiusa; al ritorno LocalHome riapre se serve. Un <em>riavvio inatteso</em> in
+      Dispositivi.</td></tr>
+  <tr><td>Blackout di tutta la casa</td><td>Lo Shelly riparte spento, poi decide LocalHome.</td></tr>
 </table>
-<p>Provati il 4 ottobre 2026 con uno Shelly Plus 1 vero sulla scheda di produzione: riavvii di LocalHome (anche a 44 secondi
-dalla scadenza dei 15 minuti), LocalHome fermo 17 minuti, scheda ferma con il server MQTT spento, riavvio del server MQTT,
-riavvio dello Shelly, Shelly senza corrente per 3 minuti e per 5 secondi, scheda staccata dalla corrente per 17 minuti
-e riaccesa, corrente tolta a tutti e due e ridata (prima lo Shelly, poi la scheda).</p>
-<p>Le impostazioni della sezione 4 servono a questo; il resto lo fa LocalHome.</p>
+<p>Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10).</p>
 
 <h2>1. Collegamento</h2>
-<p>Il relè dello Shelly Plus 1 è un <strong>contatto pulito</strong> tra i morsetti <code>I</code> e <code>O</code>: la fase da dare alla
-valvola di zona gli arriva con un ponte da <code>L</code>.</p>
-
 <div class="diagram" role="img" aria-label="Schema: fase e neutro dell'impianto ai morsetti L e N dello Shelly, ponte da L a I, O alla fase della valvola di zona, neutro della valvola al neutro dell'impianto, SW libero">
 <svg viewBox="0 0 560 300" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="17">
   <text x="10" y="24" font-weight="700">Impianto 230 V</text>
   <rect x="90" y="40" width="360" height="80" rx="10" fill="#f3f4f6" stroke="#1f2328" stroke-width="2"/>
-  <text x="270" y="72" text-anchor="middle" font-weight="700">Shelly Plus 1</text>
+  <text x="270" y="72" text-anchor="middle" font-weight="700">Shelly 1 Gen3 (o Plus 1)</text>
   <g font-weight="700" text-anchor="middle">
     <text x="120" y="108">N</text><text x="185" y="108">L</text><text x="250" y="108">SW</text>
     <text x="330" y="108">I</text><text x="405" y="108">O</text>
@@ -138,130 +124,148 @@ valvola di zona gli arriva con un ponte da <code>L</code>.</p>
   <text x="500" y="250" text-anchor="end" fill="#1f5fbf" font-size="14">neutro valvola</text>
 </svg>
 </div>
-
 <table>
   <tr><th>Morsetto</th><th>Cosa ci va</th></tr>
-  <tr><td>N</td><td>Neutro dell'impianto.</td></tr>
-  <tr><td>L</td><td>Fase dell'impianto.</td></tr>
-  <tr><td>I</td><td>Un <strong>ponte</strong> (uno spezzone di filo) da <code>L</code>.</td></tr>
-  <tr><td>O</td><td>La <strong>fase della valvola di zona</strong>. Se la zona ha più valvole, vanno in parallelo su <code>O</code>.</td></tr>
-  <tr><td>Neutro della valvola</td><td><strong>Non nello Shelly</strong>: direttamente al neutro dell'impianto (anche allo stesso morsetto del neutro dello Shelly).</td></tr>
-  <tr><td>SW</td><td><strong>Libero.</strong></td></tr>
+  <tr><td>N / L</td><td>Neutro e fase dell'impianto.</td></tr>
+  <tr><td>I</td><td>Ponte da <code>L</code> (il relè è un contatto pulito, fino a 16 A).</td></tr>
+  <tr><td>O</td><td>Fase della valvola (più valvole: in parallelo).</td></tr>
+  <tr><td>Neutro valvola</td><td>Al neutro dell'impianto, non allo Shelly.</td></tr>
+  <tr><td>SW</td><td>Libero.</td></tr>
 </table>
 
 <h2>2. App Shelly: prima accensione</h2>
 <ol class="steps">
-  <li>Aggiungi lo Shelly dall'app sulla <strong>rete Wi-Fi principale</strong> di casa (non quella ospiti).</li>
-  <li>Chiamalo <em>Valvola Stanze</em> o <em>Valvola Bagni</em>.</li>
-  <li><strong>Aggiorna il firmware</strong> (Impostazioni → Firmware).</li>
-  <li>Annota l'<strong>ID del dispositivo</strong> (Impostazioni → Informazioni dispositivo), per esempio
-      <code>shellyplus1-c0ffee000001</code>: serve in LocalHome.</li>
+  <li>Aggiungilo sulla <strong>rete Wi-Fi principale</strong> e dagli un nome (<em>Valvola Stanze</em>…).</li>
+  <li><strong>Aggiorna il firmware</strong> (Gen3: almeno 2.0.1).</li>
+  <li>Annota l'<strong>ID</strong> (Informazioni dispositivo), es. <code>shelly1g3-c0ffee000004</code>.</li>
 </ol>
 
 <h2>3. App Shelly: MQTT</h2>
-<p><strong>Impostazioni → MQTT</strong>:</p>
 <table>
-  <tr><th>Impostazione</th><th>Valore</th></tr>
+  <tr><th>Impostazioni → MQTT</th><th>Valore</th></tr>
   <tr><td>Abilita MQTT</td><td class="value">attivo</td></tr>
-  <tr><td>Server</td><td class="value"><code>&lt;nome-scheda&gt;.local:1883</code>, per esempio <code>antonio.local:1883</code></td></tr>
-  <tr><td>Client ID e prefisso</td><td class="value">quelli proposti; se cambi il prefisso (per esempio
-      <code>valvola-stanze</code>), in LocalHome scrivi quello al posto dell'ID</td></tr>
-  <tr><td>Generic status update over MQTT</td><td class="value">attivo</td></tr>
-  <tr><td>RPC over MQTT</td><td class="value">attivo</td></tr>
+  <tr><td>Server</td><td class="value"><code>&lt;nome-scheda&gt;.local:1883</code> (es. <code>antonio.local:1883</code>)</td></tr>
+  <tr><td>Prefisso</td><td class="value">quello proposto o uno tuo (es. <code>shelly1g3-stanze</code>): in LocalHome scrivi il
+      prefisso se l'hai cambiato</td></tr>
+  <tr><td>Generic status update / RPC over MQTT</td><td class="value">attivi</td></tr>
   <tr><td>SSL, utente, password</td><td class="value">spenti / vuoti</td></tr>
 </table>
-<p>L'indirizzo esatto lo trovi in LocalHome: admin → Dispositivi, sotto il link a questa guida.</p>
 
 <h2>4. App Shelly: ingresso/uscita e timer</h2>
-<p><strong>Impostazioni → Impostazioni di ingresso/uscita</strong>:</p>
-
-<figure class="shot">
-  <img src="app-ingresso-uscita.jpg" alt="App Shelly, Impostazioni di ingresso/uscita: Pulsante o Interruttore">
-  <div class="mark" style="top:73%; left:3%; width:94%; height:17%"><span>indifferente</span></div>
-</figure>
-<p><strong>Pulsante o Interruttore: indifferente.</strong> Riguarda solo cosa è collegato a <code>SW</code>, che è libero; la valvola
-la alimenta il relè.</p>
-
+<div class="pair">
 <figure class="shot">
   <img src="app-tipo-rele.jpg" alt="App Shelly: tipo relè e stato del relè all'accensione">
   <div class="mark" style="top:36%; left:3%; width:94%; height:8.6%"><span>✓ scegli questa</span></div>
   <div class="mark no" style="top:46%; left:3%; width:94%; height:10.8%"><span>✗ non questa</span></div>
   <div class="mark" style="top:75%; left:3%; width:94%; height:5.8%"><span>✓ scegli questa</span></div>
 </figure>
-<table>
-  <tr><th>Impostazione</th><th>Scegli</th><th>Perché</th></tr>
-  <tr><td>Imposta tipo relè</td><td class="value">"Detached": l'interruttore è separato dai relè</td>
-      <td>La valvola la comanda solo LocalHome. "Interruttore di attivazione" è un'altra cosa.</td></tr>
-  <tr><td>Stato del relè all'accensione</td><td class="value">"…per spegnersi quando è alimentato"</td>
-      <td>Vale solo quando lo Shelly riceve corrente, per esempio dopo un blackout: parte con la valvola chiusa, poi
-          decide LocalHome.</td></tr>
-</table>
-
-<p><strong>Timer</strong> (l'icona dell'orologio):</p>
 <figure class="shot">
-  <img src="app-timer.jpg" alt="App Shelly, Timer: accensione e spegnimento automatico, impostato a 15 minuti">
+  <img src="app-timer.jpg" alt="App Shelly, Timer: spegnimento automatico a 15 minuti">
   <div class="fix" style="top:70.1%; left:13.6%; width:36%; height:2.9%; background:rgb(36,37,39); color:#3d8bff; font-weight:700; font-size:3.05cqw">15 minimo</div>
   <div class="fix" style="top:74.6%; left:5%; width:40%; height:5.4%; padding-left:1.3cqw; background:rgb(21,22,24); color:#fff; font-size:3.9cqw">00:15:00</div>
   <div class="mark no" style="top:18%; left:3%; width:94%; height:12%"><span>lascia spenta</span></div>
   <div class="mark" style="top:61%; left:3%; width:94%; height:11.5%"><span>✓ attivo</span></div>
   <div class="mark" style="top:73.5%; left:3%; width:94%; height:9%"><span>15 minuti, poi Salva</span></div>
 </figure>
+</div>
 <table>
   <tr><th>Impostazione</th><th>Scegli</th></tr>
+  <tr><td>Tipo relè</td><td class="value">"Detached"</td></tr>
+  <tr><td>Stato all'accensione</td><td class="value">"…per spegnersi quando è alimentato"</td></tr>
   <tr><td>Accensione automatica</td><td class="value">spenta</td></tr>
-  <tr><td>Spegnimento automatico</td><td class="value">attivo, <strong>00:15:00</strong> (15 minuti), poi Salva</td></tr>
+  <tr><td>Spegnimento automatico</td><td class="value">attivo, 00:15:00</td></tr>
+  <tr><td>Pulsante o interruttore</td><td>indifferente (SW è libero)</td></tr>
 </table>
 
-<p>Perché proprio queste tre impostazioni: vedi <em>Perché: il comando a tempo</em>, all'inizio.</p>
-
-<h2>5. In LocalHome: ti dice lui cosa manca</h2>
+<h2>5. In LocalHome</h2>
 <ol class="steps">
-  <li>Apri l'admin (in fondo alla home, <em>Amministrazione</em>) e vai in <strong>Zone</strong>.</li>
-  <li>Nella scheda della zona, <strong>Fonte valvola: Shelly (dispositivo reale)</strong>, poi incolla l'ID in
-      <strong>ID dispositivo valvola</strong>.</li>
-  <li>Esci dal campo. LocalHome interroga subito lo Shelly, senza salvare né riavviare niente, e sotto il campo scrive cosa
-      ha trovato e <strong>ogni impostazione da correggere, com'è adesso e cosa mettere</strong>:</li>
+  <li>Admin → <strong>Zone</strong> (deumidificatore e bypass: <strong>Dispositivi → Da collegare qui</strong>): fonte
+      <em>Shelly</em>, incolla l'ID o il prefisso.</li>
+  <li>Esci dal campo: LocalHome interroga lo Shelly e scrive cosa correggere, com'è e cosa mettere.</li>
+  <li>Correggi nell'app e premi <em>Riprova</em> fino a <em>Impostazioni a posto ✓</em>.</li>
+  <li><strong>Salva mappatura</strong> e riavvia LocalHome dal pulsante in alto.</li>
 </ol>
 <figure class="shot">
-  <img src="admin-controllo-id.jpg" alt="LocalHome, Zone: sotto l'ID della valvola, le impostazioni dello Shelly da correggere">
+  <img src="admin-controllo-id.jpg" alt="LocalHome, Zone: sotto l'ID, le impostazioni dello Shelly da correggere">
 </figure>
-<ol class="steps" start="4">
-  <li>Correggi nell'app Shelly e premi <em>Riprova</em>, finché dice <em>Trovato: Plus1, firmware … Impostazioni a posto ✓</em>.
-      Se dice <em>Non risponde</em>, controlla l'ID e le impostazioni MQTT (sezione 3).</li>
-  <li><strong>Salva mappatura</strong> e riavvia LocalHome dal pulsante che compare in alto.</li>
-  <li>In <strong>Dispositivi</strong> la riga della valvola deve essere <em>OK</em>.</li>
-</ol>
-<p>Il controllo continua anche dopo. Se un'impostazione dello Shelly cambia, per esempio dopo un aggiornamento del firmware o un
-reset, in <strong>Dispositivi</strong> la sua riga diventa <em>Da controllare</em> e dice quale impostazione, com'è e cosa
-mettere; lo stesso avviso compare in <strong>Stato sistema</strong>. Appena la correggi nell'app, l'avviso sparisce da solo
-entro qualche minuto.</p>
-<figure class="shot">
-  <img src="admin-dispositivi.jpg" alt="LocalHome, Dispositivi: la riga dello Shelly con le impostazioni da correggere">
-</figure>
+<p>Il controllo continua: se un'impostazione cambia (aggiornamento, reset), la riga in Dispositivi diventa
+<span class="pill check">Da controllare</span> e dice cosa correggere.</p>
 
-<h2>6. Prova</h2>
+<h2>6. Stato dei dispositivi</h2>
+<p><strong>Admin → Dispositivi</strong>: tutti i dispositivi, raggruppati per zona. Tocca la riga di uno Shelly per il
+dettaglio.</p>
+<table>
+  <tr><th>Stato</th><th>Significato</th></tr>
+  <tr><td><span class="pill ok">OK</span></td><td>Tutto a posto.</td></tr>
+  <tr><td><span class="pill check">Da controllare</span></td><td>Risponde, ma un dato del dettaglio è in rosso.</td></tr>
+  <tr><td><span class="pill bad">Non risponde</span></td><td>Niente da LocalHome: corrente, Wi-Fi o MQTT.</td></tr>
+</table>
+<div class="pair">
+  <figure class="shot"><img src="admin-stato-gen3.jpg" alt="Dettaglio dello Shelly 1 Gen3 della valvola Stanze"></figure>
+  <figure class="shot"><img src="admin-stato-ht.jpg" alt="Dettaglio del sensore H&amp;T Gen3 dei bagni"></figure>
+</div>
+
+<div class="keep">
+<h3>Shelly a corrente (valvole, deumidificatore, bypass, VMC)</h3>
+<p>Interrogati ogni 5 minuti, e subito quando tornano online.</p>
+<table>
+  <tr><th>Riga</th><th>In rosso quando</th></tr>
+  <tr><td>Collegamento</td><td>scollegato o non risponde</td></tr>
+  <tr><td>Segnale Wi-Fi, 24 ore, 7 giorni</td><td>mai da solo (ottimo &gt; -65, buono &gt; -75, debole &gt; -85 dBm)</td></tr>
+  <tr><td>Temperatura interna</td><td>da 75 °C (avviso da 80 °C)</td></tr>
+  <tr><td>Riavvii inattesi 7 giorni</td><td>almeno uno (es. corrente mancata); quelli voluti non contano</td></tr>
+  <tr><td>Accensioni del relè 24 ore (Gen3)</td><td>oltre 48: aperture troppo brevi, relè che si consuma</td></tr>
+  <tr><td>Relè acceso oggi (Gen3)</td><td>-</td></tr>
+  <tr><td>Firmware</td><td>se chiede un riavvio</td></tr>
+  <tr><td>Impostazioni</td><td>sempre: com'è e cosa mettere</td></tr>
+</table>
+</div>
+
+<div class="keep">
+<h3>Sensori a batteria (H&amp;T Gen3)</h3>
+<p>Si leggono quando si svegliano: almeno ogni 2 ore, o quando temperatura o umidità cambiano.</p>
+<table>
+  <tr><th>Riga</th><th>In rosso quando</th></tr>
+  <tr><td>Ultimo invio</td><td>oltre 4 ore</td></tr>
+  <tr><td>Batteria</td><td>quasi scarica (non mostrata su USB-C)</td></tr>
+  <tr><td>Invii ultime 24 ore</td><td>3 o più persi (avviso in Stato sistema)</td></tr>
+  <tr><td>Prossimo invio, invii persi 7 giorni</td><td>-</td></tr>
+</table>
+<p>Un segnale debole da solo non è un problema: lo diventa se gli invii si perdono.</p>
+</div>
+
+<h3>Stato sistema</h3>
+<ul>
+  <li><strong>Problemi</strong>: gli avvisi veri; spariscono da soli quando la causa sparisce.</li>
+  <li><strong>Successo nelle ultime 72 ore</strong>: es. il timer di sicurezza di uno Shelly è scattato (la protezione ha
+      funzionato).</li>
+  <li><strong>Storico watchdog</strong>: gli ultimi 10 interventi automatici.</li>
+</ul>
+
+<h2>7. Prova</h2>
 <ol class="steps">
-  <li>Admin → <strong>Modalità diagnosi</strong> → spunta <em>Modalità diagnosi attiva</em>.</li>
-  <li><strong>Apri</strong> la valvola della zona: clic del relè, e dopo qualche minuto la valvola apre. <strong>Chiudi</strong>: altro clic.</li>
-  <li>Togli la spunta: il termostato riprende il controllo.</li>
+  <li>Admin → <strong>Modalità diagnosi</strong> attiva.</li>
+  <li><strong>Apri</strong> e <strong>chiudi</strong> la valvola: clic del relè.</li>
+  <li>Togli la modalità diagnosi.</li>
 </ol>
 
-<h2>Deumidificatore e valvola di bypass bagni</h2>
-<p><strong>Deumidificatore:</strong> stesso collegamento e stesse impostazioni delle valvole di zona.</p>
-<p><strong>Valvola di bypass bagni:</strong> è <strong>normalmente aperta</strong> - senza corrente è aperta; d'estate LocalHome la
-chiude chiudendo il contatto dello Shelly, d'inverno la lascia aperta. Se la scheda si ferma deve <strong>restare com'è</strong>:
-d'estate chiusa, d'inverno aperta. Per questo niente comando a tempo, e nello Shelly:</p>
+<h2>8. Deumidificatore e bypass bagni</h2>
+<p><strong>Deumidificatore</strong>: come una valvola di zona (fase del deumidificatore su <code>O</code>, fino a 16 A). Solo
+d'estate. Soglie e modi di accensione in <strong>admin → Stagione → Deumidificatore</strong>: di serie si spegne sotto il 50%,
+non si accende sotto il 55%, accensione automatica spenta.</p>
+<p><strong>Bypass bagni</strong>: normalmente aperta, deve restare com'è se la scheda si ferma. Collegamento come le valvole, ma:</p>
 <table>
   <tr><th>Impostazione</th><th>Scegli</th></tr>
-  <tr><td>Collegamento</td><td class="value">come le valvole di zona</td></tr>
-  <tr><td>Imposta tipo relè</td><td class="value">"Detached"</td></tr>
-  <tr><td>Stato del relè all'accensione</td><td class="value">"…per ripristinare l'ultima modalità in cui si trovava"</td></tr>
-  <tr><td>Timer: accensione e spegnimento automatico</td><td class="value">entrambi spenti</td></tr>
+  <tr><td>Tipo relè</td><td class="value">"Detached"</td></tr>
+  <tr><td>Stato all'accensione</td><td class="value">"…per ripristinare l'ultima modalità"</td></tr>
+  <tr><td>Timer</td><td class="value">entrambi spenti</td></tr>
 </table>
-<p>Anche per il bypass LocalHome controlla queste impostazioni e dice cosa manca.</p>
 
-<footer>LocalHome - guida aggiornata al 5 ottobre 2026, provata su Shelly Plus 1 firmware 1.7.5 e Shelly 1 Gen3
-firmware 2.0.1: stesso collegamento, stesse impostazioni.</footer>
+<h2>9. H&amp;T Gen3 e Dimmer Gen3 (VMC)</h2>
+<p>Solo MQTT come nella sezione 3, poi ID o prefisso in LocalHome. Un H&amp;T a batteria dorme: <strong>premi il suo
+pulsante</strong> e compare in Dispositivi.</p>
+
+<footer>LocalHome - 6 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.</footer>
 </main>
 </body>
 </html>
