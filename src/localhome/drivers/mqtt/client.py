@@ -15,6 +15,7 @@ stance (see core/manager.py).
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from pathlib import Path
@@ -23,6 +24,8 @@ from typing import Any, Callable
 import paho.mqtt.client as mqtt
 
 from localhome.util.jsonfile import load_json
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 1883
 
@@ -46,11 +49,25 @@ class MqttConnection:
         # has answered once. What the LED matrix's "MQ" reads - the client
         # already knows, so nothing needs to probe the broker for it.
         self.down_since: float | None = time.monotonic()
+        self._where = f"{host}:{port}"
+        self._connected_once = False
         self._client.connect_async(host, port, keepalive=60)
         self._client.loop_start()
 
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
-        if not getattr(reason_code, "is_failure", False):
+        # Said in the log, once each way: a connection that went and came
+        # back left no trace - on the production board the broker dropped
+        # LocalHome for 90 s without a keepalive, and only the broker's own
+        # log told.
+        if getattr(reason_code, "is_failure", False):
+            logger.warning("MQTT broker %s refused the connection: %s", self._where, reason_code)
+        else:
+            if self._connected_once and self.down_since is not None:
+                logger.warning("MQTT broker %s: connected again after %.0f s", self._where,
+                               time.monotonic() - self.down_since)
+            elif not self._connected_once:
+                logger.info("MQTT broker %s: connected", self._where)
+            self._connected_once = True
             self.down_since = None
         with self._lock:
             topics = list(self._subscribers)
@@ -60,6 +77,7 @@ class MqttConnection:
     def _on_disconnect(self, client, userdata, flags, reason_code, properties) -> None:
         if self.down_since is None:
             self.down_since = time.monotonic()
+            logger.warning("MQTT broker %s: connection lost (%s) - reconnecting", self._where, reason_code)
 
     def _on_message(self, client, userdata, message) -> None:
         with self._lock:
