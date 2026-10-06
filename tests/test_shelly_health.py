@@ -554,6 +554,54 @@ def test_a_mains_shelly_back_online_is_asked_at_once(tmp_path, monkeypatch):
     assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 1
 
 
+def test_a_mains_shelly_that_didnt_answer_is_asked_again_as_soon_as_it_reports(tmp_path, monkeypatch):
+    """Seen on the production board after a boot without network and a
+    router restart: both mains Shellys back and reporting for minutes,
+    the admin page still saying "not answering" until the next 5-minute
+    check. Heard from again, one that didn't answer is asked at once - at
+    most once a minute, for one whose RPC really is off."""
+    import localhome.services.shelly_health as module
+    rpc = Rpc(DIMMER_STATUS)
+    rpc.fail = "no RPC reply - device is probably offline"
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    watcher.poll_once()
+    assert by_id(watcher, DIMMER)["error"]
+    broker.publish(f"{DIMMER}/status/sys", {"uptime": 120})
+    assert watcher._wake.is_set(), "heard from: asked again"
+    watcher._wake.clear()
+    broker.publish(f"{DIMMER}/status/wifi", {"rssi": -70, "ssid": "Casa"})
+    assert not watcher._wake.is_set(), "not again within the minute"
+    monkeypatch.setattr(module, "ALIVE_RECHECK_SECONDS", 0)
+    rpc.fail = None
+    watcher.poll_once()
+    broker.publish(f"{DIMMER}/status/sys", {"uptime": 180})
+    assert not watcher._wake.is_set(), "answering: nothing to ask again"
+
+
+def test_started_a_battery_report_is_written_off_the_mqtt_thread(tmp_path):
+    """The MQTT thread hands what it hears to a writer thread: a slow
+    disk (an SQLite commit on the board's eMMC) never holds it."""
+    import threading
+    import time as _time
+    store = HistoryStore(str(tmp_path / "history.db"))
+    real_record = store.record
+    written = threading.Event()
+
+    def slow_record(sensor, ts, fields):
+        _time.sleep(1.0)
+        real_record(sensor, ts, fields)
+        if "report" in fields:
+            written.set()
+    store.record = slow_record
+    watcher, broker, clock, _ = health(tmp_path, [ht_integration()], store=store)
+    watcher.start(every=3600, first=3600, retry=3600)
+    started = _time.monotonic()
+    ht_wakes(broker)
+    assert _time.monotonic() - started < 0.5, "the MQTT thread didn't wait for the disk"
+    assert written.wait(5)
+    assert [v for _, v in store.values_since(HT, "report", 0)] == [1]
+
+
 def test_a_gen3_relays_own_counters_give_its_switch_ons_and_on_time(tmp_path):
     """A Shelly 1 Gen3 counts its relay (switch:0.counts, kept across its
     restarts): its switch-ons in the last 24 hours and its on time today,

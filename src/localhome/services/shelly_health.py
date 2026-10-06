@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import re
 from datetime import datetime
 import threading
@@ -65,6 +66,13 @@ RETRY_SECONDS = 30
 # the production board, two power cuts 5 minutes apart and one restart
 # counted, no check having caught it up between them.
 BACK_ONLINE_SETTLE_SECONDS = 10
+# A mains Shelly that didn't answer, heard from again (its status, its
+# Wi-Fi, its "online"): asked again at once - not at the next check, up to
+# 5 minutes on. Seen on the production board after a boot without network
+# and a router restart: both Shellys worked and reported for minutes while
+# the admin page said "not answering". At most this often per device, for
+# one whose RPC really is off while it keeps reporting.
+ALIVE_RECHECK_SECONDS = 60
 # A Shelly switches its output off by itself at about 90°C.
 HOT_C = 80
 MISSED_PER_DAY = 3
@@ -297,6 +305,11 @@ class ShellyHealth:
         self._reading_of = reading_of
         self._lock = threading.Lock()
         self._wake = threading.Event()      # a device back online: check now
+        self._rechecked_at: dict[str, float] = {}   # device -> when its signs of life last woke a check
+        # Started (start()): what the MQTT thread hears is written to the
+        # history by a thread of its own - a slow disk never holds MQTT.
+        # Not started (tests): at once.
+        self._writes: queue.SimpleQueue | None = None
         self._rpc_for = rpc_for
         self._rpc: dict[str, Any] = {}
         self._devices: dict[str, dict] = {}
@@ -343,6 +356,12 @@ class ShellyHealth:
                 data = text
             with self._lock:
                 handler(state, data)
+                alive_again = not state["battery"] and state["error"] is not None
+            if alive_again:
+                now = time.monotonic()
+                if now - self._rechecked_at.get(state["id"], -ALIVE_RECHECK_SECONDS) >= ALIVE_RECHECK_SECONDS:
+                    self._rechecked_at[state["id"]] = now
+                    self._wake.set()
         except Exception:
             logger.exception("Shelly health: couldn't read a message from %s", state["id"])
 
@@ -378,8 +397,15 @@ class ShellyHealth:
     def _note_report(self, state: dict) -> None:
         now = self.clock()
         if state["last_report_at"] is None or now - state["last_report_at"] > REPORT_SPAN_SECONDS:
-            self._record(state["id"], {"report": 1})
+            self._record_later(state["id"], {"report": 1}, now)
         state["last_report_at"] = now
+
+    def _record_later(self, sensor: str, fields: dict, ts: float) -> None:
+        """From the MQTT thread: written by the writer thread once started."""
+        if self._writes is None:
+            self._record(sensor, fields, ts)
+        else:
+            self._writes.put((sensor, fields, ts))
 
     # ----------------------------------------------------------- asking --
 
@@ -609,6 +635,13 @@ class ShellyHealth:
 
     def start(self, every: float = POLL_SECONDS, first: float = FIRST_POLL_SECONDS,
               retry: float = RETRY_SECONDS) -> None:
+        writes = self._writes = queue.SimpleQueue()
+
+        def write():
+            while True:
+                self._record(*writes.get())
+        threading.Thread(target=write, daemon=True, name="shelly-health-writes").start()
+
         def loop():
             time.sleep(first)
             retried = False
