@@ -441,17 +441,27 @@ async function saveSchedule(zoneName) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cells, mode: scheduleWeekModes[zoneName] || climateMode }),
+      signal: timeLimit(15000),
     });
     const data = await res.json();
     if (!data.ok) {
       notify(`${tr("climate.save_failed")}: ${apiError(data)}`);
       return;
     }
+    delete saveRetrying[zoneName];
     if (data.week) adoptServerWeek(zoneName, data.week);
   } catch (e) {
-    notify(tr("climate.save_failed"));
+    // The board didn't answer: the hours stay painted here and are sent
+    // again shortly, until it does - said once, not at every try.
+    if (!saveRetrying[zoneName]) notify(tr("climate.save_failed"));
+    saveRetrying[zoneName] = true;
+    clearTimeout(saveTimers[zoneName]);
+    saveTimers[zoneName] = setTimeout(() => saveSchedule(zoneName), SAVE_RETRY_MS);
   }
 }
+
+const saveRetrying = {};      // zone name -> a save is waiting for the board to answer
+const SAVE_RETRY_MS = 15000;
 
 // The merged week from the server becomes this page's: the grid is
 // redrawn only if it differs (someone else's edit) and nobody is in the
@@ -482,11 +492,13 @@ async function flushPendingScheduleSaves() {
   await Promise.all(pending.map(saveSchedule));
 }
 
+// True once the grid is filled - the caller tries again later otherwise.
 async function loadZoneSchedule(zoneName) {
   try {
-    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule?mode=${encodeURIComponent(climateMode)}`);
+    const res = await fetch(`/api/climate/zones/${encodeURIComponent(zoneName)}/schedule?mode=${encodeURIComponent(climateMode)}`,
+                            { signal: timeLimit(10000) });
     const data = await res.json();
-    if (!data.ok) return;
+    if (!data.ok) return false;
     scheduleWeeks[zoneName] = data.week;
     scheduleSavedWeeks[zoneName] = copyWeek(data.week);
     scheduleWeekModes[zoneName] = data.mode || climateMode;
@@ -494,6 +506,17 @@ async function loadZoneSchedule(zoneName) {
     updateEmptyScheduleHint(zoneName);
     const zone = climateZones.find(z => z.name === zoneName);
     if (zone) updateZoneNext(zone);
-  } catch (e) { /* grid stays empty; next tab visit retries */ }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// A request the board never answers is given up after a while: a save
+// that hung kept the hours painted on this page only, without a word.
+function timeLimit(ms) {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
 }
 

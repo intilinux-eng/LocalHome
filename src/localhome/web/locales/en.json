@@ -757,6 +757,8 @@
     "loading": "One moment…",
     "offline": "The board isn't answering: the values below are the last ones received.",
     "request_failed": "Request failed",
+    "no_answer": "The board didn't answer in time: try again shortly.",
+    "unreachable": "The board can't be reached: check you're on the home network and try again.",
     "season_hint": "The season is changed from the admin panel",
     "plant_heading": "Plant",
     "house_heading": "House",

@@ -35,11 +35,19 @@
     return key(a) === key(b) && firstClass(a) === firstClass(b);
   }
 
+  // A button waiting for the board (aria-busy) stays waiting through a
+  // refresh: it's its action that ends it - a refresh that enabled it
+  // again let the same action be sent twice.
+  const HELD_WHILE_BUSY = new Set(["aria-busy", "disabled"]);
+
   function syncAttributes(a, b) {
+    const busy = a.getAttribute("aria-busy") === "true";
     for (const attr of [...a.attributes]) {
+      if (busy && HELD_WHILE_BUSY.has(attr.name)) continue;
       if (!b.hasAttributeNS(attr.namespaceURI, attr.localName)) a.removeAttributeNS(attr.namespaceURI, attr.localName);
     }
     for (const attr of b.attributes) {
+      if (busy && HELD_WHILE_BUSY.has(attr.name)) continue;
       if (a.getAttributeNS(attr.namespaceURI, attr.localName) !== attr.value) {
         a.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
       }

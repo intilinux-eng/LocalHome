@@ -64,13 +64,32 @@ function displayName(name) {
   return DISPLAY_NAMES[name] ? tr(DISPLAY_NAMES[name]) : name;
 }
 
+// A request has a time limit: one the board never answers (stuck, or
+// gone without a word) would leave its button waiting for ever - and the
+// browser's few connections to the board taken, every later request
+// queued behind them. An action may wait on a Shelly a little longer.
+const READ_TIMEOUT_MS = 10000;
+const ACTION_TIMEOUT_MS = 15000;
+
 async function api(path, body) {
   const options = body === undefined ? { cache: "no-store" }
     : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-  const res = await fetch(path, options);
-  const data = await res.json().catch(() => ({ ok: false }));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), body === undefined ? READ_TIMEOUT_MS : ACTION_TIMEOUT_MS);
+  options.signal = controller.signal;
+  let res, data;
+  try {
+    res = await fetch(path, options);
+    data = await res.json().catch(() => ({ ok: false }));
+  } catch (e) {
+    // Said in the page's language, not the browser's "Failed to fetch".
+    throw new Error(tr(controller.signal.aborted ? "home.no_answer" : "home.unreachable"));
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok || data.ok === false) {
-    const error = new Error(data.error || res.statusText);
+    // A proxy's error page has no JSON: the status, not "Bad Gateway".
+    const error = new Error(data.error || `${tr("home.request_failed")} (${res.status})`);
     error.data = data;
     throw error;
   }
@@ -686,38 +705,44 @@ async function onZoneClick(event) {
   } else if (action === "cancel-pending") {
     delete state.pending[zone.name];
   } else if (action === "apply" && pending) {
-    busy(button, true);
-    asked.climate++;
     const body = pending.hours === "next" ? { target: pending.target, until: "next_change" } : { target: pending.target, hours: pending.hours };
-    try {
-      const done = await api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override`, body);
+    asked.climate++;
+    const done = await act(button, () => api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override`, body));
+    const quick = card.querySelector(".quick");
+    if (done) {
       delete state.pending[zone.name];
       // The card says it at once; the valve's answer follows.
       zone.override = done.override;
       zone.target_c = done.override.target;
-      const quick = card.querySelector(".quick");
       steady(() => { renderHero(); fillZone(card, zone, state.climate); }, quick);
-      refreshClimate(quick);
-    } catch (e) {
-      notify(errorText(e));
-      busy(button, false);
     }
+    refreshClimate(quick);
     return;
   } else if (action === "resume") {
-    busy(button, true);
     asked.climate++;
-    try {
-      await api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override/cancel`, {});
-      await refreshClimate(card.querySelector(".quick"));
-    } catch (e) {
-      notify(errorText(e));
-      busy(button, false);
-    }
+    await act(button, () => api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override/cancel`, {}));
+    refreshClimate(card.querySelector(".quick"));
     return;
   } else {
     return;
   }
   steady(() => fillZone(card, zone, state.climate), button);
+}
+
+// An action: its button waits for the board, and is itself again before
+// anything is redrawn. Refused, or not answered: said, and null - the
+// caller then shows what the board says (unanswered isn't undone: it may
+// have been done all the same).
+async function act(button, request) {
+  busy(button, true);
+  try {
+    return await request();
+  } catch (e) {
+    notify(errorText(e));
+    return null;
+  } finally {
+    busy(button, false);
+  }
 }
 
 // A button waiting for the board: dimmed, not pressed twice.
@@ -827,19 +852,15 @@ function openAway() {
     async event => {
       const button = event.target.closest("button[data-away]");
       if (!button) return;
-      busy(button, true);
       asked.climate++;
-      try {
-        const done = button.dataset.away === "back" ? await api("/api/climate/away/cancel", {})
-          : await api("/api/climate/away", { hours: Number(button.dataset.away) });
+      const done = await act(button, () => (button.dataset.away === "back" ? api("/api/climate/away/cancel", {})
+        : api("/api/climate/away", { hours: Number(button.dataset.away) })));
+      if (done) {
         closeSheet();
         state.climate.away_until = done.away_until || null;
         steady(() => { renderHero(); renderZones(); });
-        refreshClimate();
-      } catch (e) {
-        notify(errorText(e));
-        busy(button, false);
       }
+      refreshClimate();
     });
 }
 
@@ -879,7 +900,8 @@ function fillPlan(card, zone) {
   if (excluded || plan.dataset.mode === climateMode) return;
   plan.dataset.mode = climateMode;
   plan.innerHTML = schedulePaneHtml(zone, slug(zone.name));
-  loadZoneSchedule(zone.name);
+  // Not loaded (the board didn't answer): the next refresh tries again.
+  loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }
 
 // --------------------------------------------------------- the plant --
@@ -947,19 +969,15 @@ async function onSeasonDeviceClick(event) {
   const dehum = event.target.closest("button[data-dehum-hours], button[data-dehum-off]");
   if (dehum) {
     const host = dehum.closest(".season-device");
-    busy(dehum, true);
     asked.climate++;
-    try {
-      const done = dehum.hasAttribute("data-dehum-off") ? await api("/api/dehumidifier/off", {})
-        : await api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) });
-      if (state.climate) state.climate.dehumidifier = done.dehumidifier;
+    const done = await act(dehum, () => (dehum.hasAttribute("data-dehum-off") ? api("/api/dehumidifier/off", {})
+      : api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) })));
+    if (done && state.climate) {
+      state.climate.dehumidifier = done.dehumidifier;
       steady(renderSeasonDevices, host);
-      refreshClimate(host);
-      refreshDevices(host);
-    } catch (e) {
-      notify(errorText(e));
-      busy(dehum, false);
     }
+    refreshClimate(host);
+    refreshDevices(host);
     return;
   }
   const toggle = event.target.closest("button[data-switch]");

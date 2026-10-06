@@ -610,3 +610,42 @@ def test_what_grows_above_doesnt_push_what_is_being_read(iphone):
     page.evaluate("steady(() => { document.getElementById('hero-detail').textContent += ' una riga in più'.repeat(20); })")
     assert abs(card.bounding_box()["y"] - before) < 1
     assert iphone.errors == []
+
+
+# ------------------------------------------------ when the board misbehaves --
+
+def test_an_action_the_board_never_answers_frees_its_button_and_says_so(iphone):
+    """Without a time limit the button waited for ever - and a refresh
+    meanwhile enabled it again, so the same action could go twice."""
+    page = iphone.page
+    page.route("**/override", lambda route: None)          # never answered
+    card = _card(page, ZONE_A)
+    card.locator("button[data-action=start][data-delta='0.5']").tap()
+    apply = card.locator("button[data-action=apply]")
+    apply.tap()
+    page.evaluate("refreshClimate()")
+    page.wait_for_timeout(1500)
+    assert apply.get_attribute("aria-busy") == "true" and apply.is_disabled(), "still waiting after a refresh"
+    page.wait_for_timeout(15000)
+    assert apply.get_attribute("aria-busy") is None and apply.is_enabled()
+    assert "non ha risposto" in page.locator(".toast-host").inner_text()
+    page.unroute("**/override")
+    card.locator("button[data-action=cancel-pending]").tap()
+
+
+def test_a_week_that_didnt_load_comes_by_itself_once_the_board_answers(browser, server):
+    from .helpers import Opened
+    context = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+    page = context.new_page()
+    opened = Opened(page)
+    failing = {"on": True}
+    page.route("**/schedule?mode=*", lambda route: route.abort() if failing["on"] else route.continue_())
+    page.goto(server + "/")
+    page.wait_for_selector(".zone .quick button", timeout=20000)
+    page.wait_for_timeout(1500)
+    assert _card(page, ZONE_A).locator(".sched-cell").count() == 0
+    failing["on"] = False
+    page.evaluate("refreshClimate()")
+    assert eventually(page, lambda: _card(page, ZONE_A).locator(".sched-cell").count() == 168)
+    assert [e for e in opened.errors if "net::" not in e] == []
+    context.close()

@@ -757,6 +757,8 @@
     "loading": "Un attimo…",
     "offline": "La scheda non risponde: i valori qui sotto sono gli ultimi ricevuti.",
     "request_failed": "Richiesta non riuscita",
+    "no_answer": "La scheda non ha risposto in tempo: riprova tra poco.",
+    "unreachable": "Scheda non raggiungibile: controlla di essere sulla rete di casa e riprova.",
     "season_hint": "La stagione si cambia dal pannello di amministrazione",
     "plant_heading": "Impianto",
     "house_heading": "Casa",
