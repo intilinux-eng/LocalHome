@@ -351,3 +351,18 @@ def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
     assert zone["battery_pct"] is None
 
+
+
+def test_every_reading_comes_in_one_request_as_each_does_alone(tmp_path):
+    """/api/readings: what the home page asks every 20 s instead of one
+    request a device - the same reading as /api/sensors/<name> gives."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    client = create_app(str(config_path)).test_client()
+
+    body = client.get("/api/readings").get_json()
+
+    assert body["ok"] is True
+    assert set(body["readings"]) == {"Room Sensor", "Room Valve"}
+    alone = client.get("/api/sensors/Room Valve").get_json()
+    assert body["readings"]["Room Valve"]["is_on"] == alone["is_on"]

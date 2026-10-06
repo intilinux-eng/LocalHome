@@ -1582,12 +1582,15 @@ async function refreshDevices(anchor) {
   const ticket = ++asked.devices;
   try {
     if (!state.devices) state.devices = await api("/api/devices");
-    const names = state.devices.sensors.map(d => d.name);
-    const readings = await Promise.all(names.map(n => api(`/api/sensors/${encodeURIComponent(n)}`).catch(() => ({ ok: false }))));
-    const vmc = state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)
-      ? await api("/api/vmc-schedule").catch(() => null) : state.vmc;
+    // All of them in one request (a dozen on a real install, which a
+    // browser sends six at a time).
+    const [all, vmc] = await Promise.all([
+      api("/api/readings"),
+      state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)
+        ? api("/api/vmc-schedule").catch(() => null) : Promise.resolve(state.vmc),
+    ]);
     if (ticket !== asked.devices) return;
-    names.forEach((n, i) => { state.readings[n] = readings[i]; });
+    state.devices.sensors.forEach(d => { state.readings[d.name] = all.readings[d.name] || { ok: false }; });
     state.vmc = vmc;
   } catch (e) {
     return;

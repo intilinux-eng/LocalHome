@@ -1020,6 +1020,15 @@ def _register_routes(app: Flask) -> None:
         manager: DeviceManager = app.config["MANAGER"]
         return jsonify(manager.sensor_reading(name))
 
+    @app.route("/api/readings")
+    def api_readings():
+        """Every device's last reading at once, by name - what a page that
+        shows them all asks every 20 s: one request instead of one a
+        device (a dozen on a real install, six at a time in a browser),
+        and one moment for all of them."""
+        manager: DeviceManager = app.config["MANAGER"]
+        return jsonify(ok=True, readings={name: manager.sensor_reading(name) for name in manager.pollers})
+
     @app.route("/api/sensors/<name>/<action>", methods=["POST"])
     def api_sensor_action(name, action):
         if action not in ("on", "off"):
