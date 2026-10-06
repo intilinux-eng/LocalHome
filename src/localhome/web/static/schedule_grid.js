@@ -189,6 +189,13 @@ function currentDayKey(date) {
 function buildScheduleGrid(zoneId, week) {
   const grid = document.getElementById(`sched-${zoneId}`);
   if (!grid) return;
+  // Already built: its hours are recoloured in place (a copied week,
+  // another phone's edit) - nothing rebuilt, nothing blinks.
+  const cells = grid.querySelectorAll(".sched-cell");
+  if (cells.length === DAY_KEYS.length * 24) {
+    cells.forEach(cell => applyCellStyle(cell, week[cell.dataset.day][Number(cell.dataset.hour)]));
+    return;
+  }
   grid.innerHTML = "";
   const dayLabels = tr("climate.days");
   const { dayKey: nowDayKey, hour: nowHour } = scheduleNow();

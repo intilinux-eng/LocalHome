@@ -337,6 +337,7 @@ a { color: inherit; }
   line-height: 1.25;
   color: var(--text-2);
   max-width: 100%;
+  transition: background 0.3s, color 0.3s;
 }
 .state[data-tone="active"] { background: var(--accent-soft); }
 .state[data-tone="ok"] { background: color-mix(in srgb, var(--ok) 12%, transparent); }
@@ -939,6 +940,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .confirm-actions button { min-height: 42px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); }
 .confirm-actions .confirm-yes { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .confirm-actions .confirm-yes.close { background: var(--bad); border-color: var(--bad); }
+
+/* Waiting for the board: the button stays where it is, breathing - the
+   page never goes blank or jumps while an action is on its way. */
+[aria-busy="true"] { cursor: progress; animation: busy 0.9s ease-in-out infinite alternate; }
+@keyframes busy { from { opacity: 1; } to { opacity: 0.5; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

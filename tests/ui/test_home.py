@@ -537,3 +537,76 @@ def test_a_second_tap_clears_an_hour_and_a_stroke_does_what_its_first_cell_decid
         "started on a painted hour, the stroke clears"
     assert opened.errors == []
 
+
+
+# ------------------------------------------ updated in place, held still ----
+# A refresh, or a tap, used to rebuild the cards: everything blinked, and
+# on an iPhone - Safari has no scroll anchoring - the page slid under the
+# finger. Now what changed is changed in place (static/morph.js), and the
+# page is held where it was.
+
+# Elements not seen before: marked as they're counted.
+FRESH_JS = """() => { let fresh = 0;
+  document.querySelectorAll('.hero *, #zones .zone-live *, #plant-body *, #house-body *').forEach(e => {
+    if (!e.__seen) { e.__seen = true; fresh++; } });
+  return fresh; }"""
+
+
+@pytest.fixture
+def iphone(browser, server):
+    """A phone that doesn't hold the page itself, as Safari on an iPhone."""
+    from .helpers import Opened
+    context = browser.new_context(viewport={"width": 390, "height": 760}, has_touch=True, is_mobile=True)
+    page = context.new_page()
+    page.add_init_script("document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style');"
+                         " s.textContent = '* { overflow-anchor: none !important; }'; document.head.appendChild(s); });")
+    opened = Opened(page)
+    page.goto(server + "/")
+    page.wait_for_selector(".zone .quick button", timeout=20000)
+    page.wait_for_timeout(1500)
+    yield opened
+    context.close()
+
+
+def test_a_refresh_rebuilds_nothing(iphone):
+    page = iphone.page
+    page.evaluate(FRESH_JS)
+    page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
+    page.wait_for_timeout(500)
+    # A row may come or go with what it says (a reading's trend): not the cards.
+    assert page.evaluate(FRESH_JS) <= 3
+    assert iphone.errors == []
+
+
+def test_a_tap_keeps_the_card_under_the_finger_and_its_nodes(iphone, api):
+    page = iphone.page
+    card = _card(page, ZONE_A)
+    quick = card.locator(".quick")
+    quick.scroll_into_view_if_needed()
+    page.evaluate("window.scrollBy(0, -250)")        # its controls mid-screen, the top above
+    card.locator(".zone-head").evaluate("e => { e.__kept = true; }")
+    before = quick.bounding_box()["y"]
+    card.locator("button[data-action=start][data-delta='0.5']").tap()
+    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .pending")
+    assert abs(quick.bounding_box()["y"] - before) < 1
+    apply = card.locator("button[data-action=apply]")
+    apply.scroll_into_view_if_needed()
+    before = quick.bounding_box()["y"]
+    apply.tap()
+    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] button[data-action=resume]")
+    page.wait_for_timeout(800)                         # and the valve's answer after it
+    assert abs(quick.bounding_box()["y"] - before) < 1
+    assert card.locator(".zone-head").evaluate("e => e.__kept === true"), "updated, not rebuilt"
+    card.locator("button[data-action=resume]").tap()
+    assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+    assert iphone.errors == []
+
+
+def test_what_grows_above_doesnt_push_what_is_being_read(iphone):
+    page = iphone.page
+    card = _card(page, ZONE_B)
+    card.locator(".zone-foot").scroll_into_view_if_needed()
+    before = card.bounding_box()["y"]
+    page.evaluate("steady(() => { document.getElementById('hero-detail').textContent += ' una riga in più'.repeat(20); })")
+    assert abs(card.bounding_box()["y"] - before) < 1
+    assert iphone.errors == []

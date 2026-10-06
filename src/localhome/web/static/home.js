@@ -136,7 +136,7 @@ function updateZoneNext(zone) {
   if (week && mode) state.weeks[zone.name] = Object.assign({}, state.weeks[zone.name], { [mode]: week });
   const card = document.getElementById(zoneId(zone.name));
   const current = state.climate && state.climate.zones.find(z => z.name === zone.name);
-  if (card && current) fillZone(card, current, state.climate);
+  if (card && current) steady(() => fillZone(card, current, state.climate), card.querySelector(".zone-plan"));
 }
 
 function updateNowHighlight() {
@@ -335,8 +335,8 @@ function renderZones() {
   const climate = state.climate;
   const host = document.getElementById("zones");
   if (!climate || !climate.zones.length) {
-    host.innerHTML = `<div class="tile tile-wide"><div class="tile-name">${esc(tr("home.no_zones"))}</div>
-      <div class="tile-note">${esc(tr("home.no_zones_note"))}</div><a class="link-btn" href="/climate-admin">${esc(tr("home.admin_link"))}</a></div>`;
+    morph(host, `<div class="tile tile-wide"><div class="tile-name">${esc(tr("home.no_zones"))}</div>
+      <div class="tile-note">${esc(tr("home.no_zones_note"))}</div><a class="link-btn" href="/climate-admin">${esc(tr("home.admin_link"))}</a></div>`);
     return;
   }
   // Cards are kept and refilled: a card being used keeps its place.
@@ -418,7 +418,7 @@ function fillZone(card, zone, climate) {
   const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
-  card.querySelector(".zone-live").innerHTML = `
+  morph(card.querySelector(".zone-live"), `
     <div class="zone-head">
       <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
@@ -434,8 +434,8 @@ function fillZone(card, zone, climate) {
     </div>
     <div class="quick">${quickHtml(zone, climate, change)}</div>
     ${zone.sensor_manual ? manualHtml(zone) : ""}
-    <div class="zone-foot">${foot.join(" · ")}</div>`;
-  wireRibbon(card, zone, week, history, mode);
+    <div class="zone-foot">${foot.join(" · ")}</div>`);
+  wireRibbon(card, week, history, mode);
 }
 
 // A zone whose sensor is set to "manual" in the admin panel: the
@@ -475,7 +475,7 @@ async function onManualSubmit(event) {
   try {
     await api(`/api/climate-admin/zones/${encodeURIComponent(form.dataset.zone)}/manual-value`, body);
     input.blur();
-    await refreshClimate();
+    await refreshClimate(form);
   } catch (e) {
     notify(errorText(e));
   } finally {
@@ -565,13 +565,19 @@ function legendHtml() {
 }
 
 // Touch or hover the strip: what happened (or is planned) at that time.
-function wireRibbon(card, zone, week, history, mode) {
+// Wired once - the strip is updated in place, not rebuilt - reading the
+// day the card was last filled with.
+function wireRibbon(card, week, history, mode) {
+  card.ribbonDay = { week, history, mode };
   const svg = card.querySelector(".ribbon svg");
-  const readout = card.querySelector(".ribbon-readout");
-  const cursor = svg.querySelector(".rb-cursor");
-  const start = dayStartEpoch();
-  const today = week ? week[DAYS[dayIndex(boardNow())]] : null;
+  if (svg.ribbonWired) return;
+  svg.ribbonWired = true;
   const show = event => {
+    const { week, history, mode } = card.ribbonDay;
+    const readout = card.querySelector(".ribbon-readout");
+    const cursor = svg.querySelector(".rb-cursor");
+    const start = dayStartEpoch();
+    const today = week ? week[DAYS[dayIndex(boardNow())]] : null;
     const box = svg.getBoundingClientRect();
     const k = Math.max(0, Math.min(0.9999, (event.clientX - box.left) / box.width));
     const hour = k * 24;
@@ -592,8 +598,8 @@ function wireRibbon(card, zone, week, history, mode) {
     readout.textContent = bits.join(" · ");
   };
   const hide = () => {
-    cursor.setAttribute("visibility", "hidden");
-    readout.innerHTML = legendHtml();
+    svg.querySelector(".rb-cursor").setAttribute("visibility", "hidden");
+    morph(card.querySelector(".ribbon-readout"), legendHtml());
   };
   svg.addEventListener("pointermove", show);
   svg.addEventListener("pointerdown", show);
@@ -680,31 +686,45 @@ async function onZoneClick(event) {
   } else if (action === "cancel-pending") {
     delete state.pending[zone.name];
   } else if (action === "apply" && pending) {
-    button.disabled = true;
+    busy(button, true);
+    asked.climate++;
     const body = pending.hours === "next" ? { target: pending.target, until: "next_change" } : { target: pending.target, hours: pending.hours };
     try {
-      await api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override`, body);
+      const done = await api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override`, body);
       delete state.pending[zone.name];
-      await refreshClimate();
-      return;
+      // The card says it at once; the valve's answer follows.
+      zone.override = done.override;
+      zone.target_c = done.override.target;
+      const quick = card.querySelector(".quick");
+      steady(() => { renderHero(); fillZone(card, zone, state.climate); }, quick);
+      refreshClimate(quick);
     } catch (e) {
       notify(errorText(e));
-      button.disabled = false;
+      busy(button, false);
     }
+    return;
   } else if (action === "resume") {
-    button.disabled = true;
+    busy(button, true);
+    asked.climate++;
     try {
       await api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override/cancel`, {});
-      await refreshClimate();
-      return;
+      await refreshClimate(card.querySelector(".quick"));
     } catch (e) {
       notify(errorText(e));
-      button.disabled = false;
+      busy(button, false);
     }
+    return;
   } else {
     return;
   }
-  fillZone(card, zone, state.climate);
+  steady(() => fillZone(card, zone, state.climate), button);
+}
+
+// A button waiting for the board: dimmed, not pressed twice.
+function busy(button, on) {
+  button.disabled = on;
+  if (on) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
 }
 
 // ---------------------------------------------------------------- hero --
@@ -714,9 +734,9 @@ function renderHero() {
   if (!climate) return;
   const mode = climate.mode || "heat";
   document.body.dataset.season = mode;
-  document.getElementById("hero-season").textContent = tr(mode === "cool" ? "home.season_cool" : "home.season_heat");
+  setText(document.getElementById("hero-season"), tr(mode === "cool" ? "home.season_cool" : "home.season_heat"));
   const season = document.getElementById("season-chip");
-  season.innerHTML = `${mode === "cool" ? ICONS.snow : ICONS.sun}<span>${esc(tr(mode === "cool" ? "home.summer" : "home.winter"))}</span>`;
+  morph(season, `${mode === "cool" ? ICONS.snow : ICONS.sun}<span>${esc(tr(mode === "cool" ? "home.summer" : "home.winter"))}</span>`);
 
   // The title says what the plant is doing as a whole, the line under it
   // where each zone stands - nothing a reading can't back up.
@@ -733,12 +753,12 @@ function renderHero() {
   else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).reached)) title = tr("home.hero_all_ok");
   else title = tr(cool ? "home.hero_idle_cool" : "home.hero_idle_heat");
   const detail = climate.away_until ? tr("home.hero_away_detail") : zones.map(z => zoneLine(z, climate)).join(" · ");
-  document.getElementById("hero-title").textContent = title;
-  document.getElementById("hero-detail").textContent = detail;
+  setText(document.getElementById("hero-title"), title);
+  setText(document.getElementById("hero-detail"), detail);
 
   const away = document.getElementById("away-chip");
   away.setAttribute("aria-pressed", climate.away_until ? "true" : "false");
-  away.innerHTML = `${ICONS.suitcase}<span>${esc(climate.away_until ? tr("home.away_on") : tr("home.away_off"))}</span>`;
+  morph(away, `${ICONS.suitcase}<span>${esc(climate.away_until ? tr("home.away_on") : tr("home.away_off"))}</span>`);
 }
 
 // One zone's state in a few words, for the line under the title.
@@ -774,8 +794,8 @@ function renderOutdoor() {
   chip.hidden = false;
   const rh = reading.humidity_pct != null
     ? `<span class="outdoor-rh">${ICONS.drop}${fmt(reading.humidity_pct, 0)}% ${esc(tr("home.humidity").toLowerCase())}</span>` : "";
-  chip.innerHTML = `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}</span>
-    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${rh}`;
+  morph(chip, `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}</span>
+    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${rh}`);
 }
 
 const ICONS = {
@@ -807,15 +827,18 @@ function openAway() {
     async event => {
       const button = event.target.closest("button[data-away]");
       if (!button) return;
-      button.disabled = true;
+      busy(button, true);
+      asked.climate++;
       try {
-        if (button.dataset.away === "back") await api("/api/climate/away/cancel", {});
-        else await api("/api/climate/away", { hours: Number(button.dataset.away) });
+        const done = button.dataset.away === "back" ? await api("/api/climate/away/cancel", {})
+          : await api("/api/climate/away", { hours: Number(button.dataset.away) });
         closeSheet();
-        await refreshClimate();
+        state.climate.away_until = done.away_until || null;
+        steady(() => { renderHero(); renderZones(); });
+        refreshClimate();
       } catch (e) {
         notify(errorText(e));
-        button.disabled = false;
+        busy(button, false);
       }
     });
 }
@@ -872,7 +895,7 @@ function renderPlant() {
   const vmcSpeed = (state.devices ? state.devices.sensors : []).find(d => d.kind === "number" && d.paired_switch && (d.presets || []).length);
   if (vmcSpeed) tiles.push(vmcTile(vmcSpeed));
   document.getElementById("plant").hidden = !tiles.length;
-  document.getElementById("plant-body").innerHTML = tiles.join("");
+  morph(document.getElementById("plant-body"), tiles.join(""));
   renderSeasonDevices();
 }
 
@@ -896,7 +919,7 @@ function renderSeasonDevices() {
       </div>`;
   }).filter(Boolean);
   host.hidden = !cards.length;
-  host.innerHTML = cards.join("");
+  morph(host, cards.join(""));
 }
 
 // The dehumidifier: on for a while, never by itself - it draws a lot of
@@ -923,30 +946,49 @@ function dehumidifierCard(name, d) {
 async function onSeasonDeviceClick(event) {
   const dehum = event.target.closest("button[data-dehum-hours], button[data-dehum-off]");
   if (dehum) {
-    dehum.disabled = true;
+    const host = dehum.closest(".season-device");
+    busy(dehum, true);
+    asked.climate++;
     try {
-      if (dehum.hasAttribute("data-dehum-off")) await api("/api/dehumidifier/off", {});
-      else await api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) });
-      await refreshDevices();
-      await refreshClimate();
+      const done = dehum.hasAttribute("data-dehum-off") ? await api("/api/dehumidifier/off", {})
+        : await api("/api/dehumidifier/on", { hours: Number(dehum.dataset.dehumHours) });
+      if (state.climate) state.climate.dehumidifier = done.dehumidifier;
+      steady(renderSeasonDevices, host);
+      refreshClimate(host);
+      refreshDevices(host);
     } catch (e) {
       notify(errorText(e));
-      dehum.disabled = false;
+      busy(dehum, false);
     }
     return;
   }
   const toggle = event.target.closest("button[data-switch]");
-  if (!toggle) return;
-  toggle.disabled = true;
+  if (toggle) await flipSwitch(toggle);
+}
+
+// A switch slides at once, and back if the board refuses. Not dimmed
+// while it's asked - a second tap meanwhile is just ignored.
+const switching = new Set();
+
+async function flipSwitch(toggle) {
+  const name = toggle.dataset.switch;
+  if (switching.has(name)) return;
+  const on = toggle.getAttribute("aria-checked") !== "true";
+  const before = state.readings[name];
+  toggle.setAttribute("aria-checked", String(on));
+  state.readings[name] = Object.assign({}, before, { is_on: on });
+  switching.add(name);
+  asked.devices++;
   try {
-    const on = toggle.getAttribute("aria-checked") !== "true";
-    await api(`/api/sensors/${encodeURIComponent(toggle.dataset.switch)}/${on ? "on" : "off"}`, {});
-    await refreshDevices();
+    await api(`/api/sensors/${encodeURIComponent(name)}/${on ? "on" : "off"}`, {});
   } catch (e) {
     notify(errorText(e));
+    state.readings[name] = before;
+    toggle.setAttribute("aria-checked", String(!on));
   } finally {
-    toggle.disabled = false;
+    switching.delete(name);
   }
+  await refreshDevices(toggle);
 }
 
 // ------------------------------------------------------------- the VMC --
@@ -1088,7 +1130,10 @@ async function onPlantClick(event) {
   const card = target.closest("#vmc-card");
   const speed = card && deviceByName(card.dataset.device);
   if (target.dataset.vmcChoice && target.getAttribute("aria-checked") === "true") return;
-  target.disabled = true;
+  if (target.dataset.switch) { await flipSwitch(target); return; }
+  pressNow(target);
+  busy(target, true);
+  asked.devices++;
   try {
     const boosting = speed && vmcRunning(speed).boost;
     if (target.hasAttribute("data-vmc-off") && target.dataset.device) {
@@ -1111,18 +1156,24 @@ async function onPlantClick(event) {
       // switches it on and names the device it drives.
       const program = VMC_PROGRAMS.find(p => p.key === target.dataset.vmcChoice);
       await api("/api/vmc-schedule", { enabled: true, target: speed.name, week: vmcProgramWeek(program, speed) });
-    } else if (target.dataset.switch) {
-      const on = target.getAttribute("aria-checked") !== "true";
-      await api(`/api/sensors/${encodeURIComponent(target.dataset.switch)}/${on ? "on" : "off"}`, {});
     } else {
       return;
     }
-    await refreshDevices();
   } catch (e) {
     notify(errorText(e));
   } finally {
-    target.disabled = false;
+    busy(target, false);
   }
+  await refreshDevices(target);
+}
+
+// A choice in a group lights up as it's tapped, the others go out - the
+// board's answer (refreshDevices) confirms it or puts it back.
+function pressNow(button) {
+  const group = button.closest("[role=group], [role=radiogroup]");
+  const attr = button.hasAttribute("aria-checked") ? "aria-checked" : button.hasAttribute("aria-pressed") ? "aria-pressed" : null;
+  if (!group || !attr) return;
+  group.querySelectorAll(`[${attr}]`).forEach(b => b.setAttribute(attr, String(b === button)));
 }
 
 // ---------------------------------------------------------- the house --
@@ -1178,7 +1229,7 @@ function renderHouse() {
       </div></div>`);
   });
   document.getElementById("house").hidden = !tiles.length;
-  document.getElementById("house-body").innerHTML = tiles.join("");
+  morph(document.getElementById("house-body"), tiles.join(""));
 }
 
 // --------------------------------------------------------- the air --
@@ -1261,7 +1312,7 @@ async function refreshAirHistory() {
       state.airHistory[d.name] = data.series.co2_ppm || [];
     } catch (e) { /* keep what we had */ }
   }));
-  if (sensors.length) renderHouse();
+  if (sensors.length) steady(renderHouse);
 }
 
 // ------------------------------------------------------ the energy --
@@ -1374,7 +1425,7 @@ async function refreshEnergy() {
       state.energy[d.name] = await api(`/api/energy/${encodeURIComponent(d.name)}`);
     } catch (e) { /* keep what we had */ }
   }));
-  if (meters.length) renderHouse();
+  if (meters.length) steady(renderHouse);
 }
 
 function rangeHtml(device, reading) {
@@ -1398,7 +1449,7 @@ async function onHouseClick(event) {
   if (energyCard && button.dataset.energyRange) {
     state.energyRange[energyCard.dataset.sensor] = button.dataset.energyRange;
     delete state.energyPick[energyCard.dataset.sensor];
-    renderHouse();
+    steady(renderHouse, button);
     return;
   }
   if (energyCard && button.dataset.energyPick !== undefined) {
@@ -1406,16 +1457,13 @@ async function onHouseClick(event) {
     const i = Number(button.dataset.energyPick);
     if (state.energyPick[name] === i) delete state.energyPick[name];
     else state.energyPick[name] = i;
-    renderHouse();
+    steady(renderHouse, button);
     return;
   }
+  if (button.dataset.switch) { await flipSwitch(button); return; }
   button.disabled = true;
   try {
-    if (button.dataset.switch) {
-      const on = button.getAttribute("aria-checked") !== "true";
-      await api(`/api/sensors/${encodeURIComponent(button.dataset.switch)}/${on ? "on" : "off"}`, {});
-      await refreshDevices();
-    } else if (button.dataset.cover) {
+    if (button.dataset.cover) {
       await api(`/api/covers/${encodeURIComponent(button.dataset.cover)}/action/${button.dataset.coverAction}`, {});
     }
   } catch (e) {
@@ -1430,7 +1478,7 @@ async function onHouseChange(event) {
   if (!input) return;
   try {
     await api(`/api/sensors/${encodeURIComponent(input.dataset.level)}/set-value`, { value: Number(input.value) });
-    await refreshDevices();
+    await refreshDevices(input);
   } catch (e) {
     notify(errorText(e));
   }
@@ -1438,30 +1486,46 @@ async function onHouseChange(event) {
 
 // ------------------------------------------------------------ refreshes --
 
-async function refreshClimate() {
+// Each refresh is numbered: an answer to one asked before an action (or
+// before a newer refresh) is older than what the page already shows - it's
+// dropped, not drawn over it. A switch tapped on never flicks back off.
+const asked = { climate: 0, devices: 0 };
+
+// `anchor`: what was just touched - held under the finger. Otherwise
+// what's in the middle of the screen stays where it is.
+async function refreshClimate(anchor) {
+  const ticket = ++asked.climate;
   try {
-    state.climate = await api("/api/climate/zones");
+    const climate = await api("/api/climate/zones");
+    if (ticket !== asked.climate) return;
+    state.climate = climate;
     climateZones = state.climate.zones || [];
     if (state.climate.mode && state.climate.mode !== climateMode) {
       climateMode = state.climate.mode;
       ensurePaintValueForMode();
     }
     state.failures = 0;
-    document.getElementById("offline").hidden = true;
     const missing = state.climate.zones.filter(z => !state.weeks[z.name]);
     if (missing.length) await loadWeeks(missing.map(z => z.name));
+    if (ticket !== asked.climate) return;
   } catch (e) {
+    if (ticket !== asked.climate) return;
     state.failures += 1;
     if (state.failures >= 2) {
       const offline = document.getElementById("offline");
-      offline.hidden = false;
-      offline.textContent = tr("home.offline");
+      steady(() => {
+        offline.hidden = false;
+        setText(offline, tr("home.offline"));
+      }, anchor);
     }
     return;
   }
-  renderHero();
-  renderZones();
-  renderPlant();
+  steady(() => {
+    document.getElementById("offline").hidden = true;
+    renderHero();
+    renderZones();
+    renderPlant();
+  }, anchor);
 }
 
 async function loadWeeks(names) {
@@ -1478,6 +1542,7 @@ async function loadWeeks(names) {
 
 async function refreshHistory() {
   if (!state.climate) return;
+  historyAt = Date.now();
   await Promise.all(state.climate.zones.map(async zone => {
     try {
       const [temps, runs, hours] = await Promise.all([
@@ -1489,25 +1554,28 @@ async function refreshHistory() {
       state.onHours[zone.name] = hours;
     } catch (e) { /* keep what we had */ }
   }));
-  renderHero();
-  renderZones();
+  steady(() => { renderHero(); renderZones(); });
 }
 
-async function refreshDevices() {
+async function refreshDevices(anchor) {
+  const ticket = ++asked.devices;
   try {
     if (!state.devices) state.devices = await api("/api/devices");
     const names = state.devices.sensors.map(d => d.name);
     const readings = await Promise.all(names.map(n => api(`/api/sensors/${encodeURIComponent(n)}`).catch(() => ({ ok: false }))));
+    const vmc = state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)
+      ? await api("/api/vmc-schedule").catch(() => null) : state.vmc;
+    if (ticket !== asked.devices) return;
     names.forEach((n, i) => { state.readings[n] = readings[i]; });
-    if (state.devices.sensors.some(d => d.kind === "number" && (d.presets || []).length)) {
-      state.vmc = await api("/api/vmc-schedule").catch(() => null);
-    }
+    state.vmc = vmc;
   } catch (e) {
     return;
   }
-  renderOutdoor();
-  renderPlant();
-  renderHouse();
+  steady(() => {
+    renderOutdoor();
+    renderPlant();
+    renderHouse();
+  }, anchor);
 }
 
 async function refreshProblems() {
@@ -1517,7 +1585,7 @@ async function refreshProblems() {
     const data = await api("/api/problems");
     const count = (data.problems || []).length;
     health.dataset.state = count ? "warn" : "ok";
-    text.textContent = count ? tr("home.health_problems", { count }) : tr("home.health_ok");
+    setText(text, count ? tr("home.health_problems", { count }) : tr("home.health_ok"));
   } catch (e) {
     health.dataset.state = "unknown";
   }
@@ -1540,6 +1608,19 @@ document.getElementById("sheet").addEventListener("click", e => state.sheet && s
 document.getElementById("sheet-close").addEventListener("click", closeSheet);
 document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.sheet) closeSheet(); });
+
+// Back to the page - from another app, the phone woken up: what it shows
+// is brought up to date at once and in place, not after the next round,
+// and without a reload that would scroll it back to the top.
+let historyAt = 0;
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !state.climate) return;
+  refreshClimate();
+  refreshDevices();
+  refreshProblems();
+  if (Date.now() - historyAt > HISTORY_MS) refreshHistory();
+});
 
 (async function start() {
   // Until the board's clock has answered, "now" would be this phone's.
