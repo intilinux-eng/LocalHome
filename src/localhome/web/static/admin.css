@@ -394,6 +394,7 @@
 .season-switch-btn { margin-left: auto; }
 .season-effects { margin: 12px 0 0; padding-left: 18px; font-size: 0.86rem; color: var(--text-2); }
 .season-card.active .season-effects { color: var(--text); }
+.season-changed { margin: 10px 0 0; font-size: 0.8rem; color: var(--text-3); }
 .season-effects li + li { margin-top: 4px; }
 
 .season-confirm, .maint-confirm {

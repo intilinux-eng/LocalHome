@@ -304,6 +304,7 @@
     "season_note": "One season for the whole plant, each with its own schedule. Switching asks for confirmation.",
     "season_note_more": "One central unit sends hot or cold water to every zone, and it changes twice a year: that's why switching asks you to type the new season's name.",
     "season_active": "Active",
+    "season_changed": "Set on {when} from {by}",
     "season_switch_to_heat": "Switch to heating",
     "season_switch_to_cool": "Switch to cooling",
     "season_zones_heat": "Zones heated on schedule: {zones}",

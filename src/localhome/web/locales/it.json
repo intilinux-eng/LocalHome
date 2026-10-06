@@ -304,6 +304,7 @@
     "season_note": "Una sola stagione per tutto l'impianto, ognuna con la sua programmazione. Il cambio chiede conferma.",
     "season_note_more": "Un'unica centrale manda acqua calda o fredda a tutte le zone, e si cambia due volte l'anno: per questo il passaggio chiede di scrivere il nome della nuova stagione.",
     "season_active": "Attiva",
+    "season_changed": "Impostata il {when} da {by}",
     "season_switch_to_heat": "Passa al riscaldamento",
     "season_switch_to_cool": "Passa al raffrescamento",
     "season_zones_heat": "Zone riscaldate secondo la programmazione: {zones}",

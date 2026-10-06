@@ -77,3 +77,22 @@ def test_manually_toggling_a_mode_switch_is_allowed_in_diagnostic_mode(tmp_path)
 
     assert res.status_code == 200
     assert res.get_json()["ok"] is True
+
+
+def test_who_set_the_season_and_when_is_kept(tmp_path, caplog):
+    """On the production board the season changed twice with nobody able
+    to say who had done it: now the admin's season card says when, from
+    which device, and from what - and so does the log."""
+    import logging
+
+    client = _app(tmp_path).test_client()
+    assert client.get("/api/climate/zones").get_json()["mode_changed"] is None
+    iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15"
+    with caplog.at_level(logging.INFO, logger="localhome.web.app"):
+        assert client.post("/api/climate/mode", json={"mode": "heat"}, headers={"User-Agent": iphone}).get_json()["ok"]
+    changed = client.get("/api/climate/zones").get_json()["mode_changed"]
+    assert changed["from"] == "cool" and changed["by"] == "iPhone (127.0.0.1)" and changed["at"] > 0
+    assert "Season set to heat (was cool) from iPhone (127.0.0.1)" in caplog.text
+    # Set again to the same: nothing changed, the record stays.
+    client.post("/api/climate/mode", json={"mode": "heat"}, headers={"User-Agent": "curl/8"})
+    assert client.get("/api/climate/zones").get_json()["mode_changed"] == changed

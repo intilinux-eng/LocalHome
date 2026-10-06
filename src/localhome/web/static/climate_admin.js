@@ -1591,6 +1591,8 @@ function renderSeason(data) {
           ${action}
         </div>
         <ul class="season-effects">${seasonEffects(mode, data).map(i => `<li>${i}</li>`).join("")}</ul>
+        ${active && data.mode_changed && data.mode_changed.at ? `<p class="season-changed">${escapeHtml(tr("climate_admin.season_changed", {
+          when: formatWhen(data.mode_changed.at), by: data.mode_changed.by || "?" }))}</p>` : ""}
       </div>`;
   }).join(""));
 }

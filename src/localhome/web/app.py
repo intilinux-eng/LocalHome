@@ -1257,6 +1257,8 @@ def _register_routes(app: Flask) -> None:
         return jsonify(
             ok=True,
             mode=thermostat.schedule_store.get_mode(),
+            # Who set the season last, and when - the admin's season card.
+            mode_changed=thermostat.schedule_store.get_mode_changed(),
             away_until=away_until.isoformat() if away_until else None,
             diagnostic_mode=thermostat.schedule_store.get_diagnostic_mode(),
             # For the chart's band around the target: the valve only
@@ -1279,7 +1281,11 @@ def _register_routes(app: Flask) -> None:
         mode = data.get("mode")
         if mode not in ("heat", "cool"):
             return jsonify(ok=False, error="mode must be 'heat' or 'cool'"), 400
-        thermostat.schedule_store.set_mode(mode)
+        previous = thermostat.schedule_store.get_mode()
+        by = _who(request)
+        thermostat.schedule_store.set_mode(mode, by=by)
+        if previous != mode:
+            logger.info("Season set to %s (was %s) from %s", mode, previous, by)
         # Re-evaluate right away instead of leaving valves showing stale
         # state until the background loops' next scheduled tick - a mode
         # switch changes every zone's heat/cool logic at once, and the
@@ -1896,6 +1902,20 @@ def _ipv6_available() -> bool:
 # at once on load (every card, chart and stat) - 8 serves that without
 # queueing, with room for a second device.
 WEB_THREADS = 8
+
+
+# The kind of device a request came from, by its browser's own words,
+# and its address: "iPhone (192.168.1.40)". Enough to tell the family's
+# phones from the PC on the desk; nothing is stored about anyone.
+_DEVICE_WORDS = (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"), ("Windows", "Windows"),
+                 ("Macintosh", "Mac"), ("Linux", "Linux"))
+
+
+def _who(req) -> str:
+    agent = req.headers.get("User-Agent", "")
+    device = next((name for word, name in _DEVICE_WORDS if word in agent), None)
+    address = req.remote_addr or "?"
+    return f"{device} ({address})" if device else address
 
 
 def main() -> None:

@@ -155,6 +155,12 @@ class ScheduleStore:
     def get_mode(self) -> str:
         return self._load().get("mode", self.default_mode)
 
+    def get_mode_changed(self) -> dict | None:
+        """The last time the season was changed: {"at", "from", "by"}, or
+        None if it never was since this was kept."""
+        changed = self._load().get("mode_changed")
+        return changed if isinstance(changed, dict) else None
+
     def clear_schedules(self) -> None:
         """Empties every zone's grid in both seasons and cancels away and
         diagnostic mode; the current season stays as it is."""
@@ -162,11 +168,18 @@ class ScheduleStore:
             mode = self._load().get("mode", self.default_mode)
             self._save({"mode": mode})
 
-    def set_mode(self, mode: str) -> None:
+    def set_mode(self, mode: str, by: str | None = None) -> None:
+        """`by`: who set it - a device and its address, as the web page
+        says it - kept with when and what it was before (get_mode_changed()).
+        On the production board the season changed twice with nobody able
+        to say who had done it."""
         if mode not in MODES:
             raise InputError("mode_invalid", f"mode must be one of {MODES}")
         with self._lock:
             data = self._load()
+            previous = data.get("mode", self.default_mode)
+            if previous != mode:
+                data["mode_changed"] = {"at": time.time(), "from": previous, "by": by}
             data["mode"] = mode
             # A temporary target belongs to the season it was set in: 22°
             # asked for while heating means nothing once cooling.
