@@ -614,6 +614,21 @@ def test_a_tap_keeps_the_card_under_the_finger_and_its_nodes(iphone, api):
     assert iphone.errors == []
 
 
+def test_a_tap_on_the_day_strip_stays_to_be_read(iphone):
+    """On a phone the finger leaves the strip as soon as it's lifted: what
+    it touched used to vanish with it - a tap showed nothing."""
+    page = iphone.page
+    svg = _card(page, ZONE_A).locator(".ribbon > svg")
+    svg.scroll_into_view_if_needed()
+    box = svg.bounding_box()
+    page.touchscreen.tap(box["x"] + box["width"] * 0.3, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(1000)
+    readout = _card(page, ZONE_A).locator(".ribbon-readout").inner_text()
+    assert readout.startswith("07:"), readout
+    page.wait_for_timeout(4000)
+    assert "temperatura" in _card(page, ZONE_A).locator(".ribbon-readout").inner_text().lower(), "the legend again"
+
+
 def test_what_grows_above_doesnt_push_what_is_being_read(iphone):
     page = iphone.page
     card = _card(page, ZONE_B)

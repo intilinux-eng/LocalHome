@@ -594,7 +594,9 @@ function wireRibbon(card, week, history, mode) {
   const svg = card.querySelector(".ribbon svg");
   if (svg.ribbonWired) return;
   svg.ribbonWired = true;
+  let hideTimer = null;
   const show = event => {
+    clearTimeout(hideTimer);
     const { week, history, mode } = card.ribbonDay;
     const readout = card.querySelector(".ribbon-readout");
     const cursor = svg.querySelector(".rb-cursor");
@@ -619,9 +621,15 @@ function wireRibbon(card, week, history, mode) {
     if (today) bits.push(tr("home.planned", { target: fmtTarget(today[Math.floor(hour)]) }));
     readout.textContent = bits.join(" · ");
   };
-  const hide = () => {
-    svg.querySelector(".rb-cursor").setAttribute("visibility", "hidden");
-    morph(card.querySelector(".ribbon-readout"), legendHtml());
+  // A finger lifted leaves the strip at once (pointerleave follows
+  // pointerup on a touch): what it touched stays a moment to be read -
+  // a tap used to show nothing at all.
+  const hide = event => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      svg.querySelector(".rb-cursor").setAttribute("visibility", "hidden");
+      morph(card.querySelector(".ribbon-readout"), legendHtml());
+    }, event && event.pointerType === "touch" ? 4000 : 0);
   };
   svg.addEventListener("pointermove", show);
   svg.addEventListener("pointerdown", show);
