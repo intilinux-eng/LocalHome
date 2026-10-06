@@ -56,6 +56,11 @@ body[data-season="cool"] { --accent: var(--cool); --accent-soft: var(--cool-soft
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
+/* The page is held still by home.js (morph.js's steady()) the same way
+   in every browser. The browser's own anchoring picks its own element -
+   often one above what was tapped, so the card moved under the finger
+   on Android when rows came in above the button - and would fight it. */
+html, body { overflow-anchor: none; }
 
 body {
   margin: 0;

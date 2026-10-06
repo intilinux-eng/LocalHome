@@ -155,7 +155,10 @@ function updateZoneNext(zone) {
   if (week && mode) state.weeks[zone.name] = Object.assign({}, state.weeks[zone.name], { [mode]: week });
   const card = document.getElementById(zoneId(zone.name));
   const current = state.climate && state.climate.zones.find(z => z.name === zone.name);
-  if (card && current) steady(() => fillZone(card, current, state.climate), card.querySelector(".zone-plan"));
+  // Painted a moment ago: the grid stays under the finger. Loaded on its
+  // own (opening the page): nothing was touched - holding the grid then
+  // opened the page scrolled half-way down.
+  if (card && current) steady(() => fillZone(card, current, state.climate), planTouchedRecently() ? card.querySelector(".zone-plan") : null);
 }
 
 function updateNowHighlight() {

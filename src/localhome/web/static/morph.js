@@ -8,11 +8,12 @@
    What's new fades in.
 
    steady(render, anchor): holds the page still around a render. When
-   something above what you're looking at grows or shrinks, the browser
-   moves the page to make up for it - where it can (scroll anchoring).
-   Safari can't: the page slid under the finger after every tap. There,
-   the element touched (or the one in the middle of the screen) is put
-   back where it was. */
+   something above what you're looking at grows or shrinks, the page is
+   moved to make up for it: the element touched (or the one in the middle
+   of the screen) is put back where it was. Browsers do it themselves
+   (scroll anchoring) but Safari doesn't, and the others pick their own
+   element to hold - often one above what was tapped. A page that lets
+   steady() do it switches theirs off (overflow-anchor: none). */
 "use strict";
 
 (function () {
@@ -179,7 +180,12 @@
 
   function steady(render, anchor) {
     if (nativeAnchoring()) return render();
-    const start = anchor && anchor.isConnected && !fixed(anchor) ? anchor : viewAnchor();
+    const touched = anchor && anchor.isConnected && !fixed(anchor) ? anchor : null;
+    // At the top, with nothing touched, the top stays the top: holding
+    // whatever was mid-screen while the page fills in opened it scrolled
+    // half-way down.
+    if (!touched && window.scrollY < 1) return render();
+    const start = touched || viewAnchor();
     // The element and the ones around it: if it's the one that goes, the
     // nearest that stays is held instead.
     const chain = [];

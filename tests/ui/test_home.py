@@ -568,6 +568,18 @@ def iphone(browser, server):
     context.close()
 
 
+def test_the_page_opens_at_the_top(iphone):
+    """Holding still is for what's touched or read: the page filling in
+    (the week loading, its empty note) once opened it half-way down."""
+    page = iphone.page
+    page.wait_for_timeout(1500)
+    assert page.evaluate("scrollY") == 0
+    page.reload()
+    page.wait_for_selector(".zone .sched-cell", timeout=20000)
+    page.wait_for_timeout(2500)
+    assert page.evaluate("scrollY") == 0
+
+
 def test_a_refresh_rebuilds_nothing(iphone):
     page = iphone.page
     page.evaluate(FRESH_JS)

@@ -393,7 +393,26 @@ const scheduleWeekModes = {};
 function updateEmptyScheduleHint(zoneName) {
   const hint = document.getElementById(`sched-empty-${slug(zoneName)}`);
   const week = scheduleWeeks[zoneName];
-  if (hint && week) hint.hidden = Object.values(week).some(hours => hours.some(v => v != null));
+  if (!hint || !week) return;
+  const hidden = Object.values(week).some(hours => hours.some(v => v != null));
+  if (hint.hidden === hidden) return;
+  // The note comes or goes above the grid: a grid being painted stays
+  // under the finger.
+  const apply = () => { hint.hidden = hidden; };
+  if (window.steady) window.steady(apply, planTouchedRecently() ? document.getElementById(`sched-${slug(zoneName)}`) : null);
+  else apply();
+}
+
+// The last touch on a week - its grid, palette, copy buttons: what changes
+// above it right after is held under the finger. Not when the week loads
+// on its own: holding the grid then opened the page scrolled half-way down.
+let planTouchedAt = 0;
+document.addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest(".zone-plan")) planTouchedAt = Date.now();
+}, true);
+
+function planTouchedRecently() {
+  return Date.now() - planTouchedAt < 5000;
 }
 
 function scheduleSave(zoneName) {
