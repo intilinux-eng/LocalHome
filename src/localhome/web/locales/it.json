@@ -897,6 +897,7 @@
     "ribbon_label": "Oggi in {name}: programma, temperatura e quando l'impianto ha lavorato",
     "lg_temp": "temperatura",
     "lg_target": "obiettivo",
+    "lg_band": "tolleranza",
     "lg_run": "impianto acceso",
     "simulated": "simulato",
     "manual": "manuale",

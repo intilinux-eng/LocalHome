@@ -18,6 +18,8 @@
   --line: rgba(20, 20, 30, 0.09);
   --shadow: 0 1px 2px rgba(30, 25, 15, 0.05), 0 8px 24px rgba(30, 25, 15, 0.06);
   --ok: #2e9d62;
+  /* Economy: a leaf green of its own - not "all fine"'s. */
+  --eco: #5f8227;
   --warn: #c98512;
   --bad: #d2463b;
   --heat: #d9731a;
@@ -41,6 +43,7 @@
     --line: rgba(255, 255, 255, 0.08);
     --shadow: none;
     --ok: #3cc47c;
+    --eco: #a6c86b;
     --warn: #e0a33a;
     --bad: #ef6a5f;
     --heat: #f0923a;
@@ -64,7 +67,10 @@ html, body { overflow-anchor: none; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* The season's colour washing the top of the page, behind the title:
+     warm in winter, blue in summer. */
+  background: radial-gradient(ellipse 1000px 460px at 8% -80px, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%) no-repeat,
+    var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 16px;
@@ -286,7 +292,7 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 /* The target's level - comfort or economy - as the palette names it. */
 .tier-chip { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px;
   font-size: 0.72rem; font-weight: 650; vertical-align: 1px; background: var(--accent-soft); color: var(--accent); }
-.tier-chip[data-tier="economy"] { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.tier-chip[data-tier="economy"] { background: color-mix(in srgb, var(--eco) 16%, transparent); color: var(--eco); }
 .tier-chip svg { width: 11px; height: 11px; }
 .sched-tier-note { margin: 2px 0 10px; font-size: 0.8rem; color: var(--text-2); }
 /* 19,5 in a box made for two digits. */
@@ -423,10 +429,19 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .fact-rule { color: var(--accent); font-weight: 600; }
 .fact-rule .fact-icon { background: var(--accent-soft); color: var(--accent); }
 .trend { display: block; font-size: 0.8rem; color: var(--text-3); white-space: nowrap; }
+/* The target, its level and how far the room is: one line, across the
+   card's width on a narrow one. */
+.fact-target .fact-text { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.fact-sub { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 7px; }
+.fact-sub .tier-chip { margin-left: 0; }
+.fact-sub .trend { display: inline; }
+@container (max-width: 439px) {
+  .fact-target { grid-column: 1 / -1; }
+}
 
 /* today's strip */
 .ribbon { margin: 6px 0 2px; }
-.ribbon svg { display: block; width: 100%; height: 86px; overflow: visible; touch-action: pan-y; }
+.ribbon svg { display: block; width: 100%; height: 104px; overflow: visible; touch-action: pan-y; }
 .ribbon-caption {
   display: flex;
   justify-content: space-between;
@@ -446,6 +461,11 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 @media (prefers-color-scheme: dark) { .rb-block { opacity: 0.18; } }
 .rb-block-label { font-size: 9px; fill: var(--text-3); font-variant-numeric: tabular-nums; }
 .rb-target { fill: none; stroke: var(--text-3); stroke-width: 1.3; stroke-dasharray: 3 3; }
+/* Each hour's tolerance: from the target to where the valve opens again -
+   the room is fine anywhere in it. */
+.rb-band { fill: var(--text); opacity: 0.1; }
+.rb-band[data-tier="economy"] { fill: var(--eco); opacity: 0.22; }
+.lg-band { fill: var(--text); opacity: 0.18; }
 .rb-temp { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .rb-run { fill: var(--accent); rx: 2px; }
 .rb-future { fill: var(--surface); opacity: 0.55; }
@@ -871,7 +891,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   background: color-mix(in srgb, var(--tier) 8%, var(--surface));
 }
 .sched-tier-comfort.sched-tier-cool { --tier: var(--cool); }
-.sched-tier-economy { --tier: var(--ok); }
+.sched-tier-economy { --tier: var(--eco); }
 .sched-tier-off { --tier: var(--text-3); }
 .sched-tier-off .sched-tier-swatches { min-width: 62px; justify-content: center; }
 .sched-tier-off .sched-tier-label { left: 50%; transform: translateX(-50%); }

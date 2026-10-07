@@ -431,7 +431,9 @@ function fillZone(card, zone, climate) {
   const excluded = mode === "cool" && !zone.cool_enabled;
   if (zone.target_c != null && !excluded) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
-    facts.push(fact(ICONS.target, `${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${tierChip(zone.tier, mode)}${gap ? `<span class="trend">${esc(gap)}</span>` : ""}`));
+    const chip = tierChip(zone.tier, mode);
+    const sub = chip || gap ? `<span class="fact-sub">${chip}${gap ? `<span class="trend">${esc(gap)}</span>` : ""}</span>` : "";
+    facts.push(fact(ICONS.target, `<span>${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b></span>${sub}`, " fact-target"));
     const rule = climate.away_until && !zone.override ? "" : valveRule(zone, climate);
     if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
@@ -532,11 +534,23 @@ function dayStartEpoch() {
   return wallToEpoch(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 1000;
 }
 
+// Where the valve opens again for this target - the far edge of its
+// tolerance band (services/thermostat.py's thresholds(): the hysteresis,
+// and the economy tolerance for an economy target).
+function bandEdge(target, mode) {
+  const climate = state.climate || {};
+  const tier = typeof TIER_OF !== "undefined" && TIER_OF[mode] ? TIER_OF[mode](target) : null;
+  const spread = (climate.hysteresis_c != null ? climate.hysteresis_c : 0.5)
+    + (tier === "economy" ? climate.economy_tolerance_c || 0 : 0);
+  return mode === "cool" ? target + spread : target - spread;
+}
+
 function ribbonScale(zone, week, history, mode) {
   const today = week ? week[DAYS[dayIndex(boardNow())]] : [];
-  const values = [...history.temps.map(p => p.value), ...today.filter(v => v != null)];
+  const targets = today.filter(v => v != null);
+  const values = [...history.temps.map(p => p.value), ...targets, ...targets.map(v => bandEdge(v, mode))];
   if (zone.temperature_c != null) values.push(zone.temperature_c);
-  if (zone.override && zone.override.target != null) values.push(zone.override.target);
+  if (zone.override && zone.override.target != null) values.push(zone.override.target, bandEdge(zone.override.target, mode));
   if (!values.length) return null;
   let lo = Math.min(...values) - 0.4, hi = Math.max(...values) + 0.4;
   if (hi - lo < 2) { const mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1; }
@@ -556,6 +570,14 @@ function ribbonSvg(zone, week, history, mode) {
       const color = b.value == null ? null : tempColor(b.value);   // the grid's colours
       if (color) parts.push(`<rect class="rb-block" x="${x(b.start)}" y="0" width="${x(b.end) - x(b.start)}" height="${RB.bottom}" fill="${color}"/>`);
     });
+    // Each hour's tolerance band, under its target line.
+    const band = (from, to, target) => {
+      const edge = bandEdge(target, mode);
+      const top = scale.y(Math.max(target, edge)), bottom = scale.y(Math.min(target, edge));
+      const tier = TIER_OF[mode] ? TIER_OF[mode](target) : "comfort";
+      parts.push(`<rect class="rb-band" data-tier="${tier}" x="${x(from)}" y="${top.toFixed(1)}" width="${(x(to) - x(from)).toFixed(1)}" height="${(bottom - top).toFixed(1)}"/>`);
+    };
+    bands(scale.today).forEach(b => { if (b.value != null) band(b.start, b.end, b.value); });
     let d = "";
     scale.today.forEach((v, h) => {
       if (v == null) return;
@@ -567,6 +589,7 @@ function ribbonSvg(zone, week, history, mode) {
       const until = boardDate(zone.override.until);
       const endHour = Math.min(24, (until - new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 3600000);
       const y = scale.y(zone.override.target);
+      if (endHour > nowHour) band(nowHour, endHour, zone.override.target);
       parts.push(`<path class="rb-override" d="M${x(nowHour)},${y} L${x(endHour)},${y}" vector-effect="non-scaling-stroke"/>`);
     }
     const points = history.temps.filter(p => p.ts >= start).map(p => `${x((p.ts - start) / 3600).toFixed(1)},${scale.y(p.value).toFixed(1)}`);
@@ -598,6 +621,7 @@ function runSpans(runs, start) {
 function legendHtml() {
   return `<span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 6 L6 3 L11 5 L17 2" class="lg-temp"/></svg>${esc(tr("home.lg_temp"))}</span>
     <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4 H17" class="lg-target"/></svg>${esc(tr("home.lg_target"))}</span>
+    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="1" width="16" height="6" rx="1" class="lg-band"/></svg>${esc(tr("home.lg_band"))}</span>
     <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="16" height="4" rx="1" class="lg-run"/></svg>${esc(tr("home.lg_run"))}</span>`;
 }
 
