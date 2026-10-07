@@ -8,14 +8,46 @@ migration: whatever numeric fields a driver's `read()` dict declares in
 """
 from __future__ import annotations
 
+import atexit
 import logging
+import math
 import sqlite3
 import threading
 import time
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+# Samples wait in memory and reach the file together, at most this often.
+# A 30 s cycle committed on its own rewrote the last index page of every
+# sensor's field, and each meter's day row twice - some 100 KB a cycle
+# for 2 KB of rows: measured on the production board, the history was
+# most of LocalHome's ~0.6 GB a day on the eMMC. Ten cycles in one
+# transaction rewrite those pages once. Whoever reads the history writes
+# what's waiting first, so the charts, the hours run and the reports see
+# every sample as before; a stop or a restart writes it on the way out. A
+# power cut loses at most this much history.
+WRITE_EVERY_SECONDS = 300
+# Writes failing for hours (a disk gone read-only): past this many rows
+# waiting - some 8 hours of a house's samples, ~3 MB, nothing next to a
+# 2 GB UNO Q's memory - the oldest are dropped instead of the memory
+# growing for ever. Normally 5 minutes wait: ~200 rows, a few tens of KB.
+MAX_PENDING_ROWS = 20_000
+
+_open_stores: "weakref.WeakSet[HistoryStore]" = weakref.WeakSet()
+
+
+@atexit.register
+def _write_waiting() -> None:
+    """Stopping (web/app.py turns systemd's SIGTERM into a normal exit):
+    every store's waiting samples are written before going."""
+    for store in list(_open_stores):
+        try:
+            store.flush()
+        except Exception:
+            logger.warning("History: the last samples couldn't be written on the way out", exc_info=True)
 
 # Bucket sizes chosen so each range renders a reasonable number of points.
 RANGE_BUCKETS = {
@@ -55,14 +87,22 @@ class _Borrowed:
 
 
 class HistoryStore:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, write_every_seconds: float = WRITE_EVERY_SECONDS):
         self.db_path = db_path
+        self.write_every_seconds = write_every_seconds
         self._lock = threading.RLock()
         self._conn: sqlite3.Connection | None = None
+        # Writes not in the file yet - [(sql, [params, ...])], in order -
+        # since _pending_since (monotonic). Under _lock.
+        self._pending: list[tuple[str, list[tuple]]] = []
+        self._pending_rows = 0
+        self._pending_since: float | None = None
+        self._dropped_rows = 0
         # on_stats()'s counts before today, per (sensor, field) - dropped
         # whenever rows are deleted. Read and written under _lock.
         self._on_stats_cache: dict[tuple[str, str], tuple] = {}
         self._init_schema()
+        _open_stores.add(self)
 
     def _connect(self) -> _Borrowed:
         """One connection for the store's whole life, shared under a lock.
@@ -71,29 +111,86 @@ class HistoryStore:
         only for the next 30s cycle (or chart request) to recreate them -
         every cycle paid for the WAL and the database both, plus the file
         churn, on the board's eMMC. Held open, the WAL is folded back only
-        every ~1000 pages (SQLite's auto-checkpoint)."""
+        every ~1000 pages (SQLite's auto-checkpoint). What's waiting to be
+        written goes in first: every reader sees every sample."""
         self._lock.acquire()
         try:
-            if self._conn is None:
-                # timeout: another process (the CLI, a backup) may hold the
-                # database briefly - wait instead of failing the cycle.
-                conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)
-                # With WAL (set once in _init_schema), NORMAL only fsyncs at
-                # checkpoints instead of on every commit. A power cut can
-                # lose the last few seconds of samples, never corrupt the
-                # file - the right trade for a board meant to run for years
-                # on eMMC/SD, where every fsync is flash wear.
-                conn.execute("PRAGMA synchronous=NORMAL")
-                # SQLite never shrinks the -wal file by itself: one large
-                # transaction (a retention prune) left it at 25 MB on the
-                # board, bigger than the database. Truncated back to this
-                # after each checkpoint.
-                conn.execute("PRAGMA journal_size_limit=8388608")
-                self._conn = conn
-            return _Borrowed(self._conn, self._lock)
+            conn = self._open()
+            if self._pending:
+                try:
+                    self._write_pending(conn)
+                except sqlite3.Error:
+                    # A reader still gets what's in the file; the samples
+                    # wait for the next try (the recorder's own write says
+                    # it's failing).
+                    logger.exception("History: couldn't write the waiting samples - kept for the next try")
+            return _Borrowed(conn, self._lock)
         except BaseException:
             self._lock.release()
             raise
+
+    def _open(self) -> sqlite3.Connection:
+        """The store's connection, opened the first time. Under _lock."""
+        if self._conn is None:
+            # timeout: another process (the CLI, a backup) may hold the
+            # database briefly - wait instead of failing the cycle.
+            conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)
+            # With WAL (set once in _init_schema), NORMAL only fsyncs at
+            # checkpoints instead of on every commit. A power cut can
+            # lose the last few seconds of samples, never corrupt the
+            # file - the right trade for a board meant to run for years
+            # on eMMC/SD, where every fsync is flash wear.
+            conn.execute("PRAGMA synchronous=NORMAL")
+            # SQLite never shrinks the -wal file by itself: one large
+            # transaction (a retention prune) left it at 25 MB on the
+            # board, bigger than the database. Truncated back to this
+            # after each checkpoint.
+            conn.execute("PRAGMA journal_size_limit=8388608")
+            self._conn = conn
+        return self._conn
+
+    # ------------------------------------------------ waiting writes ----
+
+    def _queue(self, sql: str, rows: list[tuple]) -> None:
+        """A write, kept until it's due with the others (WRITE_EVERY_SECONDS)."""
+        with self._lock:
+            self._pending.append((sql, rows))
+            self._pending_rows += len(rows)
+            if self._pending_since is None:
+                self._pending_since = time.monotonic()
+            while self._pending_rows > MAX_PENDING_ROWS and len(self._pending) > 1:
+                _, dropped = self._pending.pop(0)
+                self._pending_rows -= len(dropped)
+                if not self._dropped_rows:
+                    logger.warning("History: writes have been failing for a long time - the oldest "
+                                   "waiting samples are being dropped")
+                self._dropped_rows += len(dropped)
+            if time.monotonic() - self._pending_since >= self.write_every_seconds:
+                self.flush()
+
+    def flush(self) -> None:
+        """Writes whatever is waiting, now, in one transaction. Raises if
+        it can't - it stays waiting for the next try."""
+        with self._lock:
+            if self._pending:
+                self._write_pending(self._open())
+
+    def _write_pending(self, conn: sqlite3.Connection) -> None:
+        """Under _lock."""
+        try:
+            for sql, rows in self._pending:
+                try:
+                    conn.executemany(sql, rows)
+                except sqlite3.IntegrityError:
+                    # A row the table refuses would hold every other one
+                    # back for ever: it loses only its own write.
+                    logger.exception("History: a write was refused - dropped")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        self._pending, self._pending_rows, self._pending_since = [], 0, None
+        self._dropped_rows = 0
 
     def used_bytes(self) -> int:
         """Space the data takes inside the file - not counting pages freed
@@ -179,6 +276,10 @@ class HistoryStore:
 
     def close(self) -> None:
         with self._lock:
+            try:
+                self.flush()
+            except sqlite3.Error:
+                logger.exception("History: the waiting samples couldn't be written before closing")
             if self._conn is not None:
                 self._conn.close()
                 self._conn = None
@@ -230,33 +331,25 @@ class HistoryStore:
         self.record_many(ts, {sensor: fields})
 
     def record_many(self, ts: int, samples: dict[str, dict[str, float]]) -> None:
-        """Every sensor's fields for one cycle, in a single transaction.
-        Recording sensor by sensor used to cost one connection and one
-        commit each - ~40k commits a day on the real deployment, for rows
-        that all share one timestamp anyway."""
+        """Every sensor's fields for one cycle, written with the others when
+        they're due (WRITE_EVERY_SECONDS). Recording sensor by sensor used
+        to cost one connection and one commit each - ~40k commits a day on
+        the real deployment, for rows that all share one timestamp anyway.
+        A value that isn't a number (NaN, infinite) is left out: the table
+        refuses it, and it used to take the whole cycle with it."""
         rows = [
             (ts, sensor, field, value)
             for sensor, fields in samples.items()
             for field, value in fields.items()
+            if not (isinstance(value, float) and not math.isfinite(value))
         ]
-        if not rows:
-            return
-        conn = self._connect()
-        try:
-            conn.executemany("INSERT INTO readings (ts, sensor, field, value) VALUES (?, ?, ?, ?)", rows)
-            conn.commit()
-        finally:
-            conn.close()
+        if rows:
+            self._queue("INSERT INTO readings (ts, sensor, field, value) VALUES (?, ?, ?, ?)", rows)
 
     # ------------------------------------------------- daily energy ----
 
     def _day_write(self, sql: str, params: tuple) -> None:
-        conn = self._connect()
-        try:
-            conn.execute(sql, params)
-            conn.commit()
-        finally:
-            conn.close()
+        self._queue(sql, [params])
 
     def set_day(self, sensor: str, day: str, kwh: float, source: str) -> None:
         """A day's kWh as a meter's own counter says it - replaced, not added."""

@@ -218,7 +218,7 @@ def create_app(config_path: str | None = None) -> Flask:
 
     history_cfg = config.raw.get("history", {})
     db_path = config.resolve(history_cfg.get("db_file", "data/history.db"))
-    store = HistoryStore(db_path)
+    store = HistoryStore(db_path, write_every_seconds=history_cfg.get("write_every_seconds", 300))
 
     energy_cfg = config.raw.get("energy") or {}
     power_budget = (

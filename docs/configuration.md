@@ -61,7 +61,16 @@ history:
   poll_interval_seconds: 30          # default shown
   retention_days: 30                 # default shown - rows older than this are pruned once a day
   max_db_mb: 300                     # default shown - hard ceiling: over it, the oldest days go first
+  write_every_seconds: 300           # default shown - samples reach the file together, this often
 ```
+
+The samples of each cycle wait in memory and are written together, every
+`write_every_seconds`: a cycle committed on its own rewrote every sensor's
+last page of the database - most of the board's flash writes. Anything
+that reads the history (the charts, the hours run, the reports) writes
+what's waiting first, so nothing shows any later; stopping or restarting
+LocalHome writes it too. A power cut loses at most that much history.
+`0` writes every cycle at once.
 
 `max_db_mb` is also held to what the disk the history is on allows, well
 inside it: a tenth of that disk and a third of the room there is (free

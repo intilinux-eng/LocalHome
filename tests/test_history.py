@@ -235,31 +235,99 @@ def test_database_runs_in_wal_mode(tmp_path):
         conn.close()
 
 
-def test_a_whole_cycle_is_one_transaction(tmp_path, monkeypatch):
-    store = HistoryStore(str(tmp_path / "history.db"))
+def _rows_in_the_file(db_path):
+    """What another reader of the file sees - not the store's own memory."""
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_cycles_wait_in_memory_and_reach_the_file_together(tmp_path, monkeypatch):
+    # A 30 s cycle committed on its own rewrote the last index page of
+    # every sensor's field: most of the board's flash writes. Now the
+    # cycles go in together, every write_every_seconds, one transaction.
+    db_path = str(tmp_path / "history.db")
+    store = HistoryStore(db_path, write_every_seconds=300)
     manager = FakeManager({
         "a": FakePoller(("temperature_c",), {"temperature_c": 21.0}),
         "b": FakePoller(("temperature_c", "humidity_pct"), {"temperature_c": 22.0, "humidity_pct": 50.0}),
         "c": FakePoller(("power_w",), {"power_w": 300.0}),
     })
-    connects = {"n": 0}
-    real_connect = store._connect
-
-    def counting_connect():
-        connects["n"] += 1
-        return real_connect()
-
-    monkeypatch.setattr(store, "_connect", counting_connect)
+    writes = []
+    real_write = store._write_pending
+    monkeypatch.setattr(store, "_write_pending", lambda conn: (writes.append(len(store._pending)), real_write(conn)))
     recorder = HistoryRecorder(manager, store, poll_interval_seconds=0)
-    recorder._last_prune_ts = time.time()  # the once-a-day prune is its own, separate connection
+    recorder._last_prune_ts = time.time()  # the once-a-day prune is a read of its own
+    for _ in range(5):
+        recorder.poll_once()
+    assert writes == [] and _rows_in_the_file(db_path) == 0
+    store._pending_since -= 300            # five minutes on
     recorder.poll_once()
+    assert len(writes) == 1, "six cycles, one transaction"
+    assert _rows_in_the_file(db_path) == 6 * 4
+    store.close()
 
-    assert connects["n"] == 1  # three sensors, one connection/commit
-    conn = real_connect()
-    try:
-        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 4
-    finally:
-        conn.close()
+
+def test_whoever_reads_sees_the_waiting_samples(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"), write_every_seconds=300)
+    now = int(time.time())
+    store.record("Rooms Sensor", now, {"temperature_c": 21.5})
+    store.add_day_kwh("Meter", "2026-10-07", 1.25)
+    assert [p["value"] for p in store.query("Rooms Sensor", "temperature_c", "6h")] == [21.5]
+    assert store.energy_days("Meter")["2026-10-07"]["kwh"] == 1.25
+    store.close()
+
+
+def test_stopping_writes_what_is_waiting(tmp_path):
+    from localhome.services import history
+
+    db_path = str(tmp_path / "history.db")
+    store = HistoryStore(db_path, write_every_seconds=300)
+    store.record("Rooms Sensor", 1000, {"temperature_c": 21.5})
+    history._write_waiting()               # what runs at exit (SIGTERM included)
+    assert _rows_in_the_file(db_path) == 1
+    store.record("Rooms Sensor", 1030, {"temperature_c": 21.0})
+    store.close()
+    assert _rows_in_the_file(db_path) == 2
+
+
+def test_a_write_that_failed_is_kept_for_the_next_try(tmp_path, monkeypatch):
+    import sqlite3
+
+    db_path = str(tmp_path / "history.db")
+    store = HistoryStore(db_path, write_every_seconds=0)
+    real_open = store._open
+
+    class FullDisk:
+        def __init__(self, conn):
+            self.conn = conn
+
+        def executemany(self, *args):
+            raise sqlite3.OperationalError("database or disk is full")
+
+        def rollback(self):
+            self.conn.rollback()
+
+    monkeypatch.setattr(store, "_open", lambda: FullDisk(real_open()))
+    with pytest.raises(sqlite3.OperationalError):
+        store.record("Rooms Sensor", 1000, {"temperature_c": 21.5})
+    monkeypatch.setattr(store, "_open", real_open)
+    store.record("Rooms Sensor", 1030, {"temperature_c": 21.0})
+    assert _rows_in_the_file(db_path) == 2
+    store.close()
+
+
+def test_a_value_that_is_not_a_number_loses_only_itself(tmp_path):
+    db_path = str(tmp_path / "history.db")
+    store = HistoryStore(db_path, write_every_seconds=0)
+    store.record_many(1000, {"Rooms Sensor": {"temperature_c": float("nan"), "humidity_pct": 55.0},
+                             "Meter": {"power_w": 300.0}})
+    assert _rows_in_the_file(db_path) == 2
+    store.close()
 
 
 def test_extra_samples_are_recorded_alongside_driver_readings(tmp_path):
