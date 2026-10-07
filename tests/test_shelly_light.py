@@ -9,7 +9,6 @@ confirmed matter for this real device (see docs/integrations/mqtt.md).
 from __future__ import annotations
 
 import json
-import threading
 import time
 
 import pytest
@@ -24,32 +23,37 @@ DEVICE_ID = "shelly0110dimg3-testmac"
 
 @pytest.fixture
 def fake_connection(monkeypatch):
+    """The fake connection - for this test's own drivers only. The patch is
+    process-wide, and by now the process holds the apps earlier tests left
+    running: their Shelly health check makes RPC clients too, and one that
+    asked its devices during a test here got this fake - its request took
+    the reply meant for the driver (a failure now and then)."""
+    from localhome.drivers.mqtt import rpc
+
     conn = FakeMqttConnection()
-    monkeypatch.setattr("localhome.drivers.mqtt.rpc.get_connection", lambda broker: conn)
+    real = rpc.get_connection
+    monkeypatch.setattr(rpc, "get_connection", lambda broker: conn if broker is BROKER else real(broker))
     return conn
 
 
 def _respond_once(fake_connection, reply_id: str, result: dict | None = None, error: dict | None = None):
-    """Wait for the next request the driver publishes, then deliver a
-    matching reply on the sender's own reply topic - mirrors how a real
-    Shelly device echoes {"id", "src"} back to "<src>/rpc"."""
+    """Answer the next request the driver publishes, as it's published:
+    a matching reply on the sender's own reply topic - mirrors how a real
+    Shelly device echoes {"id", "src"} back to "<src>/rpc". At once, from
+    the publish itself - not a thread watching for 2 s and answering
+    whatever was published last."""
 
-    def worker():
-        deadline = time.time() + 2.0
-        while time.time() < deadline:
-            if fake_connection.published:
-                topic, payload = fake_connection.published[-1]
-                request = json.loads(payload)
-                reply = {"id": request["id"], "src": DEVICE_ID, "dst": request["src"]}
-                if error is not None:
-                    reply["error"] = error
-                else:
-                    reply["result"] = result or {}
-                fake_connection.deliver(f"{request['src']}/rpc", json.dumps(reply))
-                return
-            time.sleep(0.005)
+    def answer(topic, payload):
+        fake_connection.on_publish = None          # once
+        request = json.loads(payload)
+        reply = {"id": request["id"], "src": DEVICE_ID, "dst": request["src"]}
+        if error is not None:
+            reply["error"] = error
+        else:
+            reply["result"] = result or {}
+        fake_connection.deliver(f"{request['src']}/rpc", json.dumps(reply))
 
-    threading.Thread(target=worker, daemon=True).start()
+    fake_connection.on_publish = answer
 
 
 # ------------------------------------------------------------------ rpc ----
