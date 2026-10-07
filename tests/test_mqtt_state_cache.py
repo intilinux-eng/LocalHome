@@ -202,6 +202,41 @@ def test_stopping_writes_even_a_chatty_topic(tmp_path):
         assert json.load(f)["192.168.1.21:1883/meter/status/em:0"]["payload"] == {"w": 4}
 
 
+def test_two_flushes_at_once_never_write_an_older_message_back(tmp_path, monkeypatch):
+    # At a stop the writer's flush and the last one can overlap: each took
+    # its part, and the slower wrote the older message over the newer.
+    import threading
+
+    path = str(tmp_path / "mqtt_state_cache.json")
+    late = {}
+
+    class LateForOneThread:
+        """The file lock, taken late by one thread - the slow writer."""
+        def __init__(self):
+            self.lock = threading.Lock()
+
+        def __enter__(self):
+            if threading.current_thread() is late.get("thread"):
+                late.pop("thread")
+                time.sleep(0.3)
+            self.lock.acquire()
+
+        def __exit__(self, *exc):
+            self.lock.release()
+
+    monkeypatch.setattr(state_cache, "_lock", LateForOneThread())
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": True}, 1000.0)
+    slow = threading.Thread(target=flush)
+    late["thread"] = slow
+    slow.start()
+    time.sleep(0.1)                                      # the slow one is on its way
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": False}, 1010.0)
+    flush()
+    slow.join()
+    with open(path, encoding="utf-8") as f:
+        assert json.load(f)["192.168.1.21:1883/valve/status/switch:0"]["payload"] == {"output": False}
+
+
 def test_a_write_that_failed_is_tried_again(tmp_path, monkeypatch):
     cache_path = str(tmp_path / "mqtt_state_cache.json")
     real = state_cache.save_json_atomic

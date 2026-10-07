@@ -63,10 +63,13 @@ FLUSH_SECONDS = 5.0
 QUIET_SECONDS = 60.0
 REWRITE_SECONDS = 300.0
 
-# Guards the file's read-modify-write cycle - one lock for every path is
-# simpler than one per path, and still fully safe within this single
-# process (the project's existing JSON stores make the same trade-off -
-# see services/position_control.py).
+# One flush at a time, from taking what waits to writing it - one lock for
+# every path is simpler than one per path, and still fully safe within
+# this single process (the project's existing JSON stores make the same
+# trade-off - see services/position_control.py). Taken outside it, two
+# flushes at once (the writer's and the last one, at a stop) could each
+# take their part and the slower write an older message over a newer
+# one. Never taken by save_cached(): a message never waits on the disk.
 _lock = threading.Lock()
 # What's waiting to be written: path -> {key: entry}. Its own lock, so a
 # message never waits on a write in progress.
@@ -149,21 +152,21 @@ def flush(due_only: bool = False) -> float | None:
     """Writes whatever is waiting, now - one atomic write per file. With
     due_only (the writer thread), a file only once something in it is
     due; returns the seconds until the next is, or None if nothing waits."""
-    now = time.monotonic()
-    wait = None
-    with _pending_lock:
-        work = {}
-        for cache_path, entries in list(_pending.items()):
-            if due_only:
-                due_in = min(_due_in(cache_path, key, now) for key in entries)
-                if due_in > 0:
-                    wait = due_in if wait is None else min(wait, due_in)
-                    continue
-            work[cache_path] = _pending.pop(cache_path)
-            for key in entries:
-                _urgent.discard((cache_path, key))
-    for cache_path, entries in work.items():
-        with _lock:
+    with _lock:
+        now = time.monotonic()
+        wait = None
+        with _pending_lock:
+            work = {}
+            for cache_path, entries in list(_pending.items()):
+                if due_only:
+                    due_in = min(_due_in(cache_path, key, now) for key in entries)
+                    if due_in > 0:
+                        wait = due_in if wait is None else min(wait, due_in)
+                        continue
+                work[cache_path] = _pending.pop(cache_path)
+                for key in entries:
+                    _urgent.discard((cache_path, key))
+        for cache_path, entries in work.items():
             data = _read_all(cache_path)
             data.update(entries)
             try:
@@ -176,11 +179,11 @@ def flush(due_only: bool = False) -> float | None:
                         _urgent.add((cache_path, key))
                 wait = FLUSH_SECONDS
                 continue
-        written = time.monotonic()
-        with _pending_lock:
-            for key in entries:
-                _written_at[(cache_path, key)] = written
-    return wait
+            written = time.monotonic()
+            with _pending_lock:
+                for key in entries:
+                    _written_at[(cache_path, key)] = written
+        return wait
 
 
 # Stopping (web/app.py turns systemd's SIGTERM into a normal exit): what's
