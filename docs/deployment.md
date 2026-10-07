@@ -265,6 +265,15 @@ each step reversible (it prints how):
 4. **No graphical desktop** (`lightdm` off, boot to text mode): nothing
    is attached to a monitor, and it's ~80 MB of RAM plus a steady stream
    of log lines.
+5. **File systems easy on the flash** (step 11): `lazytime` keeps file
+   timestamps in RAM - exact for every reader, written with the file's
+   next real write or once a day - so reading a file no longer writes
+   it; `commit=60` groups a minute of small writes into one ext4 journal
+   commit instead of one every 5 s. What's saved with fsync (LocalHome's
+   settings, schedules) reaches the flash at once as before; a power cut
+   loses at most the last minute of the rest, and the file system stays
+   intact. Applied at boot by `localhome-flash-mounts.service` -
+   `/etc/fstab` is not touched.
 
 Left as they are, on purpose: Arduino App Lab and its services
 (`arduino-app-cli`, `arduino-router`, Docker) - turn them off only if

@@ -232,8 +232,50 @@ done
 systemctl daemon-reload
 echo "   undo: rm /etc/systemd/system/{mosquitto,avahi-daemon,NetworkManager}.service.d/localhome-restart.conf && systemctl daemon-reload"
 
+echo "== 11. File systems easy on the flash: timestamps in RAM, journal every 60 s"
+# Reading a file can write its inode back (its access time, once a day
+# per file with relatime), and ext4 commits its journal every 5 s for
+# whatever is pending - one more flash write each time. lazytime keeps
+# the timestamps in memory, exact for every reader, and writes them with
+# the inode's next real write (or once a day); commit=60 groups a minute
+# of the board's small writes into one journal commit. What a program
+# saves with fsync - LocalHome's settings and schedules - is on the flash
+# at once, as before; a power cut can lose at most the last minute of
+# what wasn't, and never leaves a file system broken (it's journaled).
+# Applied at every boot by a small service: /etc/fstab is left alone, so
+# a mistake here can't stop the board from booting.
+targets="/"
+data_mount=$(findmnt -no TARGET -T "$HERE/.." 2>/dev/null || true)
+if [ -n "$data_mount" ] && [ "$data_mount" != "/" ]; then
+    targets="$targets $data_mount"
+fi
+FLASH_UNIT=/etc/systemd/system/localhome-flash-mounts.service
+{
+    echo "# LocalHome board: ext4 easy on the flash - see deploy/tune-board.sh."
+    echo "[Unit]"
+    echo "Description=LocalHome: ext4 timestamps in RAM, journal commit every 60 s"
+    echo "After=local-fs.target"
+    echo "[Service]"
+    echo "Type=oneshot"
+    echo "RemainAfterExit=yes"
+    for t in $targets; do
+        if [ "$(findmnt -no FSTYPE "$t")" = ext4 ]; then
+            echo "ExecStart=-/bin/mount -o remount,lazytime,commit=60 $t"
+        fi
+    done
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+} > "$FLASH_UNIT"
+systemctl daemon-reload
+systemctl enable localhome-flash-mounts.service >/dev/null 2>&1
+systemctl restart localhome-flash-mounts.service
+for t in $targets; do
+    echo "   $t: $(findmnt -no OPTIONS "$t")"
+done
+echo "   undo: systemctl disable --now localhome-flash-mounts.service && rm $FLASH_UNIT && mount -o remount,nolazytime,commit=5 <each of: $targets>"
+
 if [ "$LEAN" = 1 ]; then
-    echo "== 11. Lean: remove what LocalHome doesn't use"
+    echo "== 12. Lean: remove what LocalHome doesn't use"
     if command -v docker >/dev/null 2>&1; then
         docker image prune -a -f >/dev/null 2>&1 || true   # App Lab's images, unused by LocalHome
     fi

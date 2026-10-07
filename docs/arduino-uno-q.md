@@ -172,6 +172,7 @@ the installed version.
 | No background update downloads (`apt-daily`, `fwupd-refresh`) | nothing installs by itself anyway; they only download lists daily | `systemctl enable --now apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer` |
 | mosquitto log into the system log | the last log still written to the eMMC | set `log_dest file /var/log/mosquitto/mosquitto.log` in `/etc/mosquitto/mosquitto.conf` |
 | No graphical desktop | no monitor attached; ~80 MB of RAM | `systemctl set-default graphical.target && systemctl enable --now lightdm` |
+| ext4 `lazytime,commit=60` on `/` and LocalHome's disk, at every boot | reading a file no longer writes it; one journal commit a minute instead of every 5 s | `systemctl disable --now localhome-flash-mounts.service`, then `mount -o remount,nolazytime,commit=5` each |
 
 `sudo sh deploy/tune-board.sh --lean` - also removes what LocalHome
 doesn't use, recommended on the 2 GB board:
