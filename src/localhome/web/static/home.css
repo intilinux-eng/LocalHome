@@ -55,6 +55,8 @@
 
 body[data-season="heat"] { --accent: var(--heat); --accent-soft: var(--heat-soft); }
 body[data-season="cool"] { --accent: var(--cool); --accent-soft: var(--cool-soft); }
+/* While a zone is heating or cooling, the season's colour is stronger. */
+body[data-running="true"] { --wash: 26%; }
 
 * { box-sizing: border-box; }
 
@@ -69,7 +71,8 @@ body {
   margin: 0;
   /* The season's colour washing the top of the page, behind the title:
      warm in winter, blue in summer. */
-  background: radial-gradient(ellipse 1000px 460px at 8% -80px, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%) no-repeat,
+  --wash: 14%;
+  background: radial-gradient(ellipse 1000px 460px at 8% -80px, color-mix(in srgb, var(--accent) var(--wash), transparent), transparent 72%) no-repeat,
     var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -249,12 +252,20 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
 .outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
 .hero-season {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 6px;
   color: var(--accent);
   font-weight: 600;
   font-size: 0.82rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+/* Running: a live dot before the season. */
+body[data-running="true"] .hero-season::before {
+  content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); animation: pulse 2.4s ease-in-out infinite;
 }
 .hero-title {
   margin: 0;
@@ -363,12 +374,22 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
   padding: 18px 18px 14px;
   overflow: hidden;
 }
-.zone[data-active="true"]::before {
+/* The card in its state's colour - running in the season's, at its
+   target green, a problem amber: a line along the top, the edge and a
+   light wash from the corner. Resting and off stay plain. */
+.zone[data-tone="active"] { --tone: var(--accent); }
+.zone[data-tone="ok"] { --tone: var(--ok); }
+.zone[data-tone="warn"] { --tone: var(--warn); }
+.zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"]) {
+  border-color: color-mix(in srgb, var(--tone) 40%, var(--line));
+  background: radial-gradient(1100px 380px at 0 0, color-mix(in srgb, var(--tone) 12%, transparent), transparent 72%), var(--surface);
+}
+.zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"])::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 3px;
-  background: var(--accent);
+  height: 4px;
+  background: var(--tone);
 }
 
 .zone-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
@@ -416,8 +437,15 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
   border-radius: 18px;
   background: var(--surface-2);
 }
-.zone[data-active="true"] .readings {
-  background: radial-gradient(150% 170% at 0% 0%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 62%), var(--surface-2);
+.zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"]) .readings {
+  background: radial-gradient(150% 170% at 0% 0%, color-mix(in srgb, var(--tone) 20%, transparent), transparent 64%), var(--surface-2);
+}
+.zone[data-tone="active"] .readings {
+  background: radial-gradient(150% 170% at 0% 0%, color-mix(in srgb, var(--tone) 30%, transparent), transparent 64%), var(--surface-2);
+}
+/* The room's temperature in the card's colour too. */
+.zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"]) .reading:first-child :is(.now-value, .now-unit) {
+  color: color-mix(in srgb, var(--tone) 78%, var(--text));
 }
 .reading { display: grid; align-content: space-between; gap: 8px; }
 .reading-rh { padding-left: 18px; border-left: 1px solid var(--line); }
@@ -652,6 +680,22 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .tile-value small { font-size: 0.9rem; color: var(--text-3); margin-left: 3px; }
 .tile-note { font-size: 0.82rem; color: var(--text-3); }
 .tile-wide { grid-column: 1 / -1; }
+/* A tile in its state's colour: on green like its switch; near the
+   meter's limit or the air worth airing amber, red past it; not
+   answering, an amber edge and its value greyed. */
+.tile { --tone: var(--ok); }
+.tile:has(> .tile-head :is(.switch[aria-checked="true"], .dot-state[data-on="true"])),
+.tile.energy:has(> .energy-now:is([data-level="warn"], [data-level="bad"])),
+.tile.air:is([data-level="warn"], [data-level="bad"]) {
+  border-color: color-mix(in srgb, var(--tone) 32%, var(--line));
+  background: radial-gradient(600px 220px at 0 0, color-mix(in srgb, var(--tone) 9%, transparent), transparent 70%), var(--surface);
+}
+.tile.energy:has(> .energy-now[data-level="warn"]), .tile.air[data-level="warn"] { --tone: var(--warn); }
+.tile.energy:has(> .energy-now[data-level="bad"]), .tile.air[data-level="bad"] { --tone: var(--bad); }
+.tile:has(> .tile-off) { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.tile:has(> .tile-off) .tile-value { color: var(--text-3); }
+.tile-off { display: flex; align-items: center; gap: 6px; color: var(--warn); font-weight: 600; }
+.tile-off::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 
 /* The VMC: a card like a zone's, three big speeds with their icon and
    level, a fan that turns as fast as it runs (home.js vmcTile). */
@@ -679,6 +723,10 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 }
 @keyframes turn { to { transform: rotate(360deg); } }
 .vmc[data-on="false"] .vmc-fan { background: var(--surface-2); color: var(--text-3); }
+.vmc[data-on="true"] {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  background: radial-gradient(900px 260px at 0 0, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%), var(--surface);
+}
 
 .vmc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .vmc-presets[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

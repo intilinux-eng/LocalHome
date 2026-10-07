@@ -411,6 +411,9 @@ function fillZone(card, zone, climate) {
   const now = boardNow();
   const change = nextChange(week, now);
   card.dataset.active = status.active ? "true" : "false";
+  // The card's colour (CSS): running, at its target, a problem - resting
+  // inside its band and off stay plain.
+  card.dataset.tone = status.tone === "ok" && !status.reached ? "rest" : status.tone;
   card.dataset.zone = zone.name;
 
   // The two readings side by side, large: the temperature, and the
@@ -827,6 +830,7 @@ function renderHero() {
   const running = zones.filter(z => !zoneExcluded(z));
   const active = running.filter(z => zoneStatus(z, climate).active);
   const off = running.filter(z => z.target_c == null);
+  document.body.dataset.running = String(active.length > 0);   // the top brighter while it runs
   let title;
   if (!zones.length) title = tr("home.no_zones");
   else if (climate.away_until) title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
@@ -1338,6 +1342,11 @@ function renderHouse() {
         <button type="button" data-cover="${esc(name)}" data-cover-action="close">${esc(tr("covers.btn_close"))}</button>
       </div></div>`);
   });
+  // The wide ones (a meter's days, the air's day) first, the small ones
+  // after: two wide ones fill a row, and the small ones the gaps (CSS
+  // dense) - a wide one after a small one left a hole beside it.
+  const wide = html => /^<div class="tile (energy|air)\b/.test(html);
+  tiles.sort((a, b) => wide(b) - wide(a));
   document.getElementById("house").hidden = !tiles.length;
   morph(document.getElementById("house-body"), tiles.join(""));
 }
@@ -1384,7 +1393,7 @@ function airTile(device, r) {
       <span class="air-dot"></span>${esc(tr(`home.air_${f.field}`))} <b>${fmt(r[f.field], f.digits)}</b> <small>${f.unit}</small></span>`).join("");
   const extra = [r.temperature_c != null ? `${fmt(r.temperature_c)}°` : "", r.humidity_pct != null ? `${fmt(r.humidity_pct, 0)}%` : "",
     r.battery_pct != null ? tr("home.battery", { pct: Math.round(r.battery_pct) }) : ""].filter(Boolean).join(" · ");
-  return `<div class="tile air" data-sensor="${esc(device.name)}">
+  return `<div class="tile air" data-sensor="${esc(device.name)}" data-level="${worst.level}">
     <div class="tile-head"><span class="tile-name">${esc(displayName(device.name))}</span>
       <span class="state" data-tone="${{ ok: "ok", warn: "warn", bad: "bad" }[worst.level]}">${esc(summary)}</span></div>
     ${r.co2_ppm != null ? `<div class="air-co2" data-level="${airLevel("co2_ppm", r.co2_ppm)}">
@@ -1548,7 +1557,7 @@ function rangeHtml(device, reading) {
 // A device whose last read failed says so - the reading comes back as
 // {ok: false, error} or, through api(), as a failed request.
 function readingNote(reading) {
-  return reading.ok === false ? `<div class="tile-note">${esc(tr("home.not_answering"))}</div>` : "";
+  return reading.ok === false ? `<div class="tile-note tile-off">${esc(tr("home.not_answering"))}</div>` : "";
 }
 
 async function onHouseClick(event) {

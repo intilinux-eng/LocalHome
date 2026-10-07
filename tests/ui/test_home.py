@@ -474,6 +474,23 @@ def test_a_zone_out_of_the_season_has_no_empty_strip(open_page, api):
     assert opened.errors == []
 
 
+def test_a_card_takes_its_states_colour(open_page, api):
+    """Running in the season's colour, at its target green, a problem
+    amber; the top of the page brighter while a zone runs."""
+    opened = _open_home(open_page, 1280)
+    page = opened.page
+    line = lambda name: _card(page, name).evaluate("el => getComputedStyle(el, '::before').backgroundColor")
+    _fake_zones(page, api, "heat", {ZONE_A: (19.0, 21.0, True, True), ZONE_B: (21.0, 21.0, False, True)})
+    assert [_card(page, z).get_attribute("data-tone") for z in (ZONE_A, ZONE_B)] == ["active", "ok"]
+    assert page.evaluate("document.body.dataset.running") == "true"
+    assert line(ZONE_A) != line(ZONE_B)
+    _fake_zones(page, api, "heat", {ZONE_A: (19.0, 21.0, False, False), ZONE_B: (20.8, 21.0, False, True)})
+    assert [_card(page, z).get_attribute("data-tone") for z in (ZONE_A, ZONE_B)] == ["warn", "rest"]
+    assert page.evaluate("document.body.dataset.running") == "false"
+    assert line(ZONE_B) in ("rgba(0, 0, 0, 0)", "none", ""), "resting inside its band: plain"
+    assert opened.errors == []
+
+
 def test_the_top_says_every_zone_reached_its_target_only_when_it_has(open_page, api):
     opened = _open_home(open_page)
     page = opened.page
