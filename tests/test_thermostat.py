@@ -147,29 +147,65 @@ def test_the_clock_being_set_at_boot_isnt_a_stalled_loop(tmp_path, monkeypatch):
     assert not system_status.loop_health("thermostat", controller.last_tick_ok_ts, 60)["stalled"]
 
 
-def test_heat_mode_opens_below_target_minus_hysteresis(tmp_path):
-    controller, _ = _controller(tmp_path, hysteresis_c=0.3)
-    assert controller.decide("Rooms", current_c=19.5, target_c=20.0, mode="heat") is True
-
-
-def test_heat_mode_closes_above_target_plus_hysteresis(tmp_path):
-    controller, _ = _controller(tmp_path, hysteresis_c=0.3)
-    assert controller.decide("Rooms", current_c=20.5, target_c=20.0, mode="heat") is False
-
-
-def test_heat_mode_dead_band_keeps_previous_state(tmp_path):
+def test_heat_mode_opens_at_target_minus_hysteresis(tmp_path):
     controller, _ = _controller(tmp_path, hysteresis_c=0.5)
-    # Right at the setpoint - no previous state recorded yet, defaults closed.
-    assert controller.decide("Rooms", current_c=20.0, target_c=20.0, mode="heat") is False
+    assert controller.decide("Rooms", current_c=20.5, target_c=21.0, mode="heat") is True, \
+        "a reading landing on the threshold counts - the sensor reports in half-degree steps"
+    assert controller.decide("Rooms", current_c=20.6, target_c=21.0, mode="heat") is False
+
+
+def test_heat_mode_stops_as_soon_as_the_target_is_reached(tmp_path):
+    """A radiant ceiling keeps giving heat after its valve closes: stopping
+    past the target (target + hysteresis) overshot."""
+    controller, _ = _controller(tmp_path, hysteresis_c=0.5)
     controller._valve_open["Rooms"] = True
-    # Same reading, but now it was already open - hysteresis dead band keeps it open.
-    assert controller.decide("Rooms", current_c=20.0, target_c=20.0, mode="heat") is True
+    assert controller.decide("Rooms", current_c=20.8, target_c=21.0, mode="heat") is True, "not there yet: stays open"
+    assert controller.decide("Rooms", current_c=21.0, target_c=21.0, mode="heat") is False
+
+
+def test_between_the_two_the_valve_keeps_its_state(tmp_path):
+    controller, _ = _controller(tmp_path, hysteresis_c=0.5)
+    assert controller.decide("Rooms", current_c=20.7, target_c=21.0, mode="heat") is False
+    controller._valve_open["Rooms"] = True
+    assert controller.decide("Rooms", current_c=20.7, target_c=21.0, mode="heat") is True
 
 
 def test_cool_mode_is_the_mirror_image_of_heat_mode(tmp_path):
-    controller, _ = _controller(tmp_path, hysteresis_c=0.3)
-    assert controller.decide("Rooms", current_c=25.0, target_c=24.0, mode="cool") is True
-    assert controller.decide("Rooms", current_c=23.5, target_c=24.0, mode="cool") is False
+    controller, _ = _controller(tmp_path, hysteresis_c=0.5)
+    assert controller.decide("Rooms", current_c=25.0, target_c=24.5, mode="cool") is True
+    assert controller.decide("Rooms", current_c=24.5, target_c=24.5, mode="cool") is False
+
+
+def test_an_economy_target_opens_again_further_on_the_saving_side_only(tmp_path):
+    """Economy (heating below 20, cooling from 26): the valve waits the
+    economy tolerance longer before opening again - longer pauses, a
+    little less heating or cooling - and stops at the target as comfort
+    does. Never the other way: an economy target isn't heated or cooled
+    past where a comfort one would be."""
+    controller, _ = _controller(tmp_path, hysteresis_c=0.5)
+    assert controller.thresholds(19.5, "heat") == (18.5, 19.5)       # economy
+    assert controller.thresholds(20.5, "heat") == (20.0, 20.5)       # comfort
+    assert controller.thresholds(25.5, "cool") == (26.0, 25.5)       # comfort
+    assert controller.thresholds(26.5, "cool") == (27.5, 26.5)       # economy
+    assert controller.decide("Rooms", current_c=18.8, target_c=19.5, mode="heat") is False
+    assert controller.decide("Rooms", current_c=18.5, target_c=19.5, mode="heat") is True
+    assert controller.decide("Rooms", current_c=27.2, target_c=26.5, mode="cool") is False
+    assert controller.decide("Rooms", current_c=27.5, target_c=26.5, mode="cool") is True
+    controller.economy_tolerance_c = 0.0
+    assert controller.thresholds(19.5, "heat") == (19.0, 19.5), "no tolerance: as comfort"
+
+
+def test_the_levels_are_the_palettes():
+    """The palette (static/schedule_grid.js's TIER_OF) and the thermostat
+    must call the same targets economy."""
+    import re
+    from pathlib import Path
+    from localhome.services.thermostat import ECONOMY_COOL_FROM_C, ECONOMY_HEAT_BELOW_C, target_tier
+    js = (Path(__file__).resolve().parents[1] / "src/localhome/web/static/schedule_grid.js").read_text(encoding="utf-8")
+    assert float(re.search(r"heat: v => \(v < ([\d.]+) \?", js).group(1)) == ECONOMY_HEAT_BELOW_C
+    assert float(re.search(r"cool: v => \(v >= ([\d.]+) \?", js).group(1)) == ECONOMY_COOL_FROM_C
+    assert [target_tier(t, "heat") for t in (19.5, 20, 20.5)] == ["economy", "comfort", "comfort"]
+    assert [target_tier(t, "cool") for t in (25.5, 26, 26.5)] == ["comfort", "economy", "economy"]
 
 
 def test_no_target_means_valve_stays_closed_regardless_of_temperature(tmp_path):

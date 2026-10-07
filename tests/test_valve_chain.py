@@ -1,9 +1,12 @@
 """The whole chain a zone's valve follows, with Shelly-like devices on a
 fake broker: a target set through the API, the thermostat, the MQTT
 drivers - the H&T's readings, the Plus 1's held commands - and the relay,
-in both seasons. The rule (services/thermostat.py's decide()): cooling
-opens above target + hysteresis and closes below target - hysteresis,
-heating the other way round, and in between the valve keeps its state.
+in both seasons. The rule (services/thermostat.py's decide()): the valve
+stops as soon as the room reaches the target and opens again the
+hysteresis away from it on the season's side - above it cooling, below it
+heating - and an economy target (cooling from 26°C, heating below 20°C)
+the economy tolerance (0.5 by default) further on; in between it keeps
+its state.
 
 The devices answer as the real ones were measured to (docs/shelly-gen3.md):
 "on,N" holds for N seconds, a plain "on"/"off" has no timer, anything else
@@ -164,26 +167,30 @@ def plant(tmp_path, monkeypatch):
 # step: ("room", °C) or ("target", °C or None), then the relay expected
 COOLING = [
     (("room", 26.0), None),
-    (("target", 24.0), True),     # 26.0 above 24.5: opens
-    (("room", 24.3), True),       # within the band: stays open
-    (("room", 23.4), False),      # below 23.5: closes
-    (("room", 24.3), False),      # within the band: stays closed
-    (("room", 24.6), True),       # above 24.5: opens
-    (("target", 25.0), True),     # 24.6 within 24.5-25.5: stays open
-    (("target", 26.0), False),    # 24.6 below 25.5: closes
-    (("target", 23.0), True),     # 24.6 above 23.5: opens
+    (("target", 24.0), True),     # comfort: 26.0 at or above 24.5 opens
+    (("room", 24.3), True),       # between 24.0 and 24.5: stays open
+    (("room", 24.0), False),      # the target reached: stops
+    (("room", 24.3), False),      # between: stays closed
+    (("room", 24.5), True),       # half a degree above: opens again
+    (("target", 26.0), False),    # economy: 24.5 at or below 26.0 stops
+    (("room", 26.8), False),      # not yet - a comfort target would have opened at 26.5
+    (("room", 27.0), True),       # economy opens a degree above
+    (("room", 26.0), False),      # and stops at the target
+    (("target", 23.0), True),     # 26.0 at or above 23.5: opens
     (("target", None), False),    # off
 ]
 HEATING = [
     (("room", 18.0), None),
-    (("target", 20.0), True),     # 18.0 below 19.5: opens
-    (("room", 19.7), True),       # within the band: stays open
-    (("room", 20.6), False),      # above 20.5: closes
-    (("room", 19.7), False),      # within the band: stays closed
-    (("room", 19.4), True),       # below 19.5: opens
-    (("target", 19.0), True),     # 19.4 within 18.5-19.5: stays open
-    (("target", 18.0), False),    # 19.4 above 18.5: closes
-    (("target", 21.0), True),     # 19.4 below 20.5: opens
+    (("target", 20.0), True),     # comfort: 18.0 at or below 19.5 opens
+    (("room", 19.7), True),       # between 19.5 and 20.0: stays open
+    (("room", 20.0), False),      # the target reached: stops
+    (("room", 19.7), False),      # between: stays closed
+    (("room", 19.5), True),       # half a degree below: opens again
+    (("target", 19.0), False),    # economy: 19.5 at or above 19.0 stops
+    (("room", 18.2), False),      # not yet - a comfort target would have opened at 18.5
+    (("room", 18.0), True),       # economy opens a degree below
+    (("room", 19.0), False),      # and stops at the target
+    (("target", 21.0), True),     # 19.0 at or below 20.5: opens
     (("target", None), False),    # off
 ]
 

@@ -354,19 +354,30 @@ def test_a_plug_that_measures_its_power_shows_its_days_with_its_switch(open_page
 
 
 # What a zone's card says, against the thermostat's rule (services/
-# thermostat.py's decide(), the same in both seasons mirrored): the page's
-# words, from the readings - faked here, to set each case exactly.
+# thermostat.py's decide(), the same in both seasons mirrored): it stops at
+# the target and restarts half a degree away - an economy target a degree.
+# The page's words, from the readings - faked here, to set each case exactly.
 STATUS_CASES = [
     # mode, room, target, valve open, valve answering -> the card's status, the rule line (or None)
-    ("cool", 23.8, 24.0, False, True, "Temperatura giusta", "Riparte sopra 24,5°"),
-    ("cool", 24.3, 24.0, False, True, "In pausa", "Riparte sopra 24,5°"),   # above it, within the band: not "just right"
-    ("cool", 24.3, 24.0, True, True, "Sta raffrescando", "Raffresca fino a 23,5°"),
-    ("cool", 22.0, 24.0, False, True, "In pausa", "Riparte sopra 24,5°"),
-    ("heat", 20.3, 20.0, False, True, "Temperatura giusta", "Riparte sotto 19,5°"),
-    ("heat", 19.8, 20.0, False, True, "In pausa", "Riparte sotto 19,5°"),  # below it, within the band
-    ("heat", 19.8, 20.0, True, True, "Sta scaldando", "Scalda fino a 20,5°"),
+    ("cool", 23.8, 24.0, False, True, "Temperatura giusta", "Riparte a 24,5°"),
+    ("cool", 24.3, 24.0, False, True, "In pausa", "Riparte a 24,5°"),   # above it, within the band: not "just right"
+    ("cool", 24.3, 24.0, True, True, "Sta raffrescando", "Raffresca fino a 24,0°"),
+    ("cool", 22.0, 24.0, False, True, "In pausa", "Riparte a 24,5°"),
+    ("cool", 26.8, 26.5, False, True, "In pausa", "Riparte a 27,5°"),   # economy: a degree above
+    ("heat", 20.3, 20.0, False, True, "Temperatura giusta", "Riparte a 19,5°"),
+    ("heat", 19.8, 20.0, False, True, "In pausa", "Riparte a 19,5°"),  # below it, within the band
+    ("heat", 19.8, 20.0, True, True, "Sta scaldando", "Scalda fino a 20,0°"),
+    ("heat", 19.2, 19.5, False, True, "In pausa", "Riparte a 18,5°"),  # economy: a degree below
     ("cool", 27.5, 25.9, False, False, "La valvola non risponde", None),  # seen: a Shelly unplugged, "resting"
 ]
+
+
+def _limits(mode, target, hysteresis=0.5, economy=0.5):
+    """The thermostat's thresholds for this target, as the API says them."""
+    from localhome.services.thermostat import target_tier
+    spread = hysteresis + (economy if target_tier(target, mode) == "economy" else 0)
+    return {"tier": target_tier(target, mode), "valve_stops_at": target,
+            "valve_opens_at": round(target - spread if mode == "heat" else target + spread, 2)}
 
 
 def _fake_zones(page, api, mode, zones):
@@ -379,6 +390,7 @@ def _fake_zones(page, api, mode, zones):
     for zone in data["zones"]:
         if zone["name"] in zones:
             room, target, valve_on, valve_ok = zones[zone["name"]]
+            zone.update(_limits(mode, target))
             zone.update(temperature_c=room, target_c=target, valve_on=valve_on, valve_ok=valve_ok,
                         valve_error=None if valve_ok else "marked offline on its availability topic",
                         sensor_ok=True, sensor_failsafe_active=False, sensor_waiting=False,
@@ -405,6 +417,22 @@ def test_a_zone_says_where_it_stands_in_both_seasons(open_page, api, mode, room,
         assert rule in live
     else:
         assert "Riparte" not in live and "fino a" not in live, "no rule a valve that doesn't answer would follow"
+    assert opened.errors == []
+
+
+def test_the_card_names_the_targets_level_and_the_palette_has_half_degrees(open_page, api):
+    """Comfort or economy, on the card next to the target, as the palette
+    calls it - and under the palette, what each one does."""
+    opened = _open_home(open_page)
+    page = opened.page
+    _fake_zones(page, api, "heat", {ZONE_A: (19.2, 19.5, False, True), ZONE_B: (20.6, 20.5, False, True)})
+    assert "Economy" in _card(page, ZONE_A).locator(".tier-chip").inner_text()
+    assert "Comfort" in _card(page, ZONE_B).locator(".tier-chip").inner_text()
+    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .sched-swatch", timeout=20000)
+    swatches = _card(page, ZONE_A).locator(".sched-swatch").all_inner_texts()
+    assert "19,5" in swatches and "20,5" in swatches, swatches
+    note = _card(page, ZONE_A).locator(".sched-tier-note").inner_text()
+    assert "Comfort" in note and "Economy" in note and "0,5" in note and "1,0" in note, note
     assert opened.errors == []
 
 

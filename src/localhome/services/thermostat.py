@@ -1,8 +1,18 @@
 """Two-zone (or more) valve thermostat for a shared-plant radiant-panel
 setup: one central boiler/chiller sends hot or cold water to per-zone
 valves, and all this needs to decide is *when each valve should be open*
-- current temperature vs. that zone's own weekly schedule, with
-hysteresis so the valve doesn't chatter open/close right at the setpoint.
+- current temperature vs. that zone's own weekly schedule.
+
+The rule, for a radiant ceiling (slow: it keeps giving heat or cool for a
+while after its valve closes, and the H&T sensors report in steps of
+half a degree): the valve stops as soon as the room reaches the target -
+stopping past it overshot - and opens again once the room has moved the
+hysteresis away from it, on the season's side. Each target is "comfort"
+or "economy" (heating below 20°C, cooling from 26°C up - the palette's two
+boxes): an economy target opens again the economy tolerance further on,
+on the saving side only - longer pauses, a little less heating or
+cooling, never more. Comfort stays as close to its target as the sensor
+lets it.
 
 Each zone is just an existing `climate` sensor + `switch` valve, already
 known to the DeviceManager under those names - no new device kind. What's
@@ -37,6 +47,21 @@ MODES = ("heat", "cool")
 # working untouched, and older code reading the same file still finds its
 # grid where it expects it. A season with no grid yet reads as all-off.
 SEASON_KEYS = {"heat": "zones", "cool": "zones_cool"}
+
+# The schedule's two levels, as the palette shows them (static/
+# schedule_grid.js's TIER_OF - kept alike, a test checks): economy is
+# heating below 20°C and cooling from 26°C up.
+ECONOMY_HEAT_BELOW_C = 20.0
+ECONOMY_COOL_FROM_C = 26.0
+
+
+def target_tier(target_c: float | None, mode: str) -> str | None:
+    """"comfort" or "economy" - None without a target."""
+    if target_c is None:
+        return None
+    if mode == "heat":
+        return "economy" if target_c < ECONOMY_HEAT_BELOW_C else "comfort"
+    return "economy" if target_c >= ECONOMY_COOL_FROM_C else "comfort"
 
 
 class SilenceLog:
@@ -403,25 +428,25 @@ class ScheduleStore:
 class ThermostatController:
     """Background loop: for each zone, compares its current temperature to
     its schedule's target for the current hour and commands its valve
-    switch accordingly. Hysteresis keeps it from flipping the valve on
-    every small fluctuation right at the setpoint - once open, it stays
-    open until the temperature has moved `hysteresis_c` past the target
-    in the "satisfied" direction, and vice versa."""
+    switch accordingly - see the module's docstring for the rule, and
+    thresholds() for its two numbers."""
 
     def __init__(
         self,
         manager,
         schedule_store: ScheduleStore,
         zones: list[Zone],
-        hysteresis_c: float = 0.3,
+        hysteresis_c: float = 0.5,
         poll_interval_seconds: float = 60,
         sensor_failsafe_hours: float = 24.0,
         silence_file: str | None = None,
+        economy_tolerance_c: float = 0.5,
     ):
         self.manager = manager
         self.schedule_store = schedule_store
         self.zones = zones
         self.hysteresis_c = hysteresis_c
+        self.economy_tolerance_c = economy_tolerance_c
         self.poll_interval_seconds = poll_interval_seconds
         self.sensor_failsafe_hours = sensor_failsafe_hours
         self._valve_open: dict[str, bool] = {}
@@ -653,23 +678,38 @@ class ThermostatController:
             if not reading.get("ok") or "temperature_c" not in reading:
                 self._apply(zone, False)
 
+    def thresholds(self, target_c: float | None, mode: str) -> tuple[float, float] | None:
+        """Where the valve opens again and where it stops, for this target:
+        (opens_at, stops_at). It stops at the target itself and opens again
+        the hysteresis away on the season's side - below it heating, above
+        it cooling - plus the economy tolerance for an economy target."""
+        if target_c is None:
+            return None
+        spread = self.hysteresis_c + (self.economy_tolerance_c if target_tier(target_c, mode) == "economy" else 0.0)
+        opens_at = target_c - spread if mode == "heat" else target_c + spread
+        return round(opens_at, 2), round(target_c, 2)
+
     def decide(self, zone_name: str, current_c: float, target_c: float | None, mode: str) -> bool:
         """Pure decision logic, kept separate from _apply()/manager access
-        so it's trivially unit-testable."""
+        so it's trivially unit-testable. A threshold reached counts: the
+        sensor reports in half-degree steps, and one that lands exactly on
+        it is acted on, not left for the next step."""
         if target_c is None:
             return False
+        opens_at, stops_at = self.thresholds(target_c, mode)
         previously_open = self._valve_open.get(zone_name, False)
+        current = round(current_c, 2)
         if mode == "heat":
-            if current_c < target_c - self.hysteresis_c:
+            if current <= opens_at:
                 return True
-            if current_c > target_c + self.hysteresis_c:
+            if current >= stops_at:
                 return False
         else:  # cool
-            if current_c > target_c + self.hysteresis_c:
+            if current >= opens_at:
                 return True
-            if current_c < target_c - self.hysteresis_c:
+            if current <= stops_at:
                 return False
-        return previously_open  # inside the dead band - keep doing whatever it was doing
+        return previously_open  # between the two - keep doing whatever it was doing
 
     def _apply(self, zone: Zone, desired_open: bool) -> None:
         # Compared with the valve's real state whenever it's answering, not

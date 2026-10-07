@@ -1968,6 +1968,7 @@ async function loadSettings() {
     historyStats = data.history || null;
     settingsDisk = data.disk || null;
     settingsLoaded = Object.fromEntries(data.settings.map(s => [s.key, s.source === "panel" ? s.value : null]));
+    settingsValues = Object.fromEntries(data.settings.map(s => [s.key, s.value]));
     document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
     settingsRestartPending = !!data.restart_pending;
     const setHere = Object.values(settingsLoaded).filter(v => v != null).length;
@@ -1982,6 +1983,7 @@ async function loadSettings() {
 let historyStats = null; // from the last GET /api/climate-admin/settings
 let settingsDisk = null;  // the disk the history is on, from the same
 let settingsLoaded = {};  // key -> the value set here when the form was loaded (null = not set here)
+let settingsValues = {};  // key -> the value in force, wherever it comes from
 
 // "300 MB" means nothing without knowing what's in there now. The history
 // holds measurements only - one row per sensor field per cycle - while
@@ -2057,6 +2059,7 @@ function settingFieldHtml(s) {
       ${input}
       <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
       ${s.key === "sensor_failsafe_hours" ? failsafeExampleHtml(Number(s.value)) : ""}
+      ${s.key === "economy_tolerance_c" ? toleranceExampleHtml() : ""}
       ${s.key === "history_max_db_mb" ? historyDiskHtml(s) + historyUsageHtml(Number(s.capped_to || s.value)) : ""}
     </div>`;
 }
@@ -2065,6 +2068,18 @@ function settingFieldHtml(s) {
 // after 4 hours without a report (its stale_after_seconds - see
 // climate_map_store.py), and the hours count from there.
 const SENSOR_UNREACHABLE_HOURS = 4;
+
+// What the hysteresis and the economy tolerance make of the four targets
+// where the two levels meet - as the thermostat works it out (services/
+// thermostat.py's thresholds()): stops at the target, opens again that
+// far away.
+function toleranceExampleHtml() {
+  const h = Number(settingsValues.hysteresis_c), e = Number(settingsValues.economy_tolerance_c);
+  if (!Number.isFinite(h) || !Number.isFinite(e)) return "";
+  const show = n => n.toLocaleString(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `<span class="hint-text setting-help">${escapeHtml(tr("climate_admin.setting_tolerance_example", {
+    c_heat: show(20.5 - h), e_heat: show(19.5 - h - e), c_cool: show(25.5 + h), e_cool: show(26.5 + h + e) }))}</span>`;
+}
 
 function failsafeExampleHtml(hours) {
   if (!Number.isFinite(hours)) return "";

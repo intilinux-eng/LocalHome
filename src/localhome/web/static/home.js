@@ -293,17 +293,32 @@ function bands(day) {
 // below target - hysteresis and closes above target + hysteresis, and in
 // between keeps doing what it was doing; cooling is the mirror image.
 
+// The thermostat's own two numbers for this target (services/
+// thermostat.py's thresholds()): it stops at the target, and opens again
+// half a degree away - an economy target further on.
 function valveRule(zone, climate) {
-  const h = climate.hysteresis_c;
   // A valve that doesn't answer won't do what the rule says.
-  if (zone.target_c == null || zone.temperature_c == null || h == null || !zone.sensor_ok || !zone.valve_ok) return null;
+  if (zone.target_c == null || zone.temperature_c == null || zone.valve_opens_at == null
+      || !zone.sensor_ok || !zone.valve_ok) return null;
   const cool = climate.mode === "cool";
-  if (zone.valve_on) {
-    return tr(cool ? "home.runs_until_cool" : "home.runs_until_heat",
-      { value: fmt(cool ? zone.target_c - h : zone.target_c + h) });
-  }
-  return tr(cool ? "home.restarts_above" : "home.restarts_below",
-    { value: fmt(cool ? zone.target_c + h : zone.target_c - h) });
+  if (zone.valve_on) return tr(cool ? "home.runs_until_cool" : "home.runs_until_heat", { value: fmt(zone.valve_stops_at) });
+  return tr("home.restarts_at", { value: fmt(zone.valve_opens_at) });
+}
+
+// Comfort or economy, as the palette calls it - with the same icon.
+function tierChip(tier, mode) {
+  if (!tier || typeof TIER_ICONS === "undefined") return "";
+  return `<span class="tier-chip" data-tier="${tier}">${TIER_ICONS[tier === "comfort" ? mode : "economy"]}${esc(tr(`climate.tier_${tier}`))}</span>`;
+}
+
+// Under the palette: what the two levels do, in this season, with the
+// thermostat's numbers.
+function tierNoteHtml() {
+  const climate = state.climate || {};
+  const h = climate.hysteresis_c, e = climate.economy_tolerance_c;
+  if (h == null) return "";
+  return `<p class="sched-tier-note">${esc(tr(climateMode === "cool" ? "climate.tier_note_cool" : "climate.tier_note_heat",
+    { comfort: fmt(h), economy: fmt(h + (e || 0)) }))}</p>`;
 }
 
 // "0.8° below target", "at target" - to the tenth the sensor reports.
@@ -416,7 +431,7 @@ function fillZone(card, zone, climate) {
   const excluded = mode === "cool" && !zone.cool_enabled;
   if (zone.target_c != null && !excluded) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
-    facts.push(fact(ICONS.target, `${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${gap ? `<span class="trend">${esc(gap)}</span>` : ""}`));
+    facts.push(fact(ICONS.target, `${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b>${tierChip(zone.tier, mode)}${gap ? `<span class="trend">${esc(gap)}</span>` : ""}`));
     const rule = climate.away_until && !zone.override ? "" : valveRule(zone, climate);
     if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
@@ -910,7 +925,7 @@ function fillPlan(card, zone) {
   card.dataset.plan = excluded ? "none" : "week";
   if (excluded || plan.dataset.mode === climateMode) return;
   plan.dataset.mode = climateMode;
-  plan.innerHTML = schedulePaneHtml(zone, slug(zone.name));
+  plan.innerHTML = schedulePaneHtml(zone, slug(zone.name), tierNoteHtml());
   // Not loaded (the board didn't answer): the next refresh tries again.
   loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }

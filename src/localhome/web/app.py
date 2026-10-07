@@ -71,7 +71,7 @@ from localhome.services import shelly_health
 from localhome.services.shelly_check import ShellyCheck
 from localhome.services import system_status
 from localhome.services.system_clock import server_time
-from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone
+from localhome.services.thermostat import MODES, ScheduleStore, ThermostatController, Zone, target_tier
 from localhome.errors import InputError
 from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
@@ -277,7 +277,8 @@ def create_app(config_path: str | None = None) -> Flask:
             manager,
             schedule_store,
             zones,
-            hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.3),
+            hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.5),
+            economy_tolerance_c=thermostat_cfg.get("economy_tolerance_c", 0.5),
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 24.0),
             silence_file=config.resolve("sensor_silence.json"),
@@ -1231,6 +1232,8 @@ def _register_routes(app: Flask) -> None:
             sensor_reading = manager.sensor_reading(zone.sensor)
             override = overrides.get(zone.name)
             scheduled = thermostat.schedule_store.get_target(zone.name, now)
+            target_now = override["target"] if override else scheduled
+            opens_at, stops_at = thermostat.thresholds(target_now, mode) or (None, None)
             valve_reading = manager.sensor_reading(zone.valve)
             temperature_c = sensor_reading.get("temperature_c")
             humidity_pct = sensor_reading.get("humidity_pct")
@@ -1275,8 +1278,13 @@ def _register_routes(app: Flask) -> None:
                 "valve_error": valve_reading.get("error"),
                 # What the zone is heading for now: a temporary target
                 # set from the dashboard if there is one, else the schedule's.
-                "target_c": override["target"] if override else scheduled,
+                "target_c": target_now,
                 "scheduled_target_c": scheduled,
+                # Its level and where its valve opens again and stops -
+                # what the zone's card says (services/thermostat.py).
+                "tier": target_tier(target_now, mode),
+                "valve_opens_at": opens_at,
+                "valve_stops_at": stops_at,
                 "override": {"target": override["target"], "until": override["until"].isoformat()} if override else None,
                 "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
                 "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
@@ -1295,9 +1303,10 @@ def _register_routes(app: Flask) -> None:
             mode_changed=thermostat.schedule_store.get_mode_changed(),
             away_until=away_until.isoformat() if away_until else None,
             diagnostic_mode=thermostat.schedule_store.get_diagnostic_mode(),
-            # For the chart's band around the target: the valve only
-            # changes state once the temperature leaves target ± this.
+            # The valve stops at the target and opens again this far
+            # from it - an economy target that much more on the saving side.
             hysteresis_c=thermostat.hysteresis_c,
+            economy_tolerance_c=thermostat.economy_tolerance_c,
             # What the season does besides the zones: every switch that
             # follows it, and what it does in each season.
             season_effects={"rules": app.config["SEASON_RULES"](), "links": app.config["SEASON_LINKS"]()},

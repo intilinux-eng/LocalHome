@@ -219,7 +219,8 @@ valve/relay when a zone is too cold/hot" is the whole job fits.
 ```yaml
 thermostat:
   mode: "heat"                # "heat" or "cool" - shared by every zone; also changeable from the dashboard
-  hysteresis_c: 0.3            # dead band around the setpoint before the valve flips again - default shown
+  hysteresis_c: 0.5            # how far from the target the valve restarts - default shown
+  economy_tolerance_c: 0.5     # an economy target restarts this much further, on the saving side - default shown
   schedules_file: "schedules.json"   # where the weekly grids + mode are persisted - default shown
   poll_interval_seconds: 60    # how often the control loop re-evaluates - default shown
   zones:
@@ -240,11 +241,19 @@ zone's card instead of also showing up as generic ones.
 **Control logic** (`services/thermostat.py`): every `poll_interval_seconds`,
 for each zone, the current hour's schedule slot gives a target
 temperature (or nothing - the valve stays closed for hours with no
-target set). In `heat` mode the valve opens once the zone is more than
-`hysteresis_c` below the target and closes once it's that far above it,
-staying in whatever state it was in while inside that band (so it
-doesn't chatter open/close right at the setpoint); `cool` mode is the
-mirror image. `mode` is shared across every zone, since a shared-plant
+target set). Built for a radiant ceiling - slow, it keeps giving heat or
+cool for a while after its valve closes, and its H&T sensors report in
+half-degree steps: the valve **stops as soon as the zone reaches the
+target** (stopping past it overshot) and **restarts once the zone is
+`hysteresis_c` away from it** - below it in `heat` mode, above it in
+`cool` mode - keeping its state in between. A threshold reached counts
+(a reading landing exactly on it is acted on). Each target is *comfort*
+or *economy* - heating below 20°C, cooling from 26°C up, the palette's
+two boxes: an economy target restarts `economy_tolerance_c` further on,
+on the saving side only (longer pauses, a little less heating or
+cooling, never more); comfort stays as close as the sensor allows. The
+zones API gives each zone's `tier`, `valve_opens_at` and
+`valve_stops_at`. `mode` is shared across every zone, since a shared-plant
 system's water is either hot or cold for everyone at once - the
 dashboard's mode toggle changes it seasonally without editing
 config.yaml.
@@ -750,7 +759,7 @@ still happens to agree with the newly-computed state.
 ### Settings: tuning without editing config.yaml
 
 The admin panel's **Settings** section changes the operating parameters
-without touching this file: `thermostat.hysteresis_c`,
+without touching this file: `thermostat.hysteresis_c`, `thermostat.economy_tolerance_c`,
 `thermostat.poll_interval_seconds`, `thermostat.sensor_failsafe_hours`,
 `history.retention_days`, `history.max_db_mb`, `web.language` and
 `web.site_name`. Each has a safe range (a value outside it is refused;

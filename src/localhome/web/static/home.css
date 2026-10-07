@@ -283,6 +283,14 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .season-device-for { font-size: 0.82rem; color: var(--text-2); margin-right: 2px; }
 .season-device-controls .chip { min-height: 38px; padding: 6px 14px; }
 .season-device-controls .chip:disabled { opacity: 0.45; }
+/* The target's level - comfort or economy - as the palette names it. */
+.tier-chip { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 650; vertical-align: 1px; background: var(--accent-soft); color: var(--accent); }
+.tier-chip[data-tier="economy"] { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.tier-chip svg { width: 11px; height: 11px; }
+.sched-tier-note { margin: 2px 0 10px; font-size: 0.8rem; color: var(--text-2); }
+/* 19,5 in a box made for two digits. */
+.sched-swatch.half { font-size: 0.64rem; letter-spacing: -0.02em; }
 /* Dry enough: off, and it can't be switched on - said, not offered. */
 .season-device-dehum[data-state="disabled"] .season-device-icon { opacity: 0.45; }
 .season-device-dehum[data-state="disabled"] .season-device-text > span { color: var(--text-2); }

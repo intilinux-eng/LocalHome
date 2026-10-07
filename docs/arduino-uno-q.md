@@ -116,15 +116,17 @@ Battery sensors (H&T) only apply new settings when they wake up: press
 the device's button once after saving.
 
 **Settings** (admin panel → Settings) replace editing config.yaml:
-hysteresis, how often the thermostat checks, after how many hours a
+hysteresis, the economy tolerance, how often the thermostat checks, after how many hours a
 silent sensor's valve is closed, how many days and MB of history to
 keep, and the page language. Each has a safe range; "Restore defaults"
 goes back to config.yaml's values.
 
 ## What it does on its own
 
-- **Heating** opens a zone's valve below target − hysteresis and closes
-  it above target + hysteresis; **cooling** the opposite. An hour with
+- **Heating** stops a zone's valve as soon as the target is reached and
+  restarts it at target − hysteresis (an economy target, below 20°, at
+  target − hysteresis − economy tolerance); **cooling** the opposite
+  (economy from 26°). An hour with
   no schedule keeps the valve closed. Every cycle compares the valve's
   real state: one opened or closed by hand is corrected.
 - **Bathrooms in summer**: excluded to avoid condensation - valve held

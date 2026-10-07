@@ -20,9 +20,12 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 // 27 while heating) is just noise. 19 fills the 18-20 gap in heating.
 // There's still one weekly grid per zone, shared by both seasons - this
 // only changes what you can paint with and how it's colored.
+// Half degrees where the two levels meet: 19.5 (economy) and 20.5
+// (comfort) heating, 25.5 (comfort) and 26.5 (economy) cooling - the H&T
+// reports in half-degree steps, so finer would mean nothing.
 const SCHEDULE_PRESETS = {
-  heat: [null, 16, 18, 19, 20, 21, 22, 24],
-  cool: [null, 20, 21, 22, 23, 24, 25, 26, 27],
+  heat: [null, 16, 18, 19, 19.5, 20, 20.5, 21, 22, 24],
+  cool: [null, 22, 23, 24, 25, 25.5, 26, 26.5, 27],
 };
 const DEFAULT_PAINT_VALUE = { heat: 21, cool: 24 };
 
@@ -96,9 +99,15 @@ function targetTier(value) {
   return tierOf(value);
 }
 
+// 19.5 as the page's language writes it: 19,5 in Italian.
+function degrees(v) {
+  return Number(v).toLocaleString((window.I18N && window.I18N.locale) || undefined, { maximumFractionDigits: 1 });
+}
+
 function swatchHtml(v) {
-  return `<button class="sched-swatch${v === paintValue ? " active" : ""}" data-value="${v == null ? "" : v}"
-                  style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : v}</button>`;
+  const half = v != null && v % 1 !== 0;
+  return `<button class="sched-swatch${v === paintValue ? " active" : ""}${half ? " half" : ""}" data-value="${v == null ? "" : v}"
+                  style="${v == null ? "" : `background:${tempColor(v)}`}" onclick="selectPaintValue(this)">${v == null ? "✕" : degrees(v)}</button>`;
 }
 
 function paletteHtml() {
@@ -151,10 +160,13 @@ function hourAxisHtml() {
 
 // The schedule pane of a zone: season, palette, the grid and its copy
 // buttons - the same markup on both pages.
-function schedulePaneHtml(zone, id) {
+// `note`: what the two levels do, in a line under the palette (the page
+// that knows the thermostat's numbers writes it).
+function schedulePaneHtml(zone, id, note = "") {
   return `
         <div class="sched-season-label">${tr(`climate.schedule_heading_${climateMode}`)}</div>
         <div class="sched-palette">${paletteHtml()}</div>
+        ${note}
         <p class="hint-text">${tr("climate.schedule_hint")}</p>
         <p class="sched-empty-hint" id="sched-empty-${id}" hidden>${tr(`climate.schedule_empty_${climateMode}`)}</p>
 
@@ -178,7 +190,7 @@ function schedulePaneHtml(zone, id) {
 function applyCellStyle(cell, value) {
   cell.style.background = value == null ? "" : tempColor(value);
   cell.classList.toggle("off", value == null);
-  cell.title = value == null ? tr("climate.target_off") : `${value}°C`;
+  cell.title = value == null ? tr("climate.target_off") : `${degrees(value)}°C`;
   cell.dataset.value = value == null ? "" : value;
 }
 
