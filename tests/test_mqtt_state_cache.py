@@ -135,6 +135,73 @@ def test_many_messages_are_one_write(tmp_path, monkeypatch):
     assert load_cached(cache_path, BROKER, "shelly/status/4") == ({"n": 49}, 1049.0), "the newest of each topic"
 
 
+def _five_minutes_on(path):
+    for (p, key), at in list(state_cache._written_at.items()):
+        if p == path:
+            state_cache._written_at[(p, key)] = at - state_cache.REWRITE_SECONDS
+
+
+def _counting_writes(monkeypatch):
+    writes = []
+    real = state_cache.save_json_atomic
+    monkeypatch.setattr(state_cache, "save_json_atomic", lambda path, data: (writes.append(path), real(path, data)))
+    return writes
+
+
+def test_a_chatty_topic_is_written_once_every_few_minutes(tmp_path, monkeypatch):
+    # A meter reporting every few seconds had the whole file rewritten and
+    # fsynced every 5 s - ~17,000 times a day on the production board.
+    path = str(tmp_path / "mqtt_state_cache.json")
+    writes = _counting_writes(monkeypatch)
+    for i in range(30):                                  # one every 2 s
+        save_cached(path, BROKER, "meter/status/em:0", {"w": 300 + i}, 1000.0 + 2 * i)
+        flush(due_only=True)
+    assert len(writes) == 2, "its first two messages, then it's known to be chatty"
+    _five_minutes_on(path)
+    flush(due_only=True)
+    assert len(writes) == 3
+    with open(path, encoding="utf-8") as f:
+        assert json.load(f)["192.168.1.21:1883/meter/status/em:0"]["payload"] == {"w": 329}
+
+
+def test_news_from_a_quiet_topic_is_written_at_once(tmp_path, monkeypatch):
+    path = str(tmp_path / "mqtt_state_cache.json")
+    for i in range(5):
+        save_cached(path, BROKER, "meter/status/em:0", {"w": i}, 1000.0 + i)
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": False}, 1000.0)
+    flush(due_only=True)
+    writes = _counting_writes(monkeypatch)
+    save_cached(path, BROKER, "meter/status/em:0", {"w": 99}, 1006.0)
+    assert flush(due_only=True) > 0 and writes == [], "the meter waits"
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": True}, 1300.0)   # after five quiet minutes
+    assert flush(due_only=True) is None and writes == [path]
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["192.168.1.21:1883/valve/status/switch:0"]["payload"] == {"output": True}
+    assert data["192.168.1.21:1883/meter/status/em:0"]["payload"] == {"w": 99}, "the meter's newest went with it"
+
+
+def test_a_change_right_after_another_is_still_news(tmp_path, monkeypatch):
+    path = str(tmp_path / "mqtt_state_cache.json")
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": True}, 1000.0)
+    flush(due_only=True)
+    writes = _counting_writes(monkeypatch)
+    save_cached(path, BROKER, "valve/status/switch:0", {"output": False}, 1010.0)   # off 10 s later
+    flush(due_only=True)
+    assert writes == [path]
+    assert load_cached(path, BROKER, "valve/status/switch:0") == ({"output": False}, 1010.0)
+
+
+def test_stopping_writes_even_a_chatty_topic(tmp_path):
+    path = str(tmp_path / "mqtt_state_cache.json")
+    for i in range(5):
+        save_cached(path, BROKER, "meter/status/em:0", {"w": i}, 1000.0 + i)
+        flush(due_only=True)
+    flush()                                              # what runs at exit
+    with open(path, encoding="utf-8") as f:
+        assert json.load(f)["192.168.1.21:1883/meter/status/em:0"]["payload"] == {"w": 4}
+
+
 def test_a_write_that_failed_is_tried_again(tmp_path, monkeypatch):
     cache_path = str(tmp_path / "mqtt_state_cache.json")
     real = state_cache.save_json_atomic

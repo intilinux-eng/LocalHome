@@ -52,6 +52,16 @@ logger = logging.getLogger(__name__)
 # newest payload of each topic in one write. A power cut loses at most
 # that much - a reading the device sends again anyway.
 FLUSH_SECONDS = 5.0
+# A chatty topic - a meter reporting every few seconds - had the whole
+# file rewritten and fsynced every 5 s: ~17,000 times a day on the
+# production board, for readings it sends again within seconds of any
+# restart. Now a topic that keeps talking (its last messages less than
+# QUIET_SECONDS apart) is written at most every REWRITE_SECONDS; news from
+# a quiet one - a valve switching, a battery sensor waking, what this
+# cache is for - still goes out within FLUSH_SECONDS, and takes whatever
+# else is waiting with it. Stopping writes everything (atexit).
+QUIET_SECONDS = 60.0
+REWRITE_SECONDS = 300.0
 
 # Guards the file's read-modify-write cycle - one lock for every path is
 # simpler than one per path, and still fully safe within this single
@@ -62,6 +72,12 @@ _lock = threading.Lock()
 # message never waits on a write in progress.
 _pending: dict[str, dict[str, dict]] = {}
 _pending_lock = threading.Lock()
+# Under _pending_lock, by (path, key): what's waiting that's news, to be
+# written at once; each topic's last message time and the gap before it;
+# when each topic last reached the file (monotonic).
+_urgent: set[tuple[str, str]] = set()
+_rhythm: dict[tuple[str, str], tuple[float, float | None]] = {}
+_written_at: dict[tuple[str, str], float] = {}
 _dirty = threading.Event()
 _writer: threading.Thread | None = None
 
@@ -101,22 +117,51 @@ def load_cached(cache_path: str, broker: dict, topic: str) -> tuple[Any, float] 
 
 def save_cached(cache_path: str, broker: dict, topic: str, payload: Any, received_at: float) -> None:
     """Keeps this payload as the topic's last one - in memory at once, on
-    disk within FLUSH_SECONDS (flush() writes it now). Never touches the
-    disk itself: it's called from the MQTT thread."""
+    disk within FLUSH_SECONDS, or REWRITE_SECONDS for a topic that keeps
+    talking (flush() writes it now). Never touches the disk itself: it's
+    called from the MQTT thread."""
     global _writer
+    key = _key(broker, topic)
     with _pending_lock:
-        _pending.setdefault(cache_path, {})[_key(broker, topic)] = {"payload": payload, "received_at": received_at}
+        _pending.setdefault(cache_path, {})[key] = {"payload": payload, "received_at": received_at}
+        # News unless this message and the one before it both came less
+        # than QUIET_SECONDS after their previous one: a change right after
+        # another (on, then off) is still news.
+        last_at, last_gap = _rhythm.get((cache_path, key), (None, None))
+        gap = None if last_at is None else received_at - last_at
+        _rhythm[(cache_path, key)] = (received_at, gap)
+        if gap is None or gap >= QUIET_SECONDS or last_gap is None or last_gap >= QUIET_SECONDS:
+            _urgent.add((cache_path, key))
         if _writer is None or not _writer.is_alive():
             _writer = threading.Thread(target=_write_loop, daemon=True, name="mqtt-state-cache")
             _writer.start()
     _dirty.set()
 
 
-def flush() -> None:
-    """Writes whatever is waiting, now - one atomic write per file."""
+def _due_in(cache_path: str, key: str, now: float) -> float:
+    """Seconds until this waiting entry should be written - 0: now."""
+    if (cache_path, key) in _urgent or (cache_path, key) not in _written_at:
+        return 0.0
+    return max(0.0, REWRITE_SECONDS - (now - _written_at[(cache_path, key)]))
+
+
+def flush(due_only: bool = False) -> float | None:
+    """Writes whatever is waiting, now - one atomic write per file. With
+    due_only (the writer thread), a file only once something in it is
+    due; returns the seconds until the next is, or None if nothing waits."""
+    now = time.monotonic()
+    wait = None
     with _pending_lock:
-        work = dict(_pending)
-        _pending.clear()
+        work = {}
+        for cache_path, entries in list(_pending.items()):
+            if due_only:
+                due_in = min(_due_in(cache_path, key, now) for key in entries)
+                if due_in > 0:
+                    wait = due_in if wait is None else min(wait, due_in)
+                    continue
+            work[cache_path] = _pending.pop(cache_path)
+            for key in entries:
+                _urgent.discard((cache_path, key))
     for cache_path, entries in work.items():
         with _lock:
             data = _read_all(cache_path)
@@ -124,10 +169,18 @@ def flush() -> None:
             try:
                 save_json_atomic(cache_path, data)
             except OSError:
-                logger.exception("Failed to persist MQTT state cache to %s - will retry with the next message", cache_path)
+                logger.exception("Failed to persist MQTT state cache to %s - will retry", cache_path)
                 with _pending_lock:
                     for key, entry in entries.items():
                         _pending.setdefault(cache_path, {}).setdefault(key, entry)
+                        _urgent.add((cache_path, key))
+                wait = FLUSH_SECONDS
+                continue
+        written = time.monotonic()
+        with _pending_lock:
+            for key in entries:
+                _written_at[(cache_path, key)] = written
+    return wait
 
 
 # Stopping (web/app.py turns systemd's SIGTERM into a normal exit): what's
@@ -136,11 +189,15 @@ atexit.register(flush)
 
 
 def _write_loop() -> None:
+    timeout = None
     while True:
-        _dirty.wait()
-        time.sleep(FLUSH_SECONDS)        # what else comes meanwhile goes in the same write
+        if _dirty.wait(timeout):
+            time.sleep(FLUSH_SECONDS)    # what else comes meanwhile goes in the same write
         _dirty.clear()
         try:
-            flush()
+            timeout = flush(due_only=True)
         except Exception:
             logger.exception("MQTT state cache: write failed, will retry")
+            timeout = FLUSH_SECONDS
+        if timeout is not None:
+            timeout = max(timeout, FLUSH_SECONDS)
