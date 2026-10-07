@@ -898,6 +898,7 @@
     "lg_temp": "temperature",
     "lg_target": "target",
     "lg_band": "tolerance",
+    "plan_edit": "Edit",
     "lg_run": "system on",
     "simulated": "simulated",
     "manual": "manual",

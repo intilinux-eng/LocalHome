@@ -233,6 +233,15 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
   cursor: pointer;
 }
 @media (min-width: 820px) { .outdoor { border-left: 0; border-top: 1px solid var(--line); } }
+/* On a phone, one slim row: the time and the short date, outside - the
+   zones come into the first screen. */
+@media (max-width: 819px) {
+  .hero-now .server-clock, .outdoor { padding: 10px 16px; gap: 3px; }
+  .hero-now .server-clock-time, .outdoor-value { font-size: 1.85rem; }
+  .hero-now .server-clock-date { display: none; }
+  .hero-now .server-clock-date-short { display: block; font-weight: 550; }
+  .hero-now .server-clock-zone { display: none; }
+}
 .outdoor-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
 .outdoor-label svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .outdoor-value { font-size: 2.2rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -288,6 +297,12 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .season-device-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; padding-left: 52px; }
 .season-device-for { font-size: 0.82rem; color: var(--text-2); margin-right: 2px; }
 .season-device-controls .chip { min-height: 38px; padding: 6px 14px; }
+/* On a phone, the dehumidifier's buttons on one row, under the whole card. */
+@media (max-width: 600px) {
+  .season-device-controls, .season-device-auto { padding-left: 0; }
+  .season-device-controls { gap: 5px; }
+  .season-device-controls .chip { min-height: 36px; padding: 5px 11px; }
+}
 .season-device-controls .chip:disabled { opacity: 0.45; }
 /* The target's level - comfort or economy - as the palette names it. */
 .tier-chip { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px;
@@ -617,6 +632,9 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
   gap: 12px;
 }
+/* A wide tile (a meter's days, the air's) that doesn't fit beside a small
+   one used to leave a hole there: the next small one fills it. */
+.tiles { grid-auto-flow: row dense; }
 
 .tile {
   background: var(--surface);
@@ -866,6 +884,22 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* The weekly grid (static/schedule_grid.js) and its palette: pick a
    temperature, then tap or drag across the hours; it saves by itself. */
 .zone-plan .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 6px 0 12px; }
+/* The week's button: only on a phone, where the week waits behind it. */
+.plan-toggle { display: none; }
+@media (max-width: 600px), (pointer: coarse) and (max-width: 1100px) {
+  .plan-toggle {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 14px; border: 1px solid var(--line);
+    border-radius: var(--radius-s); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer;
+  }
+  .plan-toggle-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .plan-toggle-hint { margin-left: auto; font-size: 0.86rem; color: var(--text-2); }
+  .plan-toggle .chevron { width: 18px; height: 18px; fill: none; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round;
+    stroke-linejoin: round; transition: transform 0.2s; }
+  .plan-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+  .zone-plan:not([data-open="true"]) .plan-body { display: none; }
+  .zone-plan .plan-body { margin-top: 14px; }
+  .zone-plan .sched-season-label { display: none; }   /* the button says it */
+}
 .sched-season-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 12px; }
 .sched-palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .sched-palette:has(.sched-tier) { align-items: flex-end; gap: 18px 10px; margin-top: 12px; margin-bottom: 8px; }

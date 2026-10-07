@@ -95,7 +95,12 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
 
 
 def _open_plan(page, name):
-    """The week is on the card itself - waits for its grid to be filled."""
+    """The week is on the card itself - behind its button on a phone:
+    opens it, and waits for its grid to be filled."""
+    toggle = _card(page, name).locator(".plan-toggle")
+    toggle.wait_for(state="attached", timeout=20000)
+    if toggle.is_visible() and toggle.get_attribute("aria-expanded") != "true":
+        toggle.click()
     page.wait_for_selector(f".zone[data-zone={_css_string(name)}] .sched-cell", timeout=20000)
     page.wait_for_timeout(800)
 
@@ -140,8 +145,7 @@ def test_two_phones_editing_one_week_both_keep_their_change(open_page, api):
     phone_b = _open_home(open_page).page
     grid = f".zone[data-zone={_css_string(ZONE_A)}] .sched-cell[data-day='mon']"
     for phone in (phone_a, phone_b):
-        phone.wait_for_selector(grid, timeout=20000)
-        phone.wait_for_timeout(1000)
+        _open_plan(phone, ZONE_A)
 
     phone_a.locator(f"{grid}[data-hour='8']").click()
     assert eventually(phone_a, lambda: _week(api, ZONE_A)["mon"][8] is not None)
@@ -428,11 +432,45 @@ def test_the_card_names_the_targets_level_and_the_palette_has_half_degrees(open_
     _fake_zones(page, api, "heat", {ZONE_A: (19.2, 19.5, False, True), ZONE_B: (20.6, 20.5, False, True)})
     assert "Economy" in _card(page, ZONE_A).locator(".tier-chip").inner_text()
     assert "Comfort" in _card(page, ZONE_B).locator(".tier-chip").inner_text()
-    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .sched-swatch", timeout=20000)
+    _open_plan(page, ZONE_A)
     swatches = _card(page, ZONE_A).locator(".sched-swatch").all_inner_texts()
     assert "19,5" in swatches and "20,5" in swatches, swatches
     note = _card(page, ZONE_A).locator(".sched-tier-note").inner_text()
     assert "Comfort" in note and "Economy" in note and "0,5" in note and "1,0" in note, note
+    assert opened.errors == []
+
+
+def test_on_a_phone_the_week_waits_behind_its_button(open_page):
+    """Two screens of hours between a zone and everything after it: on a
+    phone the week is closed, its button says which; wider, it's open
+    beside the card and there's no button."""
+    phone = _open_home(open_page).page
+    toggle = _card(phone, ZONE_A).locator(".plan-toggle")
+    toggle.wait_for(timeout=20000)
+    assert toggle.is_visible() and "Programmazione" in toggle.text_content()
+    phone.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .sched-cell", state="attached", timeout=20000)
+    assert not _card(phone, ZONE_A).locator(".sched-grid").is_visible()
+    toggle.click()
+    assert _card(phone, ZONE_A).locator(".sched-grid").is_visible() and toggle.get_attribute("aria-expanded") == "true"
+    phone.evaluate("refreshClimate()")
+    phone.wait_for_timeout(800)
+    assert _card(phone, ZONE_A).locator(".sched-grid").is_visible(), "a refresh doesn't close it"
+    desktop = _open_home(open_page, 1280).page
+    desktop.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .sched-cell", timeout=20000)
+    assert not _card(desktop, ZONE_A).locator(".plan-toggle").is_visible()
+
+
+def test_a_zone_out_of_the_season_has_no_empty_strip(open_page, api):
+    opened = _open_home(open_page)
+    page = opened.page
+    _fake_zones(page, api, "cool", {ZONE_A: (24.0, 24.0, False, True), ZONE_B: (24.0, 24.0, False, True)})
+    assert _card(page, ZONE_B).locator(".ribbon > svg").count() == 1, "in the season it has its strip"
+    page.evaluate("name => { state.climate.zones.find(z => z.name === name).cool_enabled = false; renderZones(); }", ZONE_B)
+    page.wait_for_timeout(300)
+    assert _card(page, ZONE_A).locator(".ribbon > svg").count() == 1
+    excluded = _card(page, ZONE_B)
+    assert excluded.get_attribute("data-plan") == "none" and excluded.locator(".ribbon").count() == 0
+    assert excluded.locator(".excluded-note").is_visible()
     assert opened.errors == []
 
 
@@ -603,7 +641,7 @@ def test_the_page_opens_at_the_top(iphone):
     page.wait_for_timeout(1500)
     assert page.evaluate("scrollY") == 0
     page.reload()
-    page.wait_for_selector(".zone .sched-cell", timeout=20000)
+    page.wait_for_selector(".zone .sched-cell", state="attached", timeout=20000)
     page.wait_for_timeout(2500)
     assert page.evaluate("scrollY") == 0
 

@@ -466,11 +466,11 @@ function fillZone(card, zone, climate) {
       ${readings}
       ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
     </div>
-    <div class="ribbon">
+    ${excludedNow ? "" : `<div class="ribbon">
       ${ribbonSvg(zone, week, history, mode)}
       <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
       <div class="ribbon-readout">${legendHtml()}</div>
-    </div>
+    </div>`}
     <div class="quick">${quickHtml(zone, climate, change)}</div>
     ${zone.sensor_manual ? manualHtml(zone) : ""}
     <div class="zone-foot">${foot.join(" · ")}</div>`);
@@ -631,7 +631,7 @@ function legendHtml() {
 function wireRibbon(card, week, history, mode) {
   card.ribbonDay = { week, history, mode };
   const svg = card.querySelector(".ribbon svg");
-  if (svg.ribbonWired) return;
+  if (!svg || svg.ribbonWired) return;    // none out of the season
   svg.ribbonWired = true;
   let hideTimer = null;
   const show = event => {
@@ -743,6 +743,13 @@ async function onZoneClick(event) {
   const zone = state.climate.zones.find(z => z.name === card.dataset.zone);
   if (!zone) return;
   const action = button.dataset.action;
+  if (action === "toggle-plan") {
+    const plan = card.querySelector(".zone-plan");
+    const open = plan.dataset.open !== "true";
+    plan.dataset.open = String(open);
+    button.setAttribute("aria-expanded", String(open));
+    return;
+  }
   const pending = state.pending[zone.name];
   if (action === "start") {
     state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + Number(button.dataset.delta)), hours: 2 };
@@ -885,6 +892,7 @@ const ICONS = {
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>`,
   wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+  chevron: `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
   power: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>`,
   fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
 };
@@ -949,7 +957,13 @@ function fillPlan(card, zone) {
   card.dataset.plan = excluded ? "none" : "week";
   if (excluded || plan.dataset.mode === climateMode) return;
   plan.dataset.mode = climateMode;
-  plan.innerHTML = schedulePaneHtml(zone, slug(zone.name), tierNoteHtml());
+  // On a phone the week waits behind its button (CSS): it's two screens
+  // of hours, between this zone and everything after it. Wider, it's
+  // beside the card, always open.
+  plan.innerHTML = `<button class="plan-toggle" type="button" data-action="toggle-plan" aria-expanded="${plan.dataset.open === "true"}">
+      <span class="plan-toggle-label">${esc(tr(`climate.schedule_heading_${climateMode}`))}</span>
+      <span class="plan-toggle-hint">${esc(tr("home.plan_edit"))}</span>${ICONS.chevron}</button>
+    <div class="plan-body">${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>`;
   // Not loaded (the board didn't answer): the next refresh tries again.
   loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }
