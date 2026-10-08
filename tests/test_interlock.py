@@ -323,3 +323,28 @@ def test_away_switches_off_what_is_left_to_the_user_and_its_valve_with_it():
     assert (dehumidifier.calls, limited.calls) == (["off"], ["off"])
     assert valve.calls == ["off"], "its water valve closes in the same tick"
     assert bypass.calls == [], "the season's own rule stays: the plant's, not a comfort"
+
+
+def test_the_bypass_is_powered_all_summer_away_or_not_and_off_in_winter():
+    """Its Shelly on all summer - the normally open valve closed - whatever
+    the schedule (nothing here reads it) and away too; switched off from
+    its app, put back at the next tick. In winter, off."""
+    from localhome.services.interlock import SeasonRule
+    bypass = FakeSwitch()
+    manager = LiveManager(readings={"Bypass": {"ok": True, "is_on": False}}, switches={"Bypass": bypass})
+    state = {"mode": "cool", "away": True}
+    controller = InterlockController(
+        manager, [], mode_provider=lambda: state["mode"], away_provider=lambda: state["away"],
+        season_rules_provider=lambda: [SeasonRule("Bypass", {"heat": "off", "cool": "on"})])
+
+    controller.tick()
+    assert bypass.calls == ["on"], "summer, away: powered"
+    manager._readings["Bypass"]["is_on"] = False          # switched off from the Shelly app
+    controller.tick()
+    assert bypass.calls == ["on", "on"]
+    state["away"] = False
+    controller.tick()
+    assert bypass.calls == ["on", "on"], "already on: left alone"
+    state["mode"] = "heat"
+    controller.tick()
+    assert bypass.calls == ["on", "on", "off"], "winter: unpowered, the valve open"
