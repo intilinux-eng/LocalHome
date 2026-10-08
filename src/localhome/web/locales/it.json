@@ -913,6 +913,8 @@
     "season_cool": "Estate · raffrescamento",
     "winter": "Inverno",
     "summer": "Estate",
+    "outdoor_none": "Sensore non ancora collegato",
+    "outdoor_waiting": "In attesa del primo invio",
     "outdoor_range": "Oggi: minima {min}°, massima {max}°",
     "outdoor_min": "min {value}°",
     "outdoor_max": "max {value}°",

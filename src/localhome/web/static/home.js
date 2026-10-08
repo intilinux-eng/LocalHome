@@ -954,8 +954,23 @@ function listNames(names) {
 
 function renderOutdoor() {
   const chip = document.getElementById("outdoor-chip");
+  const sensors = (state.devices && state.devices.sensors) || [];
+  const device = deviceByName("Outdoor Sensor");
   const reading = state.readings["Outdoor Sensor"];
-  if (!reading || reading.temperature_c == null) { chip.hidden = true; return; }
+  // A simulated one says so, as a zone's sensor does: an invented outdoor
+  // temperature isn't read as the real one.
+  const label = `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}${device && device.simulated
+    ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}</span>`;
+  if (!reading || reading.temperature_c == null) {
+    // Not wired yet, or wired and not heard from yet: said, not left out -
+    // in a home with rooms to heat or cool (a sensor of theirs is here).
+    chip.hidden = !device && !sensors.some(d => d.kind === "climate");
+    // On a wide screen the value's place is kept, with a dash: the tile
+    // has the shape it will have once there's a reading.
+    morph(chip, `${label}<span class="outdoor-value outdoor-value-none" aria-hidden="true"><span class="dash">−−</span><small>°</small></span>
+      <span class="outdoor-none">${esc(tr(device ? "home.outdoor_waiting" : "home.outdoor_none"))}</span>`);
+    return;
+  }
   chip.hidden = false;
   const rh = reading.humidity_pct != null
     ? `<span class="outdoor-rh">${ICONS.drop}${fmt(reading.humidity_pct, 0)}% ${esc(tr("home.humidity").toLowerCase())}</span>` : "";
@@ -971,7 +986,7 @@ function renderOutdoor() {
     range = `<span class="outdoor-range" aria-label="${esc(tr("home.outdoor_range", { min: low, max: high }))}">
       <span>${esc(tr("home.outdoor_min", { value: low }))}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}</span></span>`;
   }
-  morph(chip, `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}</span>
+  morph(chip, `${label}
     <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}`);
 }
 

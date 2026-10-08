@@ -476,6 +476,40 @@ def test_each_band_of_the_week_says_its_temperature(open_page, api):
     assert opened.errors == []
 
 
+def test_the_outdoor_tile_says_when_there_is_no_sensor_or_it_is_simulated(open_page):
+    """Seen on the production board: a simulated outdoor sensor showed an
+    invented temperature as the real one. Simulated, it says so; not wired
+    yet, the tile says that; wired and not heard from yet, that too."""
+    opened = open_page("/", 390)
+    page = opened.page
+    tile = page.locator("#outdoor-chip")
+    assert eventually(page, lambda: "simulato" in tile.inner_text().lower()), "the test board's is simulated"
+
+    def without_outdoor(route):
+        response = route.fetch()
+        data = response.json()
+        data["sensors"] = [s for s in data["sensors"] if s["name"] != "Outdoor Sensor"]
+        route.fulfill(response=response, json=data)
+    page.route("**/api/devices", without_outdoor)
+    page.reload()
+    assert eventually(page, lambda: "Sensore non ancora collegato" in tile.inner_text())
+    assert tile.is_visible() and not tile.locator(".outdoor-value").is_visible(), "a phone: the words only"
+    page.set_viewport_size({"width": 1280, "height": 900})
+    assert tile.locator(".outdoor-value-none").is_visible(), "a wide screen keeps the value's place"
+    page.set_viewport_size({"width": 390, "height": 900})
+    page.unroute("**/api/devices")
+
+    def not_heard_yet(route):
+        response = route.fetch()
+        data = response.json()
+        data["readings"]["Outdoor Sensor"] = {"ok": False, "error": "no MQTT message received yet"}
+        route.fulfill(response=response, json=data)
+    page.route("**/api/readings", not_heard_yet)
+    page.reload()
+    assert eventually(page, lambda: "In attesa del primo invio" in tile.inner_text())
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
 def test_the_home_page_says_when_the_board_stops_answering(open_page):
     page = _open_home(open_page).page
     assert page.locator("#offline").is_hidden()

@@ -913,6 +913,8 @@
     "season_cool": "Summer · cooling",
     "winter": "Winter",
     "summer": "Summer",
+    "outdoor_none": "No sensor connected yet",
+    "outdoor_waiting": "Waiting for its first report",
     "outdoor_range": "Today: low {min}°, high {max}°",
     "outdoor_min": "low {value}°",
     "outdoor_max": "high {value}°",
