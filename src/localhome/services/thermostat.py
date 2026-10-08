@@ -327,26 +327,34 @@ class ScheduleStore:
     # schedule set aside for a while, from the dashboard, without touching
     # the weekly grid - and gone by itself once its time is up. Kept here,
     # beside away mode, so it survives a restart. {zone: {"target": number
-    # or None (off), "until": iso time}}.
+    # or None (off), "until": iso time, or None - until it's changed back by
+    # hand (a season change drops it too)}}.
 
     def get_overrides(self, now: datetime | None = None) -> dict[str, dict]:
         """Every zone's temporary target still in force: {zone: {"target",
-        "until" (datetime)}}."""
+        "until" (datetime, or None: until it's changed back)}}."""
         now = now or datetime.now()
         active = {}
         for zone, entry in (self._load().get("overrides") or {}).items():
+            if not isinstance(entry, dict) or "until" not in entry:
+                continue
+            if entry["until"] is None:
+                active[zone] = {"target": entry.get("target"), "until": None}
+                continue
             try:
                 until = datetime.fromisoformat(entry["until"])
-            except (KeyError, TypeError, ValueError):
+            except (TypeError, ValueError):
                 continue
             if now < until:
                 active[zone] = {"target": entry.get("target"), "until": until}
         return active
 
-    def set_override(self, zone_name: str, target: float | None, until: datetime) -> None:
+    def set_override(self, zone_name: str, target: float | None, until: datetime | None) -> None:
+        """`until` None: until it's changed back by hand."""
         with self._lock:
             data = self._load()
-            data.setdefault("overrides", {})[zone_name] = {"target": target, "until": until.isoformat()}
+            data.setdefault("overrides", {})[zone_name] = {"target": target,
+                                                           "until": until.isoformat() if until else None}
             self._save(data)
 
     def clear_override(self, zone_name: str) -> None:
@@ -363,7 +371,7 @@ class ScheduleStore:
             data = self._load()
             overrides = data.get("overrides") or {}
             keep = {zone: entry for zone, entry in overrides.items()
-                    if datetime.fromisoformat(entry["until"]) > now}
+                    if entry.get("until") is None or datetime.fromisoformat(entry["until"]) > now}
             if len(keep) != len(overrides):
                 data["overrides"] = keep
                 self._save(data)
@@ -394,9 +402,14 @@ class ScheduleStore:
         return datetime.fromisoformat(value) if value else None
 
     def set_away_until(self, until: datetime | None) -> None:
+        """Going away drops every temporary target: away holds all off,
+        and coming back finds the schedule - not a 22° "until you change
+        it" left from before."""
         with self._lock:
             data = self._load()
             data["away_until"] = until.isoformat() if until else None
+            if until is not None:
+                data.pop("overrides", None)
             self._save(data)
 
     def get_diagnostic_mode(self) -> bool:
@@ -559,15 +572,16 @@ class ThermostatController:
             self.schedule_store.set_away_until(None)
             away_until = None
         away = away_until is not None
-        # A temporary target set from the dashboard beats both the schedule
-        # and away mode for its zone: 22° asked for now, while "away" still
-        # runs, is someone coming home early. Not an excluded zone's, nor
-        # while diagnostic mode is on (returned above).
+        # A temporary target set from the dashboard beats the schedule for
+        # its zone - not away mode, which holds everything off until it's
+        # ended by hand or runs out (none can be set meanwhile, and going
+        # away drops them). Not an excluded zone's, nor while diagnostic
+        # mode is on (returned above).
         self.schedule_store.drop_expired_overrides(now)
-        overrides = self.schedule_store.get_overrides(now)
+        overrides = {} if away else self.schedule_store.get_overrides(now)
         for zone in self.zones:
             override = overrides.get(zone.name)
-            if away and override is None:
+            if away:
                 # Same exception as the cooling branch below: a valve an
                 # interlock owns (a dehumidifier's water circuit) is that
                 # interlock's to open and close. Forcing it closed here

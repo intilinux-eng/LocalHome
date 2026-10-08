@@ -1093,15 +1093,32 @@ def test_a_temporary_off_holds_the_valve_closed(tmp_path):
     assert switch.calls == ["off"] and controller.applied_target("Rooms") is None
 
 
-def test_a_temporary_target_beats_away_mode(tmp_path):
-    """Asked for from the dashboard while "away" still runs: someone is
-    coming home early."""
+def test_away_beats_a_temporary_target(tmp_path):
+    """Away holds every zone off until it's ended - none can be asked
+    for meanwhile (the dashboard refuses), and one found anyway waits."""
     controller, store, switch = _room(tmp_path, temperature=15.0, scheduled=21.0)
     now = datetime(2026, 10, 5, 18, 0)
     store.set_away_until(now + timedelta(days=2))
     store.set_override("Rooms", 22.0, now + timedelta(hours=2))
     controller.tick(now=now)
-    assert switch.calls == ["on"]
+    assert switch.calls == ["off"] and controller.applied_target("Rooms") is None
+
+
+@pytest.mark.parametrize("held_for", [timedelta(hours=2), None], ids=["for_a_while", "until_changed"])
+def test_going_away_turns_off_a_zone_changed_by_hand_before(tmp_path, held_for):
+    """Changed by hand, then "away": the house is empty, nothing keeps
+    running - and coming back finds the schedule, not the old change."""
+    controller, store, switch = _room(tmp_path, temperature=15.0, scheduled=21.0)
+    now = datetime(2026, 10, 5, 18, 0)
+    store.set_override("Rooms", 24.0, now + held_for if held_for else None)
+    controller.tick(now=now)
+    assert switch.calls == ["on"] and controller.applied_target("Rooms") == 24.0
+    store.set_away_until(now + timedelta(days=1))
+    controller.tick(now=now + timedelta(minutes=1))
+    assert switch.calls == ["on", "off"] and store.get_overrides(now) == {}
+    controller.tick(now=now + timedelta(days=1, minutes=1))
+    assert store.get_away_until() is None
+    assert switch.calls == ["on", "off", "on"] and controller.applied_target("Rooms") == 21.0, "the schedule's"
 
 
 def test_a_season_change_drops_the_temporary_targets(tmp_path):
@@ -1110,6 +1127,21 @@ def test_a_season_change_drops_the_temporary_targets(tmp_path):
     store.set_override("Rooms", 22.0, now + timedelta(hours=2))
     store.set_mode("cool")
     assert store.get_overrides(now) == {}
+
+
+def test_a_target_held_until_its_changed_back_has_no_end(tmp_path):
+    """"Until you change it": no time up - back to the schedule by hand,
+    or by a season change."""
+    controller, store, switch = _room(tmp_path, temperature=18.0, scheduled=16.0)
+    now = datetime(2026, 10, 5, 18, 0)
+    store.set_override("Rooms", 22.0, None)
+    controller.tick(now=now + timedelta(days=30))
+    assert switch.calls == ["on"] and controller.applied_target("Rooms") == 22.0
+    assert store.get_overrides(now + timedelta(days=30)) == {"Rooms": {"target": 22.0, "until": None}}
+    store.drop_expired_overrides(now + timedelta(days=60))
+    assert "Rooms" in store.get_overrides(now), "never expires by itself"
+    store.set_mode("cool")
+    assert store.get_overrides(now) == {}, "a season change drops it"
 
 
 def test_the_next_change_is_the_next_hour_with_a_different_target(tmp_path):

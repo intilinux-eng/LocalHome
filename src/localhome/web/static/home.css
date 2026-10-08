@@ -605,17 +605,28 @@ body[data-running="true"] .hero-season::before {
 .segmented button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .pending-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
-.override-note {
-  width: 100%;
+/* A zone changed by hand: at the top of its card, in the season's colour. */
+.manual-banner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 12px;
   padding: 10px 12px;
   border-radius: var(--radius-s);
-  background: var(--accent-soft);
-  font-size: 0.9rem;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
 }
+.manual-banner svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.manual-banner span { flex: 1 1 12em; }
+.manual-banner .btn { font-weight: 600; color: var(--text); }
+/* The controls say what they are. */
+.quick-title { flex-basis: 100%; font-size: 0.86rem; font-weight: 650; color: var(--text); }
+.quick-hint { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--text-3); }
+.pending-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: -4px; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */
 .excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
@@ -933,6 +944,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 .sheet-note { color: var(--text-2); font-size: 0.9rem; margin: 4px 0 14px; }
+.sheet-points { margin: 4px 0 14px; padding-left: 20px; color: var(--text-2); font-size: 0.9rem; line-height: 1.45; }
+.sheet-points li + li { margin-top: 4px; }
+.sheet-label { margin-top: 16px; color: var(--text-2); font-size: 0.85rem; font-weight: 600; }
+.sheet-label + .sheet-actions { margin-top: 8px; }
+.away-date { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+.away-date input { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; min-height: 40px; }
+.away-note { flex-wrap: wrap; }
+.away-note span { flex: 1 1 180px; }
 
 /* The weekly grid (static/schedule_grid.js) and its palette: pick a
    temperature, then tap or drag across the hours; it saves by itself. */

@@ -94,6 +94,34 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
 
 
+def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
+    """Seen on the production board: a change by hand said only by a small
+    box at the bottom of the card, the controls with no word of what they
+    are. Now the card's top says it, and the top of the page; and "until
+    you change it" is one of its durations."""
+    opened = _open_home(open_page)
+    page = opened.page
+    card = _card(page, ZONE_A)
+    assert card.locator(".quick-title").inner_text() == "Cambia la temperatura"
+    assert "Tocca − o +" in card.locator(".quick-hint").inner_text()
+    card.locator("button[data-action=start][data-delta='0.5']").click()
+    durations = card.locator(".pending .segmented button").all_inner_texts()
+    assert durations[:4] == ["2 h", "4 h", "8 h", "24 h"] and durations[-1] == "Finché non lo cambi"
+    card.locator(".pending button[data-hours='manual']").click()
+    card.locator("button[data-action=apply]").click()
+    assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {}).get("until", "x") is None)
+    banner = card.locator(".manual-banner")
+    banner.wait_for()
+    assert banner.inner_text().startswith("Cambio manuale:") and "finché non lo cambi" in banner.inner_text()
+    assert card.locator(".quick-title").inner_text() == "Cambiala ancora"
+    assert "manuale finché non lo cambi" in page.locator("#hero-detail").inner_text()
+    banner.locator("button[data-action=resume]").click()
+    assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+    page.wait_for_timeout(600)
+    assert card.locator(".manual-banner").count() == 0
+    assert opened.errors == []
+
+
 def _open_plan(page, name):
     """The week is on the card itself - behind its button on a phone:
     opens it, and waits for its grid to be filled."""
@@ -210,6 +238,49 @@ def test_away_is_set_from_the_hero_and_ended(open_page, api):
     page.click("#away-chip")
     page.locator("#sheet button[data-away='back']").click()
     assert eventually(page, lambda: api("/api/climate/zones")["away_until"] is None)
+
+
+def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api):
+    """Seen on the production board: a zone changed by hand kept cooling
+    after "away". Now away says what it does before it's chosen, turns
+    off the zone changed by hand and the dehumidifier, and every card says
+    it's off - no controls - until "I'm back"."""
+    api(f"/api/climate/zones/{urllib.parse.quote(ZONE_A, safe='')}/override", {"target": 18.0, "until": "manual"})
+    api("/api/sensors/Dehumidifier/on", {})
+    opened = _open_home(open_page)
+    page = opened.page
+    card = _card(page, ZONE_A)
+    card.locator(".manual-banner").wait_for()
+    page.click("#away-chip")
+    points = page.locator("#sheet .sheet-points").inner_text()
+    assert "anche quelle cambiate a mano" in points and "Si spegne anche: Deumidificatore" in points
+    assert "Sono rientrato" in points
+    page.locator("#sheet button[data-away='24']").click()
+    assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+    assert api("/api/sensors/Dehumidifier")["is_on"] is False
+    assert eventually(page, lambda: card.locator(".away-note").count() == 1)
+    assert card.locator(".stepper, .manual-banner, button[data-action=off]").count() == 0
+    assert "Spento anche: Deumidificatore" in page.inner_text("#hero-detail")
+    device = page.locator("#season-devices .season-device", has_text="Deumidificatore")
+    assert "sei fuori casa" in device.inner_text() and device.locator("button[data-switch]").count() == 0
+    card.locator(".away-note button[data-action=back]").click()
+    assert eventually(page, lambda: api("/api/climate/zones")["away_until"] is None)
+    assert eventually(page, lambda: card.locator(".stepper").count() == 1)
+    assert card.locator(".manual-banner").count() == 0, "back to the schedule, not the old change"
+    assert opened.errors == []
+
+
+def test_away_until_a_day_picked_in_the_calendar(open_page, api):
+    from datetime import date, timedelta
+    page = _open_home(open_page).page
+    page.click("#away-chip")
+    day = (date.today() + timedelta(days=3)).isoformat()
+    page.fill("#away-day", day)
+    page.fill("#away-time", "07:30")
+    page.locator("#sheet button[data-away='day']").click()
+    assert eventually(page, lambda: api("/api/climate/zones")["away_until"] == f"{day}T07:30:00")
+    assert eventually(page, lambda: page.locator("#away-chip").get_attribute("aria-pressed") == "true")
+    api("/api/climate/away/cancel", {})
 
 
 def test_the_home_page_says_when_the_board_stops_answering(open_page):

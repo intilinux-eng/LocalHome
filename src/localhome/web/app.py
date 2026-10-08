@@ -209,6 +209,14 @@ def create_app(config_path: str | None = None) -> Flask:
         mode = thermostat.schedule_store.get_mode()
         return any(r["switch"] == name and r[mode] != "manual" for r in season_rules())
 
+    def held_off_while_away(name: str) -> bool:
+        """Left to whoever uses it in this season (the dehumidifier) - and
+        nobody's home: off until they're back (services/interlock.py)."""
+        if thermostat is None or thermostat.schedule_store.get_away_until() is None:
+            return False
+        mode = thermostat.schedule_store.get_mode()
+        return any(r["switch"] == name and r[mode] == "manual" for r in season_rules())
+
     auth_cfg = (config.raw.get("web") or {}).get("auth")
     if auth_cfg:
         register_auth(app, config.resolve(auth_cfg["secrets_file"]))
@@ -325,6 +333,7 @@ def create_app(config_path: str | None = None) -> Flask:
             diagnostic_mode_provider=schedule_store.get_diagnostic_mode,
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             season_rules_provider=lambda: config_rules + [rule for rule, _ in _panel_rules()],
+            away_provider=lambda: schedule_store.get_away_until() is not None,
         )
         interlock_followers = {link.leader: link.follower for link in interlocks}
         thermostat.interlock_owned_valves = {link.follower: link.active_in_mode for link in interlocks}
@@ -381,7 +390,7 @@ def create_app(config_path: str | None = None) -> Flask:
         the diagnostic mode, where whoever installs it switches what they like."""
         if thermostat is None:
             return True
-        if thermostat.schedule_store.get_diagnostic_mode():
+        if thermostat.schedule_store.get_diagnostic_mode() or held_off_while_away(name):
             return False
         mode = thermostat.schedule_store.get_mode()
         rule = next((r for r in season_rules() if r["switch"] == name), None)
@@ -436,6 +445,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["SEASON_RULES"] = season_rules
     app.config["SEASON_LINKS"] = season_links
     app.config["FORCED_BY_SEASON"] = forced_by_season
+    app.config["HELD_OFF_WHILE_AWAY"] = held_off_while_away
     app.config["CLIMATE_MAP"] = climate_map
     app.config["MANUAL_OVERRIDE"] = manual_override
     # A snapshot of exactly what was loaded to build the integrations
@@ -503,7 +513,8 @@ def _valve_driver(manager: DeviceManager, link) -> dict | None:
 
 AWAY_MAX_HOURS = 24 * 366
 # A zone's temporary target (see api_climate_set_override): what the
-# dashboard offers - a few hours, or until the schedule's next change.
+# dashboard offers - a few hours (up to a day), until the schedule's next
+# change, or until it's changed back by hand.
 OVERRIDE_MAX_HOURS = 24
 OVERRIDE_MIN_C, OVERRIDE_MAX_C = 5, 35
 
@@ -1049,6 +1060,8 @@ def _register_routes(app: Flask) -> None:
         diagnostic_mode = bool(thermostat and thermostat.schedule_store.get_diagnostic_mode())
         if app.config["FORCED_BY_SEASON"](name) and not diagnostic_mode:
             return _fail("switch_mode_controlled", f"'{name}' is controlled automatically by the thermostat mode", 409, name=name)
+        if action == "on" and app.config["HELD_OFF_WHILE_AWAY"](name) and not diagnostic_mode:
+            return _fail("switch_away", f"'{name}' stays off while away", 409, name=name)
         try:
             switch.turn_on() if action == "on" else switch.turn_off()
         except Exception as exc:
@@ -1134,6 +1147,8 @@ def _register_routes(app: Flask) -> None:
         timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
         if timer is None:
             return _fail("no_dehumidifier", "no dehumidifier configured", 404)
+        if app.config["HELD_OFF_WHILE_AWAY"](timer.switch):
+            return _fail("dehumidifier_away", "away mode is on", 409)
         body = _json_body()
         try:
             status = timer.switch_on(body.get("hours"), until=body.get("until"))
@@ -1228,7 +1243,9 @@ def _register_routes(app: Flask) -> None:
         # For a sensor not heard from since the board came up - see sensor_waiting.
         uptime = system_status.board_uptime_seconds()
         zones = []
-        overrides = thermostat.schedule_store.get_overrides(now)
+        # None while away: it holds every zone off (see the thermostat's tick).
+        away_until = thermostat.schedule_store.get_away_until()
+        overrides = {} if away_until else thermostat.schedule_store.get_overrides(now)
         for zone in thermostat.zones:
             sensor_reading = manager.sensor_reading(zone.sensor)
             override = overrides.get(zone.name)
@@ -1287,7 +1304,8 @@ def _register_routes(app: Flask) -> None:
                 "tier": target_tier(target_now, mode),
                 "valve_opens_at": opens_at,
                 "valve_stops_at": stops_at,
-                "override": {"target": override["target"], "until": override["until"].isoformat()} if override else None,
+                "override": {"target": override["target"],
+                             "until": override["until"].isoformat() if override["until"] else None} if override else None,
                 "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
                 "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
                 "sensor_failsafe_hours": thermostat.sensor_failsafe_hours,
@@ -1297,7 +1315,6 @@ def _register_routes(app: Flask) -> None:
                 # for a valve the thermostat itself leaves alone.
                 "valve_driver": _valve_driver(manager, valve_drivers.get(zone.valve)),
             })
-        away_until = thermostat.schedule_store.get_away_until()
         return jsonify(
             ok=True,
             mode=thermostat.schedule_store.get_mode(),
@@ -1342,34 +1359,60 @@ def _register_routes(app: Flask) -> None:
             interlock.tick()
         return jsonify(ok=True)
 
+    def _away_changed(thermostat: ThermostatController) -> None:
+        """Every valve, and the dehumidifier with the valve it draws its
+        water through, now - not at the loops' next tick."""
+        thermostat.tick()
+        interlock: InterlockController | None = app.config["INTERLOCK"]
+        if interlock is not None:
+            interlock.tick()
+        timer: DehumidifierTimer | None = app.config["DEHUMIDIFIER"]
+        if timer is not None:
+            timer.tick()
+
     @app.route("/api/climate/away", methods=["POST"])
     def api_climate_set_away():
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
-        hours = data.get("hours")
-        # Up to a year: beyond that the date overflows (a 500), and no
-        # absence the dashboard offers comes anywhere near it.
-        if not isinstance(hours, (int, float)) or isinstance(hours, bool) or not 0 < hours <= AWAY_MAX_HOURS:
-            return _fail("away_hours_invalid", f"hours must be a number between 0 and {AWAY_MAX_HOURS}", max=AWAY_MAX_HOURS)
-        until = datetime.now() + timedelta(hours=hours)
+        now = datetime.now()
+        if "until" in data:
+            # The day back, from the home page's calendar: the board's own
+            # time, "2026-10-15T18:00".
+            try:
+                until = datetime.fromisoformat(data["until"]).replace(tzinfo=None, second=0, microsecond=0)
+            except (TypeError, ValueError):
+                until = None
+            if until is None or not now < until <= now + timedelta(hours=AWAY_MAX_HOURS):
+                return _fail("away_until_invalid", "until must be a time ahead, within a year")
+        else:
+            hours = data.get("hours")
+            # Up to a year: beyond that the date overflows (a 500), and no
+            # absence the dashboard offers comes anywhere near it.
+            if not isinstance(hours, (int, float)) or isinstance(hours, bool) or not 0 < hours <= AWAY_MAX_HOURS:
+                return _fail("away_hours_invalid", f"hours must be a number between 0 and {AWAY_MAX_HOURS}", max=AWAY_MAX_HOURS)
+            until = now + timedelta(hours=hours)
         thermostat.schedule_store.set_away_until(until)
-        thermostat.tick()
+        _away_changed(thermostat)
         return jsonify(ok=True, away_until=until.isoformat())
 
     @app.route("/api/climate/zones/<name>/override", methods=["POST"])
     def api_climate_set_override(name):
         """A zone's schedule set aside for a while - {"target": number or
-        null (off), "hours": 0.5-24} or {"target": ..., "until":
-        "next_change"}. Gone by itself when the time is up; see
-        ScheduleStore's temporary targets."""
+        null (off), "hours": 0.5-24}, {"target": ..., "until":
+        "next_change"} or {"target": ..., "until": "manual"} (until it's
+        changed back - or the season changes). Gone by itself when the
+        time is up; see ScheduleStore's temporary targets."""
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         if thermostat is None:
             return _fail("no_thermostat", "no thermostat configured", 404)
         zone = next((z for z in thermostat.zones if z.name == name), None)
         if zone is None:
             return _fail("zone_unknown", f"no zone named {name!r}", 404, zone=name)
+        if thermostat.schedule_store.get_away_until() is not None:
+            # Away holds every zone off until it's ended ("I'm back").
+            return _fail("override_while_away", "away mode is on", 409, zone=name)
         mode = thermostat.schedule_store.get_mode()
         if mode == "cool" and not zone.cool_enabled:
             return _fail("override_zone_excluded", f"{name!r} is left out of cooling", 409, zone=name)
@@ -1383,6 +1426,8 @@ def _register_routes(app: Flask) -> None:
         if data.get("until") == "next_change":
             # A schedule that never changes: a day, like the longest duration.
             until = thermostat.schedule_store.next_change(name, now) or now + timedelta(hours=OVERRIDE_MAX_HOURS)
+        elif data.get("until") == "manual":
+            until = None
         else:
             hours = data.get("hours")
             if isinstance(hours, bool) or not isinstance(hours, (int, float)) or not 0 < hours <= OVERRIDE_MAX_HOURS:
@@ -1391,7 +1436,7 @@ def _register_routes(app: Flask) -> None:
             until = now + timedelta(hours=hours)
         thermostat.schedule_store.set_override(name, float(target) if target is not None else None, until)
         thermostat.tick()
-        return jsonify(ok=True, override={"target": target, "until": until.isoformat()})
+        return jsonify(ok=True, override={"target": target, "until": until.isoformat() if until else None})
 
     @app.route("/api/climate/zones/<name>/override/cancel", methods=["POST"])
     def api_climate_cancel_override(name):
@@ -1408,7 +1453,7 @@ def _register_routes(app: Flask) -> None:
         if thermostat is None:
             return _fail("no_thermostat", "no thermostat configured", 404)
         thermostat.schedule_store.set_away_until(None)
-        thermostat.tick()
+        _away_changed(thermostat)
         return jsonify(ok=True)
 
     @app.route("/api/climate/diagnostic-mode", methods=["POST"])

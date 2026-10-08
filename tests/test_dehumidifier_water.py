@@ -240,17 +240,25 @@ def test_the_admin_hears_that_config_yaml_has_its_own_rules(board):
 # In summer the bathrooms' valve follows the dehumidifier and nothing
 # else: on with it, off with it - whatever else is going on.
 
-def test_away_doesnt_close_the_valve_the_dehumidifier_needs(board):
-    """An empty house is exactly when it runs unattended."""
-    from datetime import datetime, timedelta
+def test_going_away_switches_the_dehumidifier_off_and_its_valve_with_it(board):
+    """Nobody home runs it: off at once, and not switched on again - from
+    its card or its switch - until they're back. The bypass valve is the
+    season's, and stays."""
     app, client = board
-    app.config["THERMOSTAT"].schedule_store.set_away_until(datetime.now() + timedelta(days=2))
     client.post("/api/sensors/Deumidificatore/on")
     _settle(app)
-    assert _valve(client) is True
-    client.post("/api/sensors/Deumidificatore/off")
+    assert _valve(client) is True and _valve(client, "Valvola Bypass Bagni") is True
+    assert client.post("/api/climate/away", json={"hours": 24}).get_json()["ok"]
+    assert _valve(client, "Deumidificatore") is False and _valve(client) is False, "at once"
+    assert client.post("/api/sensors/Deumidificatore/on").get_json()["code"] == "switch_away"
+    assert client.post("/api/dehumidifier/on", json={"hours": 1}).get_json()["code"] == "dehumidifier_away"
     _settle(app)
-    assert _valve(client) is False
+    assert _valve(client, "Deumidificatore") is False and _valve(client) is False
+    assert _valve(client, "Valvola Bypass Bagni") is True
+    assert client.post("/api/climate/away/cancel").get_json() == {"ok": True}
+    assert client.post("/api/sensors/Deumidificatore/on").get_json()["ok"]
+    _settle(app)
+    assert _valve(client) is True
 
 
 def test_a_valve_opened_or_closed_by_hand_goes_back_to_the_dehumidifier(board):

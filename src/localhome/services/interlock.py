@@ -33,6 +33,10 @@ nothing to do with the thermostat's own temperature-driven logic:
   dehumidifier {heat: off, cool: manual}. Rules come from a provider
   called on every tick, so ones edited in the admin panel apply without
   a restart. See season_rules_of() for how the older two map onto it.
+
+Away mode switches off what's left to whoever uses it ("manual", a
+ModeLimitedSwitch in its mode): nobody home runs the dehumidifier. What
+the season forces on or off (a bypass valve) is the plant's, and stays.
 """
 from __future__ import annotations
 
@@ -104,6 +108,7 @@ class InterlockController:
         diagnostic_mode_provider=None,
         poll_interval_seconds: float = 20,
         season_rules_provider=None,
+        away_provider=None,
     ):
         self.manager = manager
         self.interlocks = interlocks
@@ -113,6 +118,7 @@ class InterlockController:
         self._failures = FailureLog(logger)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
+        self.away_provider = away_provider  # callable returning bool (away mode on), or None
         # callable returning the current list[SeasonRule], or None - read on
         # every tick, so a rule changed in the admin panel applies at once.
         self.season_rules_provider = season_rules_provider
@@ -150,6 +156,22 @@ class InterlockController:
             # diagnosis mode entirely.
             return
         current_mode = self.mode_provider() if self.mode_provider else None
+        away = bool(self.away_provider and self.away_provider())
+        for mode_switch in self.mode_switches:
+            self._apply(mode_switch.switch, current_mode == mode_switch.active_in_mode)
+        for limited in self.mode_limited:
+            # Left to the user inside its mode - unless nobody's home; only
+            # ever forced off.
+            if away or current_mode != limited.only_in_mode:
+                self._apply(limited.switch, False)
+        for rule in (self.season_rules_provider() if self.season_rules_provider else []):
+            action = rule.action(current_mode)
+            if action != "manual":
+                self._apply(rule.switch, action == "on")
+            elif away:
+                self._apply(rule.switch, False)
+        # Last: a leader switched off above takes its follower with it in
+        # this same tick.
         for link in self.interlocks:
             if link.active_in_mode is not None and link.active_in_mode != current_mode:
                 continue
@@ -159,16 +181,6 @@ class InterlockController:
             # leave the bathroom valve feeding it open indefinitely.
             leader_on = bool(leader_reading.get("ok") and leader_reading.get("is_on"))
             self._apply(link.follower, leader_on)
-        for mode_switch in self.mode_switches:
-            self._apply(mode_switch.switch, current_mode == mode_switch.active_in_mode)
-        for limited in self.mode_limited:
-            # Left to the user inside its mode; only ever forced off.
-            if current_mode != limited.only_in_mode:
-                self._apply(limited.switch, False)
-        for rule in (self.season_rules_provider() if self.season_rules_provider else []):
-            action = rule.action(current_mode)
-            if action != "manual":
-                self._apply(rule.switch, action == "on")
 
     def _apply(self, follower_name: str, desired_on: bool) -> None:
         switch = self.manager.switches.get(follower_name)

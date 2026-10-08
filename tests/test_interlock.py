@@ -290,3 +290,36 @@ def test_the_older_forms_map_onto_season_rules():
     rules = season_rules_of([ModeSwitch("Bypass", "cool")], [ModeLimitedSwitch("Dehumidifier", "cool")])
     assert [(r.switch, r.actions) for r in rules] == [
         ("Bypass", {"heat": "off", "cool": "on"}), ("Dehumidifier", {"heat": "off", "cool": "manual"})]
+
+
+# Away: nobody home runs the dehumidifier.
+
+class LiveManager(FakeManager):
+    """A switched switch reads back as such - as the real cache does."""
+    def __init__(self, readings, switches):
+        super().__init__(readings, switches)
+        for name, poller in self.pollers.items():
+            poller.merge = lambda partial, name=name: self._readings[name].update(partial)
+
+
+def test_away_switches_off_what_is_left_to_the_user_and_its_valve_with_it():
+    from localhome.services.interlock import SeasonRule
+    bypass, dehumidifier, limited, valve = FakeSwitch(), FakeSwitch(), FakeSwitch(), FakeSwitch()
+    manager = LiveManager(
+        readings={"Bypass": {"ok": True, "is_on": True}, "Dehumidifier": {"ok": True, "is_on": True},
+                  "Old Dehumidifier": {"ok": True, "is_on": True}, "Bath Valve": {"ok": True, "is_on": True}},
+        switches={"Bypass": bypass, "Dehumidifier": dehumidifier, "Old Dehumidifier": limited, "Bath Valve": valve})
+    away = {"on": False}
+    controller = InterlockController(
+        manager, [Interlock(leader="Dehumidifier", follower="Bath Valve", active_in_mode="cool")],
+        mode_provider=lambda: "cool", away_provider=lambda: away["on"],
+        mode_limited=[ModeLimitedSwitch(switch="Old Dehumidifier", only_in_mode="cool")],
+        season_rules_provider=lambda: [SeasonRule("Bypass", {"heat": "off", "cool": "on"}),
+                                       SeasonRule("Dehumidifier", {"heat": "off", "cool": "manual"})])
+    controller.tick()
+    assert (bypass.calls, dehumidifier.calls, limited.calls, valve.calls) == ([], [], [], [])
+    away["on"] = True
+    controller.tick()
+    assert (dehumidifier.calls, limited.calls) == (["off"], ["off"])
+    assert valve.calls == ["off"], "its water valve closes in the same tick"
+    assert bypass.calls == [], "the season's own rule stays: the plant's, not a comfort"

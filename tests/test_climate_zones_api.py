@@ -325,6 +325,10 @@ def test_a_temporary_target_from_the_dashboard(tmp_path):
     assert "scheduled_target_c" in zone
     res = client.post(f"/api/climate/zones/{name}/override", json={"target": None, "until": "next_change"}).get_json()
     assert res["ok"] and res["override"]["target"] is None
+    res = client.post(f"/api/climate/zones/{name}/override", json={"target": 23.0, "until": "manual"}).get_json()
+    assert res["ok"] and res["override"] == {"target": 23.0, "until": None}, "until it's changed back"
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
+    assert zone["override"] == {"target": 23.0, "until": None} and zone["target_c"] == 23.0
     assert client.post(f"/api/climate/zones/{name}/override/cancel").get_json() == {"ok": True}
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
     assert zone["override"] is None
@@ -334,6 +338,28 @@ def test_a_temporary_target_from_the_dashboard(tmp_path):
                        ({"target": 21}, "override_hours_invalid")):
         assert client.post(f"/api/climate/zones/{name}/override", json=body).get_json()["code"] == code
     assert client.post("/api/climate/zones/Nowhere/override", json={"target": 21, "hours": 1}).status_code == 404
+
+
+def test_going_away_turns_off_a_zone_changed_by_hand(tmp_path):
+    """Changed by hand, then "away" from the dashboard: the valve closes
+    and the change is gone. None is taken while away - back first."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG, encoding="utf-8")
+    app = create_app(str(config_path))
+    client = app.test_client()
+    name = app.config["THERMOSTAT"].zones[0].name
+    zone_of = lambda: next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
+    assert client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "until": "manual"}).get_json()["ok"]
+    assert zone_of()["valve_on"] is True
+    assert client.post("/api/climate/away", json={"hours": 24}).get_json()["ok"]
+    zone = zone_of()
+    assert zone["override"] is None and zone["valve_on"] is False
+    res = client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "hours": 2})
+    assert res.status_code == 409 and res.get_json()["code"] == "override_while_away"
+    assert zone_of()["valve_on"] is False
+    assert client.post("/api/climate/away/cancel").get_json() == {"ok": True}
+    assert client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "hours": 2}).get_json()["ok"]
+    assert zone_of()["valve_on"] is True, "back home"
 
 
 def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):

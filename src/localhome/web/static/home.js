@@ -27,8 +27,11 @@ const HISTORY_MS = 5 * 60000;
 const PROBLEMS_MS = 60000;
 const DEFAULT_TARGET = { heat: 21, cool: 25 };
 const TARGET_RANGE = { min: 5, max: 35 };
-const DURATIONS = [1, 2, 4];
+// A slow radiant ceiling does little in an hour: longer ones, and then
+// until the schedule's next change, or until it's changed back by hand.
+const DURATIONS = [2, 4, 8, 24];
 const AWAY_OPTIONS = [24, 72, 168];
+const AWAY_BACK_TIME = "18:00";   // the day back: from when, unless changed
 
 // The fixed roles' names, in the page's language.
 const DISPLAY_NAMES = {
@@ -216,6 +219,11 @@ function whenText(date) {
 }
 
 // "until 20:30", "until tomorrow at 06:00", "until Thursday at 18:00".
+// Until when a zone's change by hand holds: a time, or until it's changed back.
+function overrideUntil(override) {
+  return override.until ? untilText(boardDate(override.until)) : tr("home.until_changed");
+}
+
 function untilText(date) {
   const now = boardNow();
   const days = Math.round((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
@@ -357,7 +365,7 @@ function zoneStatus(zone, climate) {
   if (zone.sensor_waiting) return { tone: "off", text: tr("home.st_first_report") };
   if (!zone.sensor_ok && zone.temperature_c == null) return { tone: "warn", text: tr("home.st_waiting") };
   if (!zone.sensor_ok) return { tone: "warn", text: tr("home.st_stale") };
-  if (climate.away_until && !zone.override) return { tone: "off", text: tr("home.st_away") };
+  if (climate.away_until) return { tone: "off", text: tr("home.st_away") };
   if (zone.target_c == null) return { tone: "off", text: tr("home.st_off") };
   if (zone.valve_on) return { tone: "active", text: tr(mode === "cool" ? "home.st_cooling" : "home.st_heating"), active: true };
   const reached = targetReached(zone, climate);
@@ -432,12 +440,13 @@ function fillZone(card, zone, climate) {
   const fact = (icon, html, extra = "") => `<div class="fact${extra}"><span class="fact-icon">${icon}</span><span class="fact-text">${html}</span></div>`;
   const facts = [];
   const excluded = mode === "cool" && !zone.cool_enabled;
-  if (zone.target_c != null && !excluded) {
+  // Away: nothing to reach - every zone off until the way back.
+  if (zone.target_c != null && !excluded && !climate.away_until) {
     const gap = zone.sensor_ok ? gapText(zone) : "";
     const chip = tierChip(zone.tier, mode);
     const sub = chip || gap ? `<span class="fact-sub">${chip}${gap ? `<span class="trend">${esc(gap)}</span>` : ""}</span>` : "";
     facts.push(fact(ICONS.target, `<span>${esc(tr("home.target"))} <b>${fmtTarget(zone.target_c)}</b></span>${sub}`, " fact-target"));
-    const rule = climate.away_until && !zone.override ? "" : valveRule(zone, climate);
+    const rule = valveRule(zone, climate);
     if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
   if (change && !zone.override && !climate.away_until && !excluded) {
@@ -467,6 +476,7 @@ function fillZone(card, zone, climate) {
       <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
     </div>
+    ${manualBannerHtml(zone, climate)}
     <div class="zone-main">
       ${readings}
       ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
@@ -604,8 +614,8 @@ function ribbonSvg(zone, week, history, mode) {
     });
     if (d) parts.push(`<path class="rb-target" d="${d}" vector-effect="non-scaling-stroke"/>`);
     if (zone.override && zone.override.target != null) {
-      const until = boardDate(zone.override.until);
-      const endHour = Math.min(24, (until - new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 3600000);
+      const until = zone.override.until ? boardDate(zone.override.until) : null;
+      const endHour = until ? Math.min(24, (until - new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 3600000) : 24;
       const y = scale.y(zone.override.target);
       if (endHour > nowHour) band(nowHour, endHour, zone.override.target);
       parts.push(`<path class="rb-override" d="M${x(nowHour)},${y} L${x(endHour)},${y}" vector-effect="non-scaling-stroke"/>`);
@@ -695,10 +705,30 @@ function wireRibbon(card, week, history, mode) {
 
 // -------------------------------------------------------- quick change --
 
+// A zone changed by hand, said at the top of its card - not only at the
+// bottom, where it was easy to miss: what it holds, until when, and the
+// way back to its schedule.
+function manualBannerHtml(zone, climate) {
+  if (!zone.override || climate.away_until || (climate.mode === "cool" && !zone.cool_enabled)) return "";
+  const until = overrideUntil(zone.override);
+  const text = zone.override.target == null
+    ? tr("home.manual_off", { until })
+    : tr("home.manual_on", { target: fmtTarget(zone.override.target), until });
+  return `<div class="manual-banner">${ICONS.hand}<span>${esc(text)}</span>
+    <button class="btn" type="button" data-action="resume">${esc(tr("home.resume"))}</button></div>`;
+}
+
 function quickHtml(zone, climate, change) {
   const mode = climate.mode;
   if (mode === "cool" && !zone.cool_enabled) {
     return `<div class="excluded-note">${ICONS.snow}<span>${esc(tr("home.excluded_note"))}</span></div>`;
+  }
+  // Away: off until the way back, and nothing to change meanwhile - the
+  // board refuses it too. The way back right here.
+  if (climate.away_until) {
+    delete state.pending[zone.name];
+    return `<div class="excluded-note away-note">${ICONS.suitcase}<span>${esc(tr("home.away_zone_note"))}</span>
+      <button class="btn" type="button" data-action="back">${esc(tr("home.away_back"))}</button></div>`;
   }
   const pending = state.pending[zone.name];
   if (pending) {
@@ -706,9 +736,8 @@ function quickHtml(zone, climate, change) {
     if (change) {
       options.push(`<button type="button" data-action="duration" data-hours="next" aria-pressed="${pending.hours === "next"}">${esc(tr("home.until_time", { time: hhmm(change.at) }))}</button>`);
     }
-    const title = pending.target == null
-      ? tr("home.pending_off")
-      : tr("home.pending_target", { target: fmtTarget(pending.target) });
+    options.push(`<button type="button" data-action="duration" data-hours="manual" aria-pressed="${pending.hours === "manual"}">${esc(tr("home.until_changed_button"))}</button>`);
+    const title = pending.target == null ? tr("home.pending_off") : tr("home.pending_new");
     return `
       <div class="pending">
         <div class="pending-title">${esc(title)}</div>
@@ -717,6 +746,7 @@ function quickHtml(zone, climate, change) {
           <span class="stepper-value">${fmtTarget(pending.target)}</span>
           <button type="button" data-action="step" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
         </div>
+        <div class="pending-label">${esc(tr("home.for_how_long"))}</div>
         <div class="segmented" role="group" aria-label="${esc(tr("home.for_how_long"))}">${options.join("")}</div>
         <div class="pending-actions">
           <button class="btn" type="button" data-action="cancel-pending">${esc(tr("home.cancel"))}</button>
@@ -724,23 +754,18 @@ function quickHtml(zone, climate, change) {
         </div>
       </div>`;
   }
-  if (zone.override) {
-    const until = boardDate(zone.override.until);
-    const text = zone.override.target == null
-      ? tr("home.override_off", { until: untilText(until) })
-      : tr("home.override_on", { target: fmtTarget(zone.override.target), until: untilText(until) });
-    return `<div class="override-note"><span>${esc(text)}</span>
-      <button class="btn" type="button" data-action="resume">${esc(tr("home.resume"))}</button></div>`;
-  }
+  // Its controls say what they are: a title, and what a tap does.
   const shown = zone.target_c != null ? zone.target_c : null;
   return `
+    <div class="quick-title">${esc(tr(zone.override ? "home.quick_title_again" : "home.quick_title"))}</div>
     <div class="stepper">
       <button type="button" data-action="start" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
       <span class="stepper-value">${fmtTarget(shown)}</span>
       <button type="button" data-action="start" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
     </div>
     <span class="quick-spacer"></span>
-    ${zone.target_c != null ? `<button class="btn" type="button" data-action="off">${esc(tr("home.turn_off"))}</button>` : ""}`;
+    ${zone.target_c != null ? `<button class="btn" type="button" data-action="off">${esc(tr("home.turn_off"))}</button>` : ""}
+    <p class="quick-hint">${esc(tr("home.quick_hint"))}</p>`;
 }
 
 function lastTarget(zone) {
@@ -769,18 +794,23 @@ async function onZoneClick(event) {
     return;
   }
   const pending = state.pending[zone.name];
+  // Until the schedule's next change, as most thermostats do - or 4 hours
+  // without one.
+  const firstHours = () => nextChange((state.weeks[zone.name] || {})[state.climate.mode], boardNow()) ? "next" : 4;
   if (action === "start") {
-    state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + Number(button.dataset.delta)), hours: 2 };
+    state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + Number(button.dataset.delta)), hours: firstHours() };
   } else if (action === "off") {
-    state.pending[zone.name] = { target: null, hours: 2 };
+    state.pending[zone.name] = { target: null, hours: firstHours() };
   } else if (action === "step" && pending) {
     pending.target = clampTarget(pending.target + Number(button.dataset.delta));
   } else if (action === "duration" && pending) {
-    pending.hours = button.dataset.hours === "next" ? "next" : Number(button.dataset.hours);
+    pending.hours = ["next", "manual"].includes(button.dataset.hours) ? button.dataset.hours : Number(button.dataset.hours);
   } else if (action === "cancel-pending") {
     delete state.pending[zone.name];
   } else if (action === "apply" && pending) {
-    const body = pending.hours === "next" ? { target: pending.target, until: "next_change" } : { target: pending.target, hours: pending.hours };
+    const body = pending.hours === "next" ? { target: pending.target, until: "next_change" }
+      : pending.hours === "manual" ? { target: pending.target, until: "manual" }
+      : { target: pending.target, hours: pending.hours };
     asked.climate++;
     const done = await act(button, () => api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override`, body));
     const quick = card.querySelector(".quick");
@@ -797,6 +827,9 @@ async function onZoneClick(event) {
     asked.climate++;
     await act(button, () => api(`/api/climate/zones/${encodeURIComponent(zone.name)}/override/cancel`, {}));
     refreshClimate(card.querySelector(".quick"));
+    return;
+  } else if (action === "back") {
+    await comeBack(button);
     return;
   } else {
     return;
@@ -853,7 +886,10 @@ function renderHero() {
   else if (running.length && off.length === running.length) title = tr(cool ? "home.hero_all_off_cool" : "home.hero_all_off_heat");
   else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).reached)) title = tr("home.hero_all_ok");
   else title = tr(cool ? "home.hero_idle_cool" : "home.hero_idle_heat");
-  const detail = climate.away_until ? tr("home.hero_away_detail") : zones.map(z => zoneLine(z, climate)).join(" · ");
+  const devices = awayDevices();
+  const detail = climate.away_until
+    ? tr(devices.length ? "home.hero_away_detail_devices" : "home.hero_away_detail", { devices: listNames(devices) })
+    : zones.map(z => zoneLine(z, climate)).join(" · ");
   setText(document.getElementById("hero-title"), title);
   setText(document.getElementById("hero-detail"), detail);
 
@@ -870,10 +906,16 @@ function zoneLine(zone, climate) {
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
   if (zone.target_c == null) {
-    const change = zone.override ? null : nextChange((state.weeks[zone.name] || {})[climate.mode], boardNow());
-    const until = zone.override ? boardDate(zone.override.until) : change && change.at;
-    return until ? tr("home.line_off_until", { zone: zone.name, until: untilText(until) }) : tr("home.line_off", { zone: zone.name });
+    if (zone.override) return tr("home.line_off_until", { zone: zone.name, until: overrideUntil(zone.override) });
+    const change = nextChange((state.weeks[zone.name] || {})[climate.mode], boardNow());
+    return change ? tr("home.line_off_until", { zone: zone.name, until: untilText(change.at) }) : tr("home.line_off", { zone: zone.name });
   }
+  // Held by hand: said after the rest of its line.
+  const manual = zone.override ? ` · ${tr("home.line_manual", { until: overrideUntil(zone.override) })}` : "";
+  return zoneLineFor(zone, climate, temp) + manual;
+}
+
+function zoneLineFor(zone, climate, temp) {
   if (zoneStatus(zone, climate).active) return tr("home.line_on", { zone: zone.name, temp, target: fmtTarget(zone.target_c) });
   // Resting: at its target on the season's side (targetReached()), or
   // past it - 26° with a 20° heating target isn't "at temperature", and
@@ -912,6 +954,7 @@ const ICONS = {
   wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
   chevron: `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
+  hand: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-4.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6.5 7S5 17 5 13v-2a1.5 1.5 0 0 1 3 0"/></svg>`,
   battery: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4M6.5 10.5v3"/></svg>`,
   power: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>`,
   fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
@@ -919,27 +962,81 @@ const ICONS = {
 
 // ---------------------------------------------------------- away sheet --
 
+// What else away switches off: what this season leaves to be switched by
+// hand (the dehumidifier, in summer) - services/interlock.py.
+function awayDevices() {
+  const climate = state.climate;
+  const rules = (climate && climate.season_effects && climate.season_effects.rules) || [];
+  return rules.filter(rule => rule[climate.mode] === "manual" && deviceByName(rule.switch)).map(rule => displayName(rule.switch));
+}
+
+// A day as a date field wants it: yyyy-mm-dd, this device's own calendar.
+function dayValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function openAway() {
   const away = state.climate && state.climate.away_until;
   const options = AWAY_OPTIONS.map(h => `<button class="btn" type="button" data-away="${h}">${esc(tr(`home.away_${h}`))}</button>`).join("");
+  // Said before it's chosen: what goes off, and that nothing comes back on
+  // until "I'm back".
+  const devices = awayDevices();
+  const points = [tr("home.away_point_zones"),
+    ...(devices.length ? [tr("home.away_point_devices", { devices: listNames(devices) })] : []),
+    tr("home.away_point_locked"), tr("home.away_point_plan")];
+  // Or the day back, picked in the phone's own calendar: tomorrow at the
+  // earliest, a year at most (the board's limit).
+  const day = 24 * 3600 * 1000;
+  const tomorrow = dayValue(new Date(Date.now() + day));
   openSheet(tr("home.away_title"), `
-    <p class="sheet-note">${esc(tr("home.away_note"))}</p>
+    <ul class="sheet-points">${points.map(point => `<li>${esc(point)}</li>`).join("")}</ul>
     ${away ? `<p><b>${esc(tr("home.hero_away", { until: untilText(boardDate(away)) }))}</b></p>` : ""}
+    <div class="sheet-label">${esc(tr(away ? "home.away_change" : "home.away_for"))}</div>
     <div class="sheet-actions">${options}</div>
+    <div class="sheet-label">${esc(tr("home.away_back_on"))}</div>
+    <div class="away-date">
+      <input type="date" id="away-day" value="${tomorrow}" min="${tomorrow}" max="${dayValue(new Date(Date.now() + 365 * day))}" aria-label="${esc(tr("home.away_day"))}">
+      <input type="time" id="away-time" value="${AWAY_BACK_TIME}" aria-label="${esc(tr("home.away_time"))}">
+      <button class="btn" type="button" data-away="day">${esc(tr("home.away_set"))}</button>
+    </div>
     ${away ? `<div class="sheet-actions"><button class="btn btn-primary" type="button" data-away="back">${esc(tr("home.away_back"))}</button></div>` : ""}`,
     async event => {
       const button = event.target.closest("button[data-away]");
       if (!button) return;
+      const choice = button.dataset.away;
+      if (choice === "back") {
+        if (await comeBack(button)) closeSheet();
+        return;
+      }
+      let body = { hours: Number(choice) };
+      if (choice === "day") {
+        const dayField = document.getElementById("away-day"), timeField = document.getElementById("away-time");
+        if (!dayField.value) { dayField.focus(); return; }
+        body = { until: `${dayField.value}T${timeField.value || AWAY_BACK_TIME}` };
+      }
       asked.climate++;
-      const done = await act(button, () => (button.dataset.away === "back" ? api("/api/climate/away/cancel", {})
-        : api("/api/climate/away", { hours: Number(button.dataset.away) })));
+      const done = await act(button, () => api("/api/climate/away", body));
       if (done) {
         closeSheet();
         state.climate.away_until = done.away_until || null;
-        steady(() => { renderHero(); renderZones(); });
+        steady(() => { renderHero(); renderZones(); renderSeasonDevices(); });
       }
       refreshClimate();
+      refreshDevices();
     });
+}
+
+// "I'm back", from a card or the away sheet.
+async function comeBack(button) {
+  asked.climate++;
+  const done = await act(button, () => api("/api/climate/away/cancel", {}));
+  if (done) {
+    state.climate.away_until = null;
+    steady(() => { renderHero(); renderZones(); renderSeasonDevices(); });
+  }
+  refreshClimate();
+  refreshDevices();
+  return done;
 }
 
 // -------------------------------------------------------------- sheet --
@@ -1016,6 +1113,7 @@ function renderSeasonDevices() {
   const cards = rules.filter(rule => rule[climate.mode] === "manual").map(rule => {
     const device = deviceByName(rule.switch);
     if (!device || !device.controllable) return "";
+    if (climate.away_until) return awayDeviceCard(rule.switch);
     if (climate.dehumidifier && climate.dehumidifier.switch === rule.switch) return dehumidifierCard(rule.switch, climate.dehumidifier);
     const on = !!(state.readings[rule.switch] || {}).is_on;
     return `<div class="season-device" data-on="${on}">
@@ -1026,6 +1124,15 @@ function renderSeasonDevices() {
   }).filter(Boolean);
   host.hidden = !cards.length;
   morph(host, cards.join(""));
+}
+
+// Away: off until the way back - no switch, no durations (the way back
+// is on the zones and the away chip).
+function awayDeviceCard(name) {
+  return `<div class="season-device" data-on="false" data-state="away">
+      <span class="season-device-icon">${ICONS.drop}</span>
+      <span class="season-device-text"><b>${esc(displayName(name))}</b><span>${esc(tr("home.away_device_off"))}</span></span>
+    </div>`;
 }
 
 // The dehumidifier: on for a while or until the room is dry enough (the
