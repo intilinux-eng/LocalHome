@@ -86,16 +86,18 @@ def _valve_on(base, name):
     return call(base, f"/api/sensors/{urllib.parse.quote(name, safe='')}")["is_on"]
 
 
-def test_the_home_page_has_the_dehumidifier_up_top_and_none_of_the_plants_valves(browser, plant):
+def test_the_home_page_has_the_dehumidifier_in_the_plant_and_none_of_the_plants_valves(browser, plant):
     """The home is for whoever lives there: the dehumidifier, switched by
-    hand in summer, up top; the bypass moving with the season and the
-    valve the dehumidifier opens are the admin panel's."""
+    hand in summer, first in the plant's section - always there, on or off;
+    the bypass moving with the season and the valve the dehumidifier opens
+    are the admin panel's."""
     context, opened = _open(browser, plant)
     page = opened.page
     page.wait_for_selector("#season-devices:not([hidden]) .season-device", timeout=20000)
     page.wait_for_timeout(1500)
     device = page.locator("#season-devices .season-device")
     assert device.count() == 1 and "Deumidificatore" in device.inner_text()
+    assert page.locator("#plant #season-devices").count() == 1 and page.locator("#plant").is_visible()
     assert page.locator("#plant-body .tile", has_text="Bypass").count() == 0
     assert page.locator("#plant-body .tile", has_text="Deumidificatore").count() == 0
     assert "Deumidificatore" not in page.locator(".zone", has_text=ZONE_B).inner_text()
@@ -104,9 +106,10 @@ def test_the_home_page_has_the_dehumidifier_up_top_and_none_of_the_plants_valves
     context.close()
 
 
-def test_the_dehumidifier_is_switched_on_for_a_while_up_top_and_opens_the_bathrooms_valve_unsaid(browser, plant):
+def test_the_dehumidifier_is_switched_on_for_a_while_and_opens_the_bathrooms_valve_unsaid(browser, plant):
     """On for 1, 2 or 4 hours - it draws a lot of power - until when, and
-    Off; the valve it opens for its water is none of the home's business."""
+    Off; the top of the page says it runs (its card is down in the plant);
+    the valve it opens for its water is none of the home's business."""
     _humidity(plant, 60)
     context, opened = _open(browser, plant)
     page = opened.page
@@ -117,6 +120,7 @@ def test_the_dehumidifier_is_switched_on_for_a_while_up_top_and_opens_the_bathro
     device = page.locator("#season-devices .season-device")
     assert eventually(page, lambda: device.get_attribute("data-on") == "true")
     assert "Acceso fino alle" in device.inner_text()
+    assert eventually(page, lambda: "Deumidificatore acceso fino alle" in page.inner_text("#hero-detail"))
     card = page.locator(".zone", has_text=ZONE_B)
     page.wait_for_timeout(1500)
     assert "Esclusa d'estate" in card.locator(".zone-head").inner_text(), "the bathrooms aren't cooling for it"
@@ -137,7 +141,8 @@ def test_the_dehumidifier_is_off_and_not_offered_with_the_air_dry_enough(browser
     page.wait_for_selector("#season-devices .season-device", timeout=20000)
     card = page.locator("#season-devices .season-device-dehum")
     assert eventually(page, lambda: card.get_attribute("data-state") == "disabled")
-    assert "Disattivato: umidità 52%, si può accendere dal 55%" in card.inner_text()
+    assert "Spento: l'aria è già asciutta (52%). Si può accendere dal 55%." in card.inner_text()
+    assert "Deumidificatore" not in page.inner_text("#hero-detail")
     assert card.locator("button").count() == 0
     res = call(plant, "/api/dehumidifier")["dehumidifier"]
     assert res["humidity"] == 52 and res["on"] is False

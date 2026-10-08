@@ -368,6 +368,12 @@ function copyToZoneHtml(zone) {
 async function copyScheduleToZone(fromName, toName) {
   const week = scheduleWeeks[fromName];
   if (!week) return;
+  // Held by hand: its week waits for the way back (the board refuses it).
+  const target = climateZones.find(z => z.name === toName);
+  if (target && target.override) {
+    notify(tr("climate.copy_zone_manual", { to: toName }));
+    return;
+  }
   const season = tr(`climate.season_name_${scheduleWeekModes[fromName] || climateMode}`);
   const ok = await confirmAction(tr("climate.copy_zone_confirm", { from: fromName, to: toName, season }),
                                  { confirmLabel: tr("climate.copy_zone_button") });
@@ -481,6 +487,7 @@ async function saveSchedule(zoneName) {
     }
     delete saveRetrying[zoneName];
     if (data.week) adoptServerWeek(zoneName, data.week);
+    if (typeof onScheduleSaved === "function") onScheduleSaved(zoneName);
   } catch (e) {
     // The board didn't answer: the hours stay painted here and are sent
     // again shortly, until it does - said once, not at every try.

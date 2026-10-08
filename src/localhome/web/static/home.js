@@ -164,6 +164,12 @@ function updateZoneNext(zone) {
   if (card && current) steady(() => fillZone(card, current, state.climate), planTouchedRecently() ? card.querySelector(".zone-plan") : null);
 }
 
+// A week saved: the board ticked on it - the card's target, and the way
+// back's, from it now rather than at the next round.
+function onScheduleSaved() {
+  refreshClimate();
+}
+
 function updateNowHighlight() {
   const { dayKey, hour } = scheduleNow();
   document.querySelectorAll(".sched-cell.now, .sched-day-label.now, .sched-hour-axis span.now").forEach(c => c.classList.remove("now"));
@@ -895,13 +901,17 @@ function renderHero() {
   if (!zones.length) title = tr("home.no_zones");
   else if (climate.away_until) title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
   else if (active.length) title = tr(cool ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
-  else if (running.length && off.length === running.length) title = tr(cool ? "home.hero_all_off_cool" : "home.hero_all_off_heat");
+  // All off: "none planned now" only if it's the week's doing - one off
+  // by hand is planned, and the line under it says so.
+  else if (running.length && off.length === running.length) {
+    title = tr(`home.${off.some(z => z.override) ? "hero_off_now" : "hero_all_off"}_${cool ? "cool" : "heat"}`);
+  }
   else if (running.length && !off.length && running.every(z => zoneStatus(z, climate).reached)) title = tr("home.hero_all_ok");
   else title = tr(cool ? "home.hero_idle_cool" : "home.hero_idle_heat");
   const devices = awayDevices();
   const detail = climate.away_until
     ? tr(devices.length ? "home.hero_away_detail_devices" : "home.hero_away_detail", { devices: listNames(devices) })
-    : zones.map(z => zoneLine(z, climate)).join(" · ");
+    : zones.map(z => zoneLine(z, climate)).concat(dehumidifierLine(climate)).filter(Boolean).join(" · ");
   setText(document.getElementById("hero-title"), title);
   setText(document.getElementById("hero-detail"), detail);
 
@@ -1088,12 +1098,15 @@ function fillPlan(card, zone) {
   card.dataset.plan = hidden ? "none" : "week";
   if (hidden) return;
   if (plan.dataset.mode !== climateMode) buildPlan(plan, zone);
-  // Held by hand: the week is what comes back - said, so an edit that
-  // changes nothing now isn't a surprise.
+  // Held by hand: the week is what comes back - shown, not changed until
+  // then (the board refuses it too); the way back right above it.
+  const locked = !!zone.override;
   const note = plan.querySelector(".plan-manual");
-  if (note) {
-    note.hidden = !zone.override;
-    setText(note, zone.override ? tr("home.plan_manual_note") : "");
+  if (note) note.hidden = !locked;
+  const editor = plan.querySelector(".plan-edit");
+  if (editor) {
+    editor.inert = locked;
+    editor.classList.toggle("is-locked", locked);
   }
 }
 
@@ -1105,7 +1118,11 @@ function buildPlan(plan, zone) {
   plan.innerHTML = `<button class="plan-toggle" type="button" data-action="toggle-plan" aria-expanded="${plan.dataset.open === "true"}">
       <span class="plan-toggle-label">${esc(tr(`climate.schedule_heading_${climateMode}`))}</span>
       <span class="plan-toggle-hint">${esc(tr("home.plan_edit"))}</span>${ICONS.chevron}</button>
-    <div class="plan-body"><p class="plan-manual" hidden></p>${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>`;
+    <div class="plan-body">
+      <div class="plan-manual" hidden>${ICONS.hand}<span>${esc(tr("home.plan_manual_note"))}</span>
+        <button class="btn" type="button" data-action="resume">${esc(tr("home.resume"))}</button></div>
+      <div class="plan-edit">${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>
+    </div>`;
   // Not loaded (the board didn't answer): the next refresh tries again.
   loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }
@@ -1122,13 +1139,20 @@ function renderPlant() {
   const tiles = [];
   const vmcSpeed = (state.devices ? state.devices.sensors : []).find(d => d.kind === "number" && d.paired_switch && (d.presets || []).length);
   if (vmcSpeed) tiles.push(vmcTile(vmcSpeed));
-  document.getElementById("plant").hidden = !tiles.length;
-  morph(document.getElementById("plant-body"), tiles.join(""));
+  const body = document.getElementById("plant-body");
+  body.hidden = !tiles.length;
+  morph(body, tiles.join(""));
   renderSeasonDevices();
 }
 
+function showPlant() {
+  document.getElementById("plant").hidden = document.getElementById("plant-body").hidden
+    && document.getElementById("season-devices").hidden;
+}
+
 // What this season has to be switched by hand (the dehumidifier, in
-// summer): up top, a switch each. How the plant follows them - a valve
+// summer): first in the plant's section, a switch each - always there, on
+// or off; the top of the page says it when it runs. How the plant follows them - a valve
 // opened for its water, a bypass moving with the season - is the admin
 // panel's: nothing a home needs to see.
 function renderSeasonDevices() {
@@ -1149,6 +1173,14 @@ function renderSeasonDevices() {
   }).filter(Boolean);
   host.hidden = !cards.length;
   morph(host, cards.join(""));
+  showPlant();
+}
+
+// The dehumidifier running, said at the top: its card is down in the plant.
+function dehumidifierLine(climate) {
+  const d = climate.dehumidifier;
+  if (!d || d.on !== true) return "";
+  return d.until_at ? tr("home.line_dehum_until", { until: untilText(boardDate(d.until_at)) }) : tr("home.line_dehum");
 }
 
 // Away: off until the way back - no switch, no durations (the way back
@@ -1870,10 +1902,6 @@ document.getElementById("season-devices").addEventListener("click", onSeasonDevi
 document.getElementById("house-body").addEventListener("click", onHouseClick);
 document.getElementById("house-body").addEventListener("change", onHouseChange);
 document.getElementById("away-chip").addEventListener("click", openAway);
-document.getElementById("outdoor-chip").addEventListener("click", () => {
-  const plant = document.getElementById("plant");
-  if (!plant.hidden) plant.scrollIntoView({ behavior: "smooth" });
-});
 document.getElementById("sheet").addEventListener("click", e => state.sheet && state.sheet.onClick && state.sheet.onClick(e));
 document.getElementById("sheet-close").addEventListener("click", closeSheet);
 document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);

@@ -90,8 +90,8 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
     wanted = float(card.locator(".pending .stepper-value").inner_text().replace(",", ".").rstrip("°"))
     card.locator("button[data-action=apply]").click()
     assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {}).get("target") == wanted)
-    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] button[data-action=resume]")
-    card.locator("button[data-action=resume]").click()
+    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .manual-banner button[data-action=resume]")
+    card.locator(".manual-banner button[data-action=resume]").click()
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
 
 
@@ -118,6 +118,16 @@ def test_off_is_one_of_the_manual_changes_not_a_button_of_its_own(open_page, api
     banner.wait_for()
     assert banner.inner_text().startswith("Programmazione manuale: spenta")
     assert f"{ZONE_A} spenta a mano" in page.inner_text("#hero-detail")
+    # Every zone off, one by hand: not "none planned" - it is planned.
+    other = f"/api/climate/zones/{urllib.parse.quote(ZONE_B, safe='')}/override"
+    api(other, {"target": None, "hours": 2})
+    page.reload()
+    page.wait_for_selector(".zone .manual-banner", timeout=20000)
+    assert eventually(page, lambda: page.inner_text("#hero-title") == "Raffrescamento spento adesso")
+    api(other + "/cancel", {})
+    page.reload()
+    banner = _card(page, ZONE_A).locator(".manual-banner")
+    banner.wait_for(timeout=20000)
     banner.locator("button[data-action=resume]").click()
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
     assert opened.errors == []
@@ -155,6 +165,35 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     page.wait_for_timeout(600)
     assert card.locator(".manual-banner").count() == 0
     assert eventually(page, lambda: card.locator(".plan-manual").is_hidden())
+    assert opened.errors == []
+
+
+def test_the_week_is_locked_while_a_zone_is_held_by_hand(open_page, api):
+    """Seen on the production board: held by hand, the week could still be
+    painted - and "back to the schedule (24°)" kept the old hour's target.
+    Now the week is shown, locked, with the way back above it; a copy
+    from the other zone is refused too (and by the board)."""
+    api(f"/api/climate/zones/{urllib.parse.quote(ZONE_A, safe='')}/override", {"target": 22.0, "until": "manual"})
+    opened = _open_home(open_page, 1280)
+    page = opened.page
+    plan = _card(page, ZONE_A).locator(".zone-plan")
+    _open_plan(page, ZONE_A)
+    assert eventually(page, lambda: plan.locator(".plan-edit.is-locked").count() == 1)
+    assert plan.locator(".plan-edit").evaluate("e => e.inert") is True
+    assert "la settimana si cambia dopo" in plan.locator(".plan-manual").inner_text()
+    before = _week(api, ZONE_A)
+    box = plan.locator(".sched-cell").nth(30).bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(1200)
+    assert _week(api, ZONE_A) == before, "a tap on the locked week changes nothing"
+    _open_plan(page, ZONE_B)
+    _card(page, ZONE_B).locator(".zone-plan button.range-btn", has_text=ZONE_A).click()
+    assert eventually(page, lambda: "è in programmazione manuale" in page.inner_text("body"))
+    assert _week(api, ZONE_A) == before
+    plan.locator(".plan-manual button[data-action=resume]").click()
+    assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+    assert eventually(page, lambda: plan.locator(".plan-edit.is-locked").count() == 0)
+    assert plan.locator(".plan-manual").is_hidden()
     assert opened.errors == []
 
 
@@ -630,7 +669,7 @@ def test_the_top_says_every_zone_reached_its_target_only_when_it_has(open_page, 
     _fake_zones(page, api, "cool", {ZONE_A: (24.3, 24.0, False, True), ZONE_B: (23.9, 24.0, False, True)})
     assert page.inner_text("#hero-title") != "Tutte le zone hanno raggiunto l'obiettivo"
     detail = page.inner_text("#hero-detail")
-    assert f"{ZONE_A} 24,3°, sopra l'obiettivo di 24°" in detail and f"{ZONE_B} 23,9°, in temperatura" in detail
+    assert f"{ZONE_A} 24,3°, più caldo dell'obiettivo di 24°" in detail and f"{ZONE_B} 23,9°, in temperatura" in detail
     _fake_zones(page, api, "cool", {ZONE_A: (23.7, 24.0, False, True), ZONE_B: (23.9, 24.0, False, True)})
     assert page.inner_text("#hero-title") == "Tutte le zone hanno raggiunto l'obiettivo"
     _fake_zones(page, api, "cool", {ZONE_A: (23.7, 24.0, False, False), ZONE_B: (23.9, 24.0, False, True)})
@@ -821,11 +860,11 @@ def test_a_tap_keeps_the_card_under_the_finger_and_its_nodes(iphone, api):
     apply.scroll_into_view_if_needed()
     before = quick.bounding_box()["y"]
     apply.tap()
-    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] button[data-action=resume]")
+    page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .manual-banner button[data-action=resume]")
     page.wait_for_timeout(800)                         # and the valve's answer after it
     assert abs(quick.bounding_box()["y"] - before) < 1
     assert card.locator(".zone-head").evaluate("e => e.__kept === true"), "updated, not rebuilt"
-    card.locator("button[data-action=resume]").tap()
+    card.locator(".manual-banner button[data-action=resume]").tap()
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
     assert iphone.errors == []
 

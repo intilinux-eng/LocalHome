@@ -1514,6 +1514,10 @@ def _register_routes(app: Flask) -> None:
         if thermostat.schedule_store.get_away_until() is not None:
             # Away: nothing changes until "I'm back" - the week neither.
             return _fail("schedule_while_away", "away mode is on", 409, zone=name)
+        if name in thermostat.schedule_store.get_overrides(datetime.now()):
+            # Held by hand: its week changes once it's back to it - an edit
+            # now would change nothing anyone sees, "back" included.
+            return _fail("schedule_while_manual", f"{name!r} is held by hand", 409, zone=name)
         try:
             if cells is not None:
                 # Just the hours that changed, merged into the week as it is

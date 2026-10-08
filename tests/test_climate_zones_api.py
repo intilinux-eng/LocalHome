@@ -327,11 +327,15 @@ def test_a_temporary_target_from_the_dashboard(tmp_path):
     assert res["ok"] and res["override"]["target"] is None
     res = client.post(f"/api/climate/zones/{name}/override", json={"target": 23.0, "until": "manual"}).get_json()
     assert res["ok"] and res["override"] == {"target": 23.0, "until": None}, "until it's changed back"
+    week = {day: [21.0] * 24 for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    res = client.post(f"/api/climate/zones/{name}/schedule", json={"week": week})
+    assert res.status_code == 409 and res.get_json()["code"] == "schedule_while_manual", "its week waits"
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
     assert zone["override"] == {"target": 23.0, "until": None} and zone["target_c"] == 23.0
     assert client.post(f"/api/climate/zones/{name}/override/cancel").get_json() == {"ok": True}
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == name)
     assert zone["override"] is None
+    assert client.post(f"/api/climate/zones/{name}/schedule", json={"week": week}).get_json()["ok"], "back: it's free"
     for body, code in (({"target": 90, "hours": 1}, "override_target_range"),
                        ({"target": True, "hours": 1}, "override_target_range"),
                        ({"target": 21, "hours": 48}, "override_hours_invalid"),
@@ -361,9 +365,9 @@ def test_going_away_turns_off_a_zone_changed_by_hand(tmp_path):
     res = client.post(f"/api/climate/zones/{name}/schedule", json={"week": week})
     assert res.status_code == 409 and res.get_json()["code"] == "schedule_while_away", "the week neither"
     assert client.post("/api/climate/away/cancel").get_json() == {"ok": True}
+    assert client.post(f"/api/climate/zones/{name}/schedule", json={"week": week}).get_json()["ok"]
     assert client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "hours": 2}).get_json()["ok"]
     assert zone_of()["valve_on"] is True, "back home"
-    assert client.post(f"/api/climate/zones/{name}/schedule", json={"week": week}).get_json()["ok"]
 
 
 def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):
