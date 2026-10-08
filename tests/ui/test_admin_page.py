@@ -194,7 +194,11 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     page.evaluate("document.getElementById('devices').open = true")
     rows = page.locator("#device-list > li:not(.device-group)")
     assert eventually(page, lambda: rows.count() == len(names))
-    # Each zone's sensor and valve together, under the zone's name, before the rest.
+    # Each zone's sensor and valve together, under the zone's name, before
+    # the rest - grouped once the zones have come too (a busy machine had
+    # the devices first: seen in a full run).
+    groups = page.locator("#device-list > li.device-group")
+    assert eventually(page, lambda: groups.count() >= 3)
     items = page.locator("#device-list > li").all_inner_texts()
     assert items[0].strip().lower() == f"zona {ZONE_A}".lower()
     assert f"{ZONE_A} Sensor" in items[1] and f"{ZONE_A} Valve" in items[2]
