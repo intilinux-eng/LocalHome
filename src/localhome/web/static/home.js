@@ -899,7 +899,7 @@ function renderHero() {
   document.body.dataset.running = String(active.length > 0);   // the top brighter while it runs
   let title;
   if (!zones.length) title = tr("home.no_zones");
-  else if (climate.away_until) title = tr("home.hero_away", { until: untilText(boardDate(climate.away_until)) });
+  else if (climate.away_until) title = tr("home.hero_away", { until: awayUntilText(boardDate(climate.away_until)) });
   else if (active.length) title = tr(cool ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
   // All off: "none planned now" only if it's the week's doing - one off
   // by hand is planned, and the line under it says so.
@@ -999,7 +999,16 @@ const ICONS = {
 function dateText(date) {
   const months = tr("home.months_long");
   return tr("home.date_at", { day: tr(`home.day_long.${DAYS[dayIndex(date)]}`), date: date.getUTCDate(),
-    month: Array.isArray(months) ? months[date.getUTCMonth()] : "", time: hhmm(date) });
+    month: Array.isArray(months) ? months[date.getUTCMonth()] : "", year: date.getUTCFullYear(), time: hhmm(date) });
+}
+
+// Away can last weeks: "until Thursday" doesn't say which. Today, the
+// time; any other day, the whole date.
+function awayUntilText(date) {
+  const now = boardNow();
+  const today = date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth()
+    && date.getUTCDate() === now.getUTCDate();
+  return today ? untilText(date) : tr("home.until_when", { when: dateText(date) });
 }
 
 function openSeason() {
@@ -1082,9 +1091,10 @@ function awayDevices() {
   return rules.filter(rule => rule[climate.mode] === "manual" && deviceByName(rule.switch)).map(rule => displayName(rule.switch));
 }
 
-// A day as a date field wants it: yyyy-mm-dd, this device's own calendar.
+// A day as a date field wants it: yyyy-mm-dd, of a board-time date (its
+// UTC fields are the board's wall clock - boardNow(), boardDate()).
 function dayValue(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function openAway() {
@@ -1096,19 +1106,23 @@ function openAway() {
   const points = [tr("home.away_point_zones"),
     ...(devices.length ? [tr("home.away_point_devices", { devices: listNames(devices) })] : []),
     tr("home.away_point_locked"), tr("home.away_point_plan")];
-  // Or the day back, picked in the phone's own calendar: tomorrow at the
-  // earliest, a year at most (the board's limit).
+  // Or the day back, picked in the phone's own calendar - the board's
+  // days: today at the earliest ("until tonight at 22"), a year at most
+  // (the board's limit). Away already: the day back it has, to change.
   const day = 24 * 3600 * 1000;
-  const tomorrow = dayValue(new Date(Date.now() + day));
+  const now = boardNow();
+  const back = away ? boardDate(away) : null;
+  const shownDay = back ? dayValue(back) : dayValue(new Date(now.getTime() + day));
+  const shownTime = back ? hhmm(back) : AWAY_BACK_TIME;
   openSheet(tr("home.away_title"), `
     <ul class="sheet-points">${points.map(point => `<li>${esc(point)}</li>`).join("")}</ul>
-    ${away ? `<p><b>${esc(tr("home.hero_away", { until: untilText(boardDate(away)) }))}</b></p>` : ""}
+    ${away ? `<p><b>${esc(tr("home.hero_away", { until: awayUntilText(boardDate(away)) }))}</b></p>` : ""}
     <div class="sheet-label">${esc(tr(away ? "home.away_change" : "home.away_for"))}</div>
     <div class="sheet-actions">${options}</div>
     <div class="sheet-label">${esc(tr("home.away_back_on"))}</div>
     <div class="away-date">
-      <input type="date" id="away-day" value="${tomorrow}" min="${tomorrow}" max="${dayValue(new Date(Date.now() + 365 * day))}" aria-label="${esc(tr("home.away_day"))}">
-      <input type="time" id="away-time" value="${AWAY_BACK_TIME}" aria-label="${esc(tr("home.away_time"))}">
+      <input type="date" id="away-day" value="${shownDay}" min="${dayValue(now)}" max="${dayValue(new Date(now.getTime() + 365 * day))}" aria-label="${esc(tr("home.away_day"))}">
+      <input type="time" id="away-time" value="${shownTime}" aria-label="${esc(tr("home.away_time"))}">
       <button class="btn" type="button" data-away="day">${esc(tr("home.away_set"))}</button>
     </div>
     ${away ? `<div class="sheet-actions"><button class="btn btn-primary" type="button" data-away="back">${esc(tr("home.away_back"))}</button></div>` : ""}`,

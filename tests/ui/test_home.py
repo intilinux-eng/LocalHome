@@ -348,15 +348,31 @@ def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api
 
 
 def test_away_until_a_day_picked_in_the_calendar(open_page, api):
-    from datetime import date, timedelta
+    """Seen on the production board: a day weeks ahead read "until
+    Thursday" - which one? Any day but today says the whole date. Opened
+    again, the sheet shows the day back it has; today can be picked too."""
+    from datetime import date, datetime, timedelta
     page = _open_home(open_page).page
     page.click("#away-chip")
-    day = (date.today() + timedelta(days=3)).isoformat()
-    page.fill("#away-day", day)
+    back = date.today() + timedelta(days=17)
+    page.fill("#away-day", back.isoformat())
     page.fill("#away-time", "07:30")
     page.locator("#sheet button[data-away='day']").click()
-    assert eventually(page, lambda: api("/api/climate/zones")["away_until"] == f"{day}T07:30:00")
+    assert eventually(page, lambda: api("/api/climate/zones")["away_until"] == f"{back.isoformat()}T07:30:00")
     assert eventually(page, lambda: page.locator("#away-chip").get_attribute("aria-pressed") == "true")
+    weekday = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")[back.weekday()]
+    month = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre",
+             "ottobre", "novembre", "dicembre")[back.month - 1]
+    whole = f"Fuori casa fino a {weekday} {back.day} {month} {back.year} alle 07:30"
+    assert eventually(page, lambda: page.inner_text("#hero-title") == whole)
+    page.click("#away-chip")
+    assert page.input_value("#away-day") == back.isoformat() and page.input_value("#away-time") == "07:30"
+    assert page.get_attribute("#away-day", "min") == date.today().isoformat(), "tonight is a day back too"
+    if datetime.now().hour < 23:
+        page.fill("#away-day", date.today().isoformat())
+        page.fill("#away-time", "23:59")
+        page.locator("#sheet button[data-away='day']").click()
+        assert eventually(page, lambda: page.inner_text("#hero-title") == "Fuori casa fino alle 23:59")
     api("/api/climate/away/cancel", {})
 
 
