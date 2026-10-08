@@ -2599,6 +2599,41 @@ function shellySettingValue(key, value) {
   return label === `climate_admin.shelly_${key}_${value}` ? String(value) : label;
 }
 
+// The server's verdict on a Shelly (services/shelly_health.py assess()):
+// each reason to act on, and each note - what happened that isn't a
+// fault - in a sentence.
+// A wording with a count: its "_one" form for one, where it has one.
+function trCount(key, count, vars = {}) {
+  if (count === 1) {
+    const one = tr(`${key}_one`, { ...vars, count });
+    if (!one.startsWith("climate_admin.")) return one;
+  }
+  return tr(key, { ...vars, count });
+}
+
+function reasonText(reason) {
+  const key = `climate_admin.device_why_${reason.code}`;
+  if (reason.code === "crashes" || reason.code === "power_unstable") return trCount(key, reason.detail, { detail: reason.detail });
+  return tr(key, { detail: reason.code === "report_late" ? formatAge(reason.detail) : reason.detail });
+}
+
+function noteText(note) {
+  return trCount(`climate_admin.device_note_${note.code}`, note.count,
+    { avg: note.avg, when: note.at ? formatWhen(note.at) : "" });
+}
+
+// A row's label: its first reason; how many more, after it.
+function reasonLabel(reasons) {
+  const first = tr(`climate_admin.device_reason_${reasons[0].code}`);
+  return reasons.length > 1 ? tr("climate_admin.device_reason_more", { label: first, count: reasons.length - 1 }) : first;
+}
+
+function verdictHtml(verdict) {
+  if (!verdict) return "";
+  return verdict.reasons.map(r => `<p class="device-why">${escapeHtml(reasonText(r))}</p>`).join("")
+    + verdict.notes.map(n => `<p class="device-note">${escapeHtml(noteText(n))}</p>`).join("");
+}
+
 function shellyStatsHtml(d, data, now) {
   const rows = (d.settings_wrong || []).map(s => statRowHtml(tr(`climate_admin.shelly_setting_${s.key}`),
     tr("climate_admin.shelly_setting_change", { now: shellySettingValue(s.key, s.value), want: shellySettingValue(s.key, s.expected) }),
@@ -2646,16 +2681,19 @@ function shellyStatsHtml(d, data, now) {
     }
   } else {
     if (d.device_temp_c != null) {
-      rows.push(statRowHtml(tr("climate_admin.shelly_temp"), `${d.device_temp_c.toFixed(1)}°C`, d.device_temp_c >= data.hot_c - 5));
+      rows.push(statRowHtml(tr("climate_admin.shelly_temp"), `${d.device_temp_c.toFixed(1)}°C`, d.device_temp_c >= data.hot_c));
     }
     if (d.voltage_v != null) rows.push(statRowHtml(tr("climate_admin.shelly_voltage"), `${Math.round(d.voltage_v)} V`));
     if (d.booted_at != null) rows.push(statRowHtml(tr("climate_admin.shelly_on_since"), sinceText(d.booted_at, now - d.booted_at)));
-    // Only the unexpected ones are a problem; the wanted ones (an update,
-    // a settings change) are said alongside, not in red.
+    // By why it started - only a crash or a brownout is the device's
+    // trouble; a power cut, a restart asked for, are said, not in red.
     if (s.restarts_7d != null) {
-      rows.push(statRowHtml(tr("climate_admin.shelly_restarts_7d"), s.restarts_wanted_7d
-        ? tr("climate_admin.shelly_restarts_split", { unexpected: s.restarts_7d, wanted: s.restarts_wanted_7d })
-        : String(s.restarts_7d), s.restarts_7d > 0));
+      const parts = [["power", s.restarts_power_7d], ["crash", s.restarts_crash_7d], ["brownout", s.restarts_brownout_7d],
+        ["unknown", s.restarts_unknown_7d], ["wanted", s.restarts_wanted_7d]]
+        .filter(([, count]) => count).map(([kind, count]) => trCount(`climate_admin.shelly_restarts_${kind}`, count));
+      rows.push(statRowHtml(tr("climate_admin.shelly_restarts_7d"),
+        parts.length ? parts.join(" · ") : tr("climate_admin.shelly_restarts_none"),
+        (s.restarts_crash_7d || 0) + (s.restarts_brownout_7d || 0) > 0));
     }
     // Its relay's own counters - a Gen3 keeps them, a Plus 1 doesn't.
     if (s.switch_ons_24h != null) {
@@ -2674,7 +2712,7 @@ function shellyStatsHtml(d, data, now) {
   if (d.restart_required) rows.push(statRowHtml(tr("climate_admin.shelly_firmware"), tr("climate_admin.shelly_restart_required"), true));
   const error = d.error ? `<div class="admin-problem-detail">${escapeHtml(d.error)}</div>` : "";
   // A simulated H&T is watched like a real one, but has no device id.
-  return `${rows.join("")}${error}${d.simulated ? "" : `<p class="hint-text admin-path">${escapeHtml(d.id)}</p>`}`;
+  return `${verdictHtml(d.assessment)}${rows.join("")}${error}${d.simulated ? "" : `<p class="hint-text admin-path">${escapeHtml(d.id)}</p>`}`;
 }
 
 async function loadShellyHealth() {
@@ -2692,8 +2730,10 @@ async function loadShellyHealth() {
 // status knows of each one (answering, how fresh) joined with what each
 // Shelly says about itself (services/shelly_health.py). A Shelly is one
 // row whatever it drives - a VMC dimmer's switch and speed are one
-// device. Not answering first, then to check, then the rest; a Shelly's
-// row opens to its details, and stays open across refreshes.
+// device. Not answering first, then those with something to do, then
+// the rest - each Shelly as the server judges it (its "assessment"), the
+// same verdict the system's problems come from; a Shelly's row opens to
+// its details, and stays open across refreshes.
 
 let deviceStatus = null;   // devices from the last GET /api/system-status
 let shellyHealth = null;   // the last GET /api/climate-admin/shelly-health
@@ -2719,7 +2759,9 @@ function deviceRows() {
   const now = Date.now() / 1000;
   return [...rows.values()].map(row => {
     const stats = row.shelly ? shellyStatsHtml(row.shelly, shellyHealth, now) : "";
-    const state = row.devices.some(d => !d.ok) ? "bad" : stats.includes('class="admin-stat bad"') ? "neutral" : "ok";
+    const verdict = row.shelly && row.shelly.assessment;
+    const state = row.devices.some(d => !d.ok) || (verdict && verdict.state === "offline") ? "bad"
+      : verdict && verdict.state === "attention" && verdict.reasons.length ? "neutral" : "ok";
     const names = row.devices.length ? row.devices.map(d => d.name) : (row.shelly.names || [row.shelly.name]);
     return { ...row, stats, state, names };
   }).sort((a, b) => DEVICE_STATE_ORDER[a.state] - DEVICE_STATE_ORDER[b.state]
@@ -2728,7 +2770,8 @@ function deviceRows() {
 
 function deviceRowHtml(row) {
   const s = row.shelly;
-  const label = { ok: "system_device_ok", bad: "system_device_offline", neutral: "pill_rule_check" }[row.state];
+  const label = row.state === "neutral" ? reasonLabel(s.assessment.reasons)
+    : tr(`climate_admin.${row.state === "bad" ? "system_device_offline" : "system_device_ok"}`);
   const pills = s
     ? `<span class="admin-pill">${tr(s.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`
       + (s.simulated ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "")
@@ -2741,7 +2784,7 @@ function deviceRowHtml(row) {
     : tr("climate_admin.system_device_never");
   const errors = row.devices.filter(d => d.error).map(d =>
     `<div class="admin-problem-detail">${escapeHtml(row.devices.length > 1 ? `${displayName(d.name)}: ${d.error}` : d.error)}</div>`).join("");
-  const line = `<span class="admin-status ${row.state}">${escapeHtml(tr(`climate_admin.${label}`))}</span>`
+  const line = `<span class="admin-status ${row.state}">${escapeHtml(label)}</span>`
     + `<strong>${row.names.map(name => escapeHtml(displayName(name))).join(" · ")}</strong>${pills}`
     + (meta ? `<span class="device-meta">${escapeHtml(meta)}</span>` : "")
     + `<span class="admin-device-age">${escapeHtml(age)}</span>`;

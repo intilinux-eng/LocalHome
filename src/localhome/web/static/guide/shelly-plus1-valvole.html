@@ -189,15 +189,15 @@ Shelly chiude la valvola da solo entro 15 minuti.</p>
   <img src="admin-controllo-id.jpg" alt="LocalHome, Zone: sotto l'ID, le impostazioni dello Shelly da correggere">
 </figure>
 <p>Il controllo continua: se un'impostazione cambia (aggiornamento, reset), la riga in Dispositivi diventa
-<span class="pill check">Da controllare</span> e dice cosa correggere.</p>
+<span class="pill check">Impostazioni da correggere</span> e dice cosa correggere.</p>
 
 <h2>6. Stato dei dispositivi</h2>
 <p><strong>Admin → Dispositivi</strong>: tutti i dispositivi, raggruppati per zona. Tocca la riga di uno Shelly per il
 dettaglio.</p>
 <table>
   <tr><th>Stato</th><th>Significato</th></tr>
-  <tr><td><span class="pill ok">OK</span></td><td>Tutto a posto.</td></tr>
-  <tr><td><span class="pill check">Da controllare</span></td><td>Risponde, ma un dato del dettaglio è in rosso.</td></tr>
+  <tr><td><span class="pill ok">OK</span></td><td>Funziona. Nel dettaglio, in grigio, le note che non sono guasti: corrente mancata, riavvii voluti, segnale debole.</td></tr>
+  <tr><td><span class="pill check">Batteria scarica</span></td><td>C'è qualcosa da fare: l'etichetta dice cosa, il riquadro arancione nel dettaglio dice come.</td></tr>
   <tr><td><span class="pill bad">Non risponde</span></td><td>Niente da LocalHome: corrente, Wi-Fi o MQTT.</td></tr>
 </table>
 <div class="pair">
@@ -212,8 +212,8 @@ dettaglio.</p>
   <tr><th>Riga</th><th>In rosso quando</th></tr>
   <tr><td>Collegamento</td><td>scollegato o non risponde</td></tr>
   <tr><td>Segnale Wi-Fi, 24 ore, 7 giorni</td><td>mai da solo (ottimo &gt; -65, buono &gt; -75, debole &gt; -85 dBm)</td></tr>
-  <tr><td>Temperatura interna</td><td>da 75 °C (avviso da 80 °C)</td></tr>
-  <tr><td>Riavvii inattesi 7 giorni</td><td>almeno uno (es. corrente mancata); quelli voluti non contano</td></tr>
+  <tr><td>Temperatura interna</td><td>da 80 °C (si spegne da solo verso i 90 °C)</td></tr>
+  <tr><td>Riavvii, 7 giorni</td><td>divisi per causa. Solo un blocco (firmware) o un calo di tensione; senza corrente e voluti sono solo informazioni</td></tr>
   <tr><td>Accensioni del relè 24 ore (Gen3)</td><td>oltre 48: aperture troppo brevi, relè che si consuma</td></tr>
   <tr><td>Relè acceso oggi (Gen3)</td><td>-</td></tr>
   <tr><td>Firmware</td><td>se chiede un riavvio</td></tr>

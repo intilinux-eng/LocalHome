@@ -642,3 +642,88 @@ def test_too_many_switch_ons_in_a_day_is_short_cycling(tmp_path):
     found = [p for p in watcher.problems() if p["code"] == "relay_short_cycling"]
     assert found == [{"code": "relay_short_cycling", "subject": "Stanze Valve", "detail": "60"}]
 
+
+
+# ------------------------------------------------------------ verdict --
+# One verdict per Shelly - ok, attention (a reason to act on, said) or
+# offline - for the admin page and the system's problems alike. Seen on
+# the production board: a dimmer whose power was cut three times in a
+# test, and a firmware update, made a device that worked "to check" for a
+# week, while the system status listed no problem for it.
+
+def test_power_cuts_and_an_update_are_notes_not_trouble(tmp_path):
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    watcher.poll_once()
+    for reason in (1, 1, 1, 3):                          # three power cuts, then an update
+        clock.t += 600
+        rpc.status["sys"].update(uptime=60, reset_reason=reason)
+        watcher.poll_once()
+    device = by_id(watcher, DIMMER)
+    stats = device["stats"]
+    assert (stats["restarts_power_7d"], stats["restarts_wanted_7d"], stats["restarts_7d"]) == (3, 1, 3)
+    verdict = device["assessment"]
+    assert verdict["state"] == "ok" and verdict["reasons"] == []
+    assert [n["code"] for n in verdict["notes"]] == ["power_cuts", "restarts_wanted", "weak_signal"]
+    assert verdict["notes"][0]["count"] == 3 and verdict["notes"][0]["at"] == clock.t - 600 - 60
+    watcher.refresh_problems()
+    assert watcher.problems() == []
+
+
+def test_a_crash_or_a_brownout_is_a_reason_to_act(tmp_path):
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    watcher.poll_once()
+    for reason in (4, 9):                                # a crash, then a brownout
+        clock.t += 600
+        rpc.status["sys"].update(uptime=60, reset_reason=reason)
+        watcher.poll_once()
+    verdict = by_id(watcher, DIMMER)["assessment"]
+    assert verdict["state"] == "attention"
+    assert [(r["code"], r["detail"]) for r in verdict["reasons"]] == [("crashes", 1), ("power_unstable", 1)]
+    watcher.refresh_problems()
+    assert [(p["code"], p["detail"]) for p in watcher.problems()] == [("device_crashes", "1"), ("device_power_unstable", "1")]
+
+
+def test_restarts_counted_before_their_reason_was_read_are_only_a_note(tmp_path):
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    store.record(DIMMER, int(clock.t - 3 * 86400), {"restart_unexpected": 1})
+    watcher.poll_once()
+    verdict = by_id(watcher, DIMMER)["assessment"]
+    assert verdict["state"] == "ok" and verdict["notes"][0] == {"code": "restarts_unknown", "count": 1}
+
+
+def _ht(**extra):
+    device = {"battery": True, "last_report_at": 1000.0, "battery_pct": 80, "external_power": False,
+              "settings_wrong": [], "restart_required": False, "errors": [], "device_temp_c": None,
+              "stats": {"missed_24h": 0, "signal_24h": {"avg": -60}}}
+    device.update(extra)
+    return device
+
+
+def test_a_battery_sensor_low_late_or_losing_reports_says_which():
+    now = 1000.0 + 600
+    assert shelly_health.assess(_ht(), now) == {"state": "ok", "reasons": [], "notes": []}
+    assert shelly_health.assess(_ht(battery_pct=8), now)["reasons"] == [{"code": "battery_low", "detail": 8}]
+    assert shelly_health.assess(_ht(battery_pct=8, external_power=True), now)["state"] == "ok", "on USB-C"
+    late = shelly_health.assess(_ht(), 1000.0 + 2 * H + 60)
+    assert late["state"] == "attention" and late["reasons"] == [{"code": "report_late", "detail": 2 * H + 60}]
+    missed = shelly_health.assess(_ht(stats={"missed_24h": 3, "signal_24h": {"avg": -86}}), now)
+    assert missed["reasons"] == [{"code": "reports_missed", "detail": 3}]
+    assert missed["notes"] == [], "the lost reports say it - not a weak signal on top"
+    weak = shelly_health.assess(_ht(stats={"missed_24h": 0, "signal_24h": {"avg": -86}}), now)
+    assert weak == {"state": "ok", "reasons": [], "notes": [{"code": "weak_signal", "avg": -86}]}
+
+
+def test_a_mains_shelly_that_doesnt_answer_is_offline_whatever_else():
+    device = {"battery": False, "online": False, "error": None, "settings_wrong": [], "restart_required": True,
+              "errors": [], "device_temp_c": None, "stats": {}}
+    verdict = shelly_health.assess(device, 0)
+    assert verdict["state"] == "offline" and verdict["reasons"] == [{"code": "restart_required"}]
+
+
+def test_each_restart_is_counted_under_its_reason():
+    assert [shelly_health.restart_field(r) for r in (3, 1, 4, 7, 9, 0, None, "x")] == [
+        "restart_wanted", "restart_power", "restart_crash", "restart_crash", "restart_brownout",
+        "restart_unexpected", "restart_unexpected", "restart_unexpected"]

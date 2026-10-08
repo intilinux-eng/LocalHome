@@ -85,11 +85,21 @@ SWITCH_ONS_24H_MAX = 48
 # A device's start time, worked out from its uptime and our clock, moves
 # by a second or two between polls; a restart moves it by far more.
 RESTART_SLACK_SECONDS = 300
-# Why it last started (sys.reset_reason, the ESP32's own code): 3 is a
-# restart asked for - a firmware update, a settings change, a restart
-# from the app or over RPC. Anything else - 1 power on (the power went),
-# 4-7 a crash or a watchdog, 9 a brownout - is one nobody asked for.
-WANTED_RESET_REASONS = {3}
+# Why it last started (sys.reset_reason, the ESP32's own code), and what
+# that means for whoever looks after it. Seen on the production board: a
+# dimmer whose power was cut three times in a test, and a firmware update,
+# made a device that worked "to check" for a week - all four were counted
+# as one kind.
+RESET_WANTED = {3}           # asked for: a firmware update, settings, the app, RPC
+RESET_POWER = {1}            # its power went: unplugged, a breaker, a blackout - not a fault
+RESET_CRASH = {4, 5, 6, 7}   # a crash or a watchdog: the device's own
+RESET_BROWNOUT = {9}         # its supply dipped: wiring, or the supply itself
+RESTART_FIELDS = ("restart_wanted", "restart_power", "restart_crash", "restart_brownout", "restart_unexpected")
+# A battery under this is to be changed; the admin page says so too.
+LOW_BATTERY_PCT = 10
+# A signal below this on average is said - never a fault on its own: a
+# sensor at -88 dBm can get every report through for weeks.
+WEAK_SIGNAL_DBM = -75
 DAY = 86400
 WEEK = 7 * DAY
 
@@ -288,6 +298,71 @@ def _dig(data: Any, *path: str) -> Any:
             return None
         data = data.get(key)
     return data
+
+
+def restart_field(reason: Any) -> str:
+    """The history field a restart is counted under, by why it happened -
+    "restart_unexpected" for a reason not known, or none given."""
+    reason = _number(reason)
+    for field, reasons in (("restart_wanted", RESET_WANTED), ("restart_power", RESET_POWER),
+                           ("restart_crash", RESET_CRASH), ("restart_brownout", RESET_BROWNOUT)):
+        if reason in reasons:
+            return field
+    return "restart_unexpected"
+
+
+def assess(device: dict, now: float, heartbeat: float = HEARTBEAT_SECONDS) -> dict:
+    """One verdict on a Shelly, for the admin page and the system's
+    problems alike: "offline" - it doesn't answer; "attention" - there's
+    something to do, each reason said (the first is its label); "ok" - it
+    works. Its notes say what happened that isn't a fault: a power cut, a
+    restart asked for, a weak signal that still gets through."""
+    stats = device.get("stats") or {}
+    reasons: list[dict] = []
+    notes: list[dict] = []
+    if device["battery"]:
+        last = device.get("last_report_at")
+        if last is not None and now - last > 2 * heartbeat:
+            reasons.append({"code": "report_late", "detail": round(now - last)})
+        pct = device.get("battery_pct")
+        if pct is not None and not device.get("external_power") and pct <= LOW_BATTERY_PCT:
+            reasons.append({"code": "battery_low", "detail": round(pct)})
+        if (stats.get("missed_24h") or 0) >= MISSED_PER_DAY:
+            reasons.append({"code": "reports_missed", "detail": stats["missed_24h"]})
+    if device.get("settings_wrong"):
+        reasons.append({"code": "settings", "detail": ", ".join(s["key"] for s in device["settings_wrong"])})
+    if device.get("restart_required"):
+        reasons.append({"code": "restart_required"})
+    if device.get("errors"):
+        reasons.append({"code": "device_errors", "detail": ", ".join(device["errors"])})
+    if device.get("device_temp_c") is not None and device["device_temp_c"] >= HOT_C:
+        reasons.append({"code": "hot", "detail": round(device["device_temp_c"])})
+    if (stats.get("switch_ons_24h") or 0) > SWITCH_ONS_24H_MAX:
+        reasons.append({"code": "short_cycling", "detail": round(stats["switch_ons_24h"])})
+    if stats.get("restarts_crash_7d"):
+        reasons.append({"code": "crashes", "detail": stats["restarts_crash_7d"]})
+    if stats.get("restarts_brownout_7d"):
+        reasons.append({"code": "power_unstable", "detail": stats["restarts_brownout_7d"]})
+    if stats.get("restarts_power_7d"):
+        notes.append({"code": "power_cuts", "count": stats["restarts_power_7d"], "at": stats.get("last_power_cut_at")})
+    if stats.get("restarts_unknown_7d"):
+        notes.append({"code": "restarts_unknown", "count": stats["restarts_unknown_7d"]})
+    if stats.get("restarts_wanted_7d"):
+        notes.append({"code": "restarts_wanted", "count": stats["restarts_wanted_7d"]})
+    signal = (stats.get("signal_24h") or {}).get("avg")
+    if signal is not None and signal < WEAK_SIGNAL_DBM and not any(r["code"] == "reports_missed" for r in reasons):
+        notes.append({"code": "weak_signal", "avg": signal})
+    offline = not device["battery"] and (device.get("error") is not None or device.get("online") is False)
+    return {"state": "offline" if offline else "attention" if reasons else "ok", "reasons": reasons, "notes": notes}
+
+
+# Each reason to act on, as the system's problem it raises. A battery
+# sensor's late report isn't one: its own driver raises "not answering"
+# once its reading is stale - the admin page says "late" before that.
+PROBLEM_OF = {"hot": "device_hot", "reports_missed": "device_reports_missed", "short_cycling": "relay_short_cycling",
+              "settings": "shelly_settings", "crashes": "device_crashes", "power_unstable": "device_power_unstable",
+              "battery_low": "device_battery_low", "restart_required": "device_restart_required",
+              "device_errors": "device_errors"}
 
 
 def _number(value: Any) -> float | None:
@@ -495,8 +570,7 @@ class ShellyHealth:
                 # Recorded by kind: only the unexpected ones are a sign of
                 # trouble (rows from before reasons were read, plain
                 # "restart", are left out of both counts).
-                wanted = _number(sys.get("reset_reason")) in WANTED_RESET_REASONS
-                self._record(state["id"], {"restart_wanted" if wanted else "restart_unexpected": 1}, ts=booted)
+                self._record(state["id"], {restart_field(sys.get("reset_reason")): 1}, ts=booted)
                 # A firmware update is one: its version and settings are
                 # asked again.
                 state["model"] = None
@@ -569,8 +643,13 @@ class ShellyHealth:
             # less than a week of reports behind it.
             stats["counted_since"] = reports[0] if reports else None
         else:
-            stats["restarts_7d"] = len(self._history(state["id"], "restart_unexpected", now - WEEK))
-            stats["restarts_wanted_7d"] = len(self._history(state["id"], "restart_wanted", now - WEEK))
+            restarts = {field: self._history(state["id"], field, now - WEEK) for field in RESTART_FIELDS}
+            for field, key in (("restart_wanted", "wanted"), ("restart_power", "power"), ("restart_crash", "crash"),
+                               ("restart_brownout", "brownout"), ("restart_unexpected", "unknown")):
+                stats[f"restarts_{key}_7d"] = len(restarts[field])
+            # Every one nobody asked for, whatever the reason.
+            stats["restarts_7d"] = sum(stats[f"restarts_{key}_7d"] for key in ("power", "crash", "brownout", "unknown"))
+            stats["last_power_cut_at"] = restarts["restart_power"][-1][0] if restarts["restart_power"] else None
             # The relay's own count, when it keeps one: None otherwise.
             stats["switch_ons_24h"] = counted_increase(
                 self._history(state["id"], "relay_switch_ons", now - DAY - POLL_SECONDS), now - DAY)
@@ -591,6 +670,7 @@ class ShellyHealth:
             state["name"] = state["names"][0] if state["names"] else state["id"]
             if state["battery"] and self._reading_of is not None:
                 self._fill_from_reading(state, now)
+            state["assessment"] = assess(state, now)
         return states
 
     def _fill_from_reading(self, state: dict, now: float) -> None:
@@ -612,18 +692,18 @@ class ShellyHealth:
     def refresh_problems(self) -> None:
         found = []
         for device in self.devices():
-            name, stats = device["name"], device["stats"]
-            if device["device_temp_c"] is not None and device["device_temp_c"] >= HOT_C:
-                found.append({"code": "device_hot", "subject": name, "detail": f"{device['device_temp_c']:.0f}°C"})
-            # A weak signal alone isn't one: a sensor at -88 dBm can get
-            # every report through for weeks. Reports that don't arrive are.
-            if device["battery"] and stats.get("missed_24h", 0) >= MISSED_PER_DAY:
-                found.append({"code": "device_reports_missed", "subject": name, "detail": str(stats["missed_24h"])})
-            if (stats.get("switch_ons_24h") or 0) > SWITCH_ONS_24H_MAX:
-                found.append({"code": "relay_short_cycling", "subject": name, "detail": str(round(stats["switch_ons_24h"]))})
-            if device["settings_wrong"]:
-                keys = [s["key"] for s in device["settings_wrong"]]
-                found.append({"code": "shelly_settings", "subject": name, "detail": ", ".join(keys), "settings": keys})
+            # The same verdict as the admin page's: its reasons to act on.
+            for reason in device["assessment"]["reasons"]:
+                code = PROBLEM_OF.get(reason["code"])
+                if code is None:
+                    continue
+                problem = {"code": code, "subject": device["name"]}
+                if reason.get("detail") is not None:
+                    unit = {"hot": "°C", "battery_low": "%"}.get(reason["code"], "")
+                    problem["detail"] = f"{reason['detail']}{unit}"
+                if reason["code"] == "settings":
+                    problem["settings"] = [s["key"] for s in device["settings_wrong"]]
+                found.append(problem)
         with self._lock:
             self._problems = found
 

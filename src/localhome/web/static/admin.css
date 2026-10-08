@@ -450,6 +450,12 @@
 .admin-recent ul { margin: 8px 0; padding-left: 18px; }
 .admin-recent li + li { margin-top: 6px; }
 .admin-problem-detail { color: var(--text-3); font-size: 0.8rem; overflow-wrap: anywhere; }
+/* A Shelly's verdict, at the top of its details: what to do (amber), and
+   what happened that isn't a fault (plain). */
+.device-why, .device-note { margin: 0 0 8px; font-size: 0.86rem; line-height: 1.4; }
+.device-why { padding: 8px 10px; border-radius: 10px; color: var(--text);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); border-left: 3px solid var(--warn); }
+.device-note { color: var(--text-2); }
 
 .admin-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin-bottom: 14px; }
 .admin-stat-group { padding: 14px 16px; border-radius: var(--radius-s); background: var(--surface-2); gap: 0; }

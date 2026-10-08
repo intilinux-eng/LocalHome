@@ -868,7 +868,8 @@ def _register_routes(app: Flask) -> None:
         health = app.config.get("SHELLY_HEALTH")
         return jsonify(ok=True, devices=health.devices() if health else [],
                        hot_c=shelly_health.HOT_C, switch_ons_24h_max=shelly_health.SWITCH_ONS_24H_MAX,
-                       heartbeat_seconds=shelly_health.HEARTBEAT_SECONDS)
+                       heartbeat_seconds=shelly_health.HEARTBEAT_SECONDS,
+                       low_battery_pct=shelly_health.LOW_BATTERY_PCT)
 
     @app.route("/api/climate-admin/led-matrix")
     def api_led_matrix():
