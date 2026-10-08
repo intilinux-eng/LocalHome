@@ -115,6 +115,10 @@ class Home:
     def back_to_the_week(self, name):
         self.card(name).locator(".manual-banner button[data-action=resume]").click()
         assert eventually(self.page, lambda: self.zone(name)["override"] is None)
+        # Its card redrawn before the next tap: a full run's busier machine
+        # had the next card's button tapped while the page was re-anchored.
+        assert eventually(self.page, lambda: self.card(name).locator(".manual-banner").count() == 0)
+        self.page.wait_for_timeout(300)
 
     def close(self):
         assert self.page.evaluate(OVERFLOW_JS) <= 0
