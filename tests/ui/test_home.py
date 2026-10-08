@@ -393,6 +393,11 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     assert eventually(page, lambda: "min 5,0° · max 30,0°" in tile.inner_text())
     assert tile.locator(".outdoor-range").get_attribute("aria-label") == "Oggi: minima 5,0°, massima 30,0°"
     assert tile.evaluate("e => e.tagName") == "DIV", "no button: a tap did nothing a resident wanted"
+    # Nothing to add while the day's lowest and highest are the reading itself.
+    page.unroute("**/api/readings")
+    page.evaluate("""() => { const t = state.readings["Outdoor Sensor"].temperature_c;
+      state.dayRanges = {"Outdoor Sensor": {temperature_c: {min: t, max: t}}}; renderOutdoor(); }""")
+    assert tile.locator(".outdoor-range").count() == 0
     assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
 
 

@@ -963,8 +963,10 @@ function renderOutdoor() {
   // the reading itself counted too: it may be newer than the last sample.
   const today = ((state.dayRanges || {})["Outdoor Sensor"] || {}).temperature_c;
   let range = "";
-  if (today) {
-    const low = fmt(Math.min(today.min, reading.temperature_c)), high = fmt(Math.max(today.max, reading.temperature_c));
+  const low = today ? fmt(Math.min(today.min, reading.temperature_c)) : "";
+  const high = today ? fmt(Math.max(today.max, reading.temperature_c)) : "";
+  // "min 19,4° · max 19,4°" says nothing the reading doesn't.
+  if (today && low !== high) {
     // Short, and broken only between the two on a narrow phone.
     range = `<span class="outdoor-range" aria-label="${esc(tr("home.outdoor_range", { min: low, max: high }))}">
       <span>${esc(tr("home.outdoor_min", { value: low }))}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}</span></span>`;
