@@ -140,6 +140,9 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .health[data-state="ok"] .health-dot { background: var(--ok); }
 .health[data-state="warn"] .health-dot { background: var(--warn); box-shadow: 0 0 0 4px rgba(201, 133, 18, 0.18); }
 .health[data-state="warn"] { color: var(--text); }
+/* Shellys not connected yet: one to do, not a fault. */
+.health[data-state="setup"] .health-dot { background: var(--accent); }
+.health[data-state="setup"] { color: var(--text); }
 
 /* The board's clock (templates/_server_clock.html, static/server_clock.js):
    time, date and time zone; the date shortens on a phone. */
@@ -963,6 +966,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .away-date { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
 .away-date input { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; min-height: 40px; }
 .away-note { flex-wrap: wrap; }
+.setup-note a.btn { text-decoration: none; }
 .away-note span { flex: 1 1 180px; }
 
 /* The weekly grid (static/schedule_grid.js) and its palette: pick a

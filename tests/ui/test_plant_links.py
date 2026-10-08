@@ -286,12 +286,12 @@ def test_the_bathrooms_zone_groups_its_bypass_and_dehumidifier_in_devices(browse
     page = opened.page
     page.evaluate("document.getElementById('devices').open = true")
     items = page.locator("#device-list > li")
-    assert eventually(page, lambda: any(f"{ZONE_B} Valve" in t for t in items.all_inner_texts()), timeout_ms=20000)
+    assert eventually(page, lambda: any(f"Valvola {ZONE_B}" in t for t in items.all_inner_texts()), timeout_ms=20000)
     page.wait_for_timeout(1500)
     texts = [t.strip() for t in items.all_inner_texts()]
     start = next(i for i, t in enumerate(texts) if t.lower() == f"zona {ZONE_B}".lower())
     group = texts[start + 1:start + 5]
-    assert f"{ZONE_B} Sensor" in group[0] and f"{ZONE_B} Valve" in group[1]
+    assert f"Sensore {ZONE_B}" in group[0] and f"Valvola {ZONE_B}" in group[1]
     assert {"Deumidificatore", "Valvola Bypass Bagni"} == {next(n for n in ("Deumidificatore", "Valvola Bypass Bagni") if n in t) for t in group[2:]}
     assert opened.errors == []
     context.close()

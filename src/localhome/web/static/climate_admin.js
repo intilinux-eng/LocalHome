@@ -137,10 +137,16 @@ function setPill(id, html) {
 
 // An outdoor sensor's or VMC's header: its source, coloured by whether
 // the real device answers (`live`: "ok"/"neutral"/"bad", or null before
-// the first reading).
-function rolePillHtml(mode, restartPending, live) {
+// the first reading) - or `todo`, its Shelly still without an id.
+function rolePillHtml(mode, restartPending, live, todo = false) {
   if (restartPending) return pillHtml("neutral", tr("climate_admin.pill_restart"));
+  if (todo) return pillHtml("todo", tr("climate_admin.pill_todo"));
   return pillHtml(mode === "shelly" && live ? live : "idle", tr(`climate_admin.pill_${mode}`));
+}
+
+// A Shelly the panel has no id for yet - not a fault: one to do.
+function todoHtml() {
+  return `<span class="admin-status todo">${escapeHtml(tr("climate_admin.todo"))}</span>`;
 }
 
 // Every save on this page waits for a restart; this names the ones that
@@ -163,8 +169,10 @@ function updateRestartBar() {
 }
 
 // A valve that doesn't answer is a fault; a battery sensor that hasn't
-// reported yet may just be asleep - "to check", not red.
+// reported yet may just be asleep - "to check", not red; a Shelly with no
+// id yet is still to configure.
 function zoneHealth(zone) {
+  if (zone.sensor_configured === false || zone.valve_configured === false) return "todo";
   if (!zone.valve_ok) return "bad";
   return zone.sensor_ok ? "ok" : "neutral";
 }
@@ -187,11 +195,14 @@ function updatePlantOverview(data, restartPending) {
     setPill("season-summary", pillHtml(`season-${data.mode}`, name));
   }
   const zones = data.zones || [];
-  const temps = zones.map(z => `${z.name} ${fmt(z.temperature_c, 1)}°`).join(" · ");
+  // Only the zones with a reading - none yet on a new board.
+  const temps = zones.filter(z => z.temperature_c != null).map(z => `${z.name} ${fmt(z.temperature_c, 1)}°`).join(" · ");
   const health = zones.map(zoneHealth);
-  const toCheck = health.filter(h => h !== "ok").length;
-  let state = health.includes("bad") ? "bad" : toCheck ? "neutral" : "ok";
-  let value = toCheck ? tr("climate_admin.ov_zones_check", { count: toCheck }) : tr("climate_admin.ov_zones_ok");
+  const toCheck = health.filter(h => h === "bad" || h === "neutral").length;
+  const todo = health.includes("todo");
+  let state = health.includes("bad") ? "bad" : toCheck ? "neutral" : todo ? "todo" : "ok";
+  let value = toCheck ? tr("climate_admin.ov_zones_check", { count: toCheck })
+    : todo ? tr("climate_admin.ov_zones_todo") : tr("climate_admin.ov_zones_ok");
   if (restartPending) {
     state = "neutral";
     value = tr("climate_admin.ov_zones_restart");
@@ -200,7 +211,7 @@ function updatePlantOverview(data, restartPending) {
     value = tr("climate.no_zones");
   }
   setTile("ov-zones", state, value, temps);
-  setPill("zones-summary", zones.length ? pillHtml(state, restartPending || toCheck ? value
+  setPill("zones-summary", zones.length ? pillHtml(state, restartPending || toCheck || todo ? value
     : tr("climate_admin.pill_zones_ok", { count: zones.length })) : "");
 }
 
@@ -232,11 +243,9 @@ const LOW_BATTERY_PCT = 10;
 // ------------------------------------------------------------ config form ----
 
 function zoneFormHtml(zone, index) {
-  // A zone that doesn't exist yet starts simulated: on a board with no
-  // hardware installed, "Shelly (real device)" can't even be saved (an
-  // id is required) and every status line would report a device nobody
-  // ever installed. Picking the real thing is one dropdown away.
-  const z = zone || { name: "", sensor_mode: "simulated", sensor_device_id: "", valve_mode: "simulated", valve_device_id: "", cool_enabled: true };
+  // A zone that doesn't exist yet: its Shellys to configure - each one
+  // saved when its id is known, one at a time.
+  const z = zone || { name: "", sensor_mode: "shelly", sensor_device_id: "", valve_mode: "shelly", valve_device_id: "", cool_enabled: true };
   const sensorOptions = SENSOR_MODES.map(
     m => `<option value="${m}" ${z.sensor_mode === m ? "selected" : ""}>${tr(`climate_admin.mode_${m}`)}</option>`
   ).join("");
@@ -261,7 +270,7 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-sensor-id-field"${z.sensor_mode !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.sensor_device_id_label")}</label>
-        <input type="text" class="zone-sensor-device-id" value="${escapeHtml(z.sensor_device_id || "")}" placeholder="shellyht-XXXXXXXXXXXX" onchange="checkShelly(this, 'sensor')">
+        <input type="text" class="zone-sensor-device-id" value="${escapeHtml(z.sensor_device_id || "")}" placeholder="shellyhtg3-XXXXXXXXXXXX" onchange="checkShelly(this, 'sensor')">
         <p class="hint-text shelly-check" aria-live="polite"></p>
       </div>
       <p class="hint-text zone-manual-hint"${z.sensor_mode !== "manual" ? " hidden" : ""}>${tr("climate_admin.manual_mode_hint")}</p>
@@ -271,7 +280,7 @@ function zoneFormHtml(zone, index) {
       </div>
       <div class="admin-field zone-valve-id-field"${(z.valve_mode || "shelly") !== "shelly" ? " hidden" : ""}>
         <label>${tr("climate_admin.valve_device_id_label")}</label>
-        <input type="text" class="zone-valve-device-id" value="${escapeHtml(z.valve_device_id || "")}" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'valve')">
+        <input type="text" class="zone-valve-device-id" value="${escapeHtml(z.valve_device_id || "")}" placeholder="shelly1g3-XXXXXXXXXXXX" onchange="checkShelly(this, 'valve')">
         <p class="hint-text shelly-check" aria-live="polite"></p>
       </div>
       <label class="admin-checkbox">
@@ -312,7 +321,7 @@ async function loadMap() {
   const guide = document.getElementById("guide");
   if (guide && !guideDecided) {
     guideDecided = true;
-    guide.hidden = !!(savedMap.configured || savedMap.zones);
+    guide.hidden = !!savedMap.configured;
     if (!guide.hidden && !(guide.id in openSectionsSaved)) guide.open = true;
   }
   updateRestartBar();
@@ -402,9 +411,10 @@ async function loadExtraSwitches() {
     ...(data.zones || []).map(z => `<option value="${escapeAttr(z)}">${escapeHtml(z)}</option>`)].join("");
   zoneSelect.value = data.dehumidifier_water_zone || "";
   extraSwitchesRestartPending = !!data.restart_pending;
-  const wired = [data.bypass_valve_device_id, data.dehumidifier_device_id].filter(Boolean).length;
+  const missing = [data.bypass_valve_device_id, data.dehumidifier_device_id].filter(id => !id).length;
   setPill("extra-switches-summary", extraSwitchesRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
-    : pillHtml("idle", wired ? tr("climate_admin.pill_switches", { count: wired }) : tr("climate_admin.pill_none")));
+    : missing ? pillHtml("todo", tr("climate_admin.pill_todo_count", { count: missing }))
+    : pillHtml("idle", tr("climate_admin.pill_switches", { count: 2 })));
   updateRestartBar();
 }
 
@@ -466,7 +476,8 @@ async function loadExtraSensor() {
   document.getElementById("extra-outdoor-sensor-mode").value = data.outdoor_sensor_mode || "none";
   extraSensorRestartPending = !!data.restart_pending;
   syncExtraRoleFields();
-  setPill("extra-sensor-summary", rolePillHtml(data.outdoor_sensor_mode || "none", extraSensorRestartPending, null));
+  setPill("extra-sensor-summary", rolePillHtml(data.outdoor_sensor_mode || "none", extraSensorRestartPending, null,
+    data.outdoor_sensor_mode === "shelly" && !data.outdoor_sensor_device_id));
   updateRestartBar();
 }
 
@@ -511,8 +522,12 @@ async function refreshExtraSensorStatus() {
   const slot = document.getElementById("extra-sensor-status");
   if (!slot) return;
   const mode = document.getElementById("extra-outdoor-sensor-mode").value;
-  if (mode === "none" || (mode === "shelly" && !document.getElementById("extra-outdoor-sensor-id").value.trim())) {
+  if (mode === "none") {
     morph(slot, "");
+    return;
+  }
+  if (mode === "shelly" && !document.getElementById("extra-outdoor-sensor-id").value.trim()) {
+    morph(slot, `<div>${tr("climate_admin.sensor_label")}: ${todoHtml()}</div>`);
     return;
   }
   if (extraSensorRestartPending) {
@@ -557,7 +572,8 @@ async function loadVmc() {
   input.value = data.vmc_device_id || "";
   mode.value = data.vmc_mode || "none";
   vmcRestartPending = !!data.restart_pending;
-  setPill("vmc-summary", rolePillHtml(data.vmc_mode || "none", vmcRestartPending, null));
+  setPill("vmc-summary", rolePillHtml(data.vmc_mode || "none", vmcRestartPending, null,
+    data.vmc_mode === "shelly" && !data.vmc_device_id));
   // Not managed here yet, but config.yaml already has one: pre-fill it,
   // and say that saving takes it over.
   if (!data.vmc_device_id && data.suggested_vmc) {
@@ -655,9 +671,12 @@ async function refreshVmcStatus() {
   const slot = document.getElementById("vmc-status");
   if (!slot) return;
   const vmcMode = document.getElementById("extra-vmc-mode").value;
-  if (vmcMode === "none" || (vmcMode === "shelly"
-      && (!document.getElementById("extra-vmc-id").value.trim() || !document.getElementById("vmc-suggestion").hidden))) {
+  if (vmcMode === "none" || (vmcMode === "shelly" && !document.getElementById("vmc-suggestion").hidden)) {
     morph(slot, "");
+    return;
+  }
+  if (vmcMode === "shelly" && !document.getElementById("extra-vmc-id").value.trim()) {
+    morph(slot, `<div>${todoHtml()}</div>`);
     return;
   }
   if (vmcRestartPending) {
@@ -730,6 +749,8 @@ function freshnessNote(zone, mode) {
 }
 
 function sensorStatusHtml(zone, mode) {
+  // No id saved yet: nothing to read.
+  if (zone.sensor_configured === false) return todoHtml();
   if (mode === "simulated") {
     return `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ${fmt(zone.temperature_c, 1)}°C`;
   }
@@ -785,6 +806,7 @@ function sensorStatusHtml(zone, mode) {
 }
 
 function valveStatusHtml(zone, valveMode) {
+  if (zone.valve_configured === false) return todoHtml();
   const pill = valveMode === "simulated" ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span> ` : "";
   if (zone.valve_ok) {
     const driven = zone.valve_driver && zone.valve_driver.on
@@ -1056,6 +1078,7 @@ async function refreshStatus() {
     const restartPending = (savedMap && savedMap.restart_pending) || extraSwitchesRestartPending;
     updatePlantOverview(data, restartPending);
     deviceZones = devicesByZone(data);
+    setupTodo = data.to_configure || [];
     renderDevices();
     const byName = {};
     (data.zones || []).forEach(z => { byName[z.name] = z; });
@@ -2795,8 +2818,24 @@ async function refreshShellyRevision() {
 let deviceStatus = null;   // devices from the last GET /api/system-status
 let shellyHealth = null;   // the last GET /api/climate-admin/shelly-health
 let deviceZones = null;    // each zone's sensor and valve, from the last GET /api/climate/zones
+let setupTodo = [];        // the Shellys with no id yet, from the same
 const openDeviceRows = new Set();
-const DEVICE_STATE_ORDER = { bad: 0, neutral: 1, ok: 2 };
+const DEVICE_STATE_ORDER = { bad: 0, neutral: 1, ok: 2, todo: 3 };
+// What each Shelly to configure is - the model to look for in the app.
+const ROLE_MODELS = {
+  sensor: "Shelly H&T Gen3", outdoor: "Shelly H&T Gen3",
+  valve: "Shelly 1 Gen3", bypass: "Shelly 1 Gen3", dehumidifier: "Shelly 1 Gen3",
+  vmc: "Shelly Dimmer 0/1-10V Gen3",
+};
+
+// A device as the list names it: the fixed roles in the page's language,
+// a zone's own as "Sensore Stanze" rather than "Stanze Sensor".
+function deviceLabel(name) {
+  if (DISPLAY_NAMES[name]) return displayName(name);
+  const zone = (deviceZones || []).find(z => name === `${z.name} Sensor` || name === `${z.name} Valve`);
+  if (!zone) return name;
+  return tr(name === `${zone.name} Sensor` ? "climate_admin.zone_sensor_name" : "climate_admin.zone_valve_name", { zone: zone.name });
+}
 
 function deviceRows() {
   const shellys = (shellyHealth && shellyHealth.devices) || [];
@@ -2813,8 +2852,11 @@ function deviceRows() {
   shellys.forEach(s => {
     if (!rows.has(`shelly:${s.id}`)) rows.set(`shelly:${s.id}`, { key: `shelly:${s.id}`, shelly: s, devices: [] });
   });
+  // And one with no id yet, a row to do.
+  setupTodo.forEach(t => rows.set(`todo:${t.name}`, { key: `todo:${t.name}`, todo: t, devices: [] }));
   const now = Date.now() / 1000;
   return [...rows.values()].map(row => {
+    if (row.todo) return { ...row, stats: "", state: "todo", names: [row.todo.name] };
     const stats = row.shelly ? shellyStatsHtml(row.shelly, shellyHealth, now) : "";
     const verdict = row.shelly && row.shelly.assessment;
     const state = row.devices.some(d => !d.ok) || (verdict && verdict.state === "offline") ? "bad"
@@ -2822,10 +2864,14 @@ function deviceRows() {
     const names = row.devices.length ? row.devices.map(d => d.name) : (row.shelly.names || [row.shelly.name]);
     return { ...row, stats, state, names };
   }).sort((a, b) => DEVICE_STATE_ORDER[a.state] - DEVICE_STATE_ORDER[b.state]
-    || displayName(a.names[0]).localeCompare(displayName(b.names[0])));
+    || deviceLabel(a.names[0]).localeCompare(deviceLabel(b.names[0])));
 }
 
 function deviceRowHtml(row) {
+  if (row.todo) {
+    return `<li><div class="admin-device-line">${todoHtml()}<strong>${escapeHtml(deviceLabel(row.todo.name))}</strong>`
+      + `<span class="admin-pill">${escapeHtml(ROLE_MODELS[row.todo.role] || "")}</span></div></li>`;
+  }
   const s = row.shelly;
   const label = row.state === "neutral" ? reasonLabel(s.assessment.reasons)
     : tr(`climate_admin.${row.state === "bad" ? "system_device_offline" : "system_device_ok"}`);
@@ -2843,7 +2889,7 @@ function deviceRowHtml(row) {
   const errors = row.devices.filter(d => d.error).map(d =>
     `<div class="admin-problem-detail">${escapeHtml(row.devices.length > 1 ? `${displayName(d.name)}: ${d.error}` : d.error)}</div>`).join("");
   const line = `<span class="admin-status ${row.state}">${escapeHtml(label)}</span>`
-    + `<strong>${row.names.map(name => escapeHtml(displayName(name))).join(" · ")}</strong>${pills}`
+    + `<strong>${row.names.map(name => escapeHtml(deviceLabel(name))).join(" · ")}</strong>${pills}`
     + (meta ? `<span class="device-meta">${escapeHtml(meta)}</span>` : "")
     + `<span class="admin-device-age">${escapeHtml(age)}</span>`;
   if (!s) return `<li><div class="admin-device-line">${line}</div>${errors}</li>`;
@@ -2863,6 +2909,8 @@ function devicesByZone(data) {
     const members = [z.sensor, z.valve];
     (effects.links || []).filter(l => l.follower === z.valve || l.zone === z.name).forEach(l => members.push(l.leader));
     if (excluded.length === 1 && excluded[0] === z) (effects.rules || []).forEach(r => members.push(r.switch));
+    // Those still to configure that go with it (the bypass, the dehumidifier).
+    (data.to_configure || []).filter(t => t.zone === z.name).forEach(t => members.push(t.name));
     return { name: z.name, members: [...new Set(members.filter(Boolean))] };
   });
 }
@@ -2892,9 +2940,12 @@ function renderDevices() {
     : `<li class="hint-text">${escapeHtml(tr("climate_admin.devices_none"))}</li>`);
   const bad = rows.filter(r => r.state === "bad").length;
   const check = rows.filter(r => r.state === "neutral").length;
+  const todo = rows.filter(r => r.state === "todo").length;
+  const real = rows.length - todo;
   setPill("devices-summary", !rows.length ? ""
-    : bad ? pillHtml("bad", tr("climate_admin.devices_bad", { count: bad, total: rows.length }))
-    : check ? pillHtml("neutral", tr("climate_admin.devices_check", { count: check, total: rows.length }))
+    : bad ? pillHtml("bad", tr("climate_admin.devices_bad", { count: bad, total: real }))
+    : check ? pillHtml("neutral", tr("climate_admin.devices_check", { count: check, total: real }))
+    : todo ? pillHtml("todo", tr("climate_admin.devices_todo", { count: todo }))
     : pillHtml("ok", tr("climate_admin.devices_ok", { count: rows.length })));
 }
 

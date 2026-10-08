@@ -139,6 +139,7 @@
 .ov-tile[data-state="bad"] { --state: var(--bad); background: color-mix(in srgb, var(--bad) 7%, var(--surface)); }
 .ov-tile[data-state="heat"] { --state: var(--heat); }
 .ov-tile[data-state="cool"] { --state: var(--cool); }
+.ov-tile[data-state="todo"] { --state: var(--accent); }
 .ov-label { display: flex; align-items: center; gap: 7px; font-size: 0.74rem; color: var(--text-3); font-weight: 600; letter-spacing: 0.03em; }
 .ov-label::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--state); margin-left: auto; flex: none; }
 .ov-label .sec-icon { width: 15px; height: 15px; color: var(--text-3); }
@@ -342,6 +343,8 @@
 .admin-status.neutral { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .admin-status.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .admin-status.idle { color: var(--text-3); }
+/* A Shelly with no id yet: one to do, not a fault. */
+.admin-status.todo { color: var(--accent); background: var(--accent-soft); }
 .admin-status.season-heat { color: var(--heat); background: var(--heat-soft); }
 .admin-status.season-cool { color: var(--cool); background: var(--cool-soft); }
 .admin-pill.simulated, .admin-pill.manual { border: 1px dashed var(--text-3); background: transparent; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; }

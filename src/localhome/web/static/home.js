@@ -150,6 +150,19 @@ function zoneExcluded(zone) {
   return climateMode === "cool" && zone.cool_enabled === false;
 }
 
+// Its Shellys configured: a sensor to go by, a valve to drive. Until then
+// the zone says what isn't connected yet - the admin panel's to do, not a
+// fault (the board keeps its valve closed without its sensor).
+function zoneReady(zone) {
+  return zone.sensor_configured !== false && zone.valve_configured !== false;
+}
+
+// "...sensor", "...valve" or "...both": the text for what's missing.
+function setupKey(zone, prefix) {
+  if (zone.sensor_configured === false && zone.valve_configured === false) return `${prefix}_both`;
+  return `${prefix}_${zone.sensor_configured === false ? "sensor" : "valve"}`;
+}
+
 // A painted hour changes what the card says comes next: the card reads
 // the grid being edited.
 function updateZoneNext(zone) {
@@ -358,6 +371,7 @@ function targetReached(zone, climate) {
 
 function zoneStatus(zone, climate) {
   const mode = climate.mode;
+  if (!zoneReady(zone)) return { tone: "off", text: tr(setupKey(zone, "home.st_setup")) };
   // Held open by another device (a dehumidifier drawing its water
   // through this valve) - even in a zone that sits out the cooling.
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
@@ -730,6 +744,11 @@ function manualBannerHtml(zone, climate) {
 
 function quickHtml(zone, climate, change) {
   const mode = climate.mode;
+  if (!zoneReady(zone)) {
+    delete state.pending[zone.name];
+    return `<div class="excluded-note setup-note">${ICONS.link}<span>${esc(tr(setupKey(zone, "home.setup_note")))}</span>
+      <a class="btn" href="/climate-admin">${esc(tr("home.setup_link"))}</a></div>`;
+  }
   if (mode === "cool" && !zone.cool_enabled) {
     return `<div class="excluded-note">${ICONS.snow}<span>${esc(tr("home.excluded_note"))}</span></div>`;
   }
@@ -893,12 +912,14 @@ function renderHero() {
   // where each zone stands - nothing a reading can't back up.
   const zones = climate.zones || [];
   const cool = mode === "cool";
-  const running = zones.filter(z => !zoneExcluded(z));
+  const ready = zones.filter(zoneReady);
+  const running = ready.filter(z => !zoneExcluded(z));
   const active = running.filter(z => zoneStatus(z, climate).active);
   const off = running.filter(z => z.target_c == null);
   document.body.dataset.running = String(active.length > 0);   // the top brighter while it runs
   let title;
   if (!zones.length) title = tr("home.no_zones");
+  else if (!ready.length) title = tr("home.hero_setup");
   else if (climate.away_until) title = tr("home.hero_away", { until: awayUntilText(boardDate(climate.away_until)) });
   else if (active.length) title = tr(cool ? "home.hero_cooling" : "home.hero_heating", { zones: listNames(active.map(z => z.name)) });
   // All off: "none planned now" only if it's the week's doing - one off
@@ -923,6 +944,7 @@ function renderHero() {
 // One zone's state in a few words, for the line under the title.
 function zoneLine(zone, climate) {
   const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
+  if (!zoneReady(zone)) return tr(setupKey(zone, "home.line_setup"), { zone: zone.name });
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
   if (zone.valve_ok === false) return tr("home.line_valve_offline", { zone: zone.name });
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
@@ -964,7 +986,10 @@ function renderOutdoor() {
   if (!reading || reading.temperature_c == null) {
     // Not wired yet, or wired and not heard from yet: said, not left out -
     // in a home with rooms to heat or cool (a sensor of theirs is here).
-    chip.hidden = !device && !sensors.some(d => d.kind === "climate");
+    // Shown in a climate home - and on a new board, whose outdoor sensor
+    // is still to configure before any other sensor reports.
+    const todo = ((state.climate && state.climate.to_configure) || []).some(item => item.role === "outdoor");
+    chip.hidden = !device && !todo && !sensors.some(d => d.kind === "climate");
     // On a wide screen the value's place is kept, with a dash: the tile
     // has the shape it will have once there's a reading.
     morph(chip, `${label}<span class="outdoor-value outdoor-value-none" aria-hidden="true"><span class="dash">−−</span><small>°</small></span>
@@ -1080,13 +1105,22 @@ function problemText(problem) {
 function openHealth() {
   const problems = state.problems || [];
   const zones = (state.climate && state.climate.zones) || [];
+  const todo = (state.climate && state.climate.to_configure) || [];
   let body;
   if (problems.length) {
     body = `<p class="sheet-lead warn"><b>${esc(tr("home.health_problems", { count: problems.length }))}</b></p>
       <ul class="sheet-points">${problems.map(p => `<li>${esc(problemText(p))}</li>`).join("")}</ul>`;
-  } else {
+  } else if (!todo.length) {
     body = `<p class="sheet-lead ok"><b>${esc(tr("home.health_sheet_ok"))}</b></p>
       <ul class="sheet-points"><li>${esc(tr("home.health_sheet_answering"))}</li></ul>`;
+  } else {
+    body = `<p class="sheet-lead ok"><b>${esc(tr("home.health_sheet_nothing_wrong"))}</b></p>`;
+  }
+  // Not connected yet: not a problem, but the plant isn't whole until they are.
+  if (todo.length) {
+    body += `<div class="sheet-label">${esc(tr("home.health_sheet_setup"))}</div>
+      <ul class="sheet-points">${todo.map(item => `<li>${esc(setupName(item))}</li>`).join("")}</ul>
+      <p><a class="sheet-link" href="/climate-admin">${esc(tr("home.health_sheet_setup_admin"))}</a></p>`;
   }
   // Each zone's sensor's power, whatever else is going on: what a
   // resident looks after.
@@ -1945,6 +1979,7 @@ async function refreshClimate(anchor) {
     renderHero();
     renderZones();
     renderPlant();
+    renderHealth();
   }, anchor);
 }
 
@@ -2008,12 +2043,28 @@ async function refreshProblems() {
   try {
     const data = await api("/api/problems");
     state.problems = data.problems || [];
-    const count = state.problems.length;
-    health.dataset.state = count ? "warn" : "ok";
-    setText(text, count ? tr("home.health_problems", { count }) : tr("home.health_ok"));
+    renderHealth();
   } catch (e) {
     health.dataset.state = "unknown";
   }
+}
+
+// What the chip says: a problem first; else the Shellys not connected yet
+// (the admin panel's to do); else all is well.
+function renderHealth() {
+  const health = document.getElementById("health");
+  if (!state.problems) return;
+  const count = state.problems.length;
+  const todo = ((state.climate && state.climate.to_configure) || []).length;
+  health.dataset.state = count ? "warn" : todo ? "setup" : "ok";
+  setText(document.getElementById("health-text"), count ? tr("home.health_problems", { count })
+    : todo ? tr("home.health_setup") : tr("home.health_ok"));
+}
+
+// A Shelly still to configure, as the page calls it.
+function setupName(item) {
+  if (item.role === "sensor" || item.role === "valve") return tr(`home.setup_${item.role}`, { zone: item.zone });
+  return displayName(item.name);
 }
 
 // ---------------------------------------------------------------- start --

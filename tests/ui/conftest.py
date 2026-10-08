@@ -76,21 +76,36 @@ history:
 """
 
 
+# The README's installation, step 5: the page and nothing else - a new
+# board, the zones and every Shelly still to configure.
+EMPTY_CONFIG = """\
+web:
+  host: "127.0.0.1"
+  port: {port}
+  language: "it"
+
+integrations: []
+"""
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-def _launch(home: Path, zones: list[dict], config: str = CONFIG):
+def _launch(home: Path, zones: list[dict] | None, config: str = CONFIG):
     """Starts LocalHome in `home` with these zones and config.yaml (a
-    template with {port}): (base URL, process)."""
+    template with {port}): (base URL, process). No zones: nothing saved
+    in the admin panel at all, as on a new board."""
     port = _free_port()
     (home / "config.yaml").write_text(config.format(port=port), encoding="utf-8")
-    # Simulated picked, as on the demo: a new board has none at all.
-    extra_sensors = {"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": None}
-    (home / "climate_map.json").write_text(json.dumps({"zones": zones, "extra_sensors": extra_sensors}),
-                                           encoding="utf-8")
+    if zones is not None:
+        # Simulated picked, as on the demo: a new board has them to configure.
+        extra_sensors = {"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": None}
+        extra_dimmers = {"vmc_mode": "simulated", "vmc_device_id": None}
+        (home / "climate_map.json").write_text(json.dumps({"zones": zones, "extra_sensors": extra_sensors,
+                                                           "extra_dimmers": extra_dimmers}), encoding="utf-8")
     log_path = home / "server.log"
     env = dict(os.environ, LOCALHOME_CONFIG=str(home / "config.yaml"), PYTHONUNBUFFERED="1")
     with open(log_path, "w", encoding="utf-8") as log:
@@ -111,8 +126,9 @@ def _launch(home: Path, zones: list[dict], config: str = CONFIG):
 @pytest.fixture(scope="session")
 def start_server(tmp_path_factory):
     """start_server(zones, config=None) -> the base URL of another
-    LocalHome with these zones (and this config.yaml template, else the
-    usual one); all of them stopped when the session ends."""
+    LocalHome with these zones - None: a new board's - and this
+    config.yaml template, else the usual one; all of them stopped when
+    the session ends."""
     procs = []
 
     def _start(zones, config=None):

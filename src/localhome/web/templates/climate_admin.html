@@ -240,7 +240,7 @@
       <div class="admin-zone-card" id="extra-switch-form">
         <div class="admin-field">
           <label for="extra-bypass-valve-id">{{ t.climate_admin.extra_bypass_valve_label }}</label>
-          <input type="text" id="extra-bypass-valve-id" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'bypass')">
+          <input type="text" id="extra-bypass-valve-id" placeholder="shelly1g3-XXXXXXXXXXXX" onchange="checkShelly(this, 'bypass')">
           <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <label class="admin-checkbox">
@@ -249,7 +249,7 @@
         </label>
         <div class="admin-field">
           <label for="extra-dehumidifier-id">{{ t.climate_admin.extra_dehumidifier_label }}</label>
-          <input type="text" id="extra-dehumidifier-id" placeholder="shellyplus1-XXXXXXXXXXXX" onchange="checkShelly(this, 'dehumidifier')">
+          <input type="text" id="extra-dehumidifier-id" placeholder="shelly1g3-XXXXXXXXXXXX" onchange="checkShelly(this, 'dehumidifier')">
           <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <div class="admin-field">
@@ -274,14 +274,14 @@
         <div class="admin-field">
           <label for="extra-outdoor-sensor-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
           <select id="extra-outdoor-sensor-mode" onchange="syncExtraRoleFields()">
-            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
             <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
             <option value="none">{{ t.climate_admin.mode_none }}</option>
           </select>
         </div>
         <div class="admin-field" id="extra-outdoor-sensor-id-field">
           <label for="extra-outdoor-sensor-id">{{ t.climate_admin.extra_outdoor_sensor_label }}</label>
-          <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyht-XXXXXXXXXXXX" onchange="checkShelly(this, 'outdoor')">
+          <input type="text" id="extra-outdoor-sensor-id" placeholder="shellyhtg3-XXXXXXXXXXXX" onchange="checkShelly(this, 'outdoor')">
           <p class="hint-text shelly-check" aria-live="polite"></p>
         </div>
         <div class="admin-zone-status" id="extra-sensor-status"></div>
@@ -302,8 +302,8 @@
         <div class="admin-field">
           <label for="extra-vmc-mode">{{ t.climate_admin.extra_role_mode_label }}</label>
           <select id="extra-vmc-mode" onchange="syncExtraRoleFields()">
-            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
             <option value="shelly">{{ t.climate_admin.mode_shelly }}</option>
+            <option value="simulated">{{ t.climate_admin.mode_simulated }}</option>
             <option value="none">{{ t.climate_admin.mode_none }}</option>
           </select>
         </div>

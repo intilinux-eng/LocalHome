@@ -104,13 +104,13 @@ def test_a_refusal_is_explained_in_the_page_language(open_page, api):
     page.locator("#zones > summary").click()          # closed until needed
     card = page.locator("#zone-forms .admin-zone-card").first
     assert eventually(page, lambda: card.count() == 1)
-    card.locator(".zone-sensor-mode").select_option("shelly")    # and no device id typed
+    card.locator(".zone-name").fill("Stanze/Bagno")
     page.locator("#save-btn").click()
     result = page.locator("#save-result")
     assert eventually(page, lambda: result.inner_text().strip() != "")
     text = result.inner_text()
-    assert "inserisci l'ID del sensore Shelly" in text and ZONE_A in text, text
-    assert api("/api/climate-admin/map")["zones"][0]["sensor_mode"] == "simulated", "nothing saved"
+    assert "il nome non può contenere" in text and "Stanze/Bagno" in text, text
+    assert api("/api/climate-admin/map")["zones"][0]["name"] == ZONE_A, "nothing saved"
 
 
 def test_the_admin_page_says_when_the_board_stops_answering(open_page):
@@ -201,7 +201,7 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     assert eventually(page, lambda: groups.count() >= 3)
     items = page.locator("#device-list > li").all_inner_texts()
     assert items[0].strip().lower() == f"zona {ZONE_A}".lower()
-    assert f"{ZONE_A} Sensor" in items[1] and f"{ZONE_A} Valve" in items[2]
+    assert f"Sensore {ZONE_A}" in items[1] and f"Valvola {ZONE_A}" in items[2]
     assert items[3].strip().lower() == f"zona {ZONE_B}".lower()
     assert "altri dispositivi" in [i.strip().lower() for i in items]
     # Right after the server starts a device may not have answered yet.
