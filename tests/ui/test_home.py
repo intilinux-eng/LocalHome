@@ -48,9 +48,10 @@ def test_the_home_page_lays_out_and_says_everything_in_italian(open_page, width,
     page = opened.page
     assert page.locator(".zone").count() == 2
     assert page.locator("#hero-title").inner_text().strip() not in ("", "Un attimo…")
-    # The board's clock, with its date and time zone.
+    # The board's clock and its date - no time zone: it only crowded the
+    # date (the admin page shows it, for the installer).
     assert eventually(page, lambda: page.locator("#server-clock-date").inner_text().strip() != "")
-    assert "UTC" in page.locator("#server-clock-zone").inner_text()
+    assert page.locator("#server-clock-zone").count() == 0
     assert page.evaluate(UNTRANSLATED_JS) == []
     assert page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []

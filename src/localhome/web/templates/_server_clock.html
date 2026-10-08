@@ -1,13 +1,14 @@
 {# The server's date and time - filled in by static/server_clock.js. Shared
    by the dashboard and /climate-admin so both show the exact same clock
-   the thermostat schedules against. clock_zone_full spells the timezone
-   out as "Europe/Rome · UTC+2" instead of the short "CEST" - what an
-   installer checking the board's setup actually needs to read. #}
+   the thermostat schedules against. The timezone only with
+   clock_zone_full, spelled out as "Europe/Rome · UTC+2" - what an
+   installer checking the board's setup needs to read; on the home page
+   it only crowded the date. #}
 <div class="server-clock" id="server-clock"{% if clock_zone_full %} data-zone="full"{% endif %}>
   <span class="server-clock-time" id="server-clock-time">--:--</span>
   <span class="server-clock-meta">
     <span class="server-clock-date" id="server-clock-date"></span>
     <span class="server-clock-date-short" id="server-clock-date-short"></span>
-    <span class="server-clock-zone" id="server-clock-zone"></span>
+    {% if clock_zone_full %}<span class="server-clock-zone" id="server-clock-zone"></span>{% endif %}
   </span>
 </div>

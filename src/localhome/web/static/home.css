@@ -162,7 +162,6 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 @media (max-width: 560px) {
   .server-clock-date { display: none; }
   .server-clock-date-short { display: block; }
-  .server-clock-zone { display: none; }
 }
 
 .server-clock-warning { margin: -6px 0 16px; padding: 12px 14px; border-radius: var(--radius-s); background: rgba(201, 133, 18, 0.12); font-size: 0.9rem; }
@@ -219,7 +218,6 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .hero-now .server-clock-meta { gap: 2px; font-size: 0.86rem; color: var(--text-2); }
 .hero-now .server-clock-date { display: block; font-weight: 550; }
 .hero-now .server-clock-date-short { display: none; }
-.hero-now .server-clock-zone { display: block; font-size: 0.72rem; color: var(--text-3); }
 .hero-now .server-clock.is-warning .server-clock-time { color: var(--warn); }
 
 .outdoor {
@@ -243,7 +241,6 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
   .hero-now .server-clock-time, .outdoor-value { font-size: 1.85rem; }
   .hero-now .server-clock-date { display: none; }
   .hero-now .server-clock-date-short { display: block; font-weight: 550; }
-  .hero-now .server-clock-zone { display: none; }
 }
 .outdoor-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
 .outdoor-label svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
