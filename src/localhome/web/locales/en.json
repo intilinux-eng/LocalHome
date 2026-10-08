@@ -165,7 +165,7 @@
     "extra_dehumidifier_label": "Dehumidifier device id",
     "extra_sensor_heading": "Outdoor temperature sensor",
     "extra_sensor_note": "A Shelly H&T Gen3 for the outdoor temperature and humidity, at the top of the home page and in the climate chart.",
-    "extra_sensor_note_more": "Until the sensor is installed leave it Simulated: the temperature and the chart still show, marked as simulated. With None it doesn't appear.",
+    "extra_sensor_note_more": "Until the sensor is installed: with None the home page says “No sensor connected yet”; with Simulated it shows invented temperatures, marked as simulated - for trying things out.",
     "extra_outdoor_sensor_label": "Outdoor temperature sensor device id",
     "how_it_works_heading": "How it works - everything in brief",
     "how_test": "A zone's sensor can be Simulated or Manual (in the zone's card, above), to try the plant without sensors. A Simulated one behaves like a real H&T Gen3: temperature and humidity to a tenth, battery and signal, a report every 0.5 °C or 1% and every 2 hours anyway, its own row under Devices; the room warms or cools with its valve and the season, and after a restart carries on where it was. A Manual one takes the temperature you write on the zone's card on the home page, or here: the valve reacts at once. Back to Shelly from here, with a restart.",

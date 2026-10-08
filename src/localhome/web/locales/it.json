@@ -165,7 +165,7 @@
     "extra_dehumidifier_label": "ID dispositivo deumidificatore",
     "extra_sensor_heading": "Sensore temperatura esterna",
     "extra_sensor_note": "Uno Shelly H&T Gen3 per temperatura e umidità esterne, in alto sulla home e nel grafico del clima.",
-    "extra_sensor_note_more": "Finché il sensore non è installato lascialo Simulato: temperatura e grafico si vedono comunque, segnati come simulati. Con Nessuno non compare.",
+    "extra_sensor_note_more": "Finché il sensore non è installato: con Nessuno la home dice «Sensore non ancora collegato»; con Simulato mostra temperature inventate, segnate come simulate - per provare.",
     "extra_outdoor_sensor_label": "ID dispositivo sensore temperatura esterna",
     "how_it_works_heading": "Come funziona - tutto in breve",
     "how_test": "Il sensore di una zona può essere Simulato o Manuale (nella scheda della zona, qui sopra), per provare l'impianto senza sensori. Il Simulato si comporta come un H&T Gen3 vero: temperatura e umidità al decimo, batteria e segnale, un invio ogni 0,5 °C o 1% e comunque ogni 2 ore, la sua riga in Dispositivi; la stanza si scalda o si raffresca seguendo la sua valvola e la stagione, e dopo un riavvio riparte da dov'era. Il Manuale prende la temperatura che scrivi sulla scheda della zona nella home, o qui: la valvola reagisce subito. Si torna a Shelly da qui, con un riavvio.",
