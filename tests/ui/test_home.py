@@ -413,7 +413,8 @@ def test_the_season_and_the_health_chips_say_it_in_plain_words(open_page, api):
     sheet.wait_for()
     assert page.url.endswith("/"), "no jump to the admin page"
     text = sheet.inner_text()
-    assert "Estate: le zone si raffrescano" in text and "la cambia chi gestisce l'impianto" in text
+    assert "Estate: le zone si raffrescano" in text and "La stagione segue l'impianto" in text
+    assert f"Si programmano e si raffrescano tutte le zone: {ZONE_A} e {ZONE_B}" in text, text
     assert sheet.locator("a[href='/climate-admin#season']").count() == 1
     page.click("#sheet-close")
     page.click("#health")

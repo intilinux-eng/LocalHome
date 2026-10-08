@@ -211,6 +211,7 @@ def test_summer_the_dehumidifier_and_away(browser, house):
     page.click("#away-chip")
     sheet = page.locator("#sheet").inner_text()
     assert "anche quelle cambiate a mano" in sheet and "Deumidificatore" in sheet and "Sono rientrato" in sheet
+    assert "Valvola bypass bagni: resta" in sheet, "the bypass said to keep the season"
     page.locator("#sheet button[data-away='24']").click()
     assert eventually(page, lambda: home.on("Dehumidifier") is False)
     assert home.on(f"{ROOMS} Valve") is False and home.on(f"{BATHS} Valve") is False
@@ -281,7 +282,11 @@ def test_winter_both_zones_heat_and_away_closes_them(browser, house):
     assert eventually(page, lambda: home.on(f"{ROOMS} Valve") is True and home.on(f"{BATHS} Valve") is True)
     page.click("#season-chip")
     sheet = page.locator("#sheet").inner_text()
-    assert t["season_sheet_heat"] in sheet and "Deumidificatore" not in sheet
+    assert t["season_sheet_heat"] in sheet and "Si accende a mano" not in sheet
+    # Winter schedules the bathrooms too - and says that summer won't.
+    assert f"Si programmano e si scaldano tutte le zone: {ROOMS} e {BATHS}" in sheet, sheet
+    assert f"D'estate invece {BATHS} non si raffresca e non si programma" in sheet
+    assert "Deumidificatore: spento per tutta la stagione." in sheet
     page.click("#sheet-close")
     home.call("/api/climate/mode", {"mode": "cool"})
     home.close()

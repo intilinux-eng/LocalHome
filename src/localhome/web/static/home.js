@@ -1053,16 +1053,52 @@ function awayUntilText(date) {
   return today ? untilText(date) : tr("home.until_when", { when: dateText(date) });
 }
 
+// What the season holds a switch at, in words: a normally open valve's
+// "on" is the valve closed.
+function seasonState(rule, mode) {
+  return tr(`home.season_state_${rule[mode]}${rule.normally_open ? "_no" : ""}`);
+}
+
+// A device's name inside a sentence: "col deumidificatore acceso".
+function inSentence(name) {
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
 function openSeason() {
   const climate = state.climate;
   if (!climate) return;
-  const cool = climate.mode === "cool";
+  const mode = climate.mode;
+  const cool = mode === "cool";
   const zones = climate.zones || [];
-  const points = [tr(cool ? "home.season_sheet_zones_cool" : "home.season_sheet_zones_heat")];
-  const excluded = zones.filter(zoneExcluded).map(z => z.name);
-  if (excluded.length) points.push(tr("home.season_sheet_excluded", { zones: listNames(excluded) }));
-  const rules = (climate.season_effects && climate.season_effects.rules) || [];
-  const byHand = rules.filter(r => r[climate.mode] === "manual" && deviceByName(r.switch)).map(r => displayName(r.switch));
+  const effects = climate.season_effects || {};
+  const names = list => listNames(list.map(z => z.name));
+  // The zones by name: which this season schedules - in winter all of
+  // them, and the one left out in summer said so; in summer the one left
+  // out, why, and what its valve does meanwhile.
+  const keptOut = zones.filter(z => z.cool_enabled === false);
+  const scheduled = cool ? zones.filter(z => z.cool_enabled !== false) : zones;
+  const points = [];
+  if (scheduled.length) {
+    const which = scheduled.length === zones.length ? "all" : scheduled.length === 1 ? "one" : "some";
+    points.push(tr(`home.season_sheet_zones_${which}_${mode}`, { zones: names(scheduled) }));
+  }
+  if (cool) {
+    keptOut.forEach(z => {
+      const link = (effects.links || []).find(l => l.zone === z.name && (!l.mode || l.mode === mode) && deviceByName(l.leader));
+      points.push(link ? tr("home.season_sheet_kept_linked", { zone: z.name, leader: inSentence(displayName(link.leader)) })
+        : tr("home.season_sheet_kept_closed", { zone: z.name }));
+    });
+  } else if (keptOut.length) {
+    points.push(tr(keptOut.length === 1 ? "home.season_sheet_summer_one" : "home.season_sheet_summer_many", { zones: names(keptOut) }));
+  }
+  // What the season does to the plant's switches: one way for all of it -
+  // one it powers (the bypass, in summer) whatever the schedule, away too -
+  // or left to whoever lives there.
+  const rules = (effects.rules || []).filter(r => deviceByName(r.switch));
+  rules.filter(r => r[mode] === "on" || r[mode] === "off").forEach(r => points.push(tr(
+    r[mode] === "on" ? "home.season_sheet_forced_on" : "home.season_sheet_forced",
+    { device: displayName(r.switch), state: seasonState(r, mode) })));
+  const byHand = rules.filter(r => r[mode] === "manual").map(r => displayName(r.switch));
   if (byHand.length) points.push(tr("home.season_sheet_by_hand", { devices: listNames(byHand) }));
   points.push(tr("home.season_sheet_who"));
   const changed = climate.mode_changed && climate.mode_changed.at
@@ -1154,9 +1190,15 @@ function openAway() {
   // Said before it's chosen: what goes off, and that nothing comes back on
   // until "I'm back".
   const devices = awayDevices();
+  // What the season powers stays so - the bypass, in summer: the plant's,
+  // not a comfort (services/interlock.py).
+  const mode = state.climate && state.climate.mode;
+  const kept = ((state.climate && state.climate.season_effects && state.climate.season_effects.rules) || [])
+    .filter(r => r[mode] === "on" && deviceByName(r.switch))
+    .map(r => tr("home.away_point_kept", { device: displayName(r.switch), state: seasonState(r, mode) }));
   const points = [tr("home.away_point_zones"),
     ...(devices.length ? [tr("home.away_point_devices", { devices: listNames(devices) })] : []),
-    tr("home.away_point_locked"), tr("home.away_point_plan")];
+    ...kept, tr("home.away_point_locked"), tr("home.away_point_plan")];
   // Or the day back, picked in the phone's own calendar - the board's
   // days: today at the earliest ("until tonight at 22"), a year at most
   // (the board's limit). Away already: the day back it has, to change.
