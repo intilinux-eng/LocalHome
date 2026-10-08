@@ -277,9 +277,11 @@ class DehumidifierTimer:
         return self.status()
 
     def tick(self) -> None:
-        """Off when its time is up, when the room is dry enough - even if
-        it was switched on some other way - or when a run of its own
-        leaves its hours; on by itself only if the panel says so."""
+        """Off when its time is up, when the room is dry enough, when a run
+        of its own leaves its hours - and at once when it was switched on
+        some other way; on by itself only if the panel says so. Out of its
+        season, away or in the diagnostic mode the season's rule (or the
+        installer) has it: services/interlock.py."""
         with self._lock:
             s = self.settings()
             data = self._load()
@@ -299,8 +301,15 @@ class DehumidifierTimer:
                     self._auto_start(s, data, now)
                 return
             until = data.get("until")
-            if data.get("mode") == "auto" and not in_window(datetime.fromtimestamp(now).hour,
-                                                            s["auto_from_hour"], s["auto_to_hour"]):
+            if until is None:
+                # On, and no run of its own: switched on from outside - the
+                # Shelly app, a test, the diagnostic mode left behind. It
+                # draws a lot of power: off, unless asked for here (a time,
+                # "until dry", or by itself as the panel allows).
+                logger.warning("Dehumidifier on without being asked from LocalHome - switching it off")
+                self.switch_off("unasked")
+            elif data.get("mode") == "auto" and not in_window(datetime.fromtimestamp(now).hour,
+                                                              s["auto_from_hour"], s["auto_to_hour"]):
                 self.switch_off("window")
             elif until is not None and now >= until:
                 self.switch_off("time")

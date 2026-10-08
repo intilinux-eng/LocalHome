@@ -98,6 +98,26 @@ def test_only_the_offered_durations(tmp_path):
             timer.switch_on(hours)
 
 
+def test_on_without_being_asked_here_it_is_switched_off(tmp_path):
+    """It draws a lot of power: switched on from outside - the Shelly app,
+    a test, the diagnostic mode left behind - with the air still humid,
+    it's off at the next check, not left running until the room dries.
+    Asked for here, it runs its time."""
+    manager, clock = Manager(humidity=70.0), Clock()
+    diagnostic = {"on": True}
+    timer, commands = _timer(tmp_path, manager, clock, allowed=lambda: not diagnostic["on"])
+    manager.readings["Deumidificatore"]["is_on"] = True              # switched on by the installer
+    timer.tick()
+    assert commands == [], "the diagnostic mode: the installer's"
+    diagnostic["on"] = False
+    timer.tick()
+    assert commands == [("Deumidificatore", False)] and timer.status()["stopped"]["why"] == "unasked"
+    timer.switch_on(1)
+    clock.t += 1800
+    timer.tick()
+    assert commands[-1] == ("Deumidificatore", True), "asked for: on for its hour"
+
+
 def test_switched_off_some_other_way_its_time_is_forgotten(tmp_path):
     manager, clock = Manager(), Clock()
     timer, commands = _timer(tmp_path, manager, clock)
