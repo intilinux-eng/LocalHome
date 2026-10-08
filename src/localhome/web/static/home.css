@@ -944,6 +944,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 .sheet-note { color: var(--text-2); font-size: 0.9rem; margin: 4px 0 14px; }
+.sheet-lead { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; font-size: 1.02rem; }
+.sheet-lead svg { flex: none; width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sheet-lead.ok::before, .sheet-lead.warn::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
+.sheet-lead.warn::before { background: var(--warn); }
+.sheet-link { display: inline-block; margin-top: 8px; color: var(--accent); font-size: 0.9rem; text-underline-offset: 3px; }
 .sheet-points { margin: 4px 0 14px; padding-left: 20px; color: var(--text-2); font-size: 0.9rem; line-height: 1.45; }
 .sheet-points li + li { margin-top: 4px; }
 .sheet-label { margin-top: 16px; color: var(--text-2); font-size: 0.85rem; font-weight: 600; }
@@ -1037,6 +1042,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .sched-day-label.now { color: var(--accent); font-weight: 700; }
 .sched-cell { position: relative; height: 26px; border-radius: 4px; background: var(--surface-2); cursor: pointer; }
 .sched-cell.off { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--surface-3) 3px 6px); }
+/* A band's temperature, in its first hour (schedule_grid.js labelBands()):
+   over the band's next hours if it needs the room, as they're its colour. */
+.sched-cell[data-label]:not([data-label=""])::before {
+  content: attr(data-label); position: absolute; left: 3px; top: 50%; transform: translateY(-50%); z-index: 1;
+  font-size: 0.6rem; font-weight: 700; line-height: 1; color: #fff; white-space: nowrap; pointer-events: none;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
+}
+.sched-cell[data-label][data-label-wide]::before { content: none; }
 .sched-cell.now::after { content: ""; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
 @media (hover: hover) { .sched-cell:hover { filter: brightness(1.12); } }
 
@@ -1057,6 +1070,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   .sched-grid > .sched-day-label { grid-column: var(--c); grid-row: 1; justify-content: center; padding: 0 0 4px; }
   .sched-grid > .sched-cell { grid-column: var(--c); grid-row: var(--r); height: auto; border-radius: 6px; }
+  .sched-grid > .sched-cell[data-label-wide]::before { content: attr(data-label); }
   .sched-hour-label {
     display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;
     grid-column: 1; grid-row: var(--r);

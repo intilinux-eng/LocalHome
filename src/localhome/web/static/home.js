@@ -992,6 +992,86 @@ const ICONS = {
   fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
 };
 
+// ------------------------------------------- season and health sheets --
+// What the top's two chips mean, in plain words - the admin page, with
+// its technical details, one link away.
+
+function dateText(date) {
+  const months = tr("home.months_long");
+  return tr("home.date_at", { day: tr(`home.day_long.${DAYS[dayIndex(date)]}`), date: date.getUTCDate(),
+    month: Array.isArray(months) ? months[date.getUTCMonth()] : "", time: hhmm(date) });
+}
+
+function openSeason() {
+  const climate = state.climate;
+  if (!climate) return;
+  const cool = climate.mode === "cool";
+  const zones = climate.zones || [];
+  const points = [tr(cool ? "home.season_sheet_zones_cool" : "home.season_sheet_zones_heat")];
+  const excluded = zones.filter(zoneExcluded).map(z => z.name);
+  if (excluded.length) points.push(tr("home.season_sheet_excluded", { zones: listNames(excluded) }));
+  const rules = (climate.season_effects && climate.season_effects.rules) || [];
+  const byHand = rules.filter(r => r[climate.mode] === "manual" && deviceByName(r.switch)).map(r => displayName(r.switch));
+  if (byHand.length) points.push(tr("home.season_sheet_by_hand", { devices: listNames(byHand) }));
+  points.push(tr("home.season_sheet_who"));
+  const changed = climate.mode_changed && climate.mode_changed.at
+    ? `<p class="sheet-note">${esc(tr("home.season_sheet_changed", { when: dateText(wall(climate.mode_changed.at * 1000)) }))}</p>` : "";
+  openSheet(tr("home.season_sheet_title"), `
+    <p class="sheet-lead">${cool ? ICONS.snow : ICONS.sun}<b>${esc(tr(cool ? "home.season_sheet_cool" : "home.season_sheet_heat"))}</b></p>
+    <ul class="sheet-points">${points.map(point => `<li>${esc(point)}</li>`).join("")}</ul>
+    ${changed}
+    <p><a class="sheet-link" href="/climate-admin#season">${esc(tr("home.season_sheet_admin"))}</a></p>`);
+}
+
+// A device as a resident calls it: a zone's sensor or valve by its zone.
+function subjectName(subject) {
+  const zones = ((state.climate && state.climate.zones) || []).map(z => z.name);
+  for (const [suffix, key] of [[" Sensor", "home.subject_sensor"], [" Valve", "home.subject_valve"]]) {
+    if (subject && subject.endsWith(suffix) && zones.includes(subject.slice(0, -suffix.length))) {
+      return tr(key, { zone: subject.slice(0, -suffix.length) });
+    }
+  }
+  return displayName(subject || "");
+}
+
+// What a resident can make of each problem: a device that doesn't answer,
+// a battery, the internet, the router - or something for whoever looks
+// after the system, said as the admin page says it.
+const RESIDENT_PROBLEMS = {
+  device_offline: "home.problem_offline", integration_failed: "home.problem_offline",
+  device_report_late: "home.problem_offline", device_battery_low: "home.problem_battery",
+  clock_unsynced: "home.problem_internet", lan_unreachable: "home.problem_router",
+};
+
+function problemText(problem) {
+  const subject = subjectName(problem.subject);
+  const key = RESIDENT_PROBLEMS[problem.code];
+  if (key) return tr(key, { subject });
+  const technical = tr(`climate_admin.system_problem_${problem.code}`, { subject: problem.subject || "" });
+  return tr("home.problem_technical", { what: technical.startsWith("climate_admin.") ? problem.code : technical });
+}
+
+function openHealth() {
+  const problems = state.problems || [];
+  const zones = (state.climate && state.climate.zones) || [];
+  let body;
+  if (problems.length) {
+    body = `<p class="sheet-lead warn"><b>${esc(tr("home.health_problems", { count: problems.length }))}</b></p>
+      <ul class="sheet-points">${problems.map(p => `<li>${esc(problemText(p))}</li>`).join("")}</ul>`;
+  } else {
+    body = `<p class="sheet-lead ok"><b>${esc(tr("home.health_sheet_ok"))}</b></p>
+      <ul class="sheet-points"><li>${esc(tr("home.health_sheet_answering"))}</li></ul>`;
+  }
+  // Each zone's sensor's power, whatever else is going on: what a
+  // resident looks after.
+  const power = zones.filter(z => z.external_power || z.battery_pct != null).map(z => `<li>${esc(z.external_power
+    ? tr("home.health_sheet_powered", { zone: z.name })
+    : tr("home.health_sheet_battery", { zone: z.name, pct: Math.round(z.battery_pct) }))}</li>`);
+  openSheet(tr("home.health_sheet_title"), `${body}
+    ${power.length ? `<div class="sheet-label">${esc(tr("home.health_sheet_sensors"))}</div><ul class="sheet-points">${power.join("")}</ul>` : ""}
+    <p><a class="sheet-link" href="/climate-admin#system-status">${esc(tr("home.health_sheet_admin"))}</a></p>`);
+}
+
 // ---------------------------------------------------------- away sheet --
 
 // What else away switches off: what this season leaves to be switched by
@@ -1896,7 +1976,8 @@ async function refreshProblems() {
   const text = document.getElementById("health-text");
   try {
     const data = await api("/api/problems");
-    const count = (data.problems || []).length;
+    state.problems = data.problems || [];
+    const count = state.problems.length;
     health.dataset.state = count ? "warn" : "ok";
     setText(text, count ? tr("home.health_problems", { count }) : tr("home.health_ok"));
   } catch (e) {
@@ -1913,6 +1994,8 @@ document.getElementById("season-devices").addEventListener("click", onSeasonDevi
 document.getElementById("house-body").addEventListener("click", onHouseClick);
 document.getElementById("house-body").addEventListener("change", onHouseChange);
 document.getElementById("away-chip").addEventListener("click", openAway);
+document.getElementById("season-chip").addEventListener("click", openSeason);
+document.getElementById("health").addEventListener("click", openHealth);
 document.getElementById("sheet").addEventListener("click", e => state.sheet && state.sheet.onClick && state.sheet.onClick(e));
 document.getElementById("sheet-close").addEventListener("click", closeSheet);
 document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);

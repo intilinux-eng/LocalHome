@@ -380,6 +380,81 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
 
 
+def test_the_season_and_the_health_chips_say_it_in_plain_words(open_page, api):
+    """Seen using it as a resident: both chips led into the admin pages.
+    Now each opens a sheet - what the season does and who changes it;
+    whether everything answers, and each sensor's power - with the admin
+    page one link away."""
+    opened = _open_home(open_page)
+    page = opened.page
+    page.click("#season-chip")
+    sheet = page.locator("#sheet")
+    sheet.wait_for()
+    assert page.url.endswith("/"), "no jump to the admin page"
+    text = sheet.inner_text()
+    assert "Estate: le zone si raffrescano" in text and "la cambia chi gestisce l'impianto" in text
+    assert sheet.locator("a[href='/climate-admin#season']").count() == 1
+    page.click("#sheet-close")
+    page.click("#health")
+    sheet.wait_for()
+    text = sheet.inner_text()
+    problems = api("/api/problems")["problems"]
+    assert ("Tutto a posto" in text) if not problems else ("da controllare" in text)
+    assert "Sensori di temperatura" in text and f"{ZONE_A}: a batteria" in text
+    assert sheet.locator("a[href='/climate-admin#system-status']").count() == 1
+    assert page.evaluate(UNTRANSLATED_JS) == [] and opened.errors == []
+
+
+def test_a_problem_is_said_as_a_resident_would_take_it(open_page):
+    """A zone's sensor not answering, by its zone; a technical one, as
+    something to show whoever looks after the system."""
+    opened = _open_home(open_page)
+    page = opened.page
+
+    def with_problems(route):
+        route.fulfill(json={"ok": True, "problems": [
+            {"code": "device_offline", "subject": f"{ZONE_A} Sensor", "detail": "x"},
+            {"code": "cpu_hot", "subject": "82 °C"}]})
+    page.route("**/api/problems", with_problems)
+    page.evaluate("refreshProblems()")
+    assert eventually(page, lambda: page.inner_text("#health-text") == "2 da controllare")
+    page.click("#health")
+    text = page.locator("#sheet").inner_text()
+    assert f"Il sensore di {ZONE_A} non risponde." in text
+    assert "Da far vedere a chi gestisce l'impianto: CPU molto calda (82 °C)" in text
+    assert opened.errors == []
+
+
+def test_each_band_of_the_week_says_its_temperature(open_page, api):
+    """Colours alone don't tell 24° from 25°: each band's first hour says
+    it, and a stroke moves the labels with it."""
+    week = {d: [24.0] * 7 + [25.0] * 11 + [None] * 6 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    _set_week(api, ZONE_A, week)
+    opened = _open_home(open_page, 1280)
+    page = opened.page
+    _open_plan(page, ZONE_A)
+    grid = _card(page, ZONE_A).locator(".sched-grid")
+    labels = lambda: grid.locator(".sched-cell[data-day='mon']").evaluate_all(
+        "cells => cells.map(c => c.dataset.label || '')")
+    assert eventually(page, lambda: labels()[0] == "24" and labels()[7] == "25")
+    assert all(label == "" for i, label in enumerate(labels()) if i not in (0, 7)), "only each band's first hour"
+    content = grid.locator(".sched-cell[data-day='mon'][data-hour='0']").evaluate(
+        "c => getComputedStyle(c, '::before').content")
+    assert content == '"24"'
+    # One hour at 25,5 doesn't fit its cell where the hours run across: its
+    # tooltip says it there, not a label over the next band's.
+    week["mon"][11] = 25.5
+    _set_week(api, ZONE_A, week)
+    page.reload()
+    _open_plan(page, ZONE_A)
+    narrow = grid.locator(".sched-cell[data-day='mon'][data-hour='11']")
+    assert eventually(page, lambda: narrow.get_attribute("data-label") == "25,5")
+    assert narrow.evaluate("c => getComputedStyle(c, '::before').content") == "none"
+    assert grid.locator(".sched-cell[data-day='mon'][data-hour='12']").get_attribute("data-label") == "25"
+    _set_week(api, ZONE_A, EMPTY_WEEK)
+    assert opened.errors == []
+
+
 def test_the_home_page_says_when_the_board_stops_answering(open_page):
     page = _open_home(open_page).page
     assert page.locator("#offline").is_hidden()

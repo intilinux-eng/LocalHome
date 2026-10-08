@@ -25,10 +25,10 @@
       <div class="brand">
         <span class="brand-name">{{ site_name }}</span>
       </div>
-      <a class="health" id="health" href="/climate-admin#system-status" data-state="unknown">
+      <button class="health" id="health" type="button" data-state="unknown">
         <span class="health-dot" aria-hidden="true"></span>
         <span id="health-text">{{ t.home.health_checking }}</span>
-      </a>
+      </button>
     </header>
 
     <div class="server-clock-warning" id="server-clock-warning" hidden></div>
@@ -40,7 +40,7 @@
         <h1 class="hero-title" id="hero-title">{{ t.home.loading }}</h1>
         <p class="hero-detail" id="hero-detail"></p>
         <div class="hero-actions">
-          <a class="chip chip-season" id="season-chip" href="/climate-admin#season" title="{{ t.home.season_hint }}"></a>
+          <button class="chip chip-season" id="season-chip" type="button"></button>
           <button class="chip chip-away" id="away-chip" type="button"></button>
         </div>
       </div>

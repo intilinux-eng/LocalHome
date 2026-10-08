@@ -206,6 +206,7 @@ function buildScheduleGrid(zoneId, week) {
   const cells = grid.querySelectorAll(".sched-cell");
   if (cells.length === DAY_KEYS.length * 24) {
     cells.forEach(cell => applyCellStyle(cell, week[cell.dataset.day][Number(cell.dataset.hour)]));
+    labelBands(grid, week);
     return;
   }
   grid.innerHTML = "";
@@ -241,6 +242,7 @@ function buildScheduleGrid(zoneId, week) {
     grid.appendChild(label);
   }
   wireScheduleGrid(grid, zoneId);
+  labelBands(grid, week);
 }
 
 // Strokes, on the grid itself: the cell under the pointer is looked up as
@@ -335,7 +337,25 @@ function paintCell(zoneId, cell, value) {
   if (!week) return;
   applyCellStyle(cell, value);
   week[cell.dataset.day][Number(cell.dataset.hour)] = value;
+  labelBands(cell.closest(".sched-grid"), week);
   scheduleSave(zone.name);
+}
+
+// Each band - the same temperature hour after hour in a day - says it in
+// its first hour: colours alone don't tell 24° from 25°.
+function labelBands(grid, week) {
+  if (!grid) return;
+  grid.querySelectorAll(".sched-cell").forEach(cell => {
+    const hours = week[cell.dataset.day];
+    const h = Number(cell.dataset.hour);
+    const value = hours[h];
+    const label = value != null && (h === 0 || hours[h - 1] !== value) ? degrees(value) : "";
+    if (cell.dataset.label !== label) cell.dataset.label = label;
+    // "25,5" in a one-hour band: wider than its cell where the hours run
+    // across (the stylesheet leaves it to the cell's tooltip there).
+    const narrow = label.length > 2 && (h === 23 || hours[h + 1] !== value);
+    cell.toggleAttribute("data-label-wide", narrow);
+  });
 }
 
 function selectPaintValue(btn) {
