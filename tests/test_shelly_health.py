@@ -838,3 +838,17 @@ def test_a_sensor_that_declares_nothing_gets_the_heartbeat_bound(tmp_path):
     clock.t += 3 * 3600
     assert by_id(watcher, HT)["assessment"]["state"] == "ok"
     assert shelly_health.late_after(None) == 2 * H and shelly_health.late_after(60) == 1200
+
+
+def test_the_period_it_declared_is_known_again_after_a_restart(tmp_path):
+    """Seen on the production board: its USB-C unplugged, the sensor off -
+    LocalHome restarted then would never hear its period again, and
+    waited 4 hours instead of 30 minutes to say it."""
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _wake(broker, 600)
+    _wake(broker, 600)                                    # unchanged: recorded once
+    assert [v for _, v in store.values_since(HT, "wakeup_period", 0)] == [600]
+    clock.t += 10 * 60
+    restarted, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
+    clock.t += 25 * 60
+    assert by_id(restarted, HT)["assessment"]["reasons"][0]["code"] == "report_late"

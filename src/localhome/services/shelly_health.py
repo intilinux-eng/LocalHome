@@ -602,9 +602,13 @@ class ShellyHealth:
         if rev is not None:
             state["cfg_rev"] = rev
         state["restart_required"] = bool(sys.get("restart_required"))
-        # A sleeping one: when it will wake again, as it says (assess()).
+        # A sleeping one: when it will wake again, as it says (assess()) -
+        # recorded when it changes, so a restart knows it even of a sensor
+        # that has gone silent since.
         period = _number(sys.get("wakeup_period"))
         if period is not None and period > 0:
+            if state["battery"] and period != state["wakeup_period"]:
+                self._record_later(state["id"], {"wakeup_period": period}, self.clock())
             state["wakeup_period"] = period
         uptime = _number(sys.get("uptime"))
         if uptime is None or state["battery"]:
@@ -663,6 +667,9 @@ class ShellyHealth:
         if state["battery"]:
             # Its power source, until it reports again: on USB-C or not, and
             # since when it's been on its batteries if it had been on USB-C.
+            periods = self._history(state["id"], "wakeup_period", since)
+            if periods:
+                state["wakeup_period"] = periods[-1][1]
             rows = self._history(state["id"], "external_power", since)
             if rows:
                 state["power_recorded"] = state["external_power"] = bool(rows[-1][1])
