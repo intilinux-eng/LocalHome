@@ -52,15 +52,14 @@ def test_the_api_sends_the_code_and_its_parameters(tmp_path):
     app = create_app(str(path))
     try:
         zones = [
-            {"name": "Stanze", "sensor_mode": "shelly", "sensor_device_id": None,
-             "valve_mode": "simulated", "cool_enabled": True},
+            {"name": "Stanze/Bagno", "sensor_mode": "simulated", "valve_mode": "simulated", "cool_enabled": True},
             {"name": "Bagni", "sensor_mode": "simulated", "valve_mode": "simulated", "cool_enabled": True},
         ]
         res = app.test_client().post("/api/climate-admin/map", json={"zones": zones})
         body = res.get_json()
         assert res.status_code == 400
-        assert body["code"] == "sensor_id_required" and body["params"] == {"zone": "Stanze"}
-        assert "sensor_device_id" in body["error"], "the English message stays for logs and API callers"
+        assert body["code"] == "zone_name_chars" and body["params"] == {"zone": "Stanze/Bagno"}
+        assert "can't contain" in body["error"], "the English message stays for logs and API callers"
 
         res = app.test_client().post("/api/climate-admin/settings", json={"values": {"hysteresis_c": 9}})
         assert res.get_json()["code"] == "setting_range"

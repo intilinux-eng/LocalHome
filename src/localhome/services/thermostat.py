@@ -135,6 +135,11 @@ class Zone:
     # different setpoint, the zone is excluded from cooling control
     # entirely. Has no effect in heat mode.
     cool_enabled: bool = True
+    # False while its Shelly is still to configure in the admin panel
+    # (services/climate_map_store.py's to_configure()): there's no device
+    # to read or drive yet, and that's not a fault.
+    sensor_configured: bool = True
+    valve_configured: bool = True
 
 
 class ScheduleStore:
@@ -606,6 +611,12 @@ class ThermostatController:
                 # hand (or by anything else) closes again at the next tick.
                 self._apply(zone, False)
                 continue
+            if not zone.sensor_configured:
+                # Its sensor still to configure: nothing to go by, so its
+                # valve (if there's one) stays closed. Not a silence -
+                # nothing is there to fall silent.
+                self._apply(zone, False)
+                continue
             reading = self.manager.sensor_reading(zone.sensor)
             if not reading.get("ok") or "temperature_c" not in reading:
                 self._on_sensor_unreachable(zone, elapsed)
@@ -726,6 +737,8 @@ class ThermostatController:
         return previously_open  # between the two - keep doing whatever it was doing
 
     def _apply(self, zone: Zone, desired_open: bool) -> None:
+        if not zone.valve_configured:
+            return   # its Shelly still to configure: nothing to drive
         # Compared with the valve's real state whenever it's answering, not
         # just with the last command sent: a relay that rebooted into "off",
         # or was switched from its own app, used to stay wrong until the

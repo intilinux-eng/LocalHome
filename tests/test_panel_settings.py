@@ -93,9 +93,8 @@ def test_restore_defaults_removes_the_file(tmp_path):
 
 
 def test_a_thermostat_setting_alone_does_not_create_a_thermostat(tmp_path):
-    path = _config(tmp_path, "web:\n  port: 5000\nintegrations: []\n")
-    (tmp_path / "panel_settings.json").write_text('{"hysteresis_c": 0.8}', encoding="utf-8")
-    assert create_app(str(path)).config["THERMOSTAT"] is None
+    config = load_config(_config(tmp_path, "web:\n  port: 5000\nintegrations: []\n"))
+    assert panel_settings.apply(config, {"hysteresis_c": 0.8}, None) is None
 
 
 GB = 1_000_000_000

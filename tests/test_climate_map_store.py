@@ -307,10 +307,25 @@ def test_rejects_an_unknown_sensor_mode():
         validate_zones(zones)
 
 
-def test_rejects_a_missing_sensor_device_id_in_shelly_mode():
-    zones = [dict(VALID_ZONES[0], sensor_device_id=None), VALID_ZONES[1]]
+def test_a_shelly_without_an_id_yet_is_to_configure_and_saves(tmp_path):
+    """One Shelly at a time: the rest stay to configure, and nothing is
+    built for them until their id is saved."""
+    zones = [dict(VALID_ZONES[0], sensor_device_id="  ", valve_device_id=""), dict(VALID_ZONES[1], valve_device_id=None)]
+    store = ClimateMapStore(str(tmp_path / "climate_map.json"))
+
+    store.set_zones(zones)
+
+    saved = store.get_zones()
+    assert (saved[0]["sensor_device_id"], saved[0]["valve_device_id"], saved[1]["valve_device_id"]) == (None, None, None)
+    built = [i.options["name"] for i in build_climate_integrations(saved, "mqtt_broker.json", "manual_override.json")]
+    assert built == ["Bathrooms Sensor"], "the manual sensor only"
+    configs = build_zone_configs(saved)
+    assert [(c["sensor_configured"], c["valve_configured"]) for c in configs] == [(False, False), (True, False)]
+
+
+def test_a_device_id_that_isnt_text_is_refused():
     with pytest.raises(ValueError, match="sensor_device_id"):
-        validate_zones(zones)
+        validate_zones([dict(VALID_ZONES[0], sensor_device_id=42), VALID_ZONES[1]])
 
 
 def test_does_not_require_a_sensor_device_id_in_simulated_or_manual_mode():
@@ -319,12 +334,6 @@ def test_does_not_require_a_sensor_device_id_in_simulated_or_manual_mode():
         VALID_ZONES[1],  # already "manual" with sensor_device_id=None
     ]
     validate_zones(zones)  # must not raise
-
-
-def test_rejects_a_missing_valve_device_id():
-    zones = [dict(VALID_ZONES[0], valve_device_id=None), VALID_ZONES[1]]
-    with pytest.raises(ValueError, match="valve_device_id"):
-        validate_zones(zones)
 
 
 def test_rejects_a_non_bool_cool_enabled():
@@ -355,12 +364,6 @@ def test_valve_mode_defaults_to_shelly_when_absent():
 def test_rejects_an_unknown_valve_mode():
     zones = [dict(VALID_ZONES[0], valve_mode="cloud"), VALID_ZONES[1]]
     with pytest.raises(ValueError, match="valve_mode"):
-        validate_zones(zones)
-
-
-def test_rejects_a_missing_valve_device_id_in_shelly_mode():
-    zones = [dict(VALID_ZONES[0], valve_mode="shelly", valve_device_id=None), VALID_ZONES[1]]
-    with pytest.raises(ValueError, match="valve_device_id"):
         validate_zones(zones)
 
 
@@ -462,8 +465,10 @@ def test_build_zone_configs_maps_to_the_thermostat_zone_shape():
     configs = build_zone_configs(VALID_ZONES)
 
     assert configs == [
-        {"name": "Rooms", "sensor": "Rooms Sensor", "valve": "Rooms Valve", "cool_enabled": True},
-        {"name": "Bathrooms", "sensor": "Bathrooms Sensor", "valve": "Bathrooms Valve", "cool_enabled": False},
+        {"name": "Rooms", "sensor": "Rooms Sensor", "valve": "Rooms Valve", "cool_enabled": True,
+         "sensor_configured": True, "valve_configured": True},
+        {"name": "Bathrooms", "sensor": "Bathrooms Sensor", "valve": "Bathrooms Valve", "cool_enabled": False,
+         "sensor_configured": True, "valve_configured": True},
     ]
 
 
@@ -511,12 +516,10 @@ def test_snapshot_pads_up_to_zone_count_with_blank_entries():
     snapshot = snapshot_from_config(zones, [])
 
     assert len(snapshot) == 2
-    # Simulated: there is no second zone in config.yaml, so there is no
-    # real device behind this slot - and a "shelly" slot with no device
-    # id is one the panel would refuse to save.
+    # No second zone in config.yaml: its Shellys to configure.
     assert snapshot[1] == {
-        "name": "", "sensor_mode": "simulated", "sensor_device_id": None,
-        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True,
+        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
+        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
     }
 
 

@@ -42,7 +42,9 @@ from localhome.services.climate_map_store import (
     configured_rule_switches,
     dehumidifier_water_zone,
     extra_roles,
+    open_climate_map,
     panel_season_rules,
+    setup_todo,
     snapshot_from_config,
 )
 from localhome.services.day_range import DayRange
@@ -159,7 +161,7 @@ def create_app(config_path: str | None = None) -> Flask:
     # actual merge (also used by `localhome-cli doctor`, so it
     # cross-checks the same effective setup this app runs, not just
     # config.yaml's own literal thermostat block).
-    climate_map = ClimateMapStore(config.resolve("climate_map.json"))
+    climate_map = open_climate_map(config)
     manual_override_path = config.resolve("manual_override.json")
     manual_override = ManualOverrideStore(manual_override_path)
     panel_zones = climate_map.get_zones()
@@ -288,7 +290,8 @@ def create_app(config_path: str | None = None) -> Flask:
         schedules_path = config.resolve(thermostat_cfg.get("schedules_file", "schedules.json"))
         schedule_store = ScheduleStore(schedules_path, default_mode=thermostat_cfg.get("mode", "heat"))
         zones = [
-            Zone(name=z["name"], sensor=z["sensor"], valve=z["valve"], cool_enabled=z.get("cool_enabled", True))
+            Zone(name=z["name"], sensor=z["sensor"], valve=z["valve"], cool_enabled=z.get("cool_enabled", True),
+                 sensor_configured=z.get("sensor_configured", True), valve_configured=z.get("valve_configured", True))
             for z in thermostat_cfg.get("zones", [])
         ]
         thermostat = ThermostatController(
@@ -590,6 +593,14 @@ def _set_roles(roles: dict) -> dict:
     nothing saved at all build the same drivers, so a cleared field isn't
     a pending change."""
     return {key: value for key, value in (roles or {}).items() if value}
+
+
+def _built_role(role: dict) -> tuple | None:
+    """What an outdoor sensor's or VMC's source builds: nothing for none,
+    nor for a Shelly still to configure - one to the other is no restart."""
+    if role["mode"] == "none" or (role["mode"] == "shelly" and not role["device_id"]):
+        return None
+    return role["mode"], role["device_id"]
 
 
 def _loops(app: Flask) -> list[dict]:
@@ -1300,6 +1311,10 @@ def _register_routes(app: Flask) -> None:
                 "external_power": sensor_reading.get("external_power") is True,
                 "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
+                # Its Shelly still to configure: no device to read or drive -
+                # the cards say so instead of a fault.
+                "sensor_configured": zone.sensor_configured,
+                "valve_configured": zone.valve_configured,
                 # Tagged on the zone's card ("simulated") - see home.js.
                 "sensor_simulated": manager.driver_types.get(zone.sensor) == "simulated",
                 # A value typed by hand (the admin panel's "manual" mode):
@@ -1358,6 +1373,8 @@ def _register_routes(app: Flask) -> None:
             season_effects={"rules": app.config["SEASON_RULES"](), "links": app.config["SEASON_LINKS"]()},
             # On by hand for a while, never by itself - see services/dehumidifier.py.
             dehumidifier=app.config["DEHUMIDIFIER"].status() if app.config.get("DEHUMIDIFIER") else None,
+            # The Shellys still without an id, as saved in the admin panel.
+            to_configure=setup_todo(app.config["LOCALHOME_CONFIG"], app.config["CLIMATE_MAP"]),
             zones=zones,
         )
 
@@ -1634,7 +1651,8 @@ def _register_routes(app: Flask) -> None:
         # from driver names alone.
         restart_pending = saved != app.config["ACTIVE_CLIMATE_ZONES"]
         if saved is not None:
-            return jsonify(ok=True, configured=True, zones=saved, restart_pending=restart_pending)
+            # Not saved yet: the factory zones, every Shelly to configure.
+            return jsonify(ok=True, configured=climate_map.zones_saved(), zones=saved, restart_pending=restart_pending)
         # Nothing saved yet - read config.yaml's *current* hand-written
         # setup as the form's starting point (real device ids included)
         # instead of a blank form, so trying "manual"/"simulated" mode
@@ -1732,7 +1750,7 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_extra_sensors()
         role = extra_roles(config, climate_map)["outdoor"]
-        restart_pending = role != app.config["ACTIVE_EXTRA_ROLES"]["outdoor"]
+        restart_pending = _built_role(role) != _built_role(app.config["ACTIVE_EXTRA_ROLES"]["outdoor"])
         return jsonify(ok=True, restart_pending=restart_pending, outdoor_sensor_mode=role["mode"],
                        **{key: saved.get(key) for key in EXTRA_SENSOR_FIELDS})
 
@@ -1755,7 +1773,7 @@ def _register_routes(app: Flask) -> None:
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         saved = climate_map.get_extra_dimmers()
         role = extra_roles(config, climate_map)["vmc"]
-        restart_pending = role != app.config["ACTIVE_EXTRA_ROLES"]["vmc"]
+        restart_pending = _built_role(role) != _built_role(app.config["ACTIVE_EXTRA_ROLES"]["vmc"])
         # Until the panel manages the VMC, offer the id of a dimmer already
         # hand-wired in config.yaml, so adopting it is one click, not
         # re-typing an id that's already known.

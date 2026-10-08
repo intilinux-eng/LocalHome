@@ -7,15 +7,18 @@ changing device ids, never code or config.yaml's own hand-written
 comments.
 
 Persists config/climate_map.json (additive, gitignored by the existing
-config/*.json pattern - see .gitignore). `get_zones()` returns None when
-nothing has been saved yet (missing file, or a corrupt one - same
-fail-safe stance as ScheduleStore._load()), meaning "defer entirely to
-config.yaml's own thermostat.zones" - an apartment that hasn't touched
-this panel keeps working exactly as before.
+config/*.json pattern - see .gitignore). While nothing has been saved
+yet (missing file, or a corrupt one - same fail-safe stance as
+ScheduleStore._load()), a new board's zones are FACTORY_ZONES: the
+reference apartment's climate, every Shelly still to configure - unless
+config.yaml wires its own thermostat.zones by hand, which then keep
+working exactly as before (see open_climate_map()).
 
 Each zone's sensor has three possible sources - see the `sensor_mode`
 field and `_sensor_integration()` below:
-  "shelly"    - a real Shelly H&T Gen3 over MQTT (needs sensor_device_id)
+  "shelly"    - a real Shelly H&T Gen3 over MQTT, by its sensor_device_id;
+                without one yet it's "to configure": nothing is built
+                for it until the id is saved (see to_configure())
   "simulated" - drivers/simulated/climate.py's existing driver, for a
                 zone with no hardware installed yet
   "manual"    - drivers/manual/climate.py's debug driver: whatever value
@@ -23,7 +26,8 @@ field and `_sensor_integration()` below:
                 zone's on/off logic can be exercised at a chosen
                 temperature without a real event or a simulated drift
 The valve has its own, separate `valve_mode` - "shelly" (a real relay,
-Gen2+ JSON boolean shape, needs valve_device_id) or "simulated"
+Gen2+ JSON boolean shape, by its valve_device_id - to configure without
+one) or "simulated"
 (drivers/simulated/switch.py, controllable through the same generic
 on/off route the live status page's manual test buttons already use).
 No "manual" mode here - unlike a sensor reading, a switch's state is
@@ -42,9 +46,9 @@ The same file also holds `extra_switches` - two more fixed, standalone
 Shelly Plus 1 on/off switches this apartment's plant always has, same
 as the two zones are fixed: a bathroom bypass valve and a dehumidifier
 (see EXTRA_SWITCH_FIELDS/build_extra_switch_integrations() below).
-Each is independently optional (either, both, or neither may be
-panel-managed - a fresh apartment might not have the hardware wired
-yet), but unlike a zone there's no name field: the panel always builds
+Each is built once its device id is saved, independently - until then
+it's to configure (see setup_todo()) - and unlike a zone there's no
+name field: the panel always builds
 these under a fixed English name ("Bathroom Bypass Valve"/
 "Dehumidifier"). Adopting this for a device already hand-wired in
 config.yaml means updating that config.yaml's own `thermostat.
@@ -54,22 +58,18 @@ something this panel does for you (DeviceManager logs a name-collision
 warning at startup if the old config.yaml entry is left in place too -
 see web/app.py's create_app()).
 
-It also holds `extra_sensors` - the same "fixed role, optional,
-device-id-only" shape as extra_switches, but for a standalone *sensor*
-that isn't part of either zone: an outdoor temperature/humidity
-reading, always a real Shelly H&T Gen3 (see EXTRA_SENSOR_FIELDS/
-build_extra_sensor_integrations() below - reuses the exact same
-3-topic MQTT shape a zone's own "shelly" sensor mode uses). No
-"simulated"/"manual" mode here - unlike a zone's sensor, there's no
-thermostat decision riding on this reading, so there's nothing to
-exercise before the hardware exists; it's either wired (a device id is
-set) or it isn't (blank, not built at all).
+It also holds `extra_sensors` - a standalone *sensor* that isn't part
+of either zone: the outdoor temperature/humidity, a Shelly H&T Gen3
+(see EXTRA_SENSOR_FIELDS/build_extra_sensor_integrations() below -
+the same MQTT shape a zone's own "shelly" sensor mode uses).
 
 And `extra_dimmers` - the VMC (mechanical ventilation), driven by a
-Shelly 0/1-10V Dimmer Gen3 whose output sets the fan speed. Same fixed-
-role, device-id-only shape again; one device id builds two integrations,
-an on/off switch and its speed as a number paired into the switch's card
-(see EXTRA_DIMMER_FIELDS/build_extra_dimmer_integrations() below).
+Shelly 0/1-10V Dimmer Gen3 whose output sets the fan speed. One device
+id builds two integrations, an on/off switch and its speed as a number
+paired into the switch's card (see EXTRA_DIMMER_FIELDS/
+build_extra_dimmer_integrations() below). The outdoor sensor and the
+VMC each have a source - the real Shelly (to configure until its id is
+saved), simulated, or none (see extra_roles()).
 
 A config.yaml integration pointing at a device id the panel now manages
 is dropped in favour of the panel's (see apply_to_config()) - otherwise
@@ -78,6 +78,7 @@ commanding the same hardware under two names.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -93,14 +94,42 @@ ZONE_COUNT = 2
 SENSOR_MODES = ("shelly", "simulated", "manual")
 VALVE_MODES = ("shelly", "simulated")
 
+# A new board: the reference apartment's climate, every Shelly still to
+# configure - nothing simulated. The rooms, and the bathrooms: their
+# ceiling panels kept out of cooling, the dehumidifier drawing its
+# chilled water through their valve (dehumidifier_water_zone()). With
+# the bypass valve, the dehumidifier, the outdoor sensor and the VMC
+# (extra_roles(), setup_todo()), every Shelly the apartment has.
+FACTORY_ZONES = [
+    {"name": "Stanze", "sensor_mode": "shelly", "sensor_device_id": None,
+     "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True},
+    {"name": "Bagni", "sensor_mode": "shelly", "sensor_device_id": None,
+     "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": False},
+]
+
+
+def to_configure(zone: dict, part: str) -> bool:
+    """A zone's "sensor" or "valve" on a Shelly whose id isn't typed in
+    yet: nothing is built for it until there is one."""
+    return zone.get(f"{part}_mode", "shelly") == "shelly" and not (zone.get(f"{part}_device_id") or "").strip()
+
+
+def _typed_id(value, field: str, zone_name: str) -> str | None:
+    """A Shelly's id as typed, stripped; None when blank - to configure."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise InputError("device_id_invalid", f"zone '{zone_name}': {field} must be text or null", zone=zone_name)
+    return value.strip() or None
+
 
 def validate_zones(zones: list[dict]) -> None:
     """Raises ValueError describing the first problem found. Every check
     a hand-typed device id or a rushed API call could get wrong -
     duplicate names, a device id reused across two roles/zones (which
     would otherwise silently make one of them unreachable, see
-    core/manager.py's DeviceManager._register()), a missing id for the
-    mode that needs one."""
+    core/manager.py's DeviceManager._register()). A Shelly with no id
+    yet is fine: it's to configure, one device at a time."""
     if not isinstance(zones, list) or len(zones) != ZONE_COUNT:
         raise InputError("zones_count", f"exactly {ZONE_COUNT} zones are required", count=ZONE_COUNT)
 
@@ -126,12 +155,10 @@ def validate_zones(zones: list[dict]) -> None:
         if mode not in SENSOR_MODES:
             raise InputError("sensor_mode_invalid", f"zone {i} ('{name}'): sensor_mode must be one of {SENSOR_MODES}", zone=name)
 
-        sensor_device_id = zone.get("sensor_device_id")
         if mode == "shelly":
-            if not isinstance(sensor_device_id, str) or not sensor_device_id.strip():
-                raise InputError("sensor_id_required",
-                                 f"zone {i} ('{name}'): sensor_device_id is required when sensor_mode is 'shelly'", zone=name)
-            device_ids.append(sensor_device_id.strip())
+            sensor_device_id = _typed_id(zone.get("sensor_device_id"), "sensor_device_id", name)
+            if sensor_device_id:
+                device_ids.append(sensor_device_id)
 
         # Same "no hardware yet" escape hatch as the sensor - a valve
         # has no "manual" mode of its own (there's nothing to type a
@@ -142,12 +169,10 @@ def validate_zones(zones: list[dict]) -> None:
         valve_mode = zone.get("valve_mode", "shelly")
         if valve_mode not in VALVE_MODES:
             raise InputError("valve_mode_invalid", f"zone {i} ('{name}'): valve_mode must be one of {VALVE_MODES}", zone=name)
-        valve_device_id = zone.get("valve_device_id")
         if valve_mode == "shelly":
-            if not isinstance(valve_device_id, str) or not valve_device_id.strip():
-                raise InputError("valve_id_required",
-                                 f"zone {i} ('{name}'): valve_device_id is required when valve_mode is 'shelly'", zone=name)
-            device_ids.append(valve_device_id.strip())
+            valve_device_id = _typed_id(zone.get("valve_device_id"), "valve_device_id", name)
+            if valve_device_id:
+                device_ids.append(valve_device_id)
 
         if "cool_enabled" in zone and not isinstance(zone["cool_enabled"], bool):
             raise InputError("zone_invalid", f"zone {i} ('{name}'): cool_enabled must be true or false", zone=name)
@@ -247,28 +272,26 @@ SIMULATED_OUTDOOR_MONTHLY_C = [8, 9, 11, 14, 18, 23, 26, 26, 22, 18, 13, 9]
 SIMULATED_OUTDOOR_SWING_C = 5.0
 
 
-def effective_extra_mode(section: dict | None, id_key: str, mode_key: str, simulated_by_default: bool) -> str:
+def effective_extra_mode(section: dict | None, id_key: str, mode_key: str, default: str) -> str:
     """What a fixed role actually runs as. `section` None means the panel
-    has never saved that section: a new installation, where the role
-    starts simulated or as none - see extra_roles(). A section saved
-    before modes existed keeps meaning what it meant: an id is a real
-    device, no id is none."""
+    has never saved that section: `default` - see extra_roles(). A
+    section saved before modes existed keeps meaning what it meant: an
+    id is a real device, no id is none."""
     if section is None:
-        return "simulated" if simulated_by_default else "none"
+        return default
     mode = section.get(mode_key)
     if mode in EXTRA_ROLE_MODES:
         return mode
     return "shelly" if section.get(id_key) else "none"
 
 
-def _validate_role_mode(section: dict, id_key: str, mode_key: str) -> None:
+def _validate_role_mode(section: dict, mode_key: str) -> None:
     mode = section.get(mode_key)
     if mode is None:
         return
+    # A Shelly with no id yet is fine: it's to configure.
     if mode not in EXTRA_ROLE_MODES:
         raise InputError("role_mode_invalid", f"{mode_key} must be one of {list(EXTRA_ROLE_MODES)}")
-    if mode == "shelly" and not (isinstance(section.get(id_key), str) and section[id_key].strip()):
-        raise InputError("role_id_required", f"{id_key} is required when {mode_key} is 'shelly'")
 
 
 def _validate_role_ids(section: dict, fields: dict, other_ids: list[str], section_name: str) -> None:
@@ -348,7 +371,7 @@ def validate_extra_sensors(
         + _extra_dimmer_device_ids(extra_dimmers or {})
     )
     if isinstance(extra_sensors, dict):
-        _validate_role_mode(extra_sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY)
+        _validate_role_mode(extra_sensors, OUTDOOR_MODE_KEY)
     if isinstance(extra_sensors, dict) and extra_sensors.get(OUTDOOR_MODE_KEY) in ("simulated", "none"):
         return   # the id isn't used, so it can't collide
     _validate_role_ids(extra_sensors, EXTRA_SENSOR_FIELDS, other_ids, "extra_sensors")
@@ -382,7 +405,7 @@ def validate_extra_dimmers(
         + _extra_sensor_device_ids(extra_sensors or {})
     )
     if isinstance(extra_dimmers, dict):
-        _validate_role_mode(extra_dimmers, "vmc_device_id", VMC_MODE_KEY)
+        _validate_role_mode(extra_dimmers, VMC_MODE_KEY)
     if isinstance(extra_dimmers, dict) and extra_dimmers.get(VMC_MODE_KEY) in ("simulated", "none"):
         return
     _validate_role_ids(extra_dimmers, EXTRA_DIMMER_FIELDS, other_ids, "extra_dimmers")
@@ -535,14 +558,16 @@ def build_climate_integrations(zones: list[dict], broker_file: str, manual_store
     + valve - concatenated onto config.integrations before DeviceManager
     construction (see web/app.py's create_app()), the same "additive,
     zero core changes" seam this project already uses for panel-added
-    devices."""
+    devices. A Shelly still to configure gets nothing until its id is saved."""
     integrations: list[Integration] = []
     for zone in zones:
         sensor_name = f"{zone['name']} Sensor"
         valve_name = f"{zone['name']} Valve"
-        integrations.append(_sensor_integration(zone, sensor_name, broker_file, manual_store_path,
-                                                valve_name, season_file, simulated_state_file))
-        integrations.append(_valve_integration(zone, valve_name, broker_file))
+        if not to_configure(zone, "sensor"):
+            integrations.append(_sensor_integration(zone, sensor_name, broker_file, manual_store_path,
+                                                    valve_name, season_file, simulated_state_file))
+        if not to_configure(zone, "valve"):
+            integrations.append(_valve_integration(zone, valve_name, broker_file))
     return integrations
 
 
@@ -639,12 +664,10 @@ def integration_device_id(integration: Integration) -> str | None:
 
 
 def _blank_zone() -> dict:
-    # Simulated, not "shelly": this is a zone that doesn't exist in
-    # config.yaml at all, so there's no real device behind it - and a
-    # "shelly" zone with no device id can't be saved from the panel.
+    # A zone config.yaml doesn't have: its Shellys to configure.
     return {
-        "name": "", "sensor_mode": "simulated", "sensor_device_id": None,
-        "valve_mode": "simulated", "valve_device_id": None, "cool_enabled": True,
+        "name": "", "sensor_mode": "shelly", "sensor_device_id": None,
+        "valve_mode": "shelly", "valve_device_id": None, "cool_enabled": True,
     }
 
 
@@ -719,6 +742,8 @@ def build_zone_configs(zones: list[dict]) -> list[dict]:
             "sensor": f"{zone['name']} Sensor",
             "valve": f"{zone['name']} Valve",
             "cool_enabled": zone.get("cool_enabled", True),
+            "sensor_configured": not to_configure(zone, "sensor"),
+            "valve_configured": not to_configure(zone, "valve"),
         }
         for zone in zones
     ]
@@ -736,11 +761,11 @@ def apply_to_config(config: LocalHomeConfig) -> dict | None:
 
     Mutates `config.integrations` in place (additive). Returns the
     effective `thermostat` dict callers should use in place of
-    `config.raw.get("thermostat")` - unchanged (including None) if the
-    panel has no saved zones, since only having *some* apartments use
-    this panel and others not is exactly the point.
+    `config.raw.get("thermostat")` - unchanged when config.yaml wires its
+    own zones (see open_climate_map()); otherwise with the panel's zones,
+    saved or the factory ones.
     """
-    climate_map = ClimateMapStore(config.resolve("climate_map.json"))
+    climate_map = open_climate_map(config)
     manual_override_path = config.resolve("manual_override.json")
     broker_file = config.resolve("mqtt_broker.json")
     panel_zones = climate_map.get_zones()
@@ -860,14 +885,12 @@ def validate_season_rules(rules) -> dict:
 
 def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     """The outdoor sensor's and the VMC's effective source and id. A role
-    the panel has never saved: the outdoor sensor starts as none - the
-    home then says it isn't connected yet, instead of showing made-up
-    weather next to the real rooms. The VMC starts simulated on a climate
-    installation (the panel manages the zones), so its card and program
-    can be tried - unless config.yaml already wires a real one by hand
-    (its fixed name, or any Shelly dimmer): a simulated stand-in would
-    replace or duplicate it. Anywhere else - LocalHome running covers or
-    plugs only - nothing appears by itself."""
+    the panel has never saved is, on a climate installation (the panel
+    manages the zones), its Shelly to configure: nothing built, the home
+    saying it isn't connected yet - unless config.yaml already wires a
+    real one by hand (its fixed name, or for the VMC any Shelly dimmer),
+    which the panel's would duplicate. Anywhere else - config.yaml wiring
+    its own zones - nothing appears by itself."""
     hand_wired = [e for e in config.raw.get("integrations") or []
                   if isinstance(e, dict) and e.get("enabled", True) is not False]
     names = {entry.get("name") for entry in hand_wired if isinstance(entry, dict)}
@@ -875,11 +898,13 @@ def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     climate_panel = climate_map.get_zones() is not None
     sensors = climate_map.get_extra_sensors() if climate_map.has_section("extra_sensors") else None
     dimmers = climate_map.get_extra_dimmers() if climate_map.has_section("extra_dimmers") else None
-    outdoor = effective_extra_mode(sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY, simulated_by_default=False)
+    outdoor = effective_extra_mode(sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY,
+                                   "shelly" if climate_panel and OUTDOOR_SENSOR_NAME not in names else "none")
     vmc = effective_extra_mode(dimmers, "vmc_device_id", VMC_MODE_KEY,
-                               simulated_by_default=climate_panel and VMC_NAME not in names and not has_dimmer)
+                               "shelly" if climate_panel and VMC_NAME not in names and not has_dimmer else "none")
     # The id only counts for a real device - one typed in ahead while the
-    # role is still simulated changes nothing that runs.
+    # role is still simulated changes nothing that runs. A Shelly with no
+    # id yet: None, to configure.
     return {
         "outdoor": {"mode": outdoor,
                     "device_id": (sensors or {}).get("outdoor_sensor_device_id") if outdoor == "shelly" else None},
@@ -887,9 +912,63 @@ def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     }
 
 
+def open_climate_map(config: LocalHomeConfig) -> "ClimateMapStore":
+    """This installation's panel store. A config.yaml that wires its own
+    thermostat zones by hand keeps them until the panel saves some;
+    otherwise the board is a climate one, and until then its zones are
+    the factory ones (FACTORY_ZONES)."""
+    own_zones = (config.raw.get("thermostat") or {}).get("zones")
+    return ClimateMapStore(config.resolve("climate_map.json"), factory_zones=None if own_zones else FACTORY_ZONES)
+
+
+def setup_todo(config: LocalHomeConfig, climate_map: "ClimateMapStore") -> list[dict]:
+    """The Shellys this installation still needs an id for, in the order
+    an installer goes round the apartment: each zone's sensor and valve,
+    the bypass valve and the dehumidifier, the outdoor sensor, the VMC.
+    [{"role", "name", "zone"}] - `name` is what the device is called once
+    built, `zone` the zone it goes with (None for the outdoor sensor and
+    the VMC). As saved, so typing an id takes it off at once - its restart
+    is the admin panel's to say. Nothing when config.yaml wires the zones."""
+    zones = climate_map.get_zones()
+    if zones is None:
+        return []
+    todo = []
+    for zone in zones:
+        for part, suffix in (("sensor", "Sensor"), ("valve", "Valve")):
+            if to_configure(zone, part):
+                todo.append({"role": part, "name": f"{zone['name']} {suffix}", "zone": zone["name"]})
+    hand_wired = {e.get("name") for e in config.raw.get("integrations") or [] if isinstance(e, dict)}
+    switches = climate_map.get_extra_switches()
+    # Both with the zone kept out of cooling: the bypass keeps its panels
+    # dry in summer, the dehumidifier draws its water through its valve.
+    kept_out = [z["name"] for z in zones if z.get("cool_enabled") is False]
+    homes = {"bypass_valve_device_id": kept_out[0] if len(kept_out) == 1 else None,
+             "dehumidifier_device_id": dehumidifier_water_zone(switches, zones)}
+    for key, role in (("bypass_valve_device_id", "bypass"), ("dehumidifier_device_id", "dehumidifier")):
+        name = EXTRA_SWITCH_FIELDS[key]
+        if not switches.get(key) and name not in hand_wired:
+            todo.append({"role": role, "name": name, "zone": homes[key]})
+    roles = extra_roles(config, climate_map)
+    for role, name in (("outdoor", OUTDOOR_SENSOR_NAME), ("vmc", VMC_NAME)):
+        if roles[role]["mode"] == "shelly" and not roles[role]["device_id"]:
+            todo.append({"role": role, "name": name, "zone": None})
+    return todo
+
+
+def _normalized_zone(zone: dict) -> dict:
+    """As saved: a typed id stripped, a blank one None - to configure."""
+    clean = dict(zone)
+    for key in ("sensor_device_id", "valve_device_id"):
+        if isinstance(clean.get(key), str):
+            clean[key] = clean[key].strip() or None
+    return clean
+
+
 class ClimateMapStore:
-    def __init__(self, path: str):
+    def __init__(self, path: str, factory_zones: list[dict] | None = None):
         self.path = path
+        # The zones while none are saved - see open_climate_map().
+        self.factory_zones = factory_zones
         self._lock = threading.Lock()
 
     def _load(self) -> dict:
@@ -902,8 +981,15 @@ class ClimateMapStore:
             return {}
 
     def get_zones(self) -> list[dict] | None:
-        zones = self._load().get("zones")
-        return zones or None
+        """The saved zones; until there are some, the factory ones - or
+        None: config.yaml's own thermostat.zones are the ones."""
+        return self._zones(self._load())
+
+    def _zones(self, data: dict) -> list[dict] | None:
+        return data.get("zones") or copy.deepcopy(self.factory_zones)
+
+    def zones_saved(self) -> bool:
+        return bool(self._load().get("zones"))
 
     def set_zones(self, zones: list[dict]) -> None:
         # Validated against the *same* snapshot that gets written back,
@@ -915,6 +1001,7 @@ class ClimateMapStore:
         # (two admin-panel tabs saving near-simultaneously, say) could
         # validate against an already-stale snapshot.
         validate_zones(zones)
+        zones = [_normalized_zone(zone) for zone in zones]
         with self._lock:
             data = self._load()
             extra_switches, extra_sensors = data.get("extra_switches") or {}, data.get("extra_sensors") or {}
@@ -938,7 +1025,7 @@ class ClimateMapStore:
         with self._lock:
             data = self._load()
             validate_extra_switches(
-                extra_switches, data.get("zones"), data.get("extra_sensors") or {}, data.get("extra_dimmers") or {},
+                extra_switches, self._zones(data), data.get("extra_sensors") or {}, data.get("extra_dimmers") or {},
             )
             data["extra_switches"] = extra_switches
             save_json_atomic(self.path, data)
@@ -970,7 +1057,7 @@ class ClimateMapStore:
         with self._lock:
             data = self._load()
             validate_extra_sensors(
-                extra_sensors, data.get("zones"), data.get("extra_switches") or {}, data.get("extra_dimmers") or {},
+                extra_sensors, self._zones(data), data.get("extra_switches") or {}, data.get("extra_dimmers") or {},
             )
             data["extra_sensors"] = extra_sensors
             save_json_atomic(self.path, data)
@@ -983,7 +1070,7 @@ class ClimateMapStore:
         with self._lock:
             data = self._load()
             validate_extra_dimmers(
-                extra_dimmers, data.get("zones"), data.get("extra_switches") or {}, data.get("extra_sensors") or {},
+                extra_dimmers, self._zones(data), data.get("extra_switches") or {}, data.get("extra_sensors") or {},
             )
             data["extra_dimmers"] = extra_dimmers
             save_json_atomic(self.path, data)

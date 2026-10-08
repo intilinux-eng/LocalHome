@@ -15,7 +15,7 @@ from localhome.config import LocalHomeConfig, load_config
 from localhome.core.manager import DeviceManager
 from localhome.core.registry import skipped_driver_modules
 from localhome.services import panel_settings
-from localhome.services.climate_map_store import apply_to_config
+from localhome.services.climate_map_store import apply_to_config, open_climate_map, setup_todo
 from localhome.services.thermostat import ScheduleStore
 
 
@@ -49,9 +49,11 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
     verbatim: an apartment set up entirely through the climate admin
     panel has no thermostat.zones in config.yaml at all, and doctor
     needs to check the panel's own zones instead, the same ones the
-    real running server would.
+    real running server would. A Shelly the panel still has no id for
+    isn't a problem: it's listed as still to configure.
     """
     problems: list[str] = []
+    todo = setup_todo(config, open_climate_map(config))
 
     for failure in manager.failed_integrations:
         label = f"{failure['kind']}/{failure['type']}" + (f" '{failure['name']}'" if failure["name"] else "")
@@ -60,14 +62,16 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
     for zone in thermostat_cfg.get("zones", []):
         zone_name = zone.get("name", "<unnamed>")
         sensor, valve = zone.get("sensor"), zone.get("valve")
-        if sensor not in manager.pollers:
+        if not zone.get("sensor_configured", True):
+            pass
+        elif sensor not in manager.pollers:
             problems.append(f"thermostat zone '{zone_name}': sensor '{sensor}' matches no configured integration")
         elif manager.sensor_kinds.get(sensor) != "climate":
             problems.append(
                 f"thermostat zone '{zone_name}': sensor '{sensor}' is kind "
                 f"'{manager.sensor_kinds.get(sensor)}', expected 'climate'"
             )
-        if valve not in manager.switches:
+        if zone.get("valve_configured", True) and valve not in manager.switches:
             problems.append(f"thermostat zone '{zone_name}': valve '{valve}' matches no configured switch")
 
     for number_name, switch_name in manager.paired_switch.items():
@@ -99,6 +103,8 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
         if away_until:
             state.append(f"away until {away_until:%Y-%m-%d %H:%M}")
         print(f"Thermostat zones: {len(thermostat_cfg.get('zones', []))} ({', '.join(state)})")
+    if todo:
+        print(f"Shellys to configure in the admin panel ({len(todo)}): {', '.join(item['name'] for item in todo)}")
     print(f"Notifier configured: {'yes' if manager.notifier else 'no'}")
     # Not a problem on its own - an optional driver nobody configured is
     # expected to be missing. One that *is* configured already fails
