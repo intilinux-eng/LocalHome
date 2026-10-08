@@ -277,6 +277,12 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- **A new board's outdoor sensor starts as "None"**, not simulated: the
+  Climate tab says "No sensor connected yet" in its place until the
+  real Shelly is wired in the admin panel. A simulated one showed
+  made-up weather next to the real rooms; it can still be picked, and
+  is marked "simulated". A section already saved keeps what it says;
+  the VMC still starts simulated.
 - Made for a phone in the hand: nothing overflows at 320px any more,
   every field is 16px so iOS stops zooming the page when one is tapped,
   and the buttons that were 28-38px tall (tabs, season chip, away,

@@ -250,9 +250,9 @@ SIMULATED_OUTDOOR_SWING_C = 5.0
 def effective_extra_mode(section: dict | None, id_key: str, mode_key: str, simulated_by_default: bool) -> str:
     """What a fixed role actually runs as. `section` None means the panel
     has never saved that section: a new installation, where the role
-    starts simulated (unless a real one is already wired by hand - see
-    extra_roles()). A section saved before modes existed keeps meaning
-    what it meant: an id is a real device, no id is none."""
+    starts simulated or as none - see extra_roles(). A section saved
+    before modes existed keeps meaning what it meant: an id is a real
+    device, no id is none."""
     if section is None:
         return "simulated" if simulated_by_default else "none"
     mode = section.get(mode_key)
@@ -859,12 +859,15 @@ def validate_season_rules(rules) -> dict:
 
 
 def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
-    """The outdoor sensor's and the VMC's effective source and id. On a
-    climate installation (the panel manages the zones), a role the panel
-    has never saved starts simulated - unless config.yaml already wires a
-    real one by hand (its fixed name, or for the VMC any Shelly dimmer):
-    a simulated stand-in would replace or duplicate it. Anywhere else -
-    LocalHome running covers or plugs only - nothing appears by itself."""
+    """The outdoor sensor's and the VMC's effective source and id. A role
+    the panel has never saved: the outdoor sensor starts as none - the
+    home then says it isn't connected yet, instead of showing made-up
+    weather next to the real rooms. The VMC starts simulated on a climate
+    installation (the panel manages the zones), so its card and program
+    can be tried - unless config.yaml already wires a real one by hand
+    (its fixed name, or any Shelly dimmer): a simulated stand-in would
+    replace or duplicate it. Anywhere else - LocalHome running covers or
+    plugs only - nothing appears by itself."""
     hand_wired = [e for e in config.raw.get("integrations") or []
                   if isinstance(e, dict) and e.get("enabled", True) is not False]
     names = {entry.get("name") for entry in hand_wired if isinstance(entry, dict)}
@@ -872,8 +875,7 @@ def extra_roles(config, climate_map: "ClimateMapStore") -> dict:
     climate_panel = climate_map.get_zones() is not None
     sensors = climate_map.get_extra_sensors() if climate_map.has_section("extra_sensors") else None
     dimmers = climate_map.get_extra_dimmers() if climate_map.has_section("extra_dimmers") else None
-    outdoor = effective_extra_mode(sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY,
-                                   simulated_by_default=climate_panel and OUTDOOR_SENSOR_NAME not in names)
+    outdoor = effective_extra_mode(sensors, "outdoor_sensor_device_id", OUTDOOR_MODE_KEY, simulated_by_default=False)
     vmc = effective_extra_mode(dimmers, "vmc_device_id", VMC_MODE_KEY,
                                simulated_by_default=climate_panel and VMC_NAME not in names and not has_dimmer)
     # The id only counts for a real device - one typed in ahead while the

@@ -346,11 +346,13 @@ and logs "network back".
   24 characters. It replaces "LocalHome" in the header, the browser tab
   and the name under the icon when the dashboard is added to a phone's
   home screen, and takes effect on the next page load.
-- **Outdoor temperature sensor and VMC** - on a fresh installation
-  both start **simulated** too, so the outdoor chart and the VMC's
+- **Outdoor temperature sensor** - starts as **none**: the dashboard
+  says "No sensor connected yet" until it's switched to "Shelly" with
+  its device id (or to "Simulated", to see it working before then).
+- **VMC** - on a fresh installation it starts **simulated** too, so its
   speeds and day/night program can be shown and tried before the
   hardware exists. Everything simulated is marked "simulated" on the
-  dashboard. Switch each to "Shelly" with its device id once it's
+  dashboard. Switch it to "Shelly" with its device id once it's
   installed, or to "None" if the apartment doesn't have one.
 - **Zones** - exactly two, and on a fresh installation both start
   **simulated** on purpose: there is no hardware yet, a real device id

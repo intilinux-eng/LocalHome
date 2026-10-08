@@ -11,8 +11,9 @@ two. To run them:
 One server per session, from a throwaway config written here: two zones
 from the admin panel's zone map, one of them with a name built to break
 careless HTML ("Bagno <img ...>"), the other with an apostrophe, the
-outdoor sensor and VMC simulated, the two extra switches - all simulated,
-nothing on the network. Italian, so an untranslated text shows.
+outdoor sensor (picked as simulated) and VMC, the two extra switches -
+all simulated, nothing on the network. Italian, so an untranslated text
+shows.
 """
 import json
 import os
@@ -86,7 +87,10 @@ def _launch(home: Path, zones: list[dict], config: str = CONFIG):
     template with {port}): (base URL, process)."""
     port = _free_port()
     (home / "config.yaml").write_text(config.format(port=port), encoding="utf-8")
-    (home / "climate_map.json").write_text(json.dumps({"zones": zones}), encoding="utf-8")
+    # Simulated picked, as on the demo: a new board has none at all.
+    extra_sensors = {"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": None}
+    (home / "climate_map.json").write_text(json.dumps({"zones": zones, "extra_sensors": extra_sensors}),
+                                           encoding="utf-8")
     log_path = home / "server.log"
     env = dict(os.environ, LOCALHOME_CONFIG=str(home / "config.yaml"), PYTHONUNBUFFERED="1")
     with open(log_path, "w", encoding="utf-8") as log:

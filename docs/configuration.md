@@ -626,14 +626,16 @@ Both it and the VMC below have a **source**, like a zone's sensor:
   dashboard, so it never passes for the real apartment.
 - **None** - not built at all.
 
-On a climate installation (the panel manages the zones), a section that
-has never been saved starts **simulated**, so a new board shows the
-outdoor chart and the VMC's controls before the hardware exists. Never
-over a real device, though: not if config.yaml already wires one by hand
-(an integration named "Outdoor Sensor" / "VMC", or any `shelly_light`
-dimmer), and not if the section was saved before sources existed - there
-a device id still means the real device and a blank still means none.
-A LocalHome that isn't doing climate at all gets neither.
+On a new board the outdoor sensor starts as **none**: the dashboard
+says "No sensor connected yet" in its place rather than show made-up
+weather next to the real rooms - pick Simulated to see it working
+before the hardware exists. The VMC, on a climate installation (the
+panel manages the zones), starts **simulated**, so its controls can be
+tried - never over a real one, though: not if config.yaml already wires
+it by hand (an integration named "VMC", or any `shelly_light` dimmer).
+A section saved before sources existed keeps its meaning - a device id
+is the real device and a blank is none - and a LocalHome that isn't
+doing climate at all gets neither.
 
 The VMC (mechanical ventilation) has its own section too, with the
 same Shelly / simulated / none source: one device id

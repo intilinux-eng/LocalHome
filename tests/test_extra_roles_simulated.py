@@ -1,6 +1,8 @@
-"""The outdoor temperature sensor and the VMC can be simulated - and start
-simulated on a climate installation that has no real ones yet - so the
-outdoor chart and the VMC's controls exist before the hardware does.
+"""The outdoor temperature sensor and the VMC can be simulated. The VMC
+starts simulated on a climate installation that has no real one yet, so
+its controls exist before the hardware does; the outdoor sensor starts
+as none - the home says it isn't connected yet, rather than show made-up
+weather next to the real rooms - and is simulated only when picked.
 
 What must never happen: a simulated stand-in replacing or duplicating a
 real device, or appearing on a LocalHome that isn't doing climate at all.
@@ -42,8 +44,8 @@ def _setup(tmp_path, config_text="web:\n  port: 5000\nintegrations: []\n", zones
 # ------------------------------------------------------ what runs, when ----
 
 @pytest.mark.parametrize("section, default, expected", [
-    (None, True, "simulated"),                                   # never saved, climate installation
-    (None, False, "none"),                                       # never saved, a real one exists / no climate
+    (None, True, "simulated"),                                   # never saved: the VMC on a climate installation
+    (None, False, "none"),                                       # never saved: the outdoor sensor; a real VMC / no climate
     ({"outdoor_sensor_device_id": "shellyht-A"}, True, "shelly"),  # saved before modes existed
     ({"outdoor_sensor_device_id": None}, True, "none"),          # saved blank before modes: meant "not installed"
     ({"outdoor_sensor_mode": "simulated"}, False, "simulated"),
@@ -53,14 +55,16 @@ def test_the_effective_source(section, default, expected):
     assert effective_extra_mode(section, "outdoor_sensor_device_id", "outdoor_sensor_mode", default) == expected
 
 
-def test_a_new_climate_installation_starts_with_both_simulated(tmp_path):
+def test_a_new_climate_installation_has_no_outdoor_sensor_yet_and_a_simulated_vmc(tmp_path):
     store = _setup(tmp_path)
     config = load_config(tmp_path / "config.yaml")
 
     roles = extra_roles(config, store)
+    apply_to_config(config)
 
-    assert roles["outdoor"] == {"mode": "simulated", "device_id": None}
+    assert roles["outdoor"] == {"mode": "none", "device_id": None}
     assert roles["vmc"] == {"mode": "simulated", "device_id": None}
+    assert "Outdoor Sensor" not in [i.options.get("name") for i in config.integrations]
 
 
 def test_localhome_without_climate_gets_nothing_by_itself(tmp_path):
@@ -172,26 +176,39 @@ def app(tmp_path):
     app.config["HISTORY"].close()
 
 
-def test_a_new_climate_board_shows_both_and_says_they_are_simulated(app):
+def test_a_new_climate_board_says_what_is_simulated_and_has_no_outdoor_sensor(app):
     devices = {s["name"]: s for s in app.test_client().get("/api/devices").get_json()["sensors"]}
 
-    for name in ("Outdoor Sensor", "VMC", "VMC Speed"):
+    assert "Outdoor Sensor" not in devices, "the home says it isn't connected yet"
+    for name in ("VMC", "VMC Speed"):
         assert devices[name]["simulated"] is True, name
-    assert devices["Outdoor Sensor"]["tab"] == "climate"
     zones = app.test_client().get("/api/climate/zones").get_json()["zones"]
     assert all(z["sensor_simulated"] for z in zones)
 
 
+def test_a_simulated_outdoor_sensor_is_there_once_picked(tmp_path):
+    store = _setup(tmp_path)
+    store.set_extra_sensors({"outdoor_sensor_mode": "simulated", "outdoor_sensor_device_id": None})
+    app = create_app(str(tmp_path / "config.yaml"))
+    try:
+        devices = {s["name"]: s for s in app.test_client().get("/api/devices").get_json()["sensors"]}
+    finally:
+        app.config["HISTORY"].close()
+
+    assert devices["Outdoor Sensor"]["simulated"] is True
+    assert devices["Outdoor Sensor"]["tab"] == "climate"
+
+
 def test_the_panel_reads_and_saves_the_source(app):
     client = app.test_client()
-    assert client.get("/api/climate-admin/extra-sensors").get_json()["outdoor_sensor_mode"] == "simulated"
+    assert client.get("/api/climate-admin/extra-sensors").get_json()["outdoor_sensor_mode"] == "none"
     assert client.get("/api/climate-admin/extra-dimmers").get_json()["vmc_mode"] == "simulated"
     assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
 
-    res = client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "none"})
+    res = client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "simulated"})
     assert res.status_code == 200
     data = client.get("/api/climate-admin/extra-sensors").get_json()
-    assert data["outdoor_sensor_mode"] == "none" and data["restart_pending"] is True
+    assert data["outdoor_sensor_mode"] == "simulated" and data["restart_pending"] is True
 
     res = client.post("/api/climate-admin/extra-dimmers", json={"vmc_mode": "shelly", "vmc_device_id": None})
     assert res.status_code == 400 and "required" in res.get_json()["error"]
@@ -199,7 +216,7 @@ def test_the_panel_reads_and_saves_the_source(app):
 
 def test_saving_the_same_source_again_is_not_a_pending_restart(app):
     client = app.test_client()
-    client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "simulated",
+    client.post("/api/climate-admin/extra-sensors", json={"outdoor_sensor_mode": "none",
                                                           "outdoor_sensor_device_id": "shellyht-LATER"})
     assert client.get("/api/climate-admin/extra-sensors").get_json()["restart_pending"] is False
 
