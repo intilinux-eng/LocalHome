@@ -519,11 +519,21 @@
     </details>
     <h3 class="how-h">{{ t.climate_admin.how_sensors_title }}</h3>
     <p class="hint-text">{{ t.climate_admin.how_sensors_short }}</p>
+    <!-- On batteries or powered: what to expect of each, as measured. -->
+    <table class="how-table">
+      <tr><th></th><th scope="col">{{ t.climate_admin.how_sensors_col_battery }}</th><th scope="col">{{ t.climate_admin.how_sensors_col_powered }}</th></tr>
+      {% for row in ("when", "online", "age", "late", "battery", "unplugged") %}
+      <tr><th scope="row">{{ t.climate_admin["how_sensors_row_" ~ row] }}</th><td>{{ t.climate_admin["how_sensors_" ~ row ~ "_battery"] }}</td><td>{{ t.climate_admin["how_sensors_" ~ row ~ "_powered"] }}</td></tr>
+      {% endfor %}
+    </table>
     <details class="admin-more">
       <summary>{{ t.climate_admin.more_details }}</summary>
+      <p class="hint-text">{{ t.climate_admin.how_sensors_async }}</p>
       <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_sensors_usb }}</p>
       <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
       <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
+      <p class="hint-text">{{ t.climate_admin.how_sensors_values }}</p>
       <p class="hint-text">{{ t.climate_admin.how_sensors_boot }}</p>
     </details>
     <h3 class="how-h">{{ t.climate_admin.how_test_title }}</h3>

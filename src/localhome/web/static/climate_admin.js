@@ -2616,7 +2616,6 @@ function trCount(key, count, vars = {}) {
 
 function reasonText(reason) {
   const key = `climate_admin.device_why_${reason.code}`;
-  if (reason.code === "usb_lost") return tr(key, { detail: reason.detail, when: formatWhen(reason.at) });
   if (reason.code === "crashes" || reason.code === "power_unstable") return trCount(key, reason.detail, { detail: reason.detail });
   if (reason.code === "report_late" && reason.early) {
     return tr(`${key}_period`, { detail: formatAge(reason.detail), period: formatAge(reason.period) });

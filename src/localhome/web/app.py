@@ -1254,10 +1254,6 @@ def _register_routes(app: Flask) -> None:
                 # Not shown for an H&T powered over USB-C - which is said instead.
                 "battery_pct": None if sensor_reading.get("external_power") is True else sensor_reading.get("battery_pct"),
                 "external_power": sensor_reading.get("external_power") is True,
-                # Ran on external power, runs on its batteries now: the card
-                # says to check its cable (services/shelly_health.py).
-                "sensor_power_lost": bool(app.config.get("SHELLY_HEALTH")
-                                          and app.config["SHELLY_HEALTH"].power_lost(zone.sensor)),
                 "wifi_rssi_dbm": sensor_reading.get("wifi_rssi_dbm"),
                 "sensor_ok": sensor_reading.get("ok", False),
                 # Tagged on the zone's card ("simulated") - see home.js.

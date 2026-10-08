@@ -493,8 +493,8 @@ def test_a_card_takes_its_states_colour(open_page, api):
 
 def test_a_sensor_says_in_plain_words_whether_it_runs_on_battery_or_is_powered(open_page, api):
     """For whoever lives there: "on battery 80%" or "powered" - not "USB-C" -
-    and on the card itself, when its batteries want changing soon, now,
-    or when it lost its power and runs on them."""
+    and on the card itself, when its batteries want changing soon, or now.
+    Either is as good: going from one to the other is no warning."""
     opened = _open_home(open_page)
     page = opened.page
     _fake_zones(page, api, "heat", {ZONE_A: (20.0, 21.0, False, True)})
@@ -510,8 +510,8 @@ def test_a_sensor_says_in_plain_words_whether_it_runs_on_battery_or_is_powered(o
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": 8}])
     note = card.locator(".sensor-note")
     assert note.get_attribute("data-level") == "now" and "al più presto" in note.inner_text()
-    page.evaluate(set_zone, [ZONE_A, {"battery_pct": 86, "sensor_power_lost": True}])
-    assert "non è più alimentato a corrente" in card.locator(".sensor-note").inner_text()
+    page.evaluate(set_zone, [ZONE_A, {"battery_pct": 86}])
+    assert card.locator(".sensor-note").count() == 0, "from USB-C to its batteries: only said under the card"
     assert opened.errors == []
 
 

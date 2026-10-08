@@ -748,19 +748,20 @@ def test_an_h_and_t_on_usb_c_is_known_as_such_and_its_battery_isnt_a_worry(tmp_p
     assert [v for _, v in store.values_since(HT, "external_power", 0)] == [1]
 
 
-def test_usb_c_lost_is_a_reason_to_act_until_it_is_back(tmp_path):
+def test_going_from_usb_c_to_its_batteries_is_said_not_a_fault(tmp_path):
+    """Either is as good: the batteries are there to do it."""
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
     _power(broker, True)
     clock.t += 3600
     _power(broker, False, percent=86)                     # unplugged: on its batteries now
     verdict = by_id(watcher, HT)["assessment"]
-    assert verdict["state"] == "attention"
-    assert verdict["reasons"] == [{"code": "usb_lost", "detail": 86, "at": clock.t}]
+    assert verdict["state"] == "ok" and verdict["reasons"] == []
+    assert {"code": "power_switched", "at": clock.t} in verdict["notes"]
     watcher.refresh_problems()
-    assert watcher.problems() == [{"code": "device_usb_lost", "subject": "Stanze Sensor", "detail": "86"}]
+    assert watcher.problems() == []
     clock.t += 600
     _power(broker, True)                                  # plugged back
-    assert by_id(watcher, HT)["assessment"]["state"] == "ok"
+    assert not any(n["code"] == "power_switched" for n in by_id(watcher, HT)["assessment"]["notes"])
     assert [v for _, v in store.values_since(HT, "external_power", 0)] == [1, 0, 1]
 
 
@@ -784,7 +785,7 @@ def test_its_power_source_is_known_again_after_a_restart(tmp_path):
     _power(broker, False)                                 # the first watcher hears it unplugged...
     clock.t += 600
     again, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
-    assert by_id(again, HT)["assessment"]["reasons"][0]["code"] == "usb_lost", "...and the next start knows"
+    assert any(n["code"] == "power_switched" for n in by_id(again, HT)["assessment"]["notes"]), "...and the next start knows"
 
 
 # Its data are asynchronous - each message is the latest value, whenever
@@ -852,13 +853,3 @@ def test_the_period_it_declared_is_known_again_after_a_restart(tmp_path):
     restarted, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
     clock.t += 25 * 60
     assert by_id(restarted, HT)["assessment"]["reasons"][0]["code"] == "report_late"
-
-
-def test_the_home_card_is_told_when_a_sensor_lost_its_power(tmp_path):
-    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
-    assert watcher.power_lost("Stanze Sensor") is False
-    _power(broker, True)
-    _power(broker, False)
-    assert watcher.power_lost("Stanze Sensor") is True and watcher.power_lost("Nobody") is False
-    _power(broker, True)
-    assert watcher.power_lost("Stanze Sensor") is False

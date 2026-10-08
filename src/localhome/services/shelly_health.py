@@ -339,10 +339,11 @@ def assess(device: dict, now: float, heartbeat: float = HEARTBEAT_SECONDS) -> di
     reasons: list[dict] = []
     notes: list[dict] = []
     if device["battery"]:
-        lost = device.get("usb_lost_at")
-        if lost is not None and device.get("external_power") is False and now - lost < WEEK:
-            pct = device.get("battery_pct")
-            reasons.append({"code": "usb_lost", "detail": round(pct) if pct is not None else "?", "at": lost})
+        # From USB-C to its batteries: said, not a fault - it works the
+        # same either way, and the batteries are there to do it.
+        switched = device.get("usb_lost_at")
+        if switched is not None and device.get("external_power") is False and now - switched < WEEK:
+            notes.append({"code": "power_switched", "at": switched})
         last = device.get("last_report_at")
         period = device.get("wakeup_period")
         late = late_after(period, heartbeat)
@@ -390,7 +391,7 @@ def assess(device: dict, now: float, heartbeat: float = HEARTBEAT_SECONDS) -> di
 PROBLEM_OF = {"hot": "device_hot", "reports_missed": "device_reports_missed", "short_cycling": "relay_short_cycling",
               "settings": "shelly_settings", "crashes": "device_crashes", "power_unstable": "device_power_unstable",
               "battery_low": "device_battery_low", "restart_required": "device_restart_required",
-              "device_errors": "device_errors", "usb_lost": "device_usb_lost"}
+              "device_errors": "device_errors"}
 
 
 def _number(value: Any) -> float | None:
@@ -491,7 +492,7 @@ class ShellyHealth:
         present = present if isinstance(present, bool) else None
         state["external_power"] = present
         # Its power source changing is recorded - kept across restarts, and
-        # USB-C lost (on its batteries now) is a reason to act on.
+        # said (a note) when it went from USB-C to its batteries.
         if present is not None and present != state["power_recorded"]:
             if state["power_recorded"] is True and present is False:
                 state["usb_lost_at"] = self.clock()
@@ -742,18 +743,6 @@ class ShellyHealth:
                 self._fill_from_reading(state, now)
             state["assessment"] = assess(state, now)
         return states
-
-    def power_lost(self, name: str) -> bool:
-        """Whether the H&T reading for `name` ran on external power and now
-        runs on its batteries (this week) - for the home page's card. From
-        memory only: asked with every zone refresh."""
-        with self._lock:
-            for state in self._devices.values():
-                if name in state["names"]:
-                    lost = state["usb_lost_at"]
-                    return (lost is not None and state["external_power"] is False
-                            and self.clock() - lost < WEEK)
-        return False
 
     def _fill_from_reading(self, state: dict, now: float) -> None:
         """Until a battery sensor wakes after this start, what its own

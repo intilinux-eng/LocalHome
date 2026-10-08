@@ -483,23 +483,16 @@ function fillZone(card, zone, climate) {
   wireRibbon(card, week, history, mode);
 }
 
-// Its sensor's batteries, said where they're seen: to change soon, to
-// change now (the admin panel's "battery low" too), or running on them
-// since it lost its power - its cable to check.
+// Its sensor's batteries, said where they're seen: to change soon, or now
+// (the admin panel's "battery low" too). On battery or powered is only
+// said under the card: either is as good.
 const BATTERY_SOON_PCT = 20;
 const BATTERY_NOW_PCT = 10;
 function sensorNoteHtml(zone) {
-  let text = "";
-  let level = "soon";
-  if (zone.sensor_power_lost) {
-    text = tr("home.power_lost");
-    level = "now";
-  } else if (!zone.external_power && zone.battery_pct != null && zone.battery_pct <= BATTERY_SOON_PCT) {
-    const pct = Math.round(zone.battery_pct);
-    level = zone.battery_pct <= BATTERY_NOW_PCT ? "now" : "soon";
-    text = tr(level === "now" ? "home.battery_now" : "home.battery_soon", { pct });
-  }
-  return text ? `<div class="sensor-note" data-level="${level}">${ICONS.battery}<span>${esc(text)}</span></div>` : "";
+  if (zone.external_power || zone.battery_pct == null || zone.battery_pct > BATTERY_SOON_PCT) return "";
+  const level = zone.battery_pct <= BATTERY_NOW_PCT ? "now" : "soon";
+  const text = tr(level === "now" ? "home.battery_now" : "home.battery_soon", { pct: Math.round(zone.battery_pct) });
+  return `<div class="sensor-note" data-level="${level}">${ICONS.battery}<span>${esc(text)}</span></div>`;
 }
 
 // A zone whose sensor is set to "manual" in the admin panel: the
