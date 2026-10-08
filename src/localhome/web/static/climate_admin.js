@@ -2549,10 +2549,30 @@ function signalRow(label, stats) {
 // role needs that it has otherwise - asked at once over MQTT, before any
 // save or restart, nothing changed on it (services/shelly_check.py).
 
+// Pressing Save is what takes the focus from an id field, and so starts
+// its check: the line written under the field then moved the button from
+// under the pointer between press and release, and the save was lost -
+// typing an id and saving straight away is the usual way. The line waits
+// for the release (a second at most, should it never come).
+let pointerPressed = false;
+document.addEventListener("pointerdown", () => { pointerPressed = true; }, true);
+document.addEventListener("pointerup", () => { pointerPressed = false; }, true);
+document.addEventListener("pointercancel", () => { pointerPressed = false; }, true);
+
+function afterRelease() {
+  if (!pointerPressed) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => setTimeout(resolve);   // after the click it ends in
+    document.addEventListener("pointerup", done, { once: true, capture: true });
+    setTimeout(resolve, 1000);
+  });
+}
+
 async function checkShelly(input, role) {
   const out = input.parentElement.querySelector(".shelly-check");
   if (!out) return;
   const id = input.value.trim();
+  await afterRelease();
   out.className = "hint-text shelly-check";
   if (!id) {
     out.textContent = "";
@@ -2566,6 +2586,7 @@ async function checkShelly(input, role) {
     out.textContent = tr("sensors.request_failed");
     return;
   }
+  await afterRelease();
   if (input.value.trim() !== id) return;   // typed again meanwhile
   const wrong = data.settings_wrong || [];
   const good = data.answered && !wrong.length && !data.settings_error;
