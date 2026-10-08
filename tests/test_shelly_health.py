@@ -539,7 +539,7 @@ def test_a_setting_fixed_in_the_app_is_read_at_once_and_the_old_ones_not_said_me
     rpc.status["sys"]["cfg_rev"] = 22
     broker.publish(f"{RELAY}/status/sys", {"cfg_rev": 22, "uptime": 50010})
     assert by_id(watcher, RELAY)["settings_wrong"] == [], "not said while it may be right"
-    assert watcher._wake.is_set(), "read now, not in 5 minutes"
+    assert watcher._wake.is_set() and watcher._wake_settle <= 1, "read now, not in 5 minutes"
     watcher.poll_once()
     assert rpc.calls.count("Shelly.GetConfig") == 2
     assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []

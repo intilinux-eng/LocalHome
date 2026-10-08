@@ -76,6 +76,8 @@ RETRY_SECONDS = 30
 # the production board, two power cuts 5 minutes apart and one restart
 # counted, no check having caught it up between them.
 BACK_ONLINE_SETTLE_SECONDS = 10
+# A setting changed in the app: the Shelly is up - checked at once.
+CHANGE_SETTLE_SECONDS = 1
 # A mains Shelly that didn't answer, heard from again (its status, its
 # Wi-Fi, its "online"): asked again at once - not at the next check, up to
 # 5 minutes on. Seen on the production board after a boot without network
@@ -410,6 +412,7 @@ class ShellyHealth:
         self._reading_of = reading_of
         self._lock = threading.Lock()
         self._wake = threading.Event()      # a device back online: check now
+        self._wake_settle = 0.0             # ...after this long - see _wake_check()
         self._rechecked_at: dict[str, float] = {}   # device -> when its signs of life last woke a check
         # Started (start()): what the MQTT thread hears is written to the
         # history by a thread of its own - a slow disk never holds MQTT.
@@ -470,9 +473,15 @@ class ShellyHealth:
                 now = time.monotonic()
                 if now - self._rechecked_at.get(state["id"], -ALIVE_RECHECK_SECONDS) >= ALIVE_RECHECK_SECONDS:
                     self._rechecked_at[state["id"]] = now
-                    self._wake.set()
+                    self._wake_check(BACK_ONLINE_SETTLE_SECONDS)
         except Exception:
             logger.exception("Shelly health: couldn't read a message from %s", state["id"])
+
+    def _wake_check(self, settle: float) -> None:
+        """The check now, after `settle` seconds: a Shelly back online gets
+        time to start up, one whose setting just changed hardly any."""
+        self._wake_settle = max(self._wake_settle, settle)
+        self._wake.set()
 
     def _on_wifi(self, state: dict, data: Any) -> None:
         rssi = _number(_dig(data, "rssi"))
@@ -491,7 +500,7 @@ class ShellyHealth:
             # A setting changed in the app - its sys status says so at
             # once: read them now, not at the next check up to 5 minutes
             # on, while the page still said the old ones were wrong.
-            self._wake.set()
+            self._wake_check(CHANGE_SETTLE_SECONDS)
 
     def _on_devicepower(self, state: dict, data: Any) -> None:
         state["battery_pct"] = _number(_dig(data, "battery", "percent"))
@@ -517,7 +526,7 @@ class ShellyHealth:
         # "offline" and "online" can come 50 ms apart. Asked at once, its
         # restart isn't left for a check that may come after the next one.
         if online and state["online"] is False:
-            self._wake.set()
+            self._wake_check(BACK_ONLINE_SETTLE_SECONDS)
         state["online"] = online
 
     def _note_report(self, state: dict) -> None:
@@ -839,6 +848,7 @@ class ShellyHealth:
             while True:
                 failed = False
                 self._wake.clear()
+                self._wake_settle = 0.0
                 try:
                     failed = self.poll_once()
                 except Exception:
@@ -847,5 +857,5 @@ class ShellyHealth:
                 # - or sooner, when one is back online.
                 retried = failed and not retried
                 if self._wake.wait(retry if retried else every):
-                    time.sleep(BACK_ONLINE_SETTLE_SECONDS)
+                    time.sleep(self._wake_settle)
         threading.Thread(target=loop, daemon=True, name="shelly-health").start()
