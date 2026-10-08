@@ -360,6 +360,26 @@ def test_away_until_a_day_picked_in_the_calendar(open_page, api):
     api("/api/climate/away/cancel", {})
 
 
+def test_the_outdoor_reading_says_todays_low_and_high(open_page):
+    """Today's minimum and maximum under the outdoor temperature - kept by
+    the board as it records; here given, not waited for two cycles."""
+    opened = open_page("/", 390)
+    page = opened.page
+
+    def with_range(route):
+        response = route.fetch()
+        data = response.json()
+        data["day_ranges"] = {"Outdoor Sensor": {"temperature_c": {"min": 5.0, "max": 30.0}}}
+        route.fulfill(response=response, json=data)
+    page.route("**/api/readings", with_range)
+    page.reload()
+    tile = page.locator("#outdoor-chip")
+    assert eventually(page, lambda: "min 5,0° · max 30,0°" in tile.inner_text())
+    assert tile.locator(".outdoor-range").get_attribute("aria-label") == "Oggi: minima 5,0°, massima 30,0°"
+    assert tile.evaluate("e => e.tagName") == "DIV", "no button: a tap did nothing a resident wanted"
+    assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
 def test_the_home_page_says_when_the_board_stops_answering(open_page):
     page = _open_home(open_page).page
     assert page.locator("#offline").is_hidden()

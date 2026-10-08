@@ -243,6 +243,8 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .outdoor-label svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .outdoor-value { font-size: 2.2rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
 .outdoor-value small { font-size: 0.55em; color: var(--text-3); vertical-align: super; }
+.outdoor-range { font-size: 0.84rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.outdoor-range span { white-space: nowrap; }
 .outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
 .outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
 .hero-season {

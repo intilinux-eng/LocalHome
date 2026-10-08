@@ -959,8 +959,18 @@ function renderOutdoor() {
   chip.hidden = false;
   const rh = reading.humidity_pct != null
     ? `<span class="outdoor-rh">${ICONS.drop}${fmt(reading.humidity_pct, 0)}% ${esc(tr("home.humidity").toLowerCase())}</span>` : "";
+  // Today's lowest and highest so far (the board's, kept as it records) -
+  // the reading itself counted too: it may be newer than the last sample.
+  const today = ((state.dayRanges || {})["Outdoor Sensor"] || {}).temperature_c;
+  let range = "";
+  if (today) {
+    const low = fmt(Math.min(today.min, reading.temperature_c)), high = fmt(Math.max(today.max, reading.temperature_c));
+    // Short, and broken only between the two on a narrow phone.
+    range = `<span class="outdoor-range" aria-label="${esc(tr("home.outdoor_range", { min: low, max: high }))}">
+      <span>${esc(tr("home.outdoor_min", { value: low }))}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}</span></span>`;
+  }
   morph(chip, `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}</span>
-    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${rh}`);
+    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}`);
 }
 
 const ICONS = {
@@ -1869,6 +1879,7 @@ async function refreshDevices(anchor) {
     ]);
     if (ticket !== asked.devices) return;
     state.devices.sensors.forEach(d => { state.readings[d.name] = all.readings[d.name] || { ok: false }; });
+    state.dayRanges = all.day_ranges || {};
     state.vmc = vmc;
   } catch (e) {
     return;

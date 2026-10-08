@@ -33,6 +33,7 @@ from localhome.services.climate_map_store import (
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
     OUTDOOR_MODE_KEY,
+    OUTDOOR_SENSOR_NAME,
     VMC_MODE_KEY,
     SEASON_MODES,
     SEASON_RULE_DEFAULTS,
@@ -44,6 +45,7 @@ from localhome.services.climate_map_store import (
     panel_season_rules,
     snapshot_from_config,
 )
+from localhome.services.day_range import DayRange
 from localhome.services.dehumidifier import DehumidifierSettingsStore, DehumidifierTimer
 from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget, RANGE_BUCKETS
@@ -256,6 +258,14 @@ def create_app(config_path: str | None = None) -> Flask:
     # records as always.
     recorder.clock_ready = lambda: system_status.clock_synced_fast() is not False
     recorder.disk_stats = lambda: _history_disk(store)
+    # Today's outdoor minimum and maximum, for the home page: in memory,
+    # fed by the recorder - see services/day_range.py.
+    day_range = DayRange([(OUTDOOR_SENSOR_NAME, "temperature_c")])
+    try:
+        day_range.seed(store)
+    except Exception:
+        logger.exception("Outdoor minimum/maximum: couldn't read today's history - from now on")
+    recorder.day_range = day_range
 
     thermostat = None
     interlock = None
@@ -418,6 +428,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["MANAGER"] = manager
     app.config["POSITIONS"] = positions
     app.config["HISTORY"] = store
+    app.config["DAY_RANGE"] = day_range
     app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
     app.config["RECORDER"] = recorder
     app.config["POWER_BUDGET"] = power_budget
@@ -1046,7 +1057,16 @@ def _register_routes(app: Flask) -> None:
         device (a dozen on a real install, six at a time in a browser),
         and one moment for all of them."""
         manager: DeviceManager = app.config["MANAGER"]
-        return jsonify(ok=True, readings={name: manager.sensor_reading(name) for name in manager.pollers})
+        # Today's minimum and maximum where kept (the outdoor temperature):
+        # {sensor: {field: {"min", "max"}}}.
+        day_range: DayRange = app.config["DAY_RANGE"]
+        ranges: dict[str, dict] = {}
+        for sensor, field in day_range.watched:
+            today = day_range.get(sensor, field)
+            if today is not None:
+                ranges.setdefault(sensor, {})[field] = today
+        return jsonify(ok=True, readings={name: manager.sensor_reading(name) for name in manager.pollers},
+                       day_ranges=ranges)
 
     @app.route("/api/sensors/<name>/<action>", methods=["POST"])
     def api_sensor_action(name, action):

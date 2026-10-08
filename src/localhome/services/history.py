@@ -635,6 +635,9 @@ class HistoryRecorder:
         # space, whatever filled it, the history stops growing - see
         # _check_disk().
         self.disk_stats = None
+        # Optional services/day_range.py DayRange, set by create_app(): each
+        # cycle's values feed today's minimum and maximum, in memory.
+        self.day_range = None
         self.disk_hold_bytes: int | None = None
         self.disk_hold_since: float | None = None
 
@@ -710,6 +713,8 @@ class HistoryRecorder:
             logger.info("History resumed: the clock is synchronized")
             self.paused_for_clock = False
         self.store.record_many(now, batch)
+        if self.day_range is not None:
+            self.day_range.sample(now, batch)
         if self.energy is not None:
             for name, reading in meters.items():
                 try:
