@@ -852,3 +852,13 @@ def test_the_period_it_declared_is_known_again_after_a_restart(tmp_path):
     restarted, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
     clock.t += 25 * 60
     assert by_id(restarted, HT)["assessment"]["reasons"][0]["code"] == "report_late"
+
+
+def test_the_home_card_is_told_when_a_sensor_lost_its_power(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    assert watcher.power_lost("Stanze Sensor") is False
+    _power(broker, True)
+    _power(broker, False)
+    assert watcher.power_lost("Stanze Sensor") is True and watcher.power_lost("Nobody") is False
+    _power(broker, True)
+    assert watcher.power_lost("Stanze Sensor") is False

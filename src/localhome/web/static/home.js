@@ -452,11 +452,12 @@ function fillZone(card, zone, climate) {
   const age = zone.sensor_manual ? "" : fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
   // The sensor's, said as such - the hours run today after it are the
   // valve's. A value it hasn't confirmed since: the last one saved, and
-  // how old. No battery for one on USB-C (the server leaves it out).
+  // how old. Its power in plain words: on battery (how full), or powered
+  // (an H&T on USB-C - the server leaves its battery out).
   const sensorBits = [];
   if (age) sensorBits.push(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age }));
-  if (zone.external_power) sensorBits.push(tr("home.usb_power"));
-  else if (zone.battery_pct != null) sensorBits.push(tr("home.battery", { pct: Math.round(zone.battery_pct) }));
+  if (zone.external_power) sensorBits.push(tr("home.powered"));
+  else if (zone.battery_pct != null) sensorBits.push(tr("home.on_battery", { pct: Math.round(zone.battery_pct) }));
   if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
   const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
@@ -470,6 +471,7 @@ function fillZone(card, zone, climate) {
       ${readings}
       ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
     </div>
+    ${sensorNoteHtml(zone)}
     ${excludedNow ? "" : `<div class="ribbon">
       ${ribbonSvg(zone, week, history, mode)}
       <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
@@ -479,6 +481,25 @@ function fillZone(card, zone, climate) {
     ${zone.sensor_manual ? manualHtml(zone) : ""}
     <div class="zone-foot">${foot.join(" · ")}</div>`);
   wireRibbon(card, week, history, mode);
+}
+
+// Its sensor's batteries, said where they're seen: to change soon, to
+// change now (the admin panel's "battery low" too), or running on them
+// since it lost its power - its cable to check.
+const BATTERY_SOON_PCT = 20;
+const BATTERY_NOW_PCT = 10;
+function sensorNoteHtml(zone) {
+  let text = "";
+  let level = "soon";
+  if (zone.sensor_power_lost) {
+    text = tr("home.power_lost");
+    level = "now";
+  } else if (!zone.external_power && zone.battery_pct != null && zone.battery_pct <= BATTERY_SOON_PCT) {
+    const pct = Math.round(zone.battery_pct);
+    level = zone.battery_pct <= BATTERY_NOW_PCT ? "now" : "soon";
+    text = tr(level === "now" ? "home.battery_now" : "home.battery_soon", { pct });
+  }
+  return text ? `<div class="sensor-note" data-level="${level}">${ICONS.battery}<span>${esc(text)}</span></div>` : "";
 }
 
 // A zone whose sensor is set to "manual" in the admin panel: the
@@ -898,6 +919,7 @@ const ICONS = {
   wind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h10.5a3 3 0 1 0-3-3"/><path d="M3 12h15.5a3 3 0 1 1-3 3"/><path d="M3 16h8"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
   chevron: `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
+  battery: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4M6.5 10.5v3"/></svg>`,
   power: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>`,
   fan: `<svg viewBox="0 0 24 24" aria-hidden="true"><g class="fan-blades">${[0, 120, 240].map(a => `<path transform="rotate(${a} 12 12)" d="M12 12C9.6 9.6 9.4 4.9 11.6 3.3c2.4-1.7 5.6.4 4.5 3.6-.8 2.2-2.4 3.7-4.1 5.1z"/>`).join("")}<circle cx="12" cy="12" r="1.9"/></g></svg>`,
 };

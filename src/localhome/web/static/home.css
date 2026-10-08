@@ -620,6 +620,11 @@ body[data-running="true"] .hero-season::before {
 /* A zone left out of the season: said plainly, where the controls would be. */
 .excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
 .excluded-note svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Its sensor's batteries: to change soon (amber), now, or it lost its power (stronger). */
+.sensor-note { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
+.sensor-note[data-level="now"] { background: color-mix(in srgb, var(--warn) 22%, transparent); font-weight: 600; }
+.sensor-note svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .zone-foot {
   display: flex;

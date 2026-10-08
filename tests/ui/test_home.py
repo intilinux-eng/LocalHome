@@ -491,18 +491,27 @@ def test_a_card_takes_its_states_colour(open_page, api):
     assert opened.errors == []
 
 
-def test_a_sensor_on_usb_c_says_so_instead_of_its_battery(open_page, api):
-    """An H&T on USB-C: its battery isn't what keeps it going - the card
-    says where its power comes from instead."""
+def test_a_sensor_says_in_plain_words_whether_it_runs_on_battery_or_is_powered(open_page, api):
+    """For whoever lives there: "on battery 80%" or "powered" - not "USB-C" -
+    and on the card itself, when its batteries want changing soon, now,
+    or when it lost its power and runs on them."""
     opened = _open_home(open_page)
     page = opened.page
     _fake_zones(page, api, "heat", {ZONE_A: (20.0, 21.0, False, True)})
     set_zone = "([name, values]) => { Object.assign(state.climate.zones.find(z => z.name === name), values); renderZones(); }"
+    card = _card(page, ZONE_A)
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": 80, "external_power": False, "sensor_seconds_since_update": 120}])
-    assert "batteria 80%" in _card(page, ZONE_A).locator(".zone-foot").inner_text()
+    assert "a batteria 80%" in card.locator(".zone-foot").inner_text() and card.locator(".sensor-note").count() == 0
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": None, "external_power": True}])
-    foot = _card(page, ZONE_A).locator(".zone-foot").inner_text()
-    assert "su USB-C" in foot and "batteria" not in foot
+    foot = card.locator(".zone-foot").inner_text()
+    assert "alimentato a corrente" in foot and "batteria" not in foot and "USB" not in foot
+    page.evaluate(set_zone, [ZONE_A, {"battery_pct": 15, "external_power": False}])
+    assert card.locator(".sensor-note").inner_text() == "Batterie del sensore al 15%: cambiale a breve."
+    page.evaluate(set_zone, [ZONE_A, {"battery_pct": 8}])
+    note = card.locator(".sensor-note")
+    assert note.get_attribute("data-level") == "now" and "al più presto" in note.inner_text()
+    page.evaluate(set_zone, [ZONE_A, {"battery_pct": 86, "sensor_power_lost": True}])
+    assert "non è più alimentato a corrente" in card.locator(".sensor-note").inner_text()
     assert opened.errors == []
 
 

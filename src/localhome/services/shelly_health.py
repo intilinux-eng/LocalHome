@@ -743,6 +743,18 @@ class ShellyHealth:
             state["assessment"] = assess(state, now)
         return states
 
+    def power_lost(self, name: str) -> bool:
+        """Whether the H&T reading for `name` ran on external power and now
+        runs on its batteries (this week) - for the home page's card. From
+        memory only: asked with every zone refresh."""
+        with self._lock:
+            for state in self._devices.values():
+                if name in state["names"]:
+                    lost = state["usb_lost_at"]
+                    return (lost is not None and state["external_power"] is False
+                            and self.clock() - lost < WEEK)
+        return False
+
     def _fill_from_reading(self, state: dict, now: float) -> None:
         """Until a battery sensor wakes after this start, what its own
         driver last had (kept across restarts - see drivers/mqtt/state_cache.py)."""
