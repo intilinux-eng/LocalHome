@@ -566,6 +566,28 @@ def test_settings_that_couldnt_be_read_are_asked_again_soon(tmp_path):
     assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
 
 
+def test_the_revision_moves_with_what_a_shelly_says_not_with_time(tmp_path):
+    """The admin page asks it every few seconds and reads the whole list -
+    its history - only when it moves: a setting changed in the app moves it
+    at once, a check that finds nothing new doesn't."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000, "cfg_rev": 21}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    first = watcher.revision()
+    clock.t += 300
+    rpc.status["sys"]["uptime"] += 300
+    rpc.status["wifi"]["rssi"] = -61
+    watcher.poll_once()
+    assert watcher.revision() == first, "nothing new: the list isn't read again"
+    rpc.config["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)
+    broker.publish(f"{RELAY}/status/sys", {"cfg_rev": 22, "uptime": 50310})
+    changed = watcher.revision()
+    assert changed != first, "changed in the app: at once"
+    watcher.poll_once()
+    assert watcher.revision() != changed, "and again once read"
+
+
 def test_a_mains_shelly_back_online_is_asked_at_once(tmp_path, monkeypatch):
     """Seen on the production board: two power cuts 5 minutes apart, one
     restart counted - no check came between them. Back online after

@@ -35,6 +35,7 @@ device; it only reads.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import queue
@@ -741,6 +742,19 @@ class ShellyHealth:
         return stats
 
     # ----------------------------------------------------------- output --
+
+    def revision(self) -> str:
+        """A short mark of what the Shellys said last - their answers,
+        settings, restarts, reports - from memory only: the admin page asks
+        it every few seconds and reads devices() (whose day and week come
+        from the history) only when it moves. A setting changed in the app
+        shows in seconds, and the history isn't read for nothing."""
+        with self._lock:
+            said = [(s["id"], s["online"], s["error"] is None, tuple(s["errors"]), s["settings_read"],
+                     tuple(w["key"] for w in s["settings_wrong"]), s["restart_required"], s["booted_at"],
+                     s["model"], s["firmware"], s["update"], s["battery_pct"], s["external_power"],
+                     s["last_report_at"]) for s in self._devices.values()]
+        return hashlib.sha1(repr(said).encode()).hexdigest()[:12]
 
     def devices(self) -> list[dict]:
         now = self.clock()

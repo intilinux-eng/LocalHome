@@ -219,6 +219,23 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     assert opened.errors == []
 
 
+def test_the_shelly_list_follows_what_the_shellys_say(open_page):
+    """Not every minute only: a mark of what the Shellys said, asked with
+    every refresh, and the list read again as soon as it moves."""
+    revision = {"now": "a"}
+    reads = []
+    opened = open_page("/climate-admin", 1280)
+    page = opened.page
+    page.route("**/api/climate-admin/shelly-health/revision",
+               lambda route: route.fulfill(json={"ok": True, "revision": revision["now"]}))
+    page.on("request", lambda r: reads.append(1) if r.url.endswith("/api/climate-admin/shelly-health") else None)
+    page.wait_for_timeout(8000)
+    before = len(reads)
+    revision["now"] = "b"
+    assert eventually(page, lambda: len(reads) > before, timeout_ms=8000), "read again in seconds, not in a minute"
+    assert opened.errors == []
+
+
 def test_a_shellys_safety_timer_is_said_in_system_status_and_in_the_history(open_page, api):
     """Its hold ran out: for 72 hours in its own neutral box, with the
     time - not with the problems, it's over - and in the watchdog history

@@ -883,6 +883,13 @@ def _register_routes(app: Flask) -> None:
         found = [p for p in _quick_problems(app) if p["code"] != "device_not_heard_yet"]
         return jsonify(ok=True, problems=found)
 
+    @app.route("/api/climate-admin/shelly-health/revision")
+    def api_shelly_health_revision():
+        """What the Shellys said last, as a short mark from memory - the
+        admin page reads the whole list again when it moves."""
+        health = app.config.get("SHELLY_HEALTH")
+        return jsonify(ok=True, revision=health.revision() if health else "")
+
     @app.route("/api/climate-admin/shelly-health")
     def api_shelly_health():
         """Each Shelly's own status and its last day and week - see

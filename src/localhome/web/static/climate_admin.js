@@ -1111,6 +1111,7 @@ async function refreshAll() {
   await refreshVmcStatus();
   await refreshSystemStatus();
   refreshLedSummary();
+  refreshShellyRevision();
 }
 
 // While its section is closed the LED matrix isn't polled; its header
@@ -2741,6 +2742,23 @@ async function loadShellyHealth() {
     return;   // offline: the connection banner says so already
   }
   renderDevices();
+}
+
+// Led by the Shellys: what they say (a setting changed in the app, a
+// restart, back online) moves a mark kept in memory, asked with every
+// refresh; the whole list - its day and week read from the history - is
+// read again only then, and every minute for what time alone changes.
+let shellyRevision = null;
+
+async function refreshShellyRevision() {
+  let revision;
+  try {
+    revision = (await (await fetch("/api/climate-admin/shelly-health/revision", { cache: "no-store" })).json()).revision;
+  } catch (e) {
+    return;
+  }
+  if (shellyRevision !== null && revision !== shellyRevision) loadShellyHealth();
+  shellyRevision = revision;
 }
 
 // ------------------------------------------------------------- devices ----
