@@ -590,7 +590,7 @@ def _lan_signals(app: Flask, devices: list[dict], uptime_seconds: float | None) 
     battery = {name for name, kind in manager.sensor_kinds.items()
                if kind == "climate" and manager.driver_types.get(name) == "mqtt_json"}
     return {
-        "lan_silent_seconds": app.config["LAN_WATCH"].update(system_status.lan_mqtt_clients()),
+        "lan_silent_seconds": app.config["LAN_WATCH"].update(system_status.lan_mqtt_peers()),
         "battery_silent": system_status.battery_sensors_silent(devices, battery, uptime_seconds),
     }
 

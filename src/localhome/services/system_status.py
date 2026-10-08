@@ -797,14 +797,21 @@ def lan_mqtt_clients(port: int = MQTT_PORT, paths=("/proc/net/tcp", "/proc/net/t
     """Devices on the LAN connected to this board's MQTT broker right now:
     established connections to `port` from anything but the board itself.
     From /proc - no command run. None where there's no /proc (not Linux)."""
-    count = None
+    peers = lan_mqtt_peers(port, paths)
+    return None if peers is None else len(peers)
+
+
+def lan_mqtt_peers(port: int = MQTT_PORT, paths=("/proc/net/tcp", "/proc/net/tcp6")) -> set[str] | None:
+    """Each of those connections by its far end - address and port, as
+    /proc writes them: the same one later is the same connection still."""
+    peers = None
     for path in paths:
         try:
             with open(path, encoding="ascii", errors="replace") as f:
                 lines = f.read().splitlines()[1:]
         except OSError:
             continue
-        count = count or 0
+        peers = peers if peers is not None else set()
         for line in lines:
             parts = line.split()
             if len(parts) < 4 or parts[3] != "01":        # 01: ESTABLISHED
@@ -816,24 +823,36 @@ def lan_mqtt_clients(port: int = MQTT_PORT, paths=("/proc/net/tcp", "/proc/net/t
             # 127.x (also as ::ffff:127.x) and ::1: the board talking to itself.
             if host.endswith("7F") or host == "00000000000000000000000001000000":
                 continue
-            count += 1
-    return count
+            peers.add(remote)
+    return peers
+
+
+# A connection this old is a device that stays connected: a mains Shelly,
+# an H&T on USB-C. A battery sensor's lasts seconds - it wakes, reports
+# and goes back to sleep.
+STAY_SECONDS = 60
 
 
 class LanWatch:
-    """How long every LAN device has been gone from the broker - having
-    been there: an installation whose Shellys all run on batteries never
-    keeps one connected, and that isn't a fault."""
+    """How long every device that stays connected to the broker has been
+    gone - having been there. Only a connection that lasts counts: a
+    battery sensor caught while it reported made a working network look
+    broken ten minutes later, when it was asleep again (seen in a board's
+    watchdog log, every 2 hours) - and an installation whose sensors all
+    sleep never keeps one connected, which isn't a fault either. An H&T
+    on USB-C, connected all the time, counts like a mains Shelly."""
 
     def __init__(self):
         self.seen = False
         self.silent_since = None
+        self.first_seen: dict[str, float] = {}     # each connection there now, since when
 
-    def update(self, clients: int | None, now: float | None = None) -> float | None:
+    def update(self, peers: set[str] | None, now: float | None = None) -> float | None:
         now = time.monotonic() if now is None else now
-        if clients is None:
+        if peers is None:
             return None
-        if clients > 0:
+        self.first_seen = {peer: self.first_seen.get(peer, now) for peer in peers}
+        if any(now - since >= STAY_SECONDS for since in self.first_seen.values()):
             self.seen, self.silent_since = True, None
             return None
         if not self.seen:

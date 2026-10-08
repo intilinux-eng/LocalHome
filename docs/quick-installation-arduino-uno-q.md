@@ -286,7 +286,10 @@ So:
   and whenever the Shellys that stay connected to the broker all drop
   off while the router still answers (at 10 and 30 minutes). LocalHome
   then shows **RT** on the LED matrix and a problem in System status:
-  restart the router.
+  restart the router. "Stay connected" means the same connection a
+  minute later: the mains Shellys, and an H&T on USB-C. A battery H&T
+  connects only for the seconds it reports - it never counts, so a house
+  whose sensors all sleep is never taken for a broken network.
 - Put the board and the Shellys on the **main network**, never the guest
   one (guest networks keep devices apart on purpose).
 - If the router allows it, 5 GHz on a **fixed channel between 36 and

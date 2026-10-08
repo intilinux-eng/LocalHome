@@ -21,10 +21,12 @@
 #     20 min -> reconnect again, 30 min -> reboot the board (not in its
 #     first 30 min of uptime, at most once every 6 hours: a router that's
 #     switched off doesn't make the board reboot all night);
-#   - the router answering, the Shellys connected to the board's broker are
-#     counted: some were, none are for 10 min -> reconnect the Wi-Fi, again
-#     at 30. The router has stopped passing their connections (LocalHome
-#     shows RT and asks for the router to be restarted).
+#   - the router answering, the devices that stay connected to the board's
+#     broker are counted - the mains Shellys, an H&T on USB-C: some were,
+#     none are for 10 min -> reconnect the Wi-Fi, again at 30. The router
+#     has stopped passing their connections (LocalHome shows RT and asks
+#     for the router to be restarted). A battery sensor, connected for a
+#     few seconds when it wakes, doesn't count.
 #
 # What it does goes to the journal and, being rare, to a small log on disk
 # that survives the reboot it may cause: one line per action, a date, a
@@ -36,8 +38,10 @@
 # passes the Shellys looks fine from here. A fixed IP (a DHCP reservation)
 # for the board and 5 GHz on a non-radar channel (36-48) help.
 
-STATE=/run/localhome-wifi-watchdog
-DATA=/var/lib/localhome
+# Where it keeps its state and its log - other places only for trying it
+# out (tests/test_wifi_watchdog.py), like the uptime below.
+STATE=${LOCALHOME_WIFI_WATCHDOG_STATE:-/run/localhome-wifi-watchdog}
+DATA=${LOCALHOME_WIFI_WATCHDOG_DATA:-/var/lib/localhome}
 LOG=$DATA/wifi-watchdog.log
 LAST_REBOOT=$DATA/wifi-watchdog-reboot
 
@@ -54,7 +58,7 @@ log() {
     chmod 644 "$LOG"
 }
 
-uptime_s=$(cut -d. -f1 /proc/uptime)
+uptime_s=${LOCALHOME_WIFI_WATCHDOG_UPTIME:-$(cut -d. -f1 /proc/uptime)}
 
 # --------------------------------------------------- Wi-Fi never off ----
 if command -v nmcli >/dev/null 2>&1; then
@@ -126,8 +130,23 @@ if [ "$up" = 1 ]; then
     # devices on the same radio, until it was restarted). Re-activating
     # the Wi-Fi is all the board can do - at 10 and 30 minutes; LocalHome
     # shows it as "RT" and asks for the router to be restarted.
-    lan=$(ss -Htn state established '( sport = :1883 )' 2>/dev/null \
-        | awk '$4 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/' | wc -l)
+    # A device that stays is a connection - its address and port - already
+    # there at the last check, a minute ago: a mains Shelly, an H&T on
+    # USB-C. A battery sensor connects for a few seconds when it wakes and
+    # goes back to sleep: caught by one check, it made a working router
+    # look broken 10 minutes later - the Wi-Fi reconnected twice every 2
+    # hours (seen on a board with only its H&T connected).
+    peers=$(ss -Htn state established '( sport = :1883 )' 2>/dev/null \
+        | awk '$4 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/ {print $4}' | sort -u)
+    lan=0
+    if [ -n "$peers" ] && [ -s "$STATE/lan_peers" ]; then
+        lan=$(printf '%s\n' "$peers" | grep -cxFf "$STATE/lan_peers" || true)
+    fi
+    if [ -n "$peers" ]; then
+        printf '%s\n' "$peers" > "$STATE/lan_peers"
+    else
+        rm -f "$STATE/lan_peers"
+    fi
     if [ "$lan" -gt 0 ]; then
         touch "$STATE/lan_seen"
         if [ -f "$STATE/lan_silent_since" ]; then

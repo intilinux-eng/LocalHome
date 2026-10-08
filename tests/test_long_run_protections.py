@@ -190,14 +190,42 @@ def test_the_shellys_connected_to_the_broker_are_counted_from_proc(tmp_path):
     assert system_status.lan_mqtt_clients(paths=[str(tmp_path / "none")]) is None
 
 
-def test_silence_counts_only_after_devices_were_there():
+def test_the_connections_to_the_broker_are_told_apart(tmp_path):
+    (tmp_path / "tcp").write_text(TCP)
+    assert system_status.lan_mqtt_peers(paths=[str(tmp_path / "tcp")]) == {"0B01A8C0:C0FF"}
+    assert system_status.lan_mqtt_peers(paths=[str(tmp_path / "none")]) is None
+
+
+def test_silence_counts_only_after_a_device_stayed_connected():
     watch = system_status.LanWatch()
-    assert watch.update(0, now=0) is None, "battery-only installation: nobody stays connected"
-    assert watch.update(2, now=10) is None
-    assert watch.update(0, now=20) == 0
-    assert watch.update(0, now=620) == 600
-    assert watch.update(1, now=630) is None
-    assert watch.update(None, now=640) is None, "no /proc: nothing claimed"
+    assert watch.update(set(), now=0) is None, "nobody connected yet"
+    assert watch.update({"A", "B"}, now=10) is None
+    assert watch.update({"A", "B"}, now=80) is None, "connected 70 s: devices that stay"
+    assert watch.update(set(), now=90) == 0
+    assert watch.update(set(), now=690) == 600
+    assert watch.update({"C"}, now=700) == 610, "a new connection isn't back until it stays"
+    assert watch.update({"C"}, now=760) is None
+    assert watch.update(None, now=770) is None, "no /proc: nothing claimed"
+
+
+def test_a_battery_sensor_waking_is_never_a_silence():
+    """Seen in a board's watchdog log: an H&T caught while it reported,
+    then asleep - "no Shelly connected", every 2 hours, on a network that
+    was fine. Asked every 5 s for 6 hours, it connects 10 s every 2 h."""
+    watch = system_status.LanWatch()
+    for t in range(0, 6 * 3600, 5):
+        peers = {f"HT:{t // 7200}"} if t % 7200 < 10 else set()
+        assert watch.update(peers, now=t) is None
+
+
+def test_an_h_and_t_on_usb_c_counts_like_a_mains_shelly():
+    """On USB-C it stays connected: gone for 10 minutes, it's the network."""
+    watch = system_status.LanWatch()
+    for t in range(0, 300, 5):
+        watch.update({"HT-usb"}, now=t)
+    assert watch.update(set(), now=300) == 0
+    assert watch.update({"HT-battery"}, now=600) == 300, "another sensor waking doesn't end it"
+    assert watch.update(set(), now=900) == 600
 
 
 def test_every_battery_sensor_silent_at_once_is_the_network():
