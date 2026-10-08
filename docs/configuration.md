@@ -550,10 +550,19 @@ family (Gen3 H&T sensors, Plus 1 relays). Redeploying to a new home
 should only ever mean typing in *that* home's own device ids - never
 touching code or `config.yaml` by hand.
 
-When nothing's been saved here yet, the page pre-fills itself from
-`config.yaml`'s own current, hand-written setup (real device ids
-included) rather than a blank form - purely read-only, and never
-consulted again once something's saved. Saving writes to
+A new board - nothing saved here, no zones of its own in `config.yaml`
+- starts as the reference apartment, every Shelly to configure: Stanze
+and Bagni (Bagni kept out of cooling, the dehumidifier drawing its water
+through its valve), each with an H&T sensor and a valve, plus the bypass
+valve, the dehumidifier, the outdoor sensor and the VMC. A Shelly with
+no id yet builds nothing and isn't a fault: the panel lists it as *to
+configure* - in its zone's card, and in *Devices* with the model to look
+for - the dashboard says it isn't connected yet, and a zone without its
+sensor keeps its valve closed. Ids save one at a time; `localhome-cli
+doctor` lists the ones still missing. When `config.yaml` wires its own
+zones instead, the page pre-fills itself from that hand-written setup
+(real device ids included) - purely read-only, and never consulted
+again once something's saved. Saving writes to
 `config/climate_map.json` instead (additive, gitignored) - see
 `services/climate_map_store.py`'s module docstring for the exact
 on-disk shape and precedence rules. **Changes here need a LocalHome
@@ -575,9 +584,8 @@ zones), *Devices* (every device in one list, the MQTT broker above it and, below
 (system status - with the LED matrix's mirror - and settings) and *Tools* (diagnostic mode,
 maintenance, how it works) - each a card whose header says its state
 even when closed. *How it works* says each topic in a sentence or two,
-with the full explanation folded under it. On an installation with no
-zones yet - none saved in the panel, none in config.yaml - a four-step
-*How to use* guide opens above the groups. A sticky bar of links follows the scroll. Two notices
+with the full explanation folded under it. Until the zones have been
+saved here once, a four-step *How to use* guide opens above the groups. A sticky bar of links follows the scroll. Two notices
 sit above everything when they apply: saved changes waiting for a
 restart (naming which, with the restart button), and diagnostic mode
 being on. Which sections are open is remembered for the tab, so the
@@ -617,7 +625,7 @@ The panel always builds it as "Outdoor Sensor".
 
 Both it and the VMC below have a **source**, like a zone's sensor:
 
-- **Shelly** - the real device; its id is required.
+- **Shelly** - the real device, by its id; to configure until it's saved.
 - **Simulated** - no hardware behind it. The outdoor sensor follows the
   month's average temperature with a 5 degree swing over the day
   (warmest at 15:00, coldest at 03:00), so its chart looks like
@@ -626,16 +634,12 @@ Both it and the VMC below have a **source**, like a zone's sensor:
   dashboard, so it never passes for the real apartment.
 - **None** - not built at all.
 
-On a new board the outdoor sensor starts as **none**: the dashboard
-says "No sensor connected yet" in its place rather than show made-up
-weather next to the real rooms - pick Simulated to see it working
-before the hardware exists. The VMC, on a climate installation (the
-panel manages the zones), starts **simulated**, so its controls can be
-tried - never over a real one, though: not if config.yaml already wires
-it by hand (an integration named "VMC", or any `shelly_light` dimmer).
-A section saved before sources existed keeps its meaning - a device id
-is the real device and a blank is none - and a LocalHome that isn't
-doing climate at all gets neither.
+On a new board both start as their **Shelly to configure** - nothing
+built, the dashboard saying "No sensor connected yet" for the outdoor
+one - unless config.yaml already wires one by hand (an integration named
+"Outdoor Sensor" / "VMC", or any `shelly_light` dimmer): then none, so
+it's never duplicated. A section saved before sources existed keeps its
+meaning - a device id is the real device and a blank is none.
 
 The VMC (mechanical ventilation) has its own section too, with the
 same Shelly / simulated / none source: one device id

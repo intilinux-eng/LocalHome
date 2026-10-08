@@ -7,6 +7,10 @@ date rather than by tag.
 ## Unreleased
 
 ### Fixed
+- **Save, pressed right after typing a Shelly's id, saves.** Leaving the
+  field starts the id's check, and the line it wrote under the field
+  moved the button from under the pointer between press and release -
+  the first press often did nothing. The line now waits for the release.
 - **The sensor failsafe now counts silence LocalHome actually watched**,
   kept in `config/sensor_silence.json` across restarts. It used to count
   from when the process first noticed, so a board that restarts every
@@ -277,12 +281,19 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
-- **A new board's outdoor sensor starts as "None"**, not simulated: the
-  Climate tab says "No sensor connected yet" in its place until the
-  real Shelly is wired in the admin panel. A simulated one showed
-  made-up weather next to the real rooms; it can still be picked, and
-  is marked "simulated". A section already saved keeps what it says;
-  the VMC still starts simulated.
+- **A new board is the apartment's climate, every Shelly to configure.**
+  With nothing saved in the admin panel and no zones of its own in
+  config.yaml, a board starts with Stanze and Bagni (Bagni out of
+  cooling, the dehumidifier drawing its water through its valve), each
+  with its H&T sensor and valve, plus the bypass valve, the
+  dehumidifier, the outdoor sensor and the VMC - all on Shelly, none
+  with an id yet, nothing simulated (it used to start with two
+  simulated zones and a simulated VMC). A Shelly without an id saves,
+  one at a time, builds nothing and isn't a fault: the panel lists it
+  as *to configure* - by zone, with the model to look for - the
+  dashboard says what isn't connected yet, a zone without its sensor
+  keeps its valve closed, and `localhome-cli doctor` lists what's
+  missing instead of failing. Simulated stays one choice away.
 - Made for a phone in the hand: nothing overflows at 320px any more,
   every field is 16px so iOS stops zooming the page when one is tapped,
   and the buttons that were 28-38px tall (tabs, season chip, away,

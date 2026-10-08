@@ -13,11 +13,12 @@ how to configure each Shelly - are in
 [arduino-uno-q.md](arduino-uno-q.md); the generic Linux/Docker guide is
 [deployment.md](deployment.md).
 
-**What you end up with**: an installation with no configuration at all -
-no devices, no schedules, no history - that still starts, serves the
-dashboard and can run a full two-zone thermostat on simulated sensors.
-That makes it a usable test bench on day one, and the real apartment's
-setup is then typed into the admin panel, never into a file.
+**What you end up with**: the apartment's climate, ready to be
+connected - Stanze and Bagni and every Shelly of the plant listed in the
+admin panel, each to configure - with no schedules and no history yet.
+Each Shelly's id is then typed into the admin panel as it goes in, never
+into a file; picked "Simulated", any of them runs without hardware, as a
+test bench.
 
 ## Before you start
 
@@ -346,26 +347,22 @@ and logs "network back".
   24 characters. It replaces "LocalHome" in the header, the browser tab
   and the name under the icon when the dashboard is added to a phone's
   home screen, and takes effect on the next page load.
-- **Outdoor temperature sensor** - starts as **none**: the dashboard
-  says "No sensor connected yet" until it's switched to "Shelly" with
-  its device id (or to "Simulated", to see it working before then).
-- **VMC** - on a fresh installation it starts **simulated** too, so its
-  speeds and day/night program can be shown and tried before the
-  hardware exists. Everything simulated is marked "simulated" on the
-  dashboard. Switch it to "Shelly" with its device id once it's
-  installed, or to "None" if the apartment doesn't have one.
-- **Zones** - exactly two, and on a fresh installation both start
-  **simulated** on purpose: there is no hardware yet, a real device id
-  is required to save a "Shelly" zone, and a zone pointed at a device
-  that doesn't exist reports errors forever. Name them, save, restart
-  from the panel, and the thermostat, the weekly schedule, the history
-  and the statistics all work against simulated sensors - the whole
-  system, driveable on a bench.
+- **Zones** - Stanze and Bagni, already there, each with its sensor
+  (Shelly H&T Gen3) and its valve (Shelly 1 Gen3) to configure. Type in
+  each id as the device goes in and save - one at a time is fine: until
+  then the panel says *to configure*, the dashboard *not connected yet*,
+  and a zone without its sensor keeps its valve closed. Restart from the
+  panel after saving. To try the whole system on a bench first, pick
+  "Simulated" for a zone's sensor and valve.
+- **Bypass valve, dehumidifier, outdoor sensor, VMC** - listed too, each
+  to configure the same way in *Devices* (the sections under the list).
+  One the apartment doesn't have: "None" (outdoor sensor, VMC).
+  Everything simulated is marked "simulated" on the dashboard.
 - **Shelly devices** - two settings, one on each side, and they don't
   depend on each other:
   1. **In this admin panel**, the device's **id** (from the Shelly app,
-     e.g. `shellyhtg3-c0ffee000002`): switch the zone's sensor or valve
-     to "Shelly" and paste it. It tells LocalHome which messages are
+     e.g. `shellyhtg3-c0ffee000002`): paste it in the zone's sensor or
+     valve field - the source is already "Shelly". It tells LocalHome which messages are
      that device's - each Shelly prefixes its own with its id - so no
      name or address is involved.
   2. **On the Shelly itself** (Shelly app -> device -> Settings ->

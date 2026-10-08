@@ -84,10 +84,11 @@ mains voltage, restarts and firmware updates.
 - **Statistics** - every run of the last day or week, with what the
   temperature and humidity did meanwhile, in a SQLite history on the
   board.
-- **An admin panel for installers** (`/climate-admin`) - map the zones
-  and roles onto the Shelly ids of *this* apartment from the browser,
-  every device simulated until its hardware is in, plain-language status
-  and problems, the board's health, and a diagnostics download.
+- **An admin panel for installers** (`/climate-admin`) - a new board
+  already lists the apartment's Shellys, each to configure: type in each
+  one's id from the browser as it goes in, one at a time (or try it
+  simulated first); plain-language status and problems, the board's
+  health, and a diagnostics download.
 - **Built to run for years unattended** - watchdogs for the Wi-Fi, the
   service and the hardware, a budget on writes to the board's soldered
   eMMC, history paused until the clock is right, dependencies pinned to
@@ -187,10 +188,10 @@ arduino-cli lib install "Arduino_RouterBridge@0.4.3"
 arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_matrix
 ```
 
-Then open `http://<name>.local:5000/climate-admin`: name the page, set
-up the zones - they start simulated, so the whole system can be tried
-before any hardware is installed - and switch each device to its Shelly
-id as it goes in. On each Shelly: MQTT server `<name>.local:1883`,
+Then open `http://<name>.local:5000/climate-admin`: name the page; the
+zones - Stanze and Bagni - and every Shelly of the plant are already
+there, each to configure: type in each one's id as it goes in, one at a
+time, and restart from the panel. On each Shelly: MQTT server `<name>.local:1883`,
 "Generic status update over MQTT" and "RPC over MQTT" on - see
 [docs/shelly-gen3.md](docs/shelly-gen3.md#mqtt-settings-that-work).
 Limits, tuning and what to expect over years of unattended running:

@@ -15,8 +15,8 @@ written; no board-specific steps.
 >
 > **In a hurry, on a brand-new UNO Q?**
 > [quick-installation-arduino-uno-q.md](quick-installation-arduino-uno-q.md)
-> is the same path with nothing but the commands, ending at an empty
-> installation that already runs on simulated devices.
+> is the same path with nothing but the commands, ending at the
+> apartment's climate with every Shelly listed, to configure.
 
 ## Quick start: a fresh Debian/Ubuntu box, start to finish
 
@@ -155,10 +155,11 @@ cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhos
 ```
 
 It has no devices at all: no Tuya, Meross, eWeLink or TP-Link entries to
-remove, nothing that fails to load. Every device is added from
-`/climate-admin` by its Shelly id - the two zones (H&T sensor + relay
-valve), the bathroom bypass valve, the dehumidifier, the outdoor sensor
-and the VMC - and each Shelly's MQTT server is set to
+remove, nothing that fails to load. Every device is already listed in
+`/climate-admin`, to configure - the two zones, Stanze and Bagni (H&T
+sensor + relay valve), the bathroom bypass valve, the dehumidifier, the
+outdoor sensor and the VMC: each gets its Shelly id there - and each
+Shelly's MQTT server is set to
 `<board-name>.local:1883` (see
 [Addressing](#addressing-names-not-ip-addresses)).
 

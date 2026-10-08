@@ -1,10 +1,11 @@
 # LocalHome - climate only, Shelly devices only.
 #
 # For an apartment where LocalHome runs just the heating/cooling. There
-# are no devices in this file on purpose: every one is set up from the
-# admin panel (http://<board>.local:5000/climate-admin) by its Shelly id -
-# the two zones (H&T sensor + relay valve), the bathroom bypass valve,
-# the dehumidifier, the outdoor sensor and the VMC.
+# are no devices in this file on purpose: every one is already listed in
+# the admin panel (http://<board>.local:5000/climate-admin), to configure
+# by its Shelly id - the two zones, Stanze and Bagni (H&T sensor + relay
+# valve), the bathroom bypass valve, the dehumidifier, the outdoor sensor
+# and the VMC.
 #
 #   cp config/config.climate.example.yaml config/config.yaml
 #   cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
