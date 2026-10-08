@@ -418,6 +418,7 @@ class ShellyHealth:
         self._rpc: dict[str, Any] = {}
         self._devices: dict[str, dict] = {}
         self._problems: list[dict] = []
+        self._problems_at: float | None = None      # when they were worked out
         for device in devices:
             state = {
                 "id": device["id"], "names": list(device["names"]), "battery": device["battery"],
@@ -784,12 +785,20 @@ class ShellyHealth:
                 found.append(problem)
         with self._lock:
             self._problems = found
+            self._problems_at = self.clock()
 
     def problems(self) -> list[dict]:
         """The last check's problems - worked out every 5 minutes, so the
-        LED matrix and the dashboard's badge can ask for them all day."""
+        LED matrix and the dashboard's badge can ask for them all day. A
+        sensor late then that has reported since isn't late any more: it's
+        left out at once, not at the next check (seen on the production
+        board: back on its batteries, still "reports stopped" for minutes)."""
         with self._lock:
-            return list(self._problems)
+            found = list(self._problems)
+            back = {state["names"][0] if state["names"] else state["id"] for state in self._devices.values()
+                    if state["last_report_at"] is not None and self._problems_at is not None
+                    and state["last_report_at"] > self._problems_at}
+        return [p for p in found if not (p["code"] == "device_report_late" and p["subject"] in back)]
 
     def start(self, every: float = POLL_SECONDS, first: float = FIRST_POLL_SECONDS,
               retry: float = RETRY_SECONDS) -> None:

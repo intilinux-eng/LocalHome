@@ -853,3 +853,14 @@ def test_the_period_it_declared_is_known_again_after_a_restart(tmp_path):
     restarted, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
     clock.t += 25 * 60
     assert by_id(restarted, HT)["assessment"]["reasons"][0]["code"] == "report_late"
+
+
+def test_a_late_sensor_that_reports_again_leaves_the_problems_at_once(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _wake(broker, 600)
+    clock.t += 31 * 60
+    watcher.refresh_problems()
+    assert [p["code"] for p in watcher.problems()] == ["device_report_late"]
+    clock.t += 60
+    _wake(broker, 7200, present=False)                    # back, on its batteries
+    assert watcher.problems() == [], "not at the next check, minutes later"
