@@ -7,6 +7,7 @@ production board is set up: one zone cooled, the bathrooms left out of
 cooling, the dehumidifier drawing its water through their valve, the
 bypass; sensors typed by hand, so each room is as a step needs it."""
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -148,7 +149,8 @@ def test_summer_the_week_and_every_manual_change(browser, house):
     banner = home.card(ROOMS).locator(".manual-banner")
     assert banner.inner_text().startswith("Programmazione manuale: 28°")
     assert "Torna alla programmazione (24°)" in banner.inner_text()
-    assert "manuale fino alle" in page.inner_text("#hero-detail")
+    # "fino alle 18:30", or after 22:00 "fino a domani alle 00:25".
+    assert re.search(r"manuale fino (alle|a domani alle) \d", page.inner_text("#hero-detail"))
     # its week is shown, not changed
     home.card(ROOMS).locator(".plan-toggle").click()
     assert eventually(page, lambda: home.card(ROOMS).locator(".plan-edit.is-locked").count() == 1)
@@ -198,7 +200,7 @@ def test_summer_the_dehumidifier_and_away(browser, house):
     assert eventually(page, lambda: home.on(f"{BATHS} Valve") is True), "its water, through the bathrooms' valve"
     home.refresh()
     assert home.state(BATHS) == t["st_excluded"], "the bathrooms aren't cooling for it"
-    assert "Deumidificatore acceso fino alle" in page.inner_text("#hero-detail")
+    assert re.search(r"Deumidificatore acceso fino (alle|a domani alle) \d", page.inner_text("#hero-detail"))
     dehumidifier.locator("button[data-dehum-off]").click()
     assert eventually(page, lambda: home.on("Dehumidifier") is False and home.on(f"{BATHS} Valve") is False)
 
