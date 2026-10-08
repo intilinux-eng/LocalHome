@@ -708,7 +708,7 @@ def test_a_battery_sensor_low_late_or_losing_reports_says_which():
     assert shelly_health.assess(_ht(battery_pct=8), now)["reasons"] == [{"code": "battery_low", "detail": 8}]
     assert shelly_health.assess(_ht(battery_pct=8, external_power=True), now)["state"] == "ok", "on USB-C"
     late = shelly_health.assess(_ht(), 1000.0 + 2 * H + 60)
-    assert late["state"] == "attention" and late["reasons"] == [{"code": "report_late", "detail": 2 * H + 60, "usb": False}]
+    assert late["state"] == "attention" and late["reasons"] == [{"code": "report_late", "detail": 2 * H + 60, "usual": None, "early": False}]
     missed = shelly_health.assess(_ht(stats={"missed_24h": 3, "signal_24h": {"avg": -86}}), now)
     assert missed["reasons"] == [{"code": "reports_missed", "detail": 3}]
     assert missed["notes"] == [], "the lost reports say it - not a weak signal on top"
@@ -787,40 +787,57 @@ def test_its_power_source_is_known_again_after_a_restart(tmp_path):
     assert by_id(again, HT)["assessment"]["reasons"][0]["code"] == "usb_lost", "...and the next start knows"
 
 
-def test_on_usb_c_its_reports_are_counted_against_its_6_minute_cycle(tmp_path):
-    """Measured on the production board: on USB-C it wakes every 6 minutes
-    (5 asleep, Shelly's figure, and one to report) - not a 2-hour heartbeat."""
-    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
-    for _ in range(20):                                   # two hours of it
+# Its data are asynchronous - each message is the latest value, whenever
+# it comes. Only "late" needs to know when the next one is due: on USB-C
+# that's learned from its own reports, not a firmware's cycle written in
+# the code. Seen on the production board: Shelly documents a wake every 5
+# minutes; the sensor sent a complete report every 12, every other wake
+# cut short - another firmware may do otherwise.
+
+def _reports_on_usb(broker, clock, every, hours):
+    for _ in range(int(hours * 3600 // every)):
         _power(broker, True)
-        clock.t += 360
-    device = by_id(watcher, HT)
-    stats = device["stats"]
-    assert (stats["cycle_seconds"], stats["reports_24h"], stats["missed_24h"]) == (360, 20, 0)
-    assert stats["next_heartbeat_at"] == device["last_report_at"] + 360
-    assert device["assessment"] == {"state": "ok", "reasons": [], "notes": []}
+        clock.t += every
 
 
-def test_on_usb_c_a_silence_is_noticed_in_minutes_on_its_batteries_in_hours(tmp_path):
+def test_on_usb_c_its_rhythm_is_learned_not_written_in_the_code(tmp_path):
     watcher, broker, clock, store = health(tmp_path, [ht_integration()])
-    _power(broker, True)
-    clock.t += 19 * 60
-    reasons = by_id(watcher, HT)["assessment"]["reasons"]
-    assert reasons == [{"code": "report_late", "detail": 19 * 60, "usb": True}]
-    watcher.refresh_problems()
-    assert [p["code"] for p in watcher.problems()] == ["device_report_late"]
-    on_batteries, broker2, clock2, _ = health(tmp_path / "b", [ht_integration()])
-    _power(broker2, False)
-    clock2.t += 19 * 60
-    assert by_id(on_batteries, HT)["assessment"]["state"] == "ok", "on its batteries 19 minutes is nothing"
-
-
-def test_on_usb_c_many_lost_cycles_are_a_reason_to_act(tmp_path):
-    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
-    for cycle in range(240):                              # a day, one cycle in four lost
-        if cycle % 4:
-            _power(broker, True)
-        clock.t += 360
+    _reports_on_usb(broker, clock, 720, 2)
     stats = by_id(watcher, HT)["stats"]
-    assert stats["missed_24h"] == 59
-    assert by_id(watcher, HT)["assessment"]["reasons"][0] == {"code": "reports_missed", "detail": 59}
+    assert (stats["late_after_seconds"], stats["usual_gap_seconds"]) == (2 * H, None), "2 hours: not learned yet"
+    _reports_on_usb(broker, clock, 720, 11)
+    stats = by_id(watcher, HT)["stats"]
+    assert (stats["usual_gap_seconds"], stats["late_after_seconds"]) == (720, 3 * 720)
+    assert "missed_24h" not in stats, "no heartbeat on USB-C to count misses against"
+
+
+def test_on_usb_c_a_silence_past_its_rhythm_is_late_and_a_problem(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _reports_on_usb(broker, clock, 720, 13)
+    clock.t += 30 * 60 - 720                              # 30 minutes since its last report
+    assert by_id(watcher, HT)["assessment"]["state"] == "ok"
+    clock.t += 10 * 60                                    # 40
+    reasons = by_id(watcher, HT)["assessment"]["reasons"]
+    assert reasons == [{"code": "report_late", "detail": 40 * 60, "usual": 720, "early": True}]
+    watcher.refresh_problems()
+    assert [p["code"] for p in watcher.problems()] == ["device_report_late"], "its reading stays good for hours"
+
+
+def test_another_firmware_another_rhythm_learned_as_well(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _reports_on_usb(broker, clock, 1800, 13)              # every 30 minutes instead
+    assert by_id(watcher, HT)["stats"]["late_after_seconds"] == 3 * 1800
+    clock.t += 3600 - 1800                                # an hour of silence: within its rhythm
+    assert by_id(watcher, HT)["assessment"]["state"] == "ok"
+
+
+def test_on_its_batteries_the_documented_heartbeat_bound_stays(tmp_path):
+    """A busy afternoon of change reports would teach a rhythm the night's
+    2-hour heartbeat breaks: on its batteries nothing is learned."""
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    for _ in range(26):                                   # 13 hours, a change report every 30 minutes
+        _power(broker, False)
+        clock.t += 1800
+    clock.t += 2 * 3600 - 1800                            # then its night heartbeat: 2 hours
+    assert "late_after_seconds" not in by_id(watcher, HT)["stats"]
+    assert by_id(watcher, HT)["assessment"]["state"] == "ok"

@@ -2618,7 +2618,9 @@ function reasonText(reason) {
   const key = `climate_admin.device_why_${reason.code}`;
   if (reason.code === "usb_lost") return tr(key, { detail: reason.detail, when: formatWhen(reason.at) });
   if (reason.code === "crashes" || reason.code === "power_unstable") return trCount(key, reason.detail, { detail: reason.detail });
-  if (reason.code === "report_late" && reason.usb) return tr(`${key}_usb`, { detail: formatAge(reason.detail) });
+  if (reason.code === "report_late" && reason.usual) {
+    return tr(`${key}_rhythm`, { detail: formatAge(reason.detail), usual: formatAge(reason.usual) });
+  }
   return tr(key, { detail: reason.code === "report_late" ? formatAge(reason.detail) : reason.detail });
 }
 
@@ -2674,23 +2676,25 @@ function shellyStatsHtml(d, data, now) {
       // Nothing counted yet: the count starts at the sensor's next report.
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), tr("climate_admin.shelly_reports_waiting")));
     } else if (s.reports_24h != null) {
-      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), s.cycle_seconds
-        ? tr("climate_admin.shelly_reports_usb", { count: s.reports_24h, missed: s.missed_24h, minutes: Math.round(s.cycle_seconds / 60) })
+      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), d.external_power
+        ? (s.usual_gap_seconds
+          ? tr("climate_admin.shelly_reports_usual", { count: s.reports_24h, usual: formatAge(s.usual_gap_seconds) })
+          : tr("climate_admin.shelly_reports_learning", { count: s.reports_24h }))
         : s.heartbeats_24h != null
           ? tr("climate_admin.shelly_reports_split", { count: s.reports_24h, beats: s.heartbeats_24h, changes: s.changes_24h, missed: s.missed_24h })
           : tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }),
         reasons.some(r => r.code === "reports_missed")));
       // When to expect it - on its batteries the heartbeat keeps its own
-      // 2-hour clock; on USB-C it reports every cycle.
-      if (s.next_heartbeat_at) {
-        rows.push(statRowHtml(tr(s.cycle_seconds ? "climate_admin.shelly_next_report" : "climate_admin.shelly_next_heartbeat"),
+      // 2-hour clock (on USB-C, no promise to keep: not said).
+      if (s.next_heartbeat_at && !d.external_power) {
+        rows.push(statRowHtml(tr("climate_admin.shelly_next_heartbeat"),
           tr("climate_admin.shelly_next_heartbeat_value", {
             time: new Date(s.next_heartbeat_at * 1000).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
           })));
       }
       // A sensor added (or first watched) this week has less than a week behind it.
       const partial = s.counted_since && now - s.counted_since < 6.5 * 86400;
-      rows.push(statRowHtml(tr("climate_admin.shelly_missed_7d"), partial
+      if (s.missed_7d != null) rows.push(statRowHtml(tr("climate_admin.shelly_missed_7d"), partial
         ? tr("climate_admin.shelly_missed_since", { missed: s.missed_7d, since: formatWhen(s.counted_since) })
         : String(s.missed_7d)));
     }

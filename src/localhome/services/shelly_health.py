@@ -51,18 +51,19 @@ logger = logging.getLogger(__name__)
 # than that, less some slack, is a heartbeat that never arrived.
 HEARTBEAT_SECONDS = 7200
 HEARTBEAT_SLACK = 0.15
-# On USB-C an H&T Gen3 wakes every 5 minutes and reports whatever the
-# change (Shelly's documentation) - with the minute or so it takes to
-# measure and report, a report every 6 minutes (measured on the production
-# board: 09:36, 09:42, 09:48). A gap of half a cycle more is one missed.
-USB_CYCLE_SECONDS = 360
-USB_CYCLE_SLACK = 0.5
-# Silent this many cycles on USB-C: late - 18 minutes, not 4 hours.
-USB_LATE_CYCLES = 3
-# Lost reports in a day before they're a reason to act: on its batteries
-# 3 of its 12 heartbeats; on USB-C, a tenth of its 240 cycles - a Wi-Fi
-# hiccup now and then costs one.
-USB_MISSED_PER_DAY = 24
+# On USB-C its rhythm is learned from its own reports, not written here:
+# Shelly documents a wake every 5 minutes; the production board's sensor
+# sent a complete report every 12, every other wake cut short - another
+# firmware may do otherwise. Late: silent past 3 times the gap its reports
+# usually come within (their 90th percentile) and half again its longest,
+# never sooner than 20 minutes nor later than its reading goes stale -
+# once 12 hours of reports on USB-C say what's usual (a night in them:
+# a quiet one may report only on its own clock).
+LEARN_SECONDS = 12 * 3600
+LEARN_MIN_GAPS = 6
+LATE_TIMES_USUAL = 3
+LATE_TIMES_LONGEST = 1.5
+LATE_MIN_SECONDS = 1200
 # One wake publishes several topics within a second or two: one report.
 REPORT_SPAN_SECONDS = 60
 # How far a heartbeat may land from its 2-hour slot: they come within a
@@ -312,6 +313,22 @@ def _dig(data: Any, *path: str) -> Any:
     return data
 
 
+def late_after(reports: list[float], starts: list[float], since: float, now: float,
+               heartbeat: float = HEARTBEAT_SECONDS) -> tuple[float, float | None]:
+    """(how long a silence is late, the gap its reports usually come
+    within) - from its reports since `since` (on USB-C), once they cover
+    LEARN_SECONDS; until then, or without enough of them, the 2-hour
+    heartbeat's own bound. A gap LocalHome wasn't there for isn't one."""
+    ceiling = 2 * heartbeat
+    times = sorted(t for t in reports if t >= since)
+    gaps = sorted(b - a for a, b in zip(times, times[1:]) if not any(a < s <= b for s in starts))
+    if len(gaps) < LEARN_MIN_GAPS or now - since < LEARN_SECONDS:
+        return ceiling, None
+    usual = gaps[min(len(gaps) - 1, int(0.9 * len(gaps)))]
+    late = max(LATE_TIMES_USUAL * usual, LATE_TIMES_LONGEST * gaps[-1], LATE_MIN_SECONDS)
+    return min(ceiling, late), usual
+
+
 def restart_field(reason: Any) -> str:
     """The history field a restart is counted under, by why it happened -
     "restart_unexpected" for a reason not known, or none given."""
@@ -337,15 +354,17 @@ def assess(device: dict, now: float, heartbeat: float = HEARTBEAT_SECONDS) -> di
         if lost is not None and device.get("external_power") is False and now - lost < WEEK:
             pct = device.get("battery_pct")
             reasons.append({"code": "usb_lost", "detail": round(pct) if pct is not None else "?", "at": lost})
-        usb = device.get("external_power") is True
         last = device.get("last_report_at")
-        late_after = USB_LATE_CYCLES * USB_CYCLE_SECONDS if usb else 2 * heartbeat
-        if last is not None and now - last > late_after:
-            reasons.append({"code": "report_late", "detail": round(now - last), "usb": usb})
+        late = stats.get("late_after_seconds") or 2 * heartbeat
+        if last is not None and now - last > late:
+            # Sooner than its reading goes stale: known only from its own
+            # rhythm - and a problem, its driver won't say it for hours.
+            reasons.append({"code": "report_late", "detail": round(now - last),
+                            "usual": stats.get("usual_gap_seconds"), "early": late < 2 * heartbeat})
         pct = device.get("battery_pct")
         if pct is not None and device.get("external_power") is not True and pct <= LOW_BATTERY_PCT:
             reasons.append({"code": "battery_low", "detail": round(pct)})
-        if (stats.get("missed_24h") or 0) >= (USB_MISSED_PER_DAY if usb else MISSED_PER_DAY):
+        if (stats.get("missed_24h") or 0) >= MISSED_PER_DAY:
             reasons.append({"code": "reports_missed", "detail": stats["missed_24h"]})
     if device.get("settings_wrong"):
         reasons.append({"code": "settings", "detail": ", ".join(s["key"] for s in device["settings_wrong"])})
@@ -669,21 +688,16 @@ class ShellyHealth:
 
         stats = {"signal_24h": signal(now - DAY), "signal_7d": signal(now - WEEK)}
         if state["battery"] and state["external_power"] is True:
-            # On USB-C: counted against its 6-minute cycle, since it's been
-            # on USB-C (within the week) - its battery days had their own.
+            # On USB-C: its rhythm learned from its last day on USB-C - no
+            # heartbeat to count misses against, only a silence too long.
             power = self._history(state["id"], "external_power", now - WEEK)
             on_usb = [ts for ts, value in power if value]
-            usb_since = on_usb[-1] if on_usb else now - WEEK
+            usb_since = max(on_usb[-1] if on_usb else now - DAY, now - DAY)
             reports = [ts for ts, _ in self._history(state["id"], "report", usb_since)]
             starts = [ts for ts, _ in self._history(LISTEN_SENSOR, "start", usb_since)]
-            stats["cycle_seconds"] = USB_CYCLE_SECONDS
-            stats["reports_24h"] = sum(1 for ts in reports if ts >= now - DAY)
-            stats["missed_24h"] = missed_reports(reports, starts, max(now - DAY, usb_since), now,
-                                                 USB_CYCLE_SECONDS, USB_CYCLE_SLACK)
-            stats["missed_7d"] = missed_reports(reports, starts, usb_since, now, USB_CYCLE_SECONDS, USB_CYCLE_SLACK)
-            stats["counted_since"] = usb_since if on_usb else (reports[0] if reports else None)
-            last = state["last_report_at"]
-            stats["next_heartbeat_at"] = last + USB_CYCLE_SECONDS if last is not None else None
+            stats["reports_24h"] = len(reports)
+            stats["counted_since"] = reports[0] if reports else None
+            stats["late_after_seconds"], stats["usual_gap_seconds"] = late_after(reports, starts, usb_since, now)
         elif state["battery"]:
             reports = [ts for ts, _ in self._history(state["id"], "report", now - WEEK)]
             starts = [ts for ts, _ in self._history(LISTEN_SENSOR, "start", now - WEEK)]
@@ -754,7 +768,7 @@ class ShellyHealth:
             # The same verdict as the admin page's: its reasons to act on.
             for reason in device["assessment"]["reasons"]:
                 code = PROBLEM_OF.get(reason["code"])
-                if reason["code"] == "report_late" and reason.get("usb"):
+                if reason["code"] == "report_late" and reason.get("early"):
                     code = "device_report_late"
                 if code is None:
                     continue
