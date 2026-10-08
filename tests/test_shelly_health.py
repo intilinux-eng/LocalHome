@@ -809,7 +809,7 @@ def test_on_usb_c_a_silence_past_the_period_it_declares_is_late_and_a_problem(tm
     reasons = by_id(watcher, HT)["assessment"]["reasons"]
     assert reasons == [{"code": "report_late", "detail": 31 * 60, "period": 600, "early": True}]
     watcher.refresh_problems()
-    assert [p["code"] for p in watcher.problems()] == ["device_report_late"], "its reading stays good for hours"
+    assert watcher.problems() == [{"code": "device_report_late", "subject": "Stanze Sensor", "detail": "31 min"}],         "its reading stays good for hours - said in minutes, not seconds"
 
 
 def test_a_firmware_that_declares_another_period_is_taken_at_its_word(tmp_path):

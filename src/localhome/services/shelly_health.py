@@ -773,7 +773,10 @@ class ShellyHealth:
                 if code is None:
                     continue
                 problem = {"code": code, "subject": device["name"]}
-                if reason.get("detail") is not None:
+                if reason["code"] == "report_late":
+                    # Seconds don't read: "1856" in the problems list.
+                    problem["detail"] = f"{round(reason['detail'] / 60)} min"
+                elif reason.get("detail") is not None:
                     unit = {"hot": "°C", "battery_low": "%"}.get(reason["code"], "")
                     problem["detail"] = f"{reason['detail']}{unit}"
                 if reason["code"] == "settings":
