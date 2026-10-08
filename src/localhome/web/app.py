@@ -1815,6 +1815,7 @@ def _register_routes(app: Flask) -> None:
             system_status.WIFI_WATCHDOG_LOG,
             service_events=system_status.SERVICE_WATCHDOG_LOG,
             version=" ".join(str(v) for v in (software.get("commit"), software.get("date")) if v),
+            translations=app.config["TRANSLATIONS"],
         )
         name = f"localhome-diagnostics-{datetime.now():%Y%m%d-%H%M}.zip"
         return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True, download_name=name)

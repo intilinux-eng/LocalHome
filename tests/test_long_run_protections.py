@@ -164,6 +164,7 @@ def test_the_diagnostics_route_sends_a_zip_without_secrets(tmp_path):
         app.config["HISTORY"].close()
     assert res.status_code == 200 and res.mimetype == "application/zip"
     zf = zipfile.ZipFile(io.BytesIO(res.data))
+    assert "summary.txt" in zf.namelist()
     status = json.loads(zf.read("system-status.json"))
     assert "problems" in status and "watchdog_history" in status
     backup = zipfile.ZipFile(io.BytesIO(zf.read("config-backup.zip")))
