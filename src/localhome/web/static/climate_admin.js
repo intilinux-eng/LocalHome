@@ -722,7 +722,8 @@ function freshnessNote(zone, mode) {
   const seconds = zone.sensor_seconds_since_update;
   if (seconds == null) return "";
   const time = formatAge(seconds);
-  if (seconds < NORMAL_AGE_CONTEXT_SECONDS) {
+  // On USB-C it reports every 6 minutes: an older value is no "normal cadence".
+  if (seconds < NORMAL_AGE_CONTEXT_SECONDS || zone.external_power) {
     return ` · ${tr("sensors.updated_ago", { time })}`;
   }
   return ` · ${tr("climate_admin.updated_ago_normal_cadence", { time })}`;
@@ -742,7 +743,9 @@ function sensorStatusHtml(zone, mode) {
   if (zone.sensor_ok || zoneHasLastKnownValue(zone)) {
     let extra = "";
     if (zone.humidity_pct != null) extra += ` · ${fmt(zone.humidity_pct, 0)}%`;
-    if (zone.battery_pct != null) {
+    if (zone.external_power) {
+      extra += ` · ${tr("climate_admin.shelly_usb")}`;
+    } else if (zone.battery_pct != null) {
       // A low battery highlighted, so this page alone is enough to
       // notice it.
       const batteryClass = zone.battery_pct <= LOW_BATTERY_PCT ? "admin-status bad" : "";
@@ -2613,7 +2616,9 @@ function trCount(key, count, vars = {}) {
 
 function reasonText(reason) {
   const key = `climate_admin.device_why_${reason.code}`;
+  if (reason.code === "usb_lost") return tr(key, { detail: reason.detail, when: formatWhen(reason.at) });
   if (reason.code === "crashes" || reason.code === "power_unstable") return trCount(key, reason.detail, { detail: reason.detail });
+  if (reason.code === "report_late" && reason.usb) return tr(`${key}_usb`, { detail: formatAge(reason.detail) });
   return tr(key, { detail: reason.code === "report_late" ? formatAge(reason.detail) : reason.detail });
 }
 
@@ -2639,11 +2644,14 @@ function shellyStatsHtml(d, data, now) {
     tr("climate_admin.shelly_setting_change", { now: shellySettingValue(s.key, s.value), want: shellySettingValue(s.key, s.expected) }),
     true));
   const s = d.stats || {};
+  const reasons = (d.assessment && d.assessment.reasons) || [];
   if (d.battery) {
     const age = d.last_report_at == null ? null : now - d.last_report_at;
+    // Late as the server judges it: in 4 hours on its batteries, in 18
+    // minutes on USB-C (a report every 6).
     rows.push(statRowHtml(tr("climate_admin.shelly_last_report"),
       age == null ? tr("climate_admin.shelly_never") : tr("climate_admin.shelly_ago", { age: formatAge(Math.max(0, age)) }),
-      age != null && age > 2 * data.heartbeat_seconds));
+      reasons.some(r => r.code === "report_late")));
   } else {
     const state = d.error ? "not_answering" : d.online === false ? "offline" : (d.online || d.polled_at) ? "online" : null;
     if (state) rows.push(statRowHtml(tr("climate_admin.shelly_link"), tr(`climate_admin.shelly_${state}`), state !== "online"));
@@ -2654,7 +2662,9 @@ function shellyStatsHtml(d, data, now) {
   rows.push(signalRow(tr("climate_admin.shelly_signal_24h"), s.signal_24h));
   rows.push(signalRow(tr("climate_admin.shelly_signal_7d"), s.signal_7d));
   if (d.battery) {
-    // On USB-C its battery isn't what keeps it going: not shown.
+    // On USB-C its battery isn't what keeps it going: not shown - its
+    // power source is.
+    if (d.external_power) rows.push(statRowHtml(tr("climate_admin.shelly_power"), tr("climate_admin.shelly_usb")));
     if (d.battery_pct != null && !d.external_power) {
       rows.push(statRowHtml(tr("fields.battery_pct"), d.battery_v != null
         ? tr("climate_admin.shelly_battery_value", { pct: Math.round(d.battery_pct), volts: d.battery_v.toFixed(2) })
@@ -2664,14 +2674,19 @@ function shellyStatsHtml(d, data, now) {
       // Nothing counted yet: the count starts at the sensor's next report.
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), tr("climate_admin.shelly_reports_waiting")));
     } else if (s.reports_24h != null) {
-      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), s.heartbeats_24h != null
-        ? tr("climate_admin.shelly_reports_split", { count: s.reports_24h, beats: s.heartbeats_24h, changes: s.changes_24h, missed: s.missed_24h })
-        : tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }), s.missed_24h >= 3));
-      // When to expect it - the heartbeat keeps its own 2-hour clock.
+      rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), s.cycle_seconds
+        ? tr("climate_admin.shelly_reports_usb", { count: s.reports_24h, missed: s.missed_24h, minutes: Math.round(s.cycle_seconds / 60) })
+        : s.heartbeats_24h != null
+          ? tr("climate_admin.shelly_reports_split", { count: s.reports_24h, beats: s.heartbeats_24h, changes: s.changes_24h, missed: s.missed_24h })
+          : tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }),
+        reasons.some(r => r.code === "reports_missed")));
+      // When to expect it - on its batteries the heartbeat keeps its own
+      // 2-hour clock; on USB-C it reports every cycle.
       if (s.next_heartbeat_at) {
-        rows.push(statRowHtml(tr("climate_admin.shelly_next_heartbeat"), tr("climate_admin.shelly_next_heartbeat_value", {
-          time: new Date(s.next_heartbeat_at * 1000).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
-        })));
+        rows.push(statRowHtml(tr(s.cycle_seconds ? "climate_admin.shelly_next_report" : "climate_admin.shelly_next_heartbeat"),
+          tr("climate_admin.shelly_next_heartbeat_value", {
+            time: new Date(s.next_heartbeat_at * 1000).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" }),
+          })));
       }
       // A sensor added (or first watched) this week has less than a week behind it.
       const partial = s.counted_since && now - s.counted_since < 6.5 * 86400;
@@ -2773,7 +2788,8 @@ function deviceRowHtml(row) {
   const label = row.state === "neutral" ? reasonLabel(s.assessment.reasons)
     : tr(`climate_admin.${row.state === "bad" ? "system_device_offline" : "system_device_ok"}`);
   const pills = s
-    ? `<span class="admin-pill">${tr(s.battery ? "climate_admin.shelly_battery" : "climate_admin.shelly_mains")}</span>`
+    ? `<span class="admin-pill">${tr(!s.battery ? "climate_admin.shelly_mains"
+      : s.external_power ? "climate_admin.shelly_usb" : "climate_admin.shelly_battery")}</span>`
       + (s.simulated ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "")
     : `<span class="admin-pill">${escapeHtml(row.devices[0].kind)}</span>`;
   const meta = s ? [s.wifi_rssi_dbm != null ? `${Math.round(s.wifi_rssi_dbm)} dBm` : "",

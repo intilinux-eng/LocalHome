@@ -998,3 +998,87 @@ def test_a_status_queued_by_the_device_doesnt_move_the_time_off(fake_connection,
     _say(fake_connection, False, source="timer")
     assert valve.read()["safety_rest_at"] == t0 + 900
 
+
+# ----------------------------------------------------------- an H&T Gen3 ----
+# The two real sensors on the production board, one on its batteries and
+# one on USB-C: every wake publishes every component (NotifyFullStatus),
+# then "sleep" - on USB-C too, with its batteries still in. Their payloads
+# as captured, and the driver as the climate admin panel builds it.
+
+def _ht(**extra):
+    options = dict(
+        name="Bagni Sensor", broker=BROKER,
+        state_topic=["ht/status/temperature:0", "ht/status/humidity:0", "ht/status/devicepower:0", "ht/status/wifi"],
+        fields={"temperature_c": "tC", "humidity_pct": "rh", "battery_pct": "battery.percent",
+                "wifi_rssi_dbm": "rssi", "external_power": "external.present"},
+        valid_ranges={"temperature_c": [-30, 70], "humidity_pct": [1, 100], "battery_pct": [0, 100]},
+        required_fields=["temperature_c"], stale_after_seconds=14400)
+    options.update(extra)
+    return MqttSensorDriver(**options)
+
+
+def _wake(conn, temperature=25.7, humidity=54.9, external=True, percent=87):
+    conn.deliver("ht/status/devicepower:0", json.dumps(
+        {"id": 0, "battery": {"V": 5.76, "percent": percent}, "external": {"present": external}}))
+    conn.deliver("ht/status/humidity:0", json.dumps({"id": 0, "rh": humidity}))
+    conn.deliver("ht/status/temperature:0", json.dumps({"id": 0, "tC": temperature, "tF": 78.3}))
+    conn.deliver("ht/status/wifi", json.dumps({"sta_ip": "192.168.1.19", "status": "got ip", "rssi": -72}))
+
+
+def test_an_h_and_t_reads_the_same_on_usb_c_and_on_its_batteries(fake_connection):
+    driver = _ht()
+    _wake(fake_connection, external=True)
+    assert driver.read() == {"ok": True, "name": "Bagni Sensor", "temperature_c": 25.7, "humidity_pct": 54.9,
+                             "battery_pct": 87, "wifi_rssi_dbm": -72, "external_power": True}
+    _wake(fake_connection, external=False, percent=75)
+    reading = driver.read()
+    assert reading["ok"] and reading["external_power"] is False and reading["battery_pct"] == 75
+
+
+def test_a_temperature_that_cant_be_one_isnt_a_reading(fake_connection):
+    """A failing element sends -127 as readily as a real value: left out,
+    and without a temperature the sensor isn't "ok" - the thermostat
+    treats it as unreachable, its own safe path, instead of acting on it."""
+    driver = _ht()
+    _wake(fake_connection, temperature=-127.0)
+    reading = driver.read()
+    assert reading["ok"] is False and "temperature_c" not in reading
+    assert reading["rejected"] == ["temperature_c -127.0 out of -30..70"]
+    assert "out of -30..70" in reading["error"]
+    _wake(fake_connection, temperature=25.5)
+    reading = driver.read()
+    assert reading["ok"] is True and "rejected" not in reading
+
+
+def test_a_humidity_that_cant_be_one_is_left_out_and_the_rest_stands(fake_connection):
+    driver = _ht()
+    _wake(fake_connection, humidity=0)
+    reading = driver.read()
+    assert reading["ok"] is True and reading["temperature_c"] == 25.7 and "humidity_pct" not in reading
+    assert reading["rejected"] == ["humidity_pct 0 out of 1..100"]
+
+
+def test_a_value_that_isnt_a_number_is_left_out(fake_connection):
+    driver = _ht()
+    _wake(fake_connection, temperature="25.7")
+    assert driver.read()["ok"] is False
+
+
+def test_a_temperature_gone_quiet_while_the_rest_reports_is_not_trusted(fake_connection, fake_clock):
+    """Every wake republishes every component: a temperature that stops
+    while the rest goes on is a failing element, not a quiet room."""
+    driver = _ht()
+    _wake(fake_connection)
+    fake_clock(14401)
+    fake_connection.deliver("ht/status/humidity:0", json.dumps({"id": 0, "rh": 55.0}))
+    reading = driver.read()
+    assert reading["ok"] is False and "temperature_c" not in reading and reading["humidity_pct"] == 55.0
+
+
+def test_the_battery_sensor_between_wakes_keeps_its_last_value(fake_connection, fake_clock):
+    driver = _ht()
+    _wake(fake_connection, external=False)
+    fake_clock(14401)                                    # past its 4 h: every topic stale
+    reading = driver.read()
+    assert reading["ok"] is False and reading["temperature_c"] == 25.7
+    assert reading["last_value_age_seconds"] == pytest.approx(14401)

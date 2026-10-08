@@ -32,6 +32,14 @@ config.yaml options:
                docs/integrations/mqtt.md.
   available_payload: the payload on availability_topic that means
                "online" (default "true", Shelly Gen2/Gen3's convention)
+  valid_ranges: optional {reading_field_name: [min, max]} - a value outside
+               it (or not a number) is left out of the reading and named
+               in its "rejected" list: a sensor element failing can send
+               -127 or 0 % as readily as a real value
+  required_fields: optional - the reading isn't "ok" without a valid value
+               for each of these (an H&T's temperature: the thermostat then
+               treats the sensor as unreachable - its own safe path -
+               instead of acting on nothing, or on nonsense)
 
 Example - a Tasmota plug's periodic energy telemetry:
   kind: power_meter
@@ -63,6 +71,8 @@ Shelly Gen2/Gen3 DevicePower component shape ({"battery": {"percent": N}}):
 """
 from __future__ import annotations
 
+import logging
+import math
 from typing import Any
 
 from localhome.core.interfaces import PollingDriver
@@ -70,6 +80,13 @@ from localhome.core.registry import register_driver
 from localhome.drivers.mqtt.base import Availability, MqttJsonState, require_payload
 from localhome.drivers.mqtt.client import load_broker_config, state_cache_path
 from localhome.drivers.mqtt.paths import extract_path
+
+logger = logging.getLogger(__name__)
+
+
+def _within(value: Any, limits: list | tuple) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            and limits[0] <= value <= limits[1])
 
 
 class MqttSensorDriver(PollingDriver):
@@ -85,8 +102,13 @@ class MqttSensorDriver(PollingDriver):
         cache_path: str | None = None,
         availability_topic: str | None = None,
         available_payload: str = "true",
+        valid_ranges: dict[str, list] | None = None,
+        required_fields: list[str] | None = None,
     ):
         self.name = name
+        self._ranges = dict(valid_ranges or {})
+        self._required = list(required_fields or [])
+        self._rejections_logged: set[str] = set()
         self.poll_interval_seconds = poll_interval_seconds
         self._fields = fields
         self.history_fields = tuple(history_fields) if history_fields else tuple(fields)
@@ -104,18 +126,21 @@ class MqttSensorDriver(PollingDriver):
         # humidity, say) still gives a partial-but-useful reading if only
         # one topic has reported so far, instead of the whole sensor
         # going "unreachable" until every topic happens to line up.
+        # A topic gone quiet while the others go on is dropped, not kept at
+        # its last value: a Shelly H&T republishes every component at every
+        # wake (seen on the production board, on batteries and on USB-C
+        # alike), so a temperature that stops while the rest goes on is a
+        # failing element - the thermostat must stop trusting it.
         reading: dict[str, Any] = {"ok": True, "name": self.name}
         errors = []
+        rejected: list[str] = []
         for state in self._states:
             try:
                 payload = require_payload(state)
             except RuntimeError as exc:
                 errors.append(str(exc))
                 continue
-            for field, path in self._fields.items():
-                value = extract_path(payload, path)
-                if value is not None:
-                    reading[field] = value
+            self._take(payload, reading, rejected, keep=False)
         # A definitive "the broker says this device disconnected" signal
         # overrides even a still-within-window regular reading - see
         # drivers/mqtt/base.py's Availability.
@@ -142,10 +167,7 @@ class MqttSensorDriver(PollingDriver):
                 payload = state.get_payload()
                 if payload is None:
                     continue
-                for field, path in self._fields.items():
-                    value = extract_path(payload, path)
-                    if value is not None:
-                        reading.setdefault(field, value)
+                self._take(payload, reading, rejected, keep=True)
                 age = state.seconds_since_message()
                 if age is not None:
                     ages.append(age)
@@ -159,7 +181,31 @@ class MqttSensorDriver(PollingDriver):
             reading["ok"] = False
             reading["error"] = "; ".join(errors)
             reading["last_value_age_seconds"] = min(ages)
+        if rejected:
+            reading["rejected"] = rejected
+        missing = [field for field in self._required if field not in reading]
+        if missing and reading["ok"]:
+            reading["ok"] = False
+            reading["error"] = "; ".join(rejected) or f"no {', '.join(missing)} in its messages"
         return reading
+
+    def _take(self, payload: Any, reading: dict, rejected: list[str], keep: bool) -> None:
+        """This payload's fields into the reading - over what's there, or
+        only where nothing is (`keep`) - each within its valid range."""
+        for field, path in self._fields.items():
+            value = extract_path(payload, path)
+            if value is None or (keep and field in reading):
+                continue
+            limits = self._ranges.get(field)
+            if limits is not None and not _within(value, limits):
+                note = f"{field} {value!r} out of {limits[0]}..{limits[1]}"
+                if note not in rejected:
+                    rejected.append(note)
+                if note not in self._rejections_logged:
+                    self._rejections_logged.add(note)
+                    logger.warning("%s: %s - left out of its reading", self.name, note)
+                continue
+            reading[field] = value
 
     @property
     def last_update_ts(self) -> float | None:
@@ -180,6 +226,8 @@ def _create(options: dict) -> MqttSensorDriver:
         cache_path=state_cache_path(options),
         availability_topic=options.get("availability_topic"),
         available_payload=options.get("available_payload", "true"),
+        valid_ranges=options.get("valid_ranges"),
+        required_fields=options.get("required_fields"),
     )
 
 

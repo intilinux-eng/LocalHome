@@ -455,7 +455,8 @@ function fillZone(card, zone, climate) {
   // how old. No battery for one on USB-C (the server leaves it out).
   const sensorBits = [];
   if (age) sensorBits.push(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age }));
-  if (zone.battery_pct != null) sensorBits.push(tr("home.battery", { pct: Math.round(zone.battery_pct) }));
+  if (zone.external_power) sensorBits.push(tr("home.usb_power"));
+  else if (zone.battery_pct != null) sensorBits.push(tr("home.battery", { pct: Math.round(zone.battery_pct) }));
   if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
   const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));

@@ -349,7 +349,10 @@ def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):
     assert zone["battery_pct"] == 89
     cache.set({"ok": True, "name": "Room Sensor", "temperature_c": 21.0, "battery_pct": 89, "external_power": True})
     zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
-    assert zone["battery_pct"] is None
+    assert zone["battery_pct"] is None and zone["external_power"] is True, "said instead: on USB-C"
+    cache.set({"ok": True, "name": "Room Sensor", "temperature_c": 21.0, "battery_pct": 89})
+    zone = next(z for z in client.get("/api/climate/zones").get_json()["zones"] if z["name"] == "Rooms")
+    assert zone["external_power"] is False, "not said: on its batteries"
 
 
 

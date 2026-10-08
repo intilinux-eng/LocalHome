@@ -415,6 +415,11 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
         },
         # The numbers only, as before: whether it's on USB isn't history.
         "history_fields": ["temperature_c", "humidity_pct", "battery_pct", "wifi_rssi_dbm"],
+        # What an H&T Gen3 can measure, with room to spare: anything else is
+        # a failing element, not the room (-127 °C, 0 %). Without a valid
+        # temperature the sensor isn't "ok" - the thermostat's safe path.
+        "valid_ranges": {"temperature_c": [-30, 70], "humidity_pct": [1, 100], "battery_pct": [0, 100]},
+        "required_fields": ["temperature_c"],
         # 4h - just under 2x the 2h heartbeat these devices promise
         # (confirmed live overnight: both real H&T sensors landed every
         # heartbeat within a minute of exactly 2h, no exceptions once

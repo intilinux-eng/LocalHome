@@ -708,7 +708,7 @@ def test_a_battery_sensor_low_late_or_losing_reports_says_which():
     assert shelly_health.assess(_ht(battery_pct=8), now)["reasons"] == [{"code": "battery_low", "detail": 8}]
     assert shelly_health.assess(_ht(battery_pct=8, external_power=True), now)["state"] == "ok", "on USB-C"
     late = shelly_health.assess(_ht(), 1000.0 + 2 * H + 60)
-    assert late["state"] == "attention" and late["reasons"] == [{"code": "report_late", "detail": 2 * H + 60}]
+    assert late["state"] == "attention" and late["reasons"] == [{"code": "report_late", "detail": 2 * H + 60, "usb": False}]
     missed = shelly_health.assess(_ht(stats={"missed_24h": 3, "signal_24h": {"avg": -86}}), now)
     assert missed["reasons"] == [{"code": "reports_missed", "detail": 3}]
     assert missed["notes"] == [], "the lost reports say it - not a weak signal on top"
@@ -727,3 +727,100 @@ def test_each_restart_is_counted_under_its_reason():
     assert [shelly_health.restart_field(r) for r in (3, 1, 4, 7, 9, 0, None, "x")] == [
         "restart_wanted", "restart_power", "restart_crash", "restart_crash", "restart_brownout",
         "restart_unexpected", "restart_unexpected", "restart_unexpected"]
+
+
+# ------------------------------------------------------ USB-C or batteries --
+# An H&T Gen3 runs on its batteries or on USB-C (its batteries still in):
+# its devicepower says which ("external": {"present": true}). Seen on the
+# production board: one sensor on each.
+
+def _power(broker, present, percent=87, device=HT):
+    broker.publish(f"{device}/status/devicepower:0",
+                   {"id": 0, "battery": {"V": 5.76, "percent": percent}, "external": {"present": present}})
+
+
+def test_an_h_and_t_on_usb_c_is_known_as_such_and_its_battery_isnt_a_worry(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _power(broker, True, percent=5)
+    device = by_id(watcher, HT)
+    assert device["external_power"] is True
+    assert device["assessment"]["state"] == "ok", "a low battery on USB-C isn't what keeps it going"
+    assert [v for _, v in store.values_since(HT, "external_power", 0)] == [1]
+
+
+def test_usb_c_lost_is_a_reason_to_act_until_it_is_back(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _power(broker, True)
+    clock.t += 3600
+    _power(broker, False, percent=86)                     # unplugged: on its batteries now
+    verdict = by_id(watcher, HT)["assessment"]
+    assert verdict["state"] == "attention"
+    assert verdict["reasons"] == [{"code": "usb_lost", "detail": 86, "at": clock.t}]
+    watcher.refresh_problems()
+    assert watcher.problems() == [{"code": "device_usb_lost", "subject": "Stanze Sensor", "detail": "86"}]
+    clock.t += 600
+    _power(broker, True)                                  # plugged back
+    assert by_id(watcher, HT)["assessment"]["state"] == "ok"
+    assert [v for _, v in store.values_since(HT, "external_power", 0)] == [1, 0, 1]
+
+
+def test_a_sensor_always_on_its_batteries_records_nothing_about_power(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    for _ in range(3):
+        clock.t += 7200
+        _power(broker, False)
+    assert store.values_since(HT, "external_power", 0) == []
+    assert by_id(watcher, HT)["assessment"]["state"] == "ok"
+
+
+def test_its_power_source_is_known_again_after_a_restart(tmp_path):
+    """Until it reports again - up to 2 hours - the admin page kept saying
+    "battery" for a sensor on USB-C after every restart."""
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _power(broker, True)
+    clock.t += 600
+    restarted, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
+    assert by_id(restarted, HT)["external_power"] is True
+    _power(broker, False)                                 # the first watcher hears it unplugged...
+    clock.t += 600
+    again, _, _, _ = health(tmp_path, [ht_integration()], clock=clock, store=store)
+    assert by_id(again, HT)["assessment"]["reasons"][0]["code"] == "usb_lost", "...and the next start knows"
+
+
+def test_on_usb_c_its_reports_are_counted_against_its_6_minute_cycle(tmp_path):
+    """Measured on the production board: on USB-C it wakes every 6 minutes
+    (5 asleep, Shelly's figure, and one to report) - not a 2-hour heartbeat."""
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    for _ in range(20):                                   # two hours of it
+        _power(broker, True)
+        clock.t += 360
+    device = by_id(watcher, HT)
+    stats = device["stats"]
+    assert (stats["cycle_seconds"], stats["reports_24h"], stats["missed_24h"]) == (360, 20, 0)
+    assert stats["next_heartbeat_at"] == device["last_report_at"] + 360
+    assert device["assessment"] == {"state": "ok", "reasons": [], "notes": []}
+
+
+def test_on_usb_c_a_silence_is_noticed_in_minutes_on_its_batteries_in_hours(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    _power(broker, True)
+    clock.t += 19 * 60
+    reasons = by_id(watcher, HT)["assessment"]["reasons"]
+    assert reasons == [{"code": "report_late", "detail": 19 * 60, "usb": True}]
+    watcher.refresh_problems()
+    assert [p["code"] for p in watcher.problems()] == ["device_report_late"]
+    on_batteries, broker2, clock2, _ = health(tmp_path / "b", [ht_integration()])
+    _power(broker2, False)
+    clock2.t += 19 * 60
+    assert by_id(on_batteries, HT)["assessment"]["state"] == "ok", "on its batteries 19 minutes is nothing"
+
+
+def test_on_usb_c_many_lost_cycles_are_a_reason_to_act(tmp_path):
+    watcher, broker, clock, store = health(tmp_path, [ht_integration()])
+    for cycle in range(240):                              # a day, one cycle in four lost
+        if cycle % 4:
+            _power(broker, True)
+        clock.t += 360
+    stats = by_id(watcher, HT)["stats"]
+    assert stats["missed_24h"] == 59
+    assert by_id(watcher, HT)["assessment"]["reasons"][0] == {"code": "reports_missed", "detail": 59}
