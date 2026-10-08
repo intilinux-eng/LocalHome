@@ -357,9 +357,13 @@ def test_going_away_turns_off_a_zone_changed_by_hand(tmp_path):
     res = client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "hours": 2})
     assert res.status_code == 409 and res.get_json()["code"] == "override_while_away"
     assert zone_of()["valve_on"] is False
+    week = {day: [30.0] * 24 for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    res = client.post(f"/api/climate/zones/{name}/schedule", json={"week": week})
+    assert res.status_code == 409 and res.get_json()["code"] == "schedule_while_away", "the week neither"
     assert client.post("/api/climate/away/cancel").get_json() == {"ok": True}
     assert client.post(f"/api/climate/zones/{name}/override", json={"target": 30.0, "hours": 2}).get_json()["ok"]
     assert zone_of()["valve_on"] is True, "back home"
+    assert client.post(f"/api/climate/zones/{name}/schedule", json={"week": week}).get_json()["ok"]
 
 
 def test_an_h_and_t_on_usb_c_shows_no_battery(tmp_path):

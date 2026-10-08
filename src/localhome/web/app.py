@@ -1511,6 +1511,9 @@ def _register_routes(app: Flask) -> None:
         mode = data.get("mode")
         if mode is not None and mode not in MODES:
             return jsonify(ok=False, error=f"mode must be one of {MODES}"), 400
+        if thermostat.schedule_store.get_away_until() is not None:
+            # Away: nothing changes until "I'm back" - the week neither.
+            return _fail("schedule_while_away", "away mode is on", 409, zone=name)
         try:
             if cells is not None:
                 # Just the hours that changed, merged into the week as it is

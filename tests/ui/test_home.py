@@ -260,6 +260,7 @@ def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api
     assert api("/api/sensors/Dehumidifier")["is_on"] is False
     assert eventually(page, lambda: card.locator(".away-note").count() == 1)
     assert card.locator(".stepper, .manual-banner, button[data-action=off]").count() == 0
+    assert card.locator(".zone-plan").is_hidden(), "the week neither"
     assert "Spento anche: Deumidificatore" in page.inner_text("#hero-detail")
     device = page.locator("#season-devices .season-device", has_text="Deumidificatore")
     assert "sei fuori casa" in device.inner_text() and device.locator("button[data-switch]").count() == 0
@@ -267,6 +268,7 @@ def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api
     assert eventually(page, lambda: api("/api/climate/zones")["away_until"] is None)
     assert eventually(page, lambda: card.locator(".stepper").count() == 1)
     assert card.locator(".manual-banner").count() == 0, "back to the schedule, not the old change"
+    assert card.locator(".zone-plan").is_visible()
     assert opened.errors == []
 
 

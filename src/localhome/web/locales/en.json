@@ -863,7 +863,8 @@
     "away_until_invalid": "Pick a day and time ahead, within a year.",
     "override_while_away": "You're away: the zones stay off. Tap “I'm back” to change them.",
     "switch_away": "You're away: “{name}” stays off. Tap “I'm back” to switch it on.",
-    "dehumidifier_away": "You're away: the dehumidifier stays off. Tap “I'm back” to switch it on."
+    "dehumidifier_away": "You're away: the dehumidifier stays off. Tap “I'm back” to switch it on.",
+    "schedule_while_away": "You're away: the weekly plan changes when you're back. Tap “I'm back”."
   },
   "home": {
     "health_checking": "Checking…",
@@ -1100,7 +1101,7 @@
     "hero_away_detail_devices": "Every zone stays off until you're back. Also off: {devices}.",
     "away_point_zones": "Every zone goes off, including any changed by hand.",
     "away_point_devices": "Also off: {devices}.",
-    "away_point_locked": "While you're away nothing switches on or changes: tap “I'm back” first.",
+    "away_point_locked": "While you're away nothing switches on or changes, the weekly plan neither: tap “I'm back” first.",
     "away_point_plan": "The weekly plan stays as it is and picks up again by itself when you're back.",
     "away_for": "For how long?",
     "away_change": "Change how long (from now)",
@@ -1108,7 +1109,7 @@
     "away_day": "Day back",
     "away_time": "Time back",
     "away_set": "Turn on",
-    "away_zone_note": "Away: this zone stays off until you're back.",
+    "away_zone_note": "Away: this zone stays off, and its weekly plan changes when you're back.",
     "away_device_off": "Off: you're away"
   },
   "diagnostics": {

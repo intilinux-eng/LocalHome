@@ -863,7 +863,8 @@
     "away_until_invalid": "Scegli un giorno e un'ora futuri, entro un anno.",
     "override_while_away": "Sei fuori casa: le zone restano spente. Premi «Sono rientrato» per cambiarle.",
     "switch_away": "Sei fuori casa: «{name}» resta spento. Premi «Sono rientrato» per accenderlo.",
-    "dehumidifier_away": "Sei fuori casa: il deumidificatore resta spento. Premi «Sono rientrato» per accenderlo."
+    "dehumidifier_away": "Sei fuori casa: il deumidificatore resta spento. Premi «Sono rientrato» per accenderlo.",
+    "schedule_while_away": "Sei fuori casa: la programmazione si cambia al rientro. Premi «Sono rientrato»."
   },
   "home": {
     "health_checking": "Controllo…",
@@ -1100,7 +1101,7 @@
     "hero_away_detail_devices": "Tutte le zone restano spente fino al rientro. Spento anche: {devices}.",
     "away_point_zones": "Tutte le zone si spengono, anche quelle cambiate a mano.",
     "away_point_devices": "Si spegne anche: {devices}.",
-    "away_point_locked": "Finché sei fuori casa non si accende e non si cambia niente: prima premi «Sono rientrato».",
+    "away_point_locked": "Finché sei fuori casa non si accende e non si cambia niente, nemmeno la programmazione: prima premi «Sono rientrato».",
     "away_point_plan": "Il programma della settimana resta com'è e riparte da solo al rientro.",
     "away_for": "Per quanto?",
     "away_change": "Cambia la durata (da adesso)",
@@ -1108,7 +1109,7 @@
     "away_day": "Giorno del rientro",
     "away_time": "Ora del rientro",
     "away_set": "Attiva",
-    "away_zone_note": "Fuori casa: questa zona resta spenta fino al rientro.",
+    "away_zone_note": "Fuori casa: questa zona resta spenta e la programmazione si cambia al rientro.",
     "away_device_off": "Spento: sei fuori casa"
   },
   "diagnostics": {

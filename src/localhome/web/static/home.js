@@ -1068,11 +1068,13 @@ function closeSheet() {
 
 function fillPlan(card, zone) {
   const plan = card.querySelector(".zone-plan");
-  const excluded = zoneExcluded(zone);
-  plan.hidden = excluded;
+  // Away: nothing changes until "I'm back" - the week neither (the board
+  // refuses it too). Hidden, kept: back, it's there as it was.
+  const hidden = zoneExcluded(zone) || !!(state.climate && state.climate.away_until);
+  plan.hidden = hidden;
   // No week to plan this season: the card's live part takes the full width.
-  card.dataset.plan = excluded ? "none" : "week";
-  if (excluded || plan.dataset.mode === climateMode) return;
+  card.dataset.plan = hidden ? "none" : "week";
+  if (hidden || plan.dataset.mode === climateMode) return;
   plan.dataset.mode = climateMode;
   // On a phone the week waits behind its button (CSS): it's two screens
   // of hours, between this zone and everything after it. Wider, it's
