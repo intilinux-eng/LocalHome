@@ -2618,8 +2618,8 @@ function reasonText(reason) {
   const key = `climate_admin.device_why_${reason.code}`;
   if (reason.code === "usb_lost") return tr(key, { detail: reason.detail, when: formatWhen(reason.at) });
   if (reason.code === "crashes" || reason.code === "power_unstable") return trCount(key, reason.detail, { detail: reason.detail });
-  if (reason.code === "report_late" && reason.usual) {
-    return tr(`${key}_rhythm`, { detail: formatAge(reason.detail), usual: formatAge(reason.usual) });
+  if (reason.code === "report_late" && reason.early) {
+    return tr(`${key}_period`, { detail: formatAge(reason.detail), period: formatAge(reason.period) });
   }
   return tr(key, { detail: reason.code === "report_late" ? formatAge(reason.detail) : reason.detail });
 }
@@ -2677,9 +2677,9 @@ function shellyStatsHtml(d, data, now) {
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), tr("climate_admin.shelly_reports_waiting")));
     } else if (s.reports_24h != null) {
       rows.push(statRowHtml(tr("climate_admin.shelly_reports_24h"), d.external_power
-        ? (s.usual_gap_seconds
-          ? tr("climate_admin.shelly_reports_usual", { count: s.reports_24h, usual: formatAge(s.usual_gap_seconds) })
-          : tr("climate_admin.shelly_reports_learning", { count: s.reports_24h }))
+        ? (d.wakeup_period
+          ? tr("climate_admin.shelly_reports_usb", { count: s.reports_24h, period: formatAge(d.wakeup_period) })
+          : String(s.reports_24h))
         : s.heartbeats_24h != null
           ? tr("climate_admin.shelly_reports_split", { count: s.reports_24h, beats: s.heartbeats_24h, changes: s.changes_24h, missed: s.missed_24h })
           : tr("climate_admin.shelly_reports_value", { count: s.reports_24h, missed: s.missed_24h }),
