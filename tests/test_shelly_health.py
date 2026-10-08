@@ -524,6 +524,48 @@ def test_a_setting_changed_in_the_app_is_read_again_when_the_revision_moves(tmp_
     assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []
 
 
+def test_a_setting_fixed_in_the_app_is_read_at_once_and_the_old_ones_not_said_meanwhile(tmp_path):
+    """Seen on the production board: the Bagni valve set right in the app,
+    the admin page still said its settings were wrong for minutes - read
+    again only at the next 5-minute check. Its sys status says at once
+    that the revision moved: the old ones aren't said, and they're read now."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 50000, "cfg_rev": 21}, "wifi": {"rssi": -57}}
+    rpc = RelayRpc(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    watcher.poll_once()
+    assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
+    assert not watcher._wake.is_set()
+    rpc.config["switch:0"].update(in_mode="detached", auto_off=True, auto_off_delay=900.0)   # fixed in the app
+    rpc.status["sys"]["cfg_rev"] = 22
+    broker.publish(f"{RELAY}/status/sys", {"cfg_rev": 22, "uptime": 50010})
+    assert by_id(watcher, RELAY)["settings_wrong"] == [], "not said while it may be right"
+    assert watcher._wake.is_set(), "read now, not in 5 minutes"
+    watcher.poll_once()
+    assert rpc.calls.count("Shelly.GetConfig") == 2
+    assert by_id(watcher, RELAY)["settings_wrong"] == [] and watcher.problems() == []
+
+
+def test_settings_that_couldnt_be_read_are_asked_again_soon(tmp_path):
+    """A Shelly just powered on may not answer its settings yet: the check
+    counts as one that failed - asked again in 30 seconds, not 5 minutes."""
+    status = {"switch:0": {"id": 0, "output": False}, "sys": {"uptime": 40, "cfg_rev": 3}, "wifi": {"rssi": -57}}
+
+    class SlowConfig(RelayRpc):
+        busy = True
+
+        def call(self, method, params=None):
+            if method == "Shelly.GetConfig" and self.busy:
+                self.calls.append(method)
+                raise RuntimeError("timed out")
+            return super().call(method, params)
+    rpc = SlowConfig(status, RELAY_CONFIG)
+    watcher, broker, clock, store = health(tmp_path, [valve_integration()], rpc=rpc)
+    assert watcher.poll_once() is True, "worth asking again soon"
+    rpc.busy = False
+    assert watcher.poll_once() is False
+    assert [s["key"] for s in by_id(watcher, RELAY)["settings_wrong"]] == ["in_mode", "auto_off"]
+
+
 def test_a_mains_shelly_back_online_is_asked_at_once(tmp_path, monkeypatch):
     """Seen on the production board: two power cuts 5 minutes apart, one
     restart counted - no check came between them. Back online after

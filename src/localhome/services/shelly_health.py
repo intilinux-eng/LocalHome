@@ -482,9 +482,15 @@ class ShellyHealth:
             self._note_report(state)
 
     def _on_sys(self, state: dict, data: Any) -> None:
+        was_read = state["settings_read"]
         self._read_sys(state, data)
         if state["battery"]:
             self._note_report(state)
+        elif was_read and not state["settings_read"]:
+            # A setting changed in the app - its sys status says so at
+            # once: read them now, not at the next check up to 5 minutes
+            # on, while the page still said the old ones were wrong.
+            self._wake.set()
 
     def _on_devicepower(self, state: dict, data: Any) -> None:
         state["battery_pct"] = _number(_dig(data, "battery", "percent"))
@@ -559,7 +565,10 @@ class ShellyHealth:
                 try:
                     config = rpc.call("Shelly.GetConfig")
                 except Exception:
-                    continue    # asked at the next check; the status above stands
+                    # Asked again soon (the loop's retry), not in 5 minutes:
+                    # a Shelly just restarted can miss it. The status stands.
+                    failed = True
+                    continue
                 with self._lock:
                     state["settings_wrong"] = settings_wrong(state["expect"], config)
                     state["settings_read"] = True
@@ -597,10 +606,11 @@ class ShellyHealth:
             return
         update = _dig(sys, "available_updates", "stable", "version")
         state["update"] = update if isinstance(update, str) else None
-        # A setting changed (in the app, or anywhere): read them again.
+        # A setting changed (in the app, or anywhere): read them again - and
+        # what was wrong isn't said meanwhile, it may be right now.
         rev = sys.get("cfg_rev")
         if rev is not None and state["cfg_rev"] is not None and rev != state["cfg_rev"]:
-            state["settings_read"] = False
+            state["settings_read"], state["settings_wrong"] = False, []
         if rev is not None:
             state["cfg_rev"] = rev
         state["restart_required"] = bool(sys.get("restart_required"))
@@ -626,7 +636,7 @@ class ShellyHealth:
                 # A firmware update is one: its version and settings are
                 # asked again.
                 state["model"] = None
-                state["settings_read"] = False
+                state["settings_read"], state["settings_wrong"] = False, []
             self._record(state["id"], {"booted_at": booted})
             state["booted_at"] = booted
 
