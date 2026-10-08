@@ -568,6 +568,7 @@ body[data-running="true"] .hero-season::before {
   background: var(--accent-soft);
 }
 .pending-title { font-weight: 600; }
+.plan-manual { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--accent-soft); font-size: 0.86rem; line-height: 1.35; }
 
 /* A zone in manual mode: the temperature it reads is written here
    (home.js manualHtml). */

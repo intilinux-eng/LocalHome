@@ -714,8 +714,12 @@ function manualBannerHtml(zone, climate) {
   const text = zone.override.target == null
     ? tr("home.manual_off", { until })
     : tr("home.manual_on", { target: fmtTarget(zone.override.target), until });
+  // What the week has for this hour: what "back" means, said before it's tapped.
+  const back = zone.scheduled_target_c === undefined ? tr("home.resume")
+    : zone.scheduled_target_c === null ? tr("home.resume_to_off")
+    : tr("home.resume_to", { target: fmtTarget(zone.scheduled_target_c) });
   return `<div class="manual-banner">${ICONS.hand}<span>${esc(text)}</span>
-    <button class="btn" type="button" data-action="resume">${esc(tr("home.resume"))}</button></div>`;
+    <button class="btn" type="button" data-action="resume">${esc(back)}</button></div>`;
 }
 
 function quickHtml(zone, climate, change) {
@@ -734,14 +738,19 @@ function quickHtml(zone, climate, change) {
   if (pending) {
     const options = DURATIONS.map(h => `<button type="button" data-action="duration" data-hours="${h}" aria-pressed="${pending.hours === h}">${esc(fmtDuration(h))}</button>`);
     if (change) {
-      options.push(`<button type="button" data-action="duration" data-hours="next" aria-pressed="${pending.hours === "next"}">${esc(tr("home.until_time", { time: hhmm(change.at) }))}</button>`);
+      options.push(`<button type="button" data-action="duration" data-hours="next" aria-pressed="${pending.hours === "next"}">${esc(untilText(change.at))}</button>`);
     }
     options.push(`<button type="button" data-action="duration" data-hours="manual" aria-pressed="${pending.hours === "manual"}">${esc(tr("home.until_changed_button"))}</button>`);
-    const title = pending.target == null ? tr("home.pending_off") : tr("home.pending_new");
+    // A temperature, or off: both a manual change, for the time chosen.
+    const off = pending.target == null;
     return `
       <div class="pending">
-        <div class="pending-title">${esc(title)}</div>
-        <div class="stepper" ${pending.target == null ? "hidden" : ""}>
+        <div class="pending-title">${esc(tr("home.pending_title"))}</div>
+        <div class="segmented" role="group" aria-label="${esc(tr("home.pending_title"))}">
+          <button type="button" data-action="pending-on" aria-pressed="${!off}">${esc(tr("home.pending_on"))}</button>
+          <button type="button" data-action="pending-off" aria-pressed="${off}">${esc(tr("home.pending_off"))}</button>
+        </div>
+        <div class="stepper" ${off ? "hidden" : ""}>
           <button type="button" data-action="step" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
           <span class="stepper-value">${fmtTarget(pending.target)}</span>
           <button type="button" data-action="step" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
@@ -760,11 +769,9 @@ function quickHtml(zone, climate, change) {
     <div class="quick-title">${esc(tr(zone.override ? "home.quick_title_again" : "home.quick_title"))}</div>
     <div class="stepper">
       <button type="button" data-action="start" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
-      <span class="stepper-value">${fmtTarget(shown)}</span>
+      <span class="stepper-value">${shown == null ? esc(tr("home.st_off")) : fmtTarget(shown)}</span>
       <button type="button" data-action="start" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
     </div>
-    <span class="quick-spacer"></span>
-    ${zone.target_c != null ? `<button class="btn" type="button" data-action="off">${esc(tr("home.turn_off"))}</button>` : ""}
     <p class="quick-hint">${esc(tr("home.quick_hint"))}</p>`;
 }
 
@@ -798,9 +805,14 @@ async function onZoneClick(event) {
   // without one.
   const firstHours = () => nextChange((state.weeks[zone.name] || {})[state.climate.mode], boardNow()) ? "next" : 4;
   if (action === "start") {
-    state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + Number(button.dataset.delta)), hours: firstHours() };
-  } else if (action === "off") {
-    state.pending[zone.name] = { target: null, hours: firstHours() };
+    // Off: the first tap turns it on at its usual temperature, - or +.
+    const step = zone.target_c == null ? 0 : Number(button.dataset.delta);
+    state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + step), hours: firstHours() };
+  } else if (action === "pending-off" && pending && pending.target != null) {
+    pending.last = pending.target;
+    pending.target = null;
+  } else if (action === "pending-on" && pending && pending.target == null) {
+    pending.target = pending.last ?? clampTarget(lastTarget(zone));
   } else if (action === "step" && pending) {
     pending.target = clampTarget(pending.target + Number(button.dataset.delta));
   } else if (action === "duration" && pending) {
@@ -906,7 +918,7 @@ function zoneLine(zone, climate) {
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
   if (zone.target_c == null) {
-    if (zone.override) return tr("home.line_off_until", { zone: zone.name, until: overrideUntil(zone.override) });
+    if (zone.override) return tr("home.line_off_manual", { zone: zone.name, until: overrideUntil(zone.override) });
     const change = nextChange((state.weeks[zone.name] || {})[climate.mode], boardNow());
     return change ? tr("home.line_off_until", { zone: zone.name, until: untilText(change.at) }) : tr("home.line_off", { zone: zone.name });
   }
@@ -1074,7 +1086,18 @@ function fillPlan(card, zone) {
   plan.hidden = hidden;
   // No week to plan this season: the card's live part takes the full width.
   card.dataset.plan = hidden ? "none" : "week";
-  if (hidden || plan.dataset.mode === climateMode) return;
+  if (hidden) return;
+  if (plan.dataset.mode !== climateMode) buildPlan(plan, zone);
+  // Held by hand: the week is what comes back - said, so an edit that
+  // changes nothing now isn't a surprise.
+  const note = plan.querySelector(".plan-manual");
+  if (note) {
+    note.hidden = !zone.override;
+    setText(note, zone.override ? tr("home.plan_manual_note") : "");
+  }
+}
+
+function buildPlan(plan, zone) {
   plan.dataset.mode = climateMode;
   // On a phone the week waits behind its button (CSS): it's two screens
   // of hours, between this zone and everything after it. Wider, it's
@@ -1082,7 +1105,7 @@ function fillPlan(card, zone) {
   plan.innerHTML = `<button class="plan-toggle" type="button" data-action="toggle-plan" aria-expanded="${plan.dataset.open === "true"}">
       <span class="plan-toggle-label">${esc(tr(`climate.schedule_heading_${climateMode}`))}</span>
       <span class="plan-toggle-hint">${esc(tr("home.plan_edit"))}</span>${ICONS.chevron}</button>
-    <div class="plan-body">${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>`;
+    <div class="plan-body"><p class="plan-manual" hidden></p>${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>`;
   // Not loaded (the board didn't answer): the next refresh tries again.
   loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }

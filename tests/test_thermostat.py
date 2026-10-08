@@ -1121,6 +1121,45 @@ def test_going_away_turns_off_a_zone_changed_by_hand_before(tmp_path, held_for):
     assert switch.calls == ["on", "off", "on"] and controller.applied_target("Rooms") == 21.0, "the schedule's"
 
 
+# Every way a zone is told what to do at once - the week, a manual change
+# (a temperature or off, for a while or until changed back) and away - in
+# both seasons: what the valve does, and the target it's held to. "wants"
+# is a target the room is short of, "satisfied" one it's past.
+SEASON_TARGETS = {"heat": {"wants": 21.0, "satisfied": 16.0}, "cool": {"wants": 23.0, "satisfied": 28.0}}
+
+
+@pytest.mark.parametrize("mode, room", [("heat", 18.0), ("cool", 26.0)])
+@pytest.mark.parametrize("held", [timedelta(hours=2), None], ids=["for_a_while", "until_changed"])
+@pytest.mark.parametrize("week, manual, away, valve, held_to", [
+    ("wants", None, False, "on", "week"),
+    ("satisfied", None, False, "off", "week"),
+    (None, None, False, "off", None),
+    ("satisfied", "wants", False, "on", "manual"),
+    (None, "wants", False, "on", "manual"),
+    ("wants", "off", False, "off", None),
+    ("wants", None, True, "off", None),
+    ("wants", "wants", True, "off", None),       # changed by hand, then away
+    (None, "wants", True, "off", None),
+], ids=["week", "week_satisfied", "week_off", "manual_beats_week", "manual_on_a_week_off",
+        "manual_off", "away", "manual_then_away", "manual_then_away_week_off"])
+def test_every_way_a_zone_is_told_what_to_do(tmp_path, mode, room, held, week, manual, away, valve, held_to):
+    targets = SEASON_TARGETS[mode]
+    value = lambda name: None if name in (None, "off") else targets[name]
+    controller, store, switch = _room(tmp_path, temperature=room)
+    store.set_mode(mode)
+    store.set_week("Rooms", {day: [value(week)] * 24 for day in ScheduleStore.empty_week()})
+    now = datetime(2026, 10, 5, 18, 0)
+    if manual is not None:
+        store.set_override("Rooms", value(manual), now + held if held else None)
+    if away:
+        store.set_away_until(now + timedelta(days=1))
+    controller.tick(now=now)
+    assert switch.calls[-1] == valve
+    assert controller.applied_target("Rooms") == {"week": value(week), "manual": value(manual), None: None}[held_to]
+    if away:
+        assert store.get_overrides(now) == {}, "coming back finds the week"
+
+
 def test_a_season_change_drops_the_temporary_targets(tmp_path):
     _, store, _ = _room(tmp_path)
     now = datetime(2026, 10, 5, 18, 0)

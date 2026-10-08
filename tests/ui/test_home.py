@@ -95,6 +95,34 @@ def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
 
 
+def test_off_is_one_of_the_manual_changes_not_a_button_of_its_own(open_page, api):
+    """Seen on the production board: "Spegni" beside "Torna al programma"
+    read as a switch of its own. Off is chosen inside the manual change,
+    with a duration like a temperature - and back to the temperature."""
+    opened = _open_home(open_page)
+    page = opened.page
+    card = _card(page, ZONE_A)
+    assert card.locator(".quick button", has_text="Spegni").count() == 0
+    card.locator("button[data-action=start][data-delta='0.5']").click()
+    assert card.locator(".pending-title").inner_text() == "Programmazione manuale"
+    shown = card.locator(".pending .stepper-value").inner_text()
+    card.locator(".pending button[data-action=pending-off]").click()
+    assert card.locator(".pending .stepper").is_hidden()
+    card.locator(".pending button[data-action=pending-on]").click()
+    assert card.locator(".pending .stepper-value").inner_text() == shown, "the temperature it had"
+    card.locator(".pending button[data-action=pending-off]").click()
+    card.locator(".pending button[data-hours='2']").click()
+    card.locator("button[data-action=apply]").click()
+    assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
+    banner = card.locator(".manual-banner")
+    banner.wait_for()
+    assert banner.inner_text().startswith("Programmazione manuale: spenta")
+    assert f"{ZONE_A} spenta a mano" in page.inner_text("#hero-detail")
+    banner.locator("button[data-action=resume]").click()
+    assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+    assert opened.errors == []
+
+
 def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     """Seen on the production board: a change by hand said only by a small
     box at the bottom of the card, the controls with no word of what they
@@ -106,20 +134,27 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     assert card.locator(".quick-title").inner_text() == "Cambia la temperatura"
     assert "Tocca − o +" in card.locator(".quick-hint").inner_text()
     card.locator("button[data-action=start][data-delta='0.5']").click()
-    durations = card.locator(".pending .segmented button").all_inner_texts()
+    durations = card.locator(".pending button[data-action=duration]").all_inner_texts()
     assert durations[:4] == ["2 h", "4 h", "8 h", "24 h"] and durations[-1] == "Finché non lo cambi"
     card.locator(".pending button[data-hours='manual']").click()
     card.locator("button[data-action=apply]").click()
     assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {}).get("until", "x") is None)
     banner = card.locator(".manual-banner")
     banner.wait_for()
-    assert banner.inner_text().startswith("Cambio manuale:") and "finché non lo cambi" in banner.inner_text()
+    assert banner.inner_text().startswith("Programmazione manuale:") and "finché non lo cambi" in banner.inner_text()
+    # The way back says what it goes back to: the week's target this hour.
+    scheduled = _zone(api, ZONE_A)["scheduled_target_c"]
+    back = "spenta" if scheduled is None else f"{scheduled:g}".replace(".", ",") + "°"
+    assert banner.locator("button[data-action=resume]").inner_text() == f"Torna alla programmazione ({back})"
     assert card.locator(".quick-title").inner_text() == "Cambiala ancora"
     assert "manuale finché non lo cambi" in page.locator("#hero-detail").inner_text()
+    # The week says its edits wait for the way back.
+    assert eventually(page, lambda: "Adesso vale la programmazione manuale" in card.locator(".plan-manual").text_content())
     banner.locator("button[data-action=resume]").click()
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
     page.wait_for_timeout(600)
     assert card.locator(".manual-banner").count() == 0
+    assert eventually(page, lambda: card.locator(".plan-manual").is_hidden())
     assert opened.errors == []
 
 
