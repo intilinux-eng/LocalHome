@@ -429,6 +429,35 @@ def test_switch_raises_immediately_when_availability_says_offline(fake_connectio
         driver.read()
 
 
+def test_an_unplugged_relay_reads_offline_as_the_broker_says_it(fake_connection):
+    """Measured on the production board: the dehumidifier's reading went
+    offline 15-17 s after its online "false" - the 20 s poll. Its poller
+    reads it again on the message itself, once per change."""
+    from localhome.core.manager import DeviceManager
+    from localhome.core.poller import SyncPoller
+    driver = MqttSwitchDriver(
+        name="Dehumidifier", broker=BROKER,
+        state_topic="shelly1g3-dehum/status/switch:0", command_topic="shelly1g3-dehum/command/switch:0",
+        state_field="output", payload_on=True, payload_off=False,
+        availability_topic="shelly1g3-dehum/online",
+    )
+    manager = DeviceManager.__new__(DeviceManager)
+    manager.covers, manager.switches, manager.numbers, manager.pollers, manager.sensor_kinds = {}, {}, {}, {}, {}
+    manager._register("switch", driver)
+    poller = manager.pollers["Dehumidifier"]
+    assert isinstance(poller, SyncPoller) and driver.wake_poller == poller.wake
+    reads = []
+    driver.wake_poller = lambda: (reads.append(1), poller.poll_once())   # the thread's next read, now
+
+    fake_connection.deliver("shelly1g3-dehum/status/switch:0", json.dumps({"output": False}))
+    fake_connection.deliver("shelly1g3-dehum/online", "true")
+    assert poller.get()["ok"] is True
+    fake_connection.deliver("shelly1g3-dehum/online", "false")
+    assert poller.get()["ok"] is False, "no poll in between"
+    fake_connection.deliver("shelly1g3-dehum/online", "false")
+    assert len(reads) == 2, "said again: nothing new to read"
+
+
 def test_number_raises_immediately_when_availability_says_offline(fake_connection):
     driver = MqttNumberDriver(
         name="VMC Dimmer", broker=BROKER,

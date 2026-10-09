@@ -160,7 +160,11 @@ class MqttSwitchDriver(SwitchDriver):
         self._safety_rest_at: float | None = self._last_safety_rest()
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path,
                                     on_message=self._on_status)
-        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
+        # Set by the device manager: reads this device again at once - its
+        # availability saying online or offline doesn't wait for the poll.
+        self.wake_poller = None
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path,
+                                          on_change=lambda: self.wake_poller and self.wake_poller())
 
     def read(self) -> dict[str, Any]:
         # A definitive "the broker says this device disconnected" signal

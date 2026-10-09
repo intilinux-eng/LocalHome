@@ -117,7 +117,11 @@ class MqttSensorDriver(PollingDriver):
             MqttJsonState(broker, topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
             for topic in topics
         ]
-        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
+        # Set by the device manager: reads this device again at once - its
+        # availability saying online or offline doesn't wait for the poll.
+        self.wake_poller = None
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path,
+                                          on_change=lambda: self.wake_poller and self.wake_poller())
 
     def read(self) -> dict[str, Any]:
         # Each subscribed topic is tried independently rather than

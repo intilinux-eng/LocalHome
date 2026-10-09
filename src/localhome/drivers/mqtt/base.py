@@ -114,9 +114,19 @@ class Availability:
     read()/async_read() for how each folds offline_reason() in.
     """
 
-    def __init__(self, broker: dict, topic: str | None, available_payload: str = "true", cache_path: str | None = None):
-        self._state = MqttJsonState(broker, topic, cache_path=cache_path) if topic else None
+    def __init__(self, broker: dict, topic: str | None, available_payload: str = "true", cache_path: str | None = None,
+                 on_change=None):
+        # `on_change()`: called when it says something new - online or
+        # offline - so its device's reading follows at once, not at the
+        # next poll (core/manager.py wires it to the device's poller).
+        self._on_change = on_change
+        self._state = MqttJsonState(broker, topic, cache_path=cache_path,
+                                    on_message=self._said if on_change else None) if topic else None
         self._available_payload = available_payload
+
+    def _said(self, previous, previous_at, payload, received_at) -> None:
+        if payload != previous:
+            self._on_change()
 
     def offline_reason(self) -> str | None:
         """None if there's no availability topic configured, or nothing

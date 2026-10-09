@@ -121,6 +121,10 @@ class DeviceManager:
             self.numbers[driver.name] = driver
         poller = AsyncPoller(driver) if getattr(driver, "is_async", False) else SyncPoller(driver)
         self.pollers[driver.name] = poller
+        # A driver told things between polls (an MQTT device's online or
+        # offline) has it read again at once.
+        if hasattr(driver, "wake_poller") and hasattr(poller, "wake"):
+            driver.wake_poller = poller.wake
         self.sensor_kinds[driver.name] = kind
 
     def start(self) -> None:

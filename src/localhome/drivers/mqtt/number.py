@@ -70,7 +70,11 @@ class MqttNumberDriver(NumberDriver):
         self._command_topic = command_topic
         self._command_payload_field = command_payload_field
         self._state = MqttJsonState(broker, state_topic, stale_after_seconds=stale_after_seconds, cache_path=cache_path)
-        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path)
+        # Set by the device manager: reads this device again at once - its
+        # availability saying online or offline doesn't wait for the poll.
+        self.wake_poller = None
+        self._availability = Availability(broker, availability_topic, available_payload, cache_path=cache_path,
+                                          on_change=lambda: self.wake_poller and self.wake_poller())
 
     def read(self) -> dict[str, Any]:
         # See drivers/mqtt/base.py's Availability - a definitive

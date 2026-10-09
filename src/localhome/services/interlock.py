@@ -115,6 +115,9 @@ class InterlockController:
         self.mode_switches = list(mode_switches)
         self.mode_limited = list(mode_limited)
         self._missing_warned: set[str] = set()
+        # What each switch was last told - not told again while it doesn't
+        # answer (see _apply()).
+        self._told: dict[str, bool] = {}
         self._failures = FailureLog(logger)
         self.mode_provider = mode_provider  # callable returning the current thermostat mode, or None
         self.diagnostic_mode_provider = diagnostic_mode_provider  # callable returning bool, or None
@@ -194,6 +197,12 @@ class InterlockController:
             return
         current = self.manager.sensor_reading(follower_name)
         if current.get("ok") and bool(current.get("is_on")) == desired_on:
+            self._told[follower_name] = desired_on
+            return
+        # Not answering - unplugged, say: told once, not on every tick. Back
+        # online, its real state is read and corrected if it must be, as
+        # the thermostat does with its valves.
+        if not current.get("ok") and self._told.get(follower_name) == desired_on:
             return
         try:
             switch.turn_on() if desired_on else switch.turn_off()
@@ -201,6 +210,7 @@ class InterlockController:
             self._failures.failed(follower_name, "Failed to %s %r", "switch on" if desired_on else "switch off", follower_name)
             return
         self._failures.succeeded(follower_name)
+        self._told[follower_name] = desired_on
         poller = self.manager.pollers.get(follower_name)
         if poller is not None:
             poller.cache.merge({"is_on": desired_on})

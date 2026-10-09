@@ -325,6 +325,23 @@ def test_away_switches_off_what_is_left_to_the_user_and_its_valve_with_it():
     assert bypass.calls == [], "the season's own rule stays: the plant's, not a comfort"
 
 
+def test_a_switch_not_answering_is_told_once_and_corrected_when_back():
+    """Seen on the production board: the dehumidifier unplugged in winter
+    was sent "off" every 20 s. Told once; back online and on, switched off."""
+    from localhome.services.interlock import SeasonRule
+    dehumidifier = FakeSwitch()
+    manager = FakeManager(readings={"Dehumidifier": {"ok": False, "error": "marked offline"}},
+                          switches={"Dehumidifier": dehumidifier})
+    controller = InterlockController(manager, [], mode_provider=lambda: "heat",
+                                     season_rules_provider=lambda: [SeasonRule("Dehumidifier", {"heat": "off", "cool": "manual"})])
+    for _ in range(5):
+        controller.tick()
+    assert dehumidifier.calls == ["off"]
+    manager._readings["Dehumidifier"] = {"ok": True, "is_on": True}   # plugged in, on
+    controller.tick()
+    assert dehumidifier.calls == ["off", "off"]
+
+
 def test_the_bypass_is_powered_all_summer_away_or_not_and_off_in_winter():
     """Its Shelly on all summer - the normally open valve closed - whatever
     the schedule (nothing here reads it) and away too; switched off from
