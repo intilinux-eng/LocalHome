@@ -80,6 +80,7 @@
     <a href="#overview">{{ t.climate_admin.ov_label }}</a>
     <a href="#season">{{ t.climate_admin.season_heading }}</a>
     <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
+    <a href="#plant-settings">{{ t.climate_admin.plant_settings_nav }}</a>
     <a href="#group-devices">{{ t.climate_admin.group_devices }}</a>
     <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
     <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
@@ -199,6 +200,38 @@
       <button class="range-btn" onclick="refreshAll()">{{ t.climate_admin.refresh_button }}</button>
     </div>
     <p class="hint-text" id="save-result"></p>
+  </details>
+
+  <!-- The plant's own tuning, next to its zones: the thermostat's
+       settings and the VMC's speeds. The thermostat's fields are part of
+       the one settings form (Board -> Settings): either Save sends them
+       all - see loadSettings()/saveSettings() in climate_admin.js. -->
+  <details class="admin-details" id="plant-settings" data-nav="plant-settings">
+    <summary>{{ icon("settings") }}<span class="sec-title">{{ t.climate_admin.plant_settings_heading }}</span><span class="sec-pills" id="plant-settings-status"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.plant_settings_note }}</p>
+    <div class="admin-zone-card settings-grid" id="plant-settings-form"></div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" id="save-plant-settings-btn" onclick="saveSettings(this)">{{ t.climate_admin.settings_save }}</button>
+    </div>
+    <p class="hint-text settings-result" id="plant-settings-result"></p>
+    <!-- The VMC's night/day/boost percentages: in use at once, unlike the
+         settings above - see loadVmcSpeeds(). -->
+    <div class="admin-zone-card settings-extra" id="vmc-speeds" hidden>
+      <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
+      <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
+      <div class="admin-speed-fields">
+        {% for key in ("night", "day", "boost") %}
+        <div class="admin-field">
+          <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
+          <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" id="save-vmc-speeds-btn" onclick="saveVmcSpeeds(this)">{{ t.climate_admin.vmc_speeds_save }}</button>
+      </div>
+      <p class="hint-text" id="save-vmc-speeds-result"></p>
+    </div>
   </details>
 
   <!-- ========================================================== devices -->
@@ -394,25 +427,7 @@
       <button class="tbtn open" onclick="saveSettings(this)">{{ t.climate_admin.settings_save }}</button>
       <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
     </div>
-    <p class="hint-text" id="settings-result"></p>
-    <!-- The VMC's night/day/boost percentages: in use at once, unlike the
-         settings above - see loadVmcSpeeds(). -->
-    <div class="admin-zone-card settings-extra" id="vmc-speeds" hidden>
-      <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
-      <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
-      <div class="admin-speed-fields">
-        {% for key in ("night", "day", "boost") %}
-        <div class="admin-field">
-          <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
-          <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
-        </div>
-        {% endfor %}
-      </div>
-      <div class="toolbar admin-actions">
-        <button class="tbtn open" id="save-vmc-speeds-btn" onclick="saveVmcSpeeds(this)">{{ t.climate_admin.vmc_speeds_save }}</button>
-      </div>
-      <p class="hint-text" id="save-vmc-speeds-result"></p>
-    </div>
+    <p class="hint-text settings-result" id="settings-result"></p>
   </details>
 
   <!-- ============================================================ tools -->

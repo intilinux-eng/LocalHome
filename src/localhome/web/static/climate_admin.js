@@ -1991,6 +1991,10 @@ async function confirmSeason(button) {
 // Each field shows where its current value comes from (set here,
 // config.yaml, or the built-in default); a blank field falls back.
 
+// Shown in the Plant group, next to the zones; the rest under Board ->
+// Settings. One form all the same: saveSettings() sends every field.
+const PLANT_SETTING_KEYS = new Set(["hysteresis_c", "economy_tolerance_c", "thermostat_poll_seconds", "sensor_failsafe_hours"]);
+
 async function loadSettings() {
   try {
     const res = await fetch("/api/climate-admin/settings");
@@ -2000,11 +2004,19 @@ async function loadSettings() {
     settingsDisk = data.disk || null;
     settingsLoaded = Object.fromEntries(data.settings.map(s => [s.key, s.source === "panel" ? s.value : null]));
     settingsValues = Object.fromEntries(data.settings.map(s => [s.key, s.value]));
-    document.getElementById("settings-form").innerHTML = data.settings.map(settingFieldHtml).join("");
+    const plant = data.settings.filter(s => PLANT_SETTING_KEYS.has(s.key));
+    document.getElementById("settings-form").innerHTML = data.settings.filter(s => !PLANT_SETTING_KEYS.has(s.key))
+      .map(settingFieldHtml).join("");
+    const plantForm = document.getElementById("plant-settings-form");
+    if (plantForm) plantForm.innerHTML = plant.map(settingFieldHtml).join("");
     settingsRestartPending = !!data.restart_pending;
-    const setHere = Object.values(settingsLoaded).filter(v => v != null).length;
-    setPill("settings-status", settingsRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
-      : setHere ? pillHtml("idle", tr("climate_admin.pill_settings_custom", { count: setHere })) : "");
+    const pill = keys => {
+      const setHere = keys.filter(key => settingsLoaded[key] != null).length;
+      return settingsRestartPending ? pillHtml("neutral", tr("climate_admin.pill_restart"))
+        : setHere ? pillHtml("idle", tr("climate_admin.pill_settings_custom", { count: setHere })) : "";
+    };
+    setPill("settings-status", pill(Object.keys(settingsLoaded).filter(key => !PLANT_SETTING_KEYS.has(key))));
+    setPill("plant-settings-status", pill(plant.map(s => s.key)));
     updateRestartBar();
   } catch (e) {
     // Keep the form as it was.
@@ -2142,8 +2154,7 @@ function countSetting(input) {
   counter.classList.toggle("at-limit", input.value.length >= max);
 }
 
-async function postSettings(values, button) {
-  const result = document.getElementById("settings-result");
+async function postSettings(values, button, result = document.getElementById("settings-result")) {
   button.disabled = true;
   try {
     const res = await fetch("/api/climate-admin/settings", {
@@ -2200,9 +2211,10 @@ function settingsInputError(el) {
 
 function saveSettings(button) {
   const values = {};
-  const result = document.getElementById("settings-result");
+  // The answer next to the button pressed; every field sent, wherever shown.
+  const result = button.closest("details").querySelector(".settings-result");
   let firstError = null;
-  document.querySelectorAll("#settings-form [data-setting]").forEach(el => {
+  document.querySelectorAll("#settings-form [data-setting], #plant-settings-form [data-setting]").forEach(el => {
     const error = settingsInputError(el);
     el.classList.toggle("input-invalid", !!error);
     if (error && !firstError) firstError = { el, error };
@@ -2214,7 +2226,7 @@ function saveSettings(button) {
     firstError.el.focus();
     return;
   }
-  postSettings(values, button);
+  postSettings(values, button, result);
 }
 
 async function resetSettings(button) {

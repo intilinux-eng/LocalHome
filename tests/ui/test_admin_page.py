@@ -135,7 +135,7 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     opened = open_page("/climate-admin", 390)
     page = opened.page
     page.wait_for_selector("#vmc-speeds:not([hidden])", state="attached", timeout=20000)
-    page.evaluate("document.getElementById('settings').open = true")
+    page.evaluate("document.getElementById('plant-settings').open = true")
     page.fill("#vmc-speed-night", "60")
     page.click("#save-vmc-speeds-btn")
     assert eventually(page, lambda: "Notte deve essere" in page.inner_text("#save-vmc-speeds-result"))
@@ -148,6 +148,26 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     api("/api/climate-admin/vmc-speeds", before)
     # The browser logs the refused save's 400; nothing else.
     assert [e for e in opened.errors if "400" not in e] == []
+
+
+def test_the_plants_tuning_and_the_boards_settings_are_one_form(open_page, api):
+    """Shown in two places - the thermostat's next to the zones, the rest
+    under Board - and either Save sends every field: none is lost."""
+    before = {r["key"]: r for r in api("/api/climate-admin/settings")["settings"]}
+    opened = open_page("/climate-admin", 1280)
+    page = opened.page
+    page.evaluate("for (const id of ['plant-settings', 'settings']) document.getElementById(id).open = true")
+    assert eventually(page, lambda: page.locator("#plant-settings-form [data-setting='hysteresis_c']").count() == 1)
+    assert page.locator("#settings-form [data-setting='hysteresis_c']").count() == 0
+    assert page.locator("#settings-form [data-setting='history_retention_days']").count() == 1
+    page.fill("[data-setting='history_retention_days']", "20")
+    page.fill("[data-setting='hysteresis_c']", "0.7")
+    page.click("#save-plant-settings-btn")
+    assert eventually(page, lambda: "Salvato" in page.inner_text("#plant-settings-result"))
+    saved = {r["key"]: r["value"] for r in api("/api/climate-admin/settings")["settings"]}
+    assert (saved["hysteresis_c"], saved["history_retention_days"]) == (0.7, 20)
+    api("/api/climate-admin/settings", {"values": {k: r["value"] for k, r in before.items() if r["source"] == "panel"}})
+    assert opened.errors == []
 
 
 def test_the_history_size_says_what_the_disk_allows(open_page, api):
