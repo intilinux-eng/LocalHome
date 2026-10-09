@@ -21,6 +21,17 @@
 .admin-top-site { display: block; font-size: 0.8rem; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .admin-top h1 { margin: 0; font-size: clamp(1.35rem, 5vw, 1.8rem); font-weight: 650; letter-spacing: -0.015em; line-height: 1.15; }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* The administrator's guide: always in sight, in the accent colour. */
+.admin-guide-link { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 999px;
+                    background: var(--accent-soft); color: var(--accent); font-weight: 650; text-decoration: none;
+                    white-space: nowrap; }
+.admin-guide-link:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.admin-guide-link .sec-icon { width: 18px; height: 18px; }
+/* A phone: the title on its own line, the guide and the clock under it. */
+@media (max-width: 640px) {
+  .admin-top { flex-wrap: wrap; }
+  .header-right { width: 100%; margin-left: 0; justify-content: space-between; }
+}
 
 .icon-btn-sm {
   display: inline-grid;

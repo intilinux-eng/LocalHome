@@ -49,6 +49,10 @@
       <h1>{{ t.climate_admin.page_title }}</h1>
     </div>
     <div class="header-right">
+      <!-- The administrator's guide, where it's always seen: how it works,
+           wiring the Shellys, what to do when something's missing. -->
+      <a class="admin-guide-link" href="/static/guide/shelly-plus1-valvole.html" target="_blank" rel="noopener"
+         title="{{ t.climate_admin.guide_button_title }}">{{ icon("guide") }}<span>{{ t.climate_admin.guide_button }}</span></a>
       {% with clock_zone_full = true %}{% include "_server_clock.html" %}{% endwith %}
     </div>
   </header>
@@ -101,8 +105,8 @@
       <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
       <span class="ov-sub"></span>
     </a>
-    <a class="ov-tile" id="ov-broker" href="#devices" data-state="idle">
-      <span class="ov-label">{{ icon("broker") }}{{ t.climate_admin.broker_heading }}</span>
+    <a class="ov-tile" id="ov-devices" href="#devices" data-state="idle">
+      <span class="ov-label">{{ icon("broker") }}{{ t.climate_admin.ov_devices_label }}</span>
       <strong class="ov-value">{{ t.climate_admin.ov_loading }}</strong>
       <span class="ov-sub"></span>
     </a>
@@ -129,6 +133,8 @@
       <li><strong>{{ t.climate_admin.guide_step3_title }}</strong> {{ t.climate_admin.guide_step3 }}</li>
       <li><strong>{{ t.climate_admin.guide_step4_title }}</strong> {{ t.climate_admin.guide_step4 }}</li>
     </ol>
+    <p class="hint-text">{{ t.climate_admin.guide_more }}
+      <a href="/static/guide/shelly-plus1-valvole.html" target="_blank" rel="noopener">{{ t.climate_admin.guide_button }}</a>.</p>
   </details>
 
   <!-- ============================================================ plant -->

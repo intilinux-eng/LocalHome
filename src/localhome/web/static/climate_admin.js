@@ -221,13 +221,11 @@ function problemsCountText(count) {
 }
 
 function updateBoardOverview(data) {
-  const devices = data.devices || [];
-  const offline = devices.filter(d => !d.ok).length;
   const problems = data.problems || [];
+  // The first problem under the count - the devices have their own tile.
   setTile("ov-system", problems.length ? "bad" : "ok",
     problems.length ? problemsCountText(problems.length) : tr("climate_admin.system_all_ok"),
-    offline ? tr(offline === 1 ? "climate_admin.ov_devices_one_offline" : "climate_admin.ov_devices", { count: devices.length, offline })
-      : tr("climate_admin.ov_devices_all", { count: devices.length }));
+    problems.length ? problemTitle(problems[0]) + (problems.length > 1 ? " …" : "") : "");
   const p = data.process || {};
   const h = data.host || {};
   const clock = h.clock_synced;
@@ -1114,14 +1112,16 @@ async function refreshBroker() {
     if (!data.host) {
       morph(el, pillHtml("idle", tr("climate_admin.broker_not_configured")));
       if (hint) hint.hidden = true;
-      setTile("ov-broker", "idle", tr("climate_admin.broker_not_configured"), "");
+      brokerView = { configured: false };
+      updateDevicesTile();
       return;
     }
     const where = `${data.host}:${data.port || "?"}`;
     const text = tr(data.reachable ? "climate_admin.broker_ok" : "climate_admin.broker_down");
     morph(el, `${pillHtml(data.reachable ? "ok" : "bad", text)} <span class="sec-note">${escapeHtml(where)}</span>`);
     if (hint) hint.hidden = !!data.reachable;
-    setTile("ov-broker", data.reachable ? "ok" : "bad", text, where);
+    brokerView = { configured: true, reachable: !!data.reachable, where };
+    updateDevicesTile();
   } catch (e) {
     // Transient fetch failure - leave the last rendering in place.
   }
@@ -1270,10 +1270,14 @@ function statRowHtml(label, value, bad) {
   return `<div class="admin-stat${bad ? " bad" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
 
-function problemHtml(problem) {
+function problemTitle(problem) {
   const subject = problem.code === "protection_missing"
-    ? tr(`climate_admin.protection_${problem.subject}`) : displayName(problem.subject);
-  const title = tr(`climate_admin.system_problem_${problem.code}`, { subject });
+    ? tr(`climate_admin.protection_${problem.subject}`) : deviceLabel(problem.subject || "");
+  return tr(`climate_admin.system_problem_${problem.code}`, { subject });
+}
+
+function problemHtml(problem) {
+  const title = problemTitle(problem);
   const text = problem.settings ? problem.settings.map(key => tr(`climate_admin.shelly_setting_${key}`)).join(", ") : problem.detail;
   const detail = text ? `<div class="admin-problem-detail">${escapeHtml(text)}</div>` : "";
   return `<li>${escapeHtml(title)}${detail}</li>`;
@@ -2942,11 +2946,34 @@ function renderDevices() {
   const check = rows.filter(r => r.state === "neutral").length;
   const todo = rows.filter(r => r.state === "todo").length;
   const real = rows.length - todo;
+  deviceCounts = { bad, check, todo, real };
+  updateDevicesTile();
   setPill("devices-summary", !rows.length ? ""
     : bad ? pillHtml("bad", tr("climate_admin.devices_bad", { count: bad, total: real }))
     : check ? pillHtml("neutral", tr("climate_admin.devices_check", { count: check, total: real }))
     : todo ? pillHtml("todo", tr("climate_admin.devices_todo", { count: todo }))
     : pillHtml("ok", tr("climate_admin.devices_ok", { count: rows.length })));
+}
+
+// The devices at a glance: the broker only when it's the trouble - every
+// Shelly speaks through it - else what the list says.
+let brokerView = null;
+let deviceCounts = null;
+
+function updateDevicesTile() {
+  if (brokerView && brokerView.configured && !brokerView.reachable) {
+    setTile("ov-devices", "bad", tr("climate_admin.ov_broker_down"), brokerView.where);
+    return;
+  }
+  if (!deviceCounts) return;
+  const { bad, check, todo, real } = deviceCounts;
+  const todoSub = todo ? tr("climate_admin.ov_devices_todo", { count: todo }) : "";
+  if (bad) setTile("ov-devices", "bad", tr("climate_admin.devices_bad", { count: bad, total: real }), todoSub);
+  else if (check) setTile("ov-devices", "neutral", tr("climate_admin.devices_check", { count: check, total: real }), todoSub);
+  else if (todo) setTile("ov-devices", "todo", tr("climate_admin.devices_todo", { count: todo }),
+    real ? tr("climate_admin.ov_devices_answering", { count: real }) : "");
+  else if (real) setTile("ov-devices", "ok", tr("climate_admin.ov_devices_all_ok"), tr("climate_admin.ov_devices_count", { count: real }));
+  else setTile("ov-devices", "idle", tr("climate_admin.devices_none"), "");
 }
 
 function watchDeviceRows() {

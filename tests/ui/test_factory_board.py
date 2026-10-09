@@ -82,6 +82,10 @@ def test_the_admin_lists_every_shelly_to_configure(browser, factory):
         assert page.locator("#devices-summary").inner_text() == "8 Shelly da configurare"
         assert page.locator("#zones-summary").inner_text() == "Shelly da configurare"
         assert page.locator("#ov-zones .ov-value").inner_text() == "Shelly da configurare"
+        assert eventually(page, lambda: page.locator("#ov-devices .ov-value").inner_text() == "8 Shelly da configurare")
+        # The administrator's guide, always in sight at the top.
+        guide = page.locator(".admin-top .admin-guide-link")
+        assert guide.is_visible() and guide.get_attribute("href") == "/static/guide/shelly-plus1-valvole.html"
         # The zones as the apartment has them, on Shelly, their ids to type in.
         names = page.locator("#zone-forms .zone-name")
         assert [names.nth(i).input_value() for i in range(2)] == ["Stanze", "Bagni"]
