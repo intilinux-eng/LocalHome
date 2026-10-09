@@ -184,22 +184,25 @@ def test_the_history_size_says_what_the_disk_allows(open_page, api):
     assert opened.errors == []
 
 
-def test_how_it_works_says_each_topic_short_and_folds_the_rest(open_page):
-    """A sentence or two per topic in view; the full text under "Più
-    dettagli". The four-step guide is for an installation with no zones."""
+def test_diagnostics_and_maintenance_are_one_section_how_it_works_is_the_guide(open_page):
+    """For production, a shorter page: how the software and the plant work
+    is in the administrator's guide (the link at the top), not here; the
+    two rarely needed tools are one section, maintenance set apart in red
+    under diagnostic mode. The four-step guide is for an installation with
+    no zones."""
     opened = open_page("/climate-admin", 390)
     page = opened.page
     assert page.locator("#guide").is_hidden(), "zones are set up here"
-    page.evaluate("document.getElementById('how-it-works').open = true")
-    section = page.locator("#how-it-works")
-    assert section.locator("h3.how-h").count() == 9
-    assert section.locator("details.admin-more").count() == 9
-    assert section.locator("details.admin-more[open]").count() == 0
-    visible = page.evaluate(r"""() => [...document.querySelectorAll('#how-it-works > p')]
-      .reduce((n, p) => n + p.innerText.split(/\s+/).length, 0)""")
-    assert visible < 350, visible
-    section.locator("details.admin-more summary").nth(1).click()
-    assert "deumidificatore" in section.locator("details.admin-more").nth(1).inner_text()
+    assert page.locator("#how-it-works").count() == 0
+    assert page.locator("header .admin-guide-link").get_attribute("href") == "/static/guide/shelly-plus1-valvole.html"
+    section = page.locator("#diagnostic")
+    assert section.locator("summary .sec-title").inner_text() == "Diagnosi e manutenzione"
+    assert eventually(page, lambda: section.locator("#diagnostic-summary").inner_text() == "Diagnosi spenta")
+    page.evaluate("document.getElementById('diagnostic').open = true")
+    assert [h.inner_text() for h in section.locator("h3.admin-subheading").all()] == ["Modalità diagnosi", "Manutenzione"]
+    assert section.locator("#diagnostic-mode-toggle").is_visible()
+    assert section.locator("#maintenance .maint-row").count() == 4
+    assert page.locator("details#maintenance").count() == 0
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
 

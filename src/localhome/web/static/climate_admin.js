@@ -1027,7 +1027,7 @@ async function refreshDiagnosticSection(data) {
   const alert = document.getElementById("diagnostic-alert");
   if (alert) alert.hidden = !diagnosticModeEnabled;
   setPill("diagnostic-summary", pillHtml(diagnosticModeEnabled ? "bad" : "idle",
-    tr(diagnosticModeEnabled ? "climate_admin.pill_on" : "climate_admin.pill_off")));
+    tr(diagnosticModeEnabled ? "climate_admin.diag_pill_on" : "climate_admin.diag_pill_off")));
   // Turned on - here or from another phone: its section opens by itself.
   const section = document.getElementById("diagnostic");
   if (section && diagnosticModeEnabled && !wasEnabled) section.open = true;

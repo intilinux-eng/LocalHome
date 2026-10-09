@@ -33,8 +33,6 @@
     "led": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
     "settings": '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
     "diagnostic": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
-    "maintenance": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
-    "help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   } -%}
   {%- macro icon(name) -%}
     <svg class="sec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name] | safe }}</svg>
@@ -436,12 +434,14 @@
     <p>{{ t.climate_admin.group_tools_note }}</p>
   </div>
 
-  <!-- System-wide override, not per-zone - see services/thermostat.py's
-       ScheduleStore.get_diagnostic_mode(). Collapsed while off; while on,
-       the banner at the top of the page says so and this section opens
-       by itself - see refreshDiagnosticSection(). -->
+  <!-- Diagnostic mode and maintenance, one section: both rarely needed.
+       Diagnostic mode is system-wide, not per-zone - see services/
+       thermostat.py's ScheduleStore.get_diagnostic_mode(). Collapsed while
+       off; while on, the banner at the top of the page says so and this
+       section opens by itself - see refreshDiagnosticSection(). -->
   <details class="admin-details" id="diagnostic" data-nav="group-tools">
-    <summary>{{ icon("diagnostic") }}<span class="sec-title">{{ t.climate_admin.diagnostic_heading }}</span><span class="sec-pills" id="diagnostic-summary"></span></summary>
+    <summary>{{ icon("diagnostic") }}<span class="sec-title">{{ t.climate_admin.tools_heading }}</span><span class="sec-pills" id="diagnostic-summary"></span></summary>
+    <h3 class="admin-subheading">{{ t.climate_admin.diagnostic_heading }}</h3>
     <p class="hint-text">{{ t.climate_admin.diagnostic_note }}</p>
     <details class="admin-more">
       <summary>{{ t.climate_admin.more_details }}</summary>
@@ -453,13 +453,12 @@
     </label>
     <p class="admin-mode-exclusion" id="diagnostic-mode-banner" hidden>{{ t.climate_admin.diagnostic_active_banner }}</p>
     <div id="diagnostic-valves"></div>
-  </details>
 
-  <!-- Clear / reset / backup - see the maintenance section of
-       climate_admin.js and services/maintenance.py. Every action behind
-       it is destructive. -->
-  <details class="admin-details admin-danger" id="maintenance" data-nav="group-tools">
-    <summary>{{ icon("maintenance") }}<span class="sec-title">{{ t.climate_admin.maint_heading }}</span></summary>
+    <!-- Clear / reset / backup - see the maintenance section of
+         climate_admin.js and services/maintenance.py. Every action but the
+         backup deletes data. -->
+    <div class="admin-danger-zone" id="maintenance">
+    <h3 class="admin-subheading">{{ t.climate_admin.maint_heading }}</h3>
     <p class="hint-text">{{ t.climate_admin.maint_note }}</p>
     <div class="maint-row">
       <div class="maint-text">
@@ -512,84 +511,7 @@
       </div>
     </div>
     <p class="hint-text" id="maintenance-result"></p>
-  </details>
-
-  <!-- Every non-obvious behavior the status pills above can leave a
-       technician guessing about: each topic in a sentence or two, the
-       full text folded under it - reference material, read once per
-       install. -->
-  <details class="admin-details" id="how-it-works" data-nav="group-tools">
-    <summary>{{ icon("help") }}<span class="sec-title">{{ t.climate_admin.how_it_works_heading }}</span></summary>
-    <h3 class="how-h">{{ t.climate_admin.how_seasons_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_seasons_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_seasons }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_bathrooms_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_bathrooms_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_bathrooms }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_vmc_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_vmc_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_vmc }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_sensors_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_sensors_short }}</p>
-    <!-- On batteries or powered: what to expect of each, as measured. -->
-    <table class="how-table">
-      <tr><th></th><th scope="col">{{ t.climate_admin.how_sensors_col_battery }}</th><th scope="col">{{ t.climate_admin.how_sensors_col_powered }}</th></tr>
-      {% for row in ("when", "online", "age", "late", "battery", "unplugged") %}
-      <tr><th scope="row">{{ t.climate_admin["how_sensors_row_" ~ row] }}</th><td>{{ t.climate_admin["how_sensors_" ~ row ~ "_battery"] }}</td><td>{{ t.climate_admin["how_sensors_" ~ row ~ "_powered"] }}</td></tr>
-      {% endfor %}
-    </table>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_sensors_async }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_it_works_threshold }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_sensors_usb }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_it_works_wifi }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_it_works_battery }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_sensors_values }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_sensors_boot }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_test_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_test_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_test }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_network_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_network_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_network }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_network_router }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_safety_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_safety_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_it_works_failsafe }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_missing }}</p>
-      <p class="hint-text">{{ t.climate_admin.how_hold }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_data_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_data_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_data }}</p>
-    </details>
-    <h3 class="how-h">{{ t.climate_admin.how_diagnostic_title }}</h3>
-    <p class="hint-text">{{ t.climate_admin.how_diagnostic_short }}</p>
-    <details class="admin-more">
-      <summary>{{ t.climate_admin.more_details }}</summary>
-      <p class="hint-text">{{ t.climate_admin.how_it_works_diagnostic }}</p>
-    </details>
+    </div>
   </details>
 
   </div>

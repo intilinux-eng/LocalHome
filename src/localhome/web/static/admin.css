@@ -252,6 +252,10 @@
 .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 4px 0 14px; line-height: 1.5; }
 .how-h { margin: 16px 0 4px; font-size: 0.95rem; }
 .admin-subheading { margin: 22px 0 6px; font-size: 0.98rem; }
+/* Maintenance inside "Diagnostics and maintenance": its actions delete
+   data, so it's set apart and said in red, as its own section was. */
+.admin-danger-zone { margin-top: 22px; border-top: 1px solid color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.admin-danger-zone > .admin-subheading { color: var(--bad); }
 .admin-path { overflow-wrap: anywhere; }
 .admin-error { color: var(--bad); }
 .admin-success { color: var(--ok); }
