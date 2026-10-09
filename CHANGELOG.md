@@ -44,6 +44,14 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **`tools/live_walk.py`: a walk on the real board**, to run before
+  wiring the valves and after a deploy. The home page used as a resident
+  would (manual changes of every kind, back to the week, away and back),
+  the season changed in every direction, diagnostic mode from the admin
+  page - and each time what the Shelly relays themselves say on the
+  broker. Prints the plan without `--yes`; puts back the season, the
+  dehumidifier's threshold and diagnostic mode as it found them; stops if
+  someone is using the house.
 - **A demo that runs in a minute**: `docker compose -f
   docker-compose.demo.yml up --build` starts LocalHome with every device
   simulated - two zones with a sample week, the outdoor sensor, the VMC,
