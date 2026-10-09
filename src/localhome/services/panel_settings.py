@@ -46,7 +46,7 @@ SETTINGS = {
     "thermostat_poll_seconds": {"section": "thermostat", "option": "poll_interval_seconds", "type": "int",
                                 "min": 10, "max": 600, "step": 10, "default": 60},
     "sensor_failsafe_hours": {"section": "thermostat", "option": "sensor_failsafe_hours", "type": "float",
-                              "min": 1, "max": 168, "step": 1, "default": 24},
+                              "min": 1, "max": 168, "step": 1, "default": 3},
     "history_retention_days": {"section": "history", "option": "retention_days", "type": "int",
                                "min": 1, "max": 365, "step": 1, "default": 30},
     "history_max_db_mb": {"section": "history", "option": "max_db_mb", "type": "int",

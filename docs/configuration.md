@@ -735,7 +735,8 @@ Telegram bot token or a phone being nearby:
   in `config/sensor_silence.json` so restarts don't restart the
   countdown, and time the board spent switched off doesn't count at all
   (the sensors were talking; nobody was listening). It is
-  configurable per-thermostat as `sensor_failsafe_hours` (default 24),
+  configurable per-thermostat as `sensor_failsafe_hours` (default 3 - an
+  H&T is unreachable after 4 hours, so 7 after its last report),
   it forces that zone's valve closed rather than leaving it frozen in
   whatever it was last doing indefinitely, and clears itself the moment
   the sensor reports again. The zone's card shows the countdown

@@ -170,7 +170,7 @@ with the MQTT broker itself down:
 - its card and the admin panel's system status show it as not
   responding; nothing else changes;
 - the thermostat leaves a zone without a sensor reading alone, and after
-  `sensor_failsafe_hours` (24 by default) closes its valve;
+  `sensor_failsafe_hours` (3 by default) closes its valve;
 - a zone with no schedule for the current hour keeps its valve closed;
 - a device named in a season rule (`season_rules`, `mode_switches`,
   `mode_limited_switches`) that the

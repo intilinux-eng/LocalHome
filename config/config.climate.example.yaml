@@ -32,8 +32,10 @@ thermostat:
   hysteresis_c: 0.5
   schedules_file: "schedules.json"
   poll_interval_seconds: 60
-  # No reading from a zone's sensor for this long: its valve is closed.
-  sensor_failsafe_hours: 24
+  # A zone's sensor unreachable this long (it is after 4 hours without a
+  # report): its valve is closed - 7 hours after its last report in all.
+  # Longer would leave a radiant panel open blind for a day.
+  sensor_failsafe_hours: 3
   # The bypass valve and the dehumidifier entered in the admin panel get
   # their season rules there (Extra switches -> Behaviour per season):
   # by default the bypass is on in summer and off in winter, the

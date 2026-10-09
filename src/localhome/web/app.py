@@ -301,7 +301,7 @@ def create_app(config_path: str | None = None) -> Flask:
             hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.5),
             economy_tolerance_c=thermostat_cfg.get("economy_tolerance_c", 0.5),
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
-            sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 24.0),
+            sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 3.0),
             silence_file=config.resolve("sensor_silence.json"),
         )
         # The target each zone's valve was actually driven against, recorded

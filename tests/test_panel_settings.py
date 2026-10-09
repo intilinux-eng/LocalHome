@@ -56,7 +56,7 @@ def test_effective_values_say_where_they_come_from(tmp_path):
     rows = {r["key"]: r for r in panel_settings.effective(config, {"history_max_db_mb": 500})}
     assert (rows["history_max_db_mb"]["value"], rows["history_max_db_mb"]["source"]) == (500, "panel")
     assert (rows["hysteresis_c"]["value"], rows["hysteresis_c"]["source"]) == (0.5, "config")
-    assert (rows["sensor_failsafe_hours"]["value"], rows["sensor_failsafe_hours"]["source"]) == (24, "default")
+    assert (rows["sensor_failsafe_hours"]["value"], rows["sensor_failsafe_hours"]["source"]) == (3, "default")
 
 
 def test_saved_settings_apply_after_a_restart(tmp_path):

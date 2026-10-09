@@ -456,7 +456,7 @@ class ThermostatController:
         zones: list[Zone],
         hysteresis_c: float = 0.5,
         poll_interval_seconds: float = 60,
-        sensor_failsafe_hours: float = 24.0,
+        sensor_failsafe_hours: float = 3.0,
         silence_file: str | None = None,
         economy_tolerance_c: float = 0.5,
     ):

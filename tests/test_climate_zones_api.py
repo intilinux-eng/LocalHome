@@ -111,7 +111,7 @@ def test_diagnostic_mode_defaults_to_false_in_the_zones_response(tmp_path):
     zone = next(z for z in body["zones"] if z["name"] == "Rooms")
     assert zone["sensor_failsafe_active"] is False
     assert zone["sensor_unreachable_hours"] is None
-    assert zone["sensor_failsafe_hours"] == 24.0
+    assert zone["sensor_failsafe_hours"] == 3.0
 
 
 def test_enabling_diagnostic_mode_via_the_api_is_reflected_back(tmp_path):

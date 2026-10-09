@@ -289,6 +289,11 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- **The safety close comes 3 hours after a zone's sensor is unreachable,
+  not 24.** An H&T is unreachable after 4 hours without a report, so its
+  valve now closes 7 hours after the last one instead of 28 - a radiant
+  panel left open blind for a day was too long. Still set in the admin
+  panel (Plant tuning), from 1 hour up.
 - **A new board is the apartment's climate, every Shelly to configure.**
   With nothing saved in the admin panel and no zones of its own in
   config.yaml, a board starts with Stanze and Bagni (Bagni out of
