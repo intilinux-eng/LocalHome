@@ -81,7 +81,7 @@ from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
 from localhome.services import vmc_auto
 from localhome.services.vmc_auto import VmcAuto, VmcAutoSettingsStore
-from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore
+from localhome.services.vmc_schedule import AWAY_CHOICES, VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
 
@@ -363,14 +363,21 @@ def create_app(config_path: str | None = None) -> Flask:
     # cooling (services/vmc_auto.py) - from the zones' sensors and the
     # outdoor one, set in the admin panel and read at every check.
     vmc_auto_settings = VmcAutoSettingsStore(config.resolve("vmc_auto.json"))
-    vmc = VmcScheduleController(manager, vmc_schedule, auto=VmcAuto(
-        manager, vmc_auto_settings,
-        season=lambda: thermostat.schedule_store.get_mode() if thermostat else None,
-        zones=lambda: _auto_zones(thermostat),
-        outdoor_sensor=OUTDOOR_SENSOR_NAME,
+    vmc = VmcScheduleController(
+        manager, vmc_schedule,
+        auto=VmcAuto(
+            manager, vmc_auto_settings,
+            season=lambda: thermostat.schedule_store.get_mode() if thermostat else None,
+            zones=lambda: _auto_zones(thermostat),
+            outdoor_sensor=OUTDOOR_SENSOR_NAME,
+            device=lambda: _vmc_speed_device(manager),
+            speeds=lambda device: _vmc_speeds_in_use(app, device),
+        ),
+        # Away from home, at night speed or off - see api_climate_set_away.
+        away_until=lambda: thermostat.schedule_store.get_away_until() if thermostat else None,
         device=lambda: _vmc_speed_device(manager),
         speeds=lambda device: _vmc_speeds_in_use(app, device),
-    ))
+    )
 
     # What each Shelly says about itself - signal, temperature, restarts,
     # battery reports on time: see services/shelly_health.py. Listening
@@ -1127,6 +1134,12 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True, readings={name: manager.sensor_reading(name) for name in manager.pollers},
                        day_ranges=ranges)
 
+    def vmc_held_away(name: str) -> bool:
+        """The VMC's speed or its switch, held at night or off while away:
+        nothing changes it until "I'm back"."""
+        away = app.config["VMC_SCHEDULE"].holding_away()
+        return bool(away) and name in (away["device"], app.config["MANAGER"].paired_switch.get(away["device"]))
+
     @app.route("/api/sensors/<name>/<action>", methods=["POST"])
     def api_sensor_action(name, action):
         if action not in ("on", "off"):
@@ -1135,6 +1148,8 @@ def _register_routes(app: Flask) -> None:
         switch = manager.switches.get(name)
         if switch is None:
             return jsonify(ok=False, error=f"'{name}' is not a controllable switch"), 404
+        if vmc_held_away(name):
+            return _fail("vmc_away", f"'{name}' stays as away mode set it until back home", 409)
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
         diagnostic_mode = bool(thermostat and thermostat.schedule_store.get_diagnostic_mode())
         if app.config["FORCED_BY_SEASON"](name) and not diagnostic_mode:
@@ -1163,6 +1178,8 @@ def _register_routes(app: Flask) -> None:
         number = manager.numbers.get(name)
         if number is None:
             return jsonify(ok=False, error=f"'{name}' is not a settable number"), 404
+        if vmc_held_away(name):
+            return _fail("vmc_away", f"'{name}' stays as away mode set it until back home", 409)
         try:
             number.set_value(data["value"])
         except Exception as exc:
@@ -1186,6 +1203,8 @@ def _register_routes(app: Flask) -> None:
         """Only what the body names changes: {"enabled", "target"} turns it
         on or off, {"week"} replaces the week."""
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        if vmc.holding_away():
+            return _fail("vmc_away", "the VMC's program changes after coming back home", 409)
         body = {k: v for k, v in _json_body().items() if k in ("enabled", "target", "week")}
         try:
             schedule = vmc.store.update(body)
@@ -1201,6 +1220,8 @@ def _register_routes(app: Flask) -> None:
         """{"device", "value", "minutes"}: that speed for that long, then
         back to the program - or to how the unit was, with it off."""
         vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        if vmc.holding_away():
+            return _fail("vmc_away", "no timed speed while away", 409)
         body = _json_body()
         try:
             value = body.get("value")
@@ -1462,6 +1483,13 @@ def _register_routes(app: Flask) -> None:
             return _fail("no_thermostat", "no thermostat configured", 404)
         data = _json_body()
         now = datetime.now()
+        # What the VMC does meanwhile: night or off, as picked in the away
+        # sheet - the last choice if none comes ("keep": not touched, for
+        # tools/live_walk.py).
+        vmc: VmcScheduleController = app.config["VMC_SCHEDULE"]
+        vmc_choice = data.get("vmc", vmc.store.get()["away_choice"])
+        if vmc_choice not in AWAY_CHOICES:
+            return _fail("away_vmc_invalid", f"vmc must be one of {', '.join(AWAY_CHOICES)}")
         if "until" in data:
             # The day back, from the home page's calendar: the board's own
             # time, "2026-10-15T18:00".
@@ -1480,7 +1508,8 @@ def _register_routes(app: Flask) -> None:
             until = now + timedelta(hours=hours)
         thermostat.schedule_store.set_away_until(until)
         _away_changed(thermostat)
-        return jsonify(ok=True, away_until=until.isoformat())
+        vmc.go_away(vmc_choice)
+        return jsonify(ok=True, away_until=until.isoformat(), vmc=vmc_choice)
 
     @app.route("/api/climate/zones/<name>/override", methods=["POST"])
     def api_climate_set_override(name):
@@ -1539,6 +1568,7 @@ def _register_routes(app: Flask) -> None:
             return _fail("no_thermostat", "no thermostat configured", 404)
         thermostat.schedule_store.set_away_until(None)
         _away_changed(thermostat)
+        app.config["VMC_SCHEDULE"].tick()      # the VMC back as it was, now
         return jsonify(ok=True)
 
     @app.route("/api/climate/diagnostic-mode", methods=["POST"])

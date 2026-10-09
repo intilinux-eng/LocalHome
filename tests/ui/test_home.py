@@ -604,6 +604,42 @@ def test_an_automatic_vmc_change_says_why_on_its_card(open_page, width):
     assert opened.errors == []
 
 
+def test_away_asks_what_the_vmc_does_and_its_card_says_so(open_page, api):
+    """The away sheet: the VMC at its night speed (preselected - the last
+    choice) or off; away, its card offers nothing to press and says what
+    it's held at, and the choice changes at once from the sheet; back
+    home, as it was."""
+    _reset_vmc(api)
+    opened = _open_home(open_page)
+    page = opened.page
+    held = lambda: (_vmc(api)["status"].get("away") or {}).get("mode")
+    try:
+        page.click("#away-chip")
+        sheet = page.locator("#sheet")
+        assert sheet.locator("[data-away-vmc='night']").get_attribute("aria-checked") == "true"
+        assert "%" in sheet.locator("[data-away-vmc='night']").inner_text(), "night with its percentage"
+        sheet.locator("[data-away-vmc='off']").click()
+        assert sheet.locator("[data-away-vmc='off']").get_attribute("aria-checked") == "true"
+        sheet.locator("button[data-away='24']").click()
+        assert eventually(page, lambda: held() == "off")
+        assert eventually(page, lambda: "spenta fino al rientro" in page.inner_text("#vmc-card"))
+        assert page.locator("#vmc-card button").count() == 0, "nothing to press while away"
+        assert "Ventilazione" in page.inner_text("#hero-detail")
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+        page.click("#away-chip")
+        sheet.locator("[data-away-vmc='night']").click()
+        assert eventually(page, lambda: held() == "night")
+        assert eventually(page, lambda: "Notte" in page.inner_text("#vmc-card"))
+        sheet.locator("button[data-away='back']").click()
+        assert eventually(page, lambda: held() is None)
+        assert eventually(page, lambda: page.locator("#vmc-card button[data-vmc]").count() > 0)
+        assert _vmc(api)["schedule"]["away_choice"] == "night", "the last choice, for next time"
+    finally:
+        api("/api/climate/away/cancel", {})
+        _reset_vmc(api)
+    assert opened.errors == []
+
+
 def test_an_air_quality_sensor_shows_its_co2_day_and_levels(open_page):
     """The test server has no Tuya air sensor: its reading - tonight's,
     from the real one - is handed to the page as refreshDevices() would."""

@@ -526,6 +526,17 @@ new value.
 with the program off, to the speed and on/off state from before. A
 speed picked by hand meanwhile ends it.
 
+**Away from home** the VMC runs at its night speed or is off - picked
+in the away sheet on the home page (`away_choice` in the file, night
+unless one is made; the API's `"vmc"` on `POST /api/climate/away`, with
+`"keep"` to leave it alone - what `tools/live_walk.py` sends). It wins
+over everything else: the program, the automatic adjustments below, a
+timed speed (ended on leaving); its controls are refused (409
+`vmc_away`), and a change from elsewhere is put back at the next check.
+Back home - by hand or when the absence ends - it returns to its program,
+or to the speed and on/off state from before (`away.restore`, kept on
+disk across restarts).
+
 **Automatic adjustments** (`services/vmc_auto.py`), set in the admin
 panel under Plant tuning (`config/vmc_auto.json`, only what differs from
 the defaults) - **all off by default**, each switched on by itself, in

@@ -150,7 +150,8 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
   <li><strong>Dalla home</strong>: una temperatura o "spenta" per 2, 4, 8 o 24 ore, fino al prossimo cambio della settimana
       o finché non la si cambia. Poi torna la programmazione.</li>
   <li><strong>Fuori casa</strong> (1 giorno, 3 giorni, 1 settimana o fino a un giorno e un'ora): zone e deumidificatore
-      spenti, e niente si cambia fino a <em>Sono rientrato</em>. La settimana resta com'è e riparte da sola al rientro.</li>
+      spenti, la VMC a Notte o spenta (si sceglie nel foglio, sezione 4), e niente si cambia fino a <em>Sono rientrato</em>.
+      La settimana resta com'è e riparte da sola al rientro.</li>
   <li>Il termostato ricontrolla le zone ogni 60 secondi e legge lo stato vero dei relè: una valvola aperta o chiusa da
       altri (per esempio dall'app Shelly) viene rimessa a posto al ciclo dopo. Una modifica dalla home vale subito.</li>
 </ul>
@@ -185,6 +186,10 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
       successiva: una velocità scelta a mano resta fino ad allora.</li>
   <li><strong>Percentuali</strong> di Notte, Giorno e Massimo (di serie 25, 50 e 100%): admin → <em>Regolazioni
       impianto</em> (sezione 20). Valgono subito.</li>
+  <li><strong>Fuori casa</strong>: nel foglio si sceglie <em>Notte</em> (di serie, ricorda l'ultima scelta) o <em>Spenta</em>.
+      Vince su tutto il resto: programma, automatismi, "Massimo per"; dalla home non si cambia, e se qualcuno la cambia
+      dall'app Shelly torna com'era entro un minuto. Al rientro torna al suo programma, o com'era prima. Notte ricambia ancora
+      l'aria della casa chiusa; Spenta risparmia di più, ma l'aria ristagna.</li>
   <li><strong>Automatismi</strong> (spenti di serie, sezione 20): doccia, aria fuori più umida e raffrescamento notturno.
       Cambiano velocità sopra al programma, non accendono mai la VMC spenta, e una velocità scelta a mano li ferma finché
       il motivo non passa. La scheda della VMC dice quale è in corso e perché.</li>
@@ -634,7 +639,8 @@ nell'app non arriva niente.</div>
   <tr><td>Nessuno Shelly risponde</td><td>È la rete: riavvia il router (sezione 8).</td></tr>
   <tr><td>Bypass</td><td>Estate chiuso, inverno aperto: sempre, anche fuori casa.</td></tr>
   <tr><td>Deumidificatore</td><td>Solo d'estate, acceso dalla home a tempo. Acceso da altri: spento entro un minuto.</td></tr>
-  <tr><td>Fuori casa</td><td>Zone e deumidificatore spenti; niente si cambia fino a <em>Sono rientrato</em>.</td></tr>
+  <tr><td>Fuori casa</td><td>Zone e deumidificatore spenti, VMC a Notte o spenta; niente si cambia fino a <em>Sono
+      rientrato</em>.</td></tr>
 </table>
 
 <h2 id="s23">23. Quanto ci mette ad accorgersene</h2>

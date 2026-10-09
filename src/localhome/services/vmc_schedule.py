@@ -19,6 +19,12 @@ A timed boost (`override`) is the one exception: a speed for so many
 minutes, then back to what the program says - or, with the program off,
 to the speed and on/off state from before it.
 
+Away from home (the thermostat's away mode) the VMC runs at its night
+speed or is off, as chosen on the home page when leaving (`away`, the
+choice remembered in `away_choice` - night unless one is made); nothing
+else moves it meanwhile, and on return it goes back to its program, or
+to the speed and on/off state from before.
+
 The automatic adjustments (services/vmc_auto.py: a shower, humid outdoor
 air in summer, night cooling) sit between the two: on top of the speed
 the program set or someone picked, never over a timed boost, and a speed
@@ -36,6 +42,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta
+from typing import Callable
 
 from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
@@ -53,6 +60,10 @@ MAX_OVERRIDE_MINUTES = 24 * 60
 # having answered yet rather than someone's hand.
 SETTLE_SECONDS = 90
 DEFAULT_DAY_NIGHT = {"day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 25}}
+# What the VMC does while nobody's home - and "keep", for a tool that
+# mustn't touch it (tools/live_walk.py).
+AWAY_MODES = ("night", "off")
+AWAY_CHOICES = (*AWAY_MODES, "keep")
 
 
 def day_night_week(day: dict, night: dict) -> dict[str, list[int]]:
@@ -72,6 +83,8 @@ DEFAULT_SCHEDULE = {
     "target": None,
     "week": day_night_week(DEFAULT_DAY_NIGHT["day"], DEFAULT_DAY_NIGHT["night"]),
     "override": None,
+    "away": None,
+    "away_choice": "night",
 }
 
 
@@ -126,6 +139,23 @@ def _validate_override(override) -> dict | None:
         raise InputError("vmc_override_invalid", "a timed speed needs a device, a speed and an end time")
 
 
+def _validate_away(away) -> dict | None:
+    if away is None:
+        return None
+    try:
+        if away["mode"] not in AWAY_MODES:
+            raise ValueError(away["mode"])
+        restore = away.get("restore") or {}
+        return {
+            "mode": away["mode"],
+            "device": str(away["device"]),
+            "restore": {"value": restore.get("value") if isinstance(restore.get("value"), (int, float)) else None,
+                        "on": restore.get("on") if isinstance(restore.get("on"), bool) else None},
+        }
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise InputError("away_vmc_invalid", "away: a mode (night or off) and a device")
+
+
 def validate(schedule: dict) -> dict:
     """Returns the schedule cleaned up, or raises InputError describing
     the first problem. Without a `week`, `day` and `night` (the older
@@ -140,6 +170,8 @@ def validate(schedule: dict) -> dict:
         "target": target.strip() if isinstance(target, str) and target.strip() else None,
         "week": _validate_week(schedule["week"]) if "week" in schedule else _validate_day_night(schedule),
         "override": _validate_override(schedule.get("override")),
+        "away": _validate_away(schedule.get("away")),
+        "away_choice": schedule.get("away_choice") if schedule.get("away_choice") in AWAY_MODES else "night",
     }
     if clean["enabled"] and not clean["target"]:
         raise InputError("vmc_no_target", "choose which device the program controls before turning it on")
@@ -219,11 +251,15 @@ class VmcScheduleController:
     the schedule every tick, so a save takes effect without a restart."""
 
     def __init__(self, manager, store: VmcScheduleStore, poll_interval_seconds: float = 60,
-                 auto: VmcAuto | None = None):
+                 auto: VmcAuto | None = None, away_until: Callable[[], datetime | None] | None = None,
+                 device: Callable[[], str | None] | None = None, speeds: Callable[[str], dict] | None = None):
         self.manager = manager
         self.store = store
         self.poll_interval_seconds = poll_interval_seconds
         self.auto = auto
+        self.away_until = away_until    # the house's absence - the thermostat's away mode
+        self.device = device            # the VMC's speed, when no program names it
+        self.speeds = speeds            # its night/day/boost speeds
         self._applied: tuple | None = None
         # The speed it would run at without the adjustments - the program's,
         # or one picked by hand - and the adjustment written, while it lasts.
@@ -255,6 +291,13 @@ class VmcScheduleController:
             # something else decides the speed.
             settings = self.auto.observe(now.timestamp()) if self.auto else None
             schedule = self.store.get()
+            if schedule["away"]:
+                if self._away_on(now):
+                    self._hold_away(schedule["away"])
+                    self._base, self._adjusted = None, None
+                    return
+                self._end_away(schedule)
+                schedule = self.store.get()
             override = schedule["override"]
             if override_active(override, now):
                 wanted = ("override", override["device"], override["value"], override["until"])
@@ -289,6 +332,80 @@ class VmcScheduleController:
                 self._applied = None  # switched off: the next change applies again
             if self.auto:
                 self._automate(schedule, settings, now)
+
+    # ------------------------------------------------------------- away --
+
+    def _away_on(self, now: datetime) -> bool:
+        until = self.away_until() if self.away_until else None
+        return bool(until and until > now)
+
+    def holding_away(self, now: datetime | None = None) -> dict | None:
+        """The VMC's absence under way - {"mode", "device", "restore"} - or
+        None: then nothing holds it."""
+        away = self.store.get()["away"]
+        return away if away and self._away_on(now or datetime.now()) else None
+
+    def go_away(self, mode: str, now: datetime | None = None) -> None:
+        """Nobody's home: the VMC at its night speed or off (`mode`) until
+        they're back, then as it was - or left alone ("keep"). Going away
+        again while away (another length) keeps what it was before."""
+        if mode not in AWAY_CHOICES:
+            raise InputError("away_vmc_invalid", f"the VMC away: one of {', '.join(AWAY_CHOICES)}")
+        now = now or datetime.now()
+        with self._lock:
+            schedule = self.store.get()
+            if mode == "keep":
+                if schedule["away"]:
+                    self._end_away(schedule)
+                    self.tick(now)
+                return
+            program = schedule["enabled"] and schedule["target"]
+            device = (schedule["away"] or {}).get("device") or (schedule["target"] if program else None) or \
+                (self.device() if self.device else None)
+            if not device or device not in self.manager.numbers:
+                self.store.update({"away_choice": mode})
+                return
+            if schedule["away"]:
+                restore = schedule["away"]["restore"]
+            elif override_active(schedule["override"], now):
+                restore = schedule["override"]["restore"]      # what it was before the timed speed
+            else:
+                restore = self._reading(device)
+            self.store.update({"away": {"mode": mode, "device": device, "restore": restore},
+                               "away_choice": mode, "override": None})
+            self.tick(now)
+
+    def _hold_away(self, away: dict) -> None:
+        """Night or off, and kept so: changed from elsewhere (the Shelly
+        app), it's put back at the next check."""
+        device = away["device"]
+        switch = getattr(self.manager, "paired_switch", {}).get(device)
+        on = self._poller_reading(switch).get("is_on") if switch else None
+        value = self._poller_reading(device).get("value")
+        if away["mode"] == "off":
+            if (switch and on is not False) or (not switch and value != 0):
+                self._apply(device, 0, "away")
+            return
+        night = (self.speeds(device) if self.speeds else {}).get("night")
+        if night is not None and (on is False or not isinstance(value, (int, float)) or round(value) != night):
+            self._apply(device, night, "away")
+
+    def _end_away(self, schedule: dict) -> None:
+        """Back home: the program's speed (applied right after), or the
+        speed and on/off state from before."""
+        away = schedule["away"]
+        self.store.update({"away": None})
+        self._applied = None
+        self._base, self._adjusted = None, None
+        if schedule["enabled"] and schedule["target"]:
+            return
+        restore = away.get("restore") or {}
+        if restore.get("on") is False:
+            self._apply(away["device"], 0, "back home")
+        elif restore.get("value") is not None:
+            self._apply(away["device"], round(restore["value"]), "back home")
+
+    # ------------------------------------------------------- automatics --
 
     def _automate(self, schedule: dict, settings: dict, now: datetime) -> None:
         """The adjustments on top of the speed it runs at now."""
@@ -425,7 +542,12 @@ class VmcScheduleController:
         schedule = self.store.get()
         status: dict = {"enabled": bool(schedule["enabled"] and schedule["target"])}
         override = schedule["override"]
-        if override_active(override, now):
+        away = schedule["away"]
+        if away and self._away_on(now):
+            night = (self.speeds(away["device"]) if self.speeds else {}).get("night")
+            status["away"] = {"mode": away["mode"], "device": away["device"],
+                              "value": 0 if away["mode"] == "off" else night}
+        elif override_active(override, now):
             status["override"] = {"device": override["device"], "value": override["value"],
                                   "until": override["until"], "until_hhmm": override["until"][11:16]}
         elif self._adjusted is not None and self.auto is not None:

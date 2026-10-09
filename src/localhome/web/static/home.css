@@ -799,6 +799,14 @@ body[data-running="true"] .hero-season::before {
 .vmc-auto-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius-s);
                  background: var(--accent-soft); color: var(--accent); font-size: 0.86rem; font-weight: 600; line-height: 1.35; }
 .vmc-auto-note svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+/* Away: just the head and what it's held at. */
+.vmc-held .vmc-auto-note { margin: 0; }
+@media (min-width: 760px) {
+  .vmc-held .vmc-live { grid-template-columns: 1fr; grid-template-areas: "head" "note"; row-gap: 12px; }
+  .vmc-held .vmc-auto-note { grid-area: note; }
+}
+/* The away sheet's VMC choice: night or off, one lit. */
+.away-vmc .btn[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 @media (min-width: 760px) {
   .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "boost presets"; column-gap: 28px; align-items: center; }

@@ -118,6 +118,8 @@ class Board:
             return json.load(res)
 
     def post(self, path, body):
+        if path == "/api/climate/away":
+            body = {**body, "vmc": "keep"}      # the VMC stays as it is - see keep_vmc()
         req = urllib.request.Request(self.base + path, data=json.dumps(body).encode(), method="POST",
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -237,11 +239,25 @@ class Board:
                        self.becomes(f"{z['name']} Valve", want))
 
 
+def keep_vmc(page):
+    """The page's absences leave the VMC as it is - the one device in real
+    use: the away sheet asks for its night speed or off, this asks the
+    board to keep it."""
+    def keep(route, request):
+        if request.method != "POST":
+            route.continue_()
+            return
+        body = json.loads(request.post_data or "{}")
+        route.continue_(post_data=json.dumps({**body, "vmc": "keep"}))
+    page.route("**/api/climate/away", keep)
+
+
 class Home:
     """The home page, tapped as a resident would."""
 
     def __init__(self, board: Board, page):
         self.board, self.page = board, page
+        keep_vmc(page)
 
     def open(self):
         self.page.goto(self.board.base)
@@ -618,6 +634,7 @@ def away_and_home(board, home, browser):
 
     # 1. Away from the sheet, with a stale second phone; refusals; back from a card.
     stale = browser.new_page(viewport={"width": 390, "height": 900})
+    keep_vmc(stale)
     stale.goto(board.base)
     stale.wait_for_selector(".zone", timeout=30000)
     stale.wait_for_timeout(1000)

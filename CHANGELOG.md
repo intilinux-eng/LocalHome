@@ -44,6 +44,13 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **Away from home, the VMC at its night speed or off** - chosen in the
+  away sheet (night unless chosen otherwise; the last choice is kept).
+  It wins over the program, the automatics and a timed boost; the VMC's
+  card says what it's held at and offers nothing to press, a change from
+  the Shelly app is put back within a minute, and on return it goes back
+  to its program, or as it was before. `tools/live_walk.py` asks for the
+  VMC to be left alone, so its walks don't touch it.
 - **VMC automatics, off by default**: set in the admin panel under Plant
   tuning, each switched on by itself, in use at once. *Shower*: the
   bathroom's humidity rising 8 points within 10 minutes runs the VMC at
