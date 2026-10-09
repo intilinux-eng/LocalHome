@@ -124,7 +124,7 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
   <tr><td>Sensore Stanze, Bagni, esterno</td><td>Shelly H&amp;T Gen3, a batteria (sezione 5)</td></tr>
   <tr><td>Valvola Stanze, Bagni</td><td>Shelly 1 Gen3</td></tr>
   <tr><td>Bypass bagni, deumidificatore</td><td>Shelly 1 Gen3 (sezione 3)</td></tr>
-  <tr><td>VMC</td><td>Shelly Dimmer 0/1-10V Gen3 (sezione 4)</td></tr>
+  <tr><td>VMC Maico AERA 320</td><td>Shelly Dimmer 0/1-10V Gen3 (sezione 4)</td></tr>
 </table>
 <table>
   <tr><th>Pagina</th><th>Per chi, cosa</th></tr>
@@ -191,6 +191,23 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
   <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva. Se non risponde, LocalHome la interroga sempre
       meno spesso finché non torna.</li>
 </ul>
+<div class="keep">
+<h3>La VMC: Maico AERA 320</h3>
+<p>LocalHome ne comanda solo la velocità, con il segnale 0-10 V dello Shelly Dimmer (sezione 19). Il resto lo fa la VMC da sola,
+con i suoi sensori: LocalHome non lo comanda e non lo vede.</p>
+<table>
+  <tr><th>Funzione della VMC</th><th>Cosa fa</th></tr>
+  <tr><td>Bypass estivo (free cooling)</td><td>Una serranda manda l'aria attorno allo scambiatore, senza recuperare calore. Si apre
+      da sola con <strong>dentro più di 22 °C, dentro più caldo che fuori e fuori più di 16 °C</strong> (l'aria fresca della notte
+      raffresca), oppure con dentro meno di 22 °C e fuori più caldo (l'aria tiepida scalda).</td></tr>
+  <tr><td>Antigelo</td><td>Con l'esterno troppo freddo protegge lo scambiatore: può girare un solo ventilatore. Non è un guasto, né di
+      LocalHome: torna da sola quando fuori si scalda.</td></tr>
+  <tr><td>Manutenzione</td><td>Filtri della VMC e delle bocchette almeno ogni 3 mesi, scambiatore ogni anno (sostituzione ogni 6),
+      tubazioni ogni 3 anni. Acqua tiepida e sapone neutro, niente getti in pressione.</td></tr>
+</table>
+<p>Per questo il <em>raffrescamento notturno</em> (sezione 20) alza la velocità solo con fuori almeno 16 °C: è lì che il bypass è
+aperto e l'aria fresca entra davvero. Sotto, passerebbe dallo scambiatore e si scalderebbe con l'aria che esce.</p>
+</div>
 
 <h2 id="s5">5. Sensori: Shelly H&amp;T Gen3</h2>
 <p>Stesso sensore per Stanze, Bagni ed esterno: temperatura e umidità, display e-paper, 4 pile AA (circa un anno) o USB-C,
@@ -539,6 +556,9 @@ stesso della sezione 15, con queste come giuste.</p>
 
 <h2 id="s19">19. Dimmer Gen3 (VMC)</h2>
 <p>MQTT come nella sezione 13, poi ID o prefisso in admin → Dispositivi → VMC. Come lavora: sezione 4.</p>
+<p>Sulla Maico AERA 320 il segnale va all'ingresso 1-10 V / 0-10 V (schema 3 del manuale): <strong>jumper in posizione 1-10V</strong>,
+trimmer <strong>MIN al minimo e MAX al massimo</strong>, così tutta la scala segue il segnale e le percentuali di Notte, Giorno e
+Massimo (sezione 20) sono quelle vere.</p>
 
 <h2 id="s20">20. Regolazioni nell'admin</h2>
 <p>Quelle che vale la pena conoscere. Le altre vanno bene di serie.</p>
@@ -576,7 +596,7 @@ giorno/notte si sceglie dalla home, sulla scheda della VMC.</p>
       umido</td><td>Giorno, mai Massimo</td></tr>
 </table>
 <p>Conta la salita dell'umidità, non un valore fisso: d'estate il bagno è umido anche senza doccia. I 16 °C sono quelli del bypass
-estivo della VMC (Maico AERA 320): sotto, l'aria passa dallo scambiatore e non raffresca. Le due estive vogliono la sonda
+estivo della VMC (sezione 4): sotto, l'aria passa dallo scambiatore e non raffresca. Le due estive vogliono la sonda
 esterna. I valori della doccia sono pensati per la soglia umidità dell'H&amp;T all'1% (sezione 5): un invio a ogni punto, la salita
 si vede entro un paio di minuti.</p>
 </div>
