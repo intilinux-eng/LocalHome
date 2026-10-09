@@ -185,6 +185,9 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
       successiva: una velocità scelta a mano resta fino ad allora.</li>
   <li><strong>Percentuali</strong> di Notte, Giorno e Massimo (di serie 25, 50 e 100%): admin → <em>Regolazioni
       impianto</em> (sezione 20). Valgono subito.</li>
+  <li><strong>Automatismi</strong> (spenti di serie, sezione 20): doccia, aria fuori più umida e raffrescamento notturno.
+      Cambiano velocità sopra al programma, non accendono mai la VMC spenta, e una velocità scelta a mano li ferma finché
+      il motivo non passa. La scheda della VMC dice quale è in corso e perché.</li>
   <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva. Se non risponde, LocalHome la interroga sempre
       meno spesso finché non torna.</li>
 </ul>
@@ -559,6 +562,23 @@ stesso della sezione 15, con queste come giuste.</p>
 <p>Notte, Giorno e Massimo in percentuale: le velocità dei pulsanti e dei programmi della home. Valgono subito. Il programma
 giorno/notte si sceglie dalla home, sulla scheda della VMC.</p>
 <figure class="shot wide"><img src="admin-vmc-velocita.jpg" alt="Admin, Velocità VMC: notte 25%, giorno 50%, massimo 100%"></figure>
+</div>
+<div class="keep">
+<h3>Automatismi VMC: admin → Regolazioni impianto → Automatismi VMC</h3>
+<p>Tutti spenti di serie: si attivano uno per uno, i valori consigliati sono già pronti. Valgono subito.</p>
+<table class="three">
+  <tr><th>Automatismo</th><th>Quando</th><th>Velocità</th></tr>
+  <tr><td>Doccia</td><td>l'umidità del bagno sale di 8 punti in 10 minuti; finisce tornata entro 5 punti da prima, dopo 15-60
+      minuti</td><td>Massimo; Giorno nelle ore silenziose (22-7)</td></tr>
+  <tr><td>Aria fuori più umida (estate)</td><td>il punto di rugiada fuori supera di 1 °C quello di Stanze</td><td>Notte, mai
+      spenta</td></tr>
+  <tr><td>Raffrescamento notturno (estate)</td><td>Stanze da 24 °C, fuori almeno 3 °C più fresco, non sotto 16 °C e non più
+      umido</td><td>Giorno, mai Massimo</td></tr>
+</table>
+<p>Conta la salita dell'umidità, non un valore fisso: d'estate il bagno è umido anche senza doccia. I 16 °C sono quelli del bypass
+estivo della VMC (Maico AERA 320): sotto, l'aria passa dallo scambiatore e non raffresca. Le due estive vogliono la sonda
+esterna. I valori della doccia sono pensati per la soglia umidità dell'H&amp;T all'1% (sezione 5): un invio a ogni punto, la salita
+si vede entro un paio di minuti.</p>
 </div>
 <div class="keep">
 <h3>Deumidificatore: admin → Stagione → Deumidificatore</h3>

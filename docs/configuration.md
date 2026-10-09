@@ -526,6 +526,30 @@ new value.
 with the program off, to the speed and on/off state from before. A
 speed picked by hand meanwhile ends it.
 
+**Automatic adjustments** (`services/vmc_auto.py`), set in the admin
+panel under Plant tuning (`config/vmc_auto.json`, only what differs from
+the defaults) - **all off by default**, each switched on by itself, in
+use at once:
+
+| Adjustment | When | Speed | Recommended values |
+|---|---|---|---|
+| Shower | the bathroom's humidity rises fast | boost; day in the quiet hours | +8 points within 10 min; over when back within 5 points of where it started, after 15 to 60 min |
+| Humid outside (summer) | the outdoor dew point above the reference room's | night (never off) | 1 °C over to start, back at the indoor dew point |
+| Night cooling (summer) | the house warm, the outdoor air cooler and no more humid | day | house from 24 °C, outside 3 °C cooler and not under 16 °C |
+
+The quiet hours (22-7) never get the boost - it's loud. The bathroom is
+the zone kept out of cooling and the reference room the first one
+cooled, unless the panel names others; the summer two need the outdoor
+sensor. The rise is a rate, not a fixed humidity: a bathroom's ordinary
+humidity moves with the season. The outdoor floor is the unit's own
+summer bypass - a Maico AERA 320's opens with indoor > 22 °C, indoor >
+outdoor and outdoor > 16 °C; below it the air goes through the heat
+exchanger and doesn't cool. They sit on top of the program and of a
+speed picked by hand: never switching the unit on, never over a timed
+speed, and a speed picked by hand while one is under way - on the card,
+in the Shelly app or on the unit's regulator - makes it step aside until
+its reason has passed. The card says which one is under way and why.
+
 ### Away mode
 
 There's no config key for this - it's a runtime toggle, from the

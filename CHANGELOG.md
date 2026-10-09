@@ -44,6 +44,18 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **VMC automatics, off by default**: set in the admin panel under Plant
+  tuning, each switched on by itself, in use at once. *Shower*: the
+  bathroom's humidity rising 8 points within 10 minutes runs the VMC at
+  boost (day speed in the quiet hours, 22-7) until it's back within 5
+  points, for 15 to 60 minutes. *Humid outside* (summer): the outdoor
+  dew point 1 °C above the reference room's - the night speed. *Night
+  cooling* (summer): the house from 24 °C, the outdoor air 3 °C cooler,
+  not under 16 °C (the unit's summer bypass) and no more humid - the day
+  speed. On top of the program and of a speed picked by hand: never
+  switching the VMC on, never over a timed boost, and a speed picked by
+  hand makes them step aside until their reason has passed. The home
+  page's VMC card says which one is under way and why.
 - **`tools/live_walk.py`: a walk on the real board**, to run before
   wiring the valves and after a deploy. The home page used as a resident
   would (manual changes of every kind, back to the week, away and back),
