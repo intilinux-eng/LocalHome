@@ -150,6 +150,38 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     assert [e for e in opened.errors if "400" not in e] == []
 
 
+def test_the_vmc_automatics_are_off_until_switched_on_here(open_page, api):
+    """Under the VMC's speeds: each automatic off, its recommended values
+    ready; switched on and saved, in use at once; the recommended values
+    back with one button."""
+    assert not any(api("/api/climate-admin/vmc-auto")["settings"][k] for k in ("shower", "humid", "cooling"))
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    try:
+        page.wait_for_selector("#vmc-auto:not([hidden]) [data-vmc-auto='shower']", state="attached", timeout=20000)
+        page.evaluate("document.getElementById('plant-settings').open = true")
+        box = page.locator("#vmc-auto")
+        assert box.locator("input[type=checkbox]:checked").count() == 0
+        assert box.locator("[data-rule='shower'] .vmc-auto-fields").get_attribute("aria-disabled") == "true"
+        assert box.locator("[data-vmc-auto='shower_rise']").input_value() == "8"
+        assert "Scegli la zona del bagno" in box.inner_text(), "neither test zone is kept out of cooling"
+        box.locator("[data-vmc-auto='shower']").check()
+        box.locator("[data-vmc-auto-zone='bathroom_zone']").select_option(ZONE_B)
+        box.locator("[data-vmc-auto='shower_max_minutes']").fill("45")
+        box.locator("button.open").click()
+        assert eventually(page, lambda: "Salvato" in page.inner_text("#vmc-auto-result"))
+        saved = api("/api/climate-admin/vmc-auto")
+        assert saved["settings"]["shower"] and saved["settings"]["shower_max_minutes"] == 45
+        assert saved["bathroom"] == ZONE_B and "Scegli la zona del bagno" not in box.inner_text()
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+        box.locator("button:not(.open)").click()
+        assert eventually(page, lambda: "consigliati" in page.inner_text("#vmc-auto-result"))
+        assert api("/api/climate-admin/vmc-auto")["settings"]["shower"] is False
+    finally:
+        api("/api/climate-admin/vmc-auto", {"reset": True})
+    assert opened.errors == []
+
+
 def test_the_plants_tuning_and_the_boards_settings_are_one_form(open_page, api):
     """Shown in two places - the thermostat's next to the zones, the rest
     under Board - and either Save sends every field: none is lost."""

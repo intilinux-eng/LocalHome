@@ -635,6 +635,123 @@ async function loadVmcSpeeds() {
   });
 }
 
+// The VMC's automatic adjustments (services/vmc_auto.py): off by
+// default, each switched on here; in use as soon as they're saved.
+async function loadVmcAuto() {
+  const box = document.getElementById("vmc-auto");
+  if (!box) return;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/vmc-auto", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  box.hidden = !(data.ok && data.vmc);
+  if (box.hidden) return;
+  const s = data.settings, r = data.ranges;
+  const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
+  const num = (key, step) => `<input type="number" data-vmc-auto="${key}" min="${r[key][0]}" max="${r[key][1]}" step="${step || 1}" value="${s[key]}">`;
+  const field = (key, unit, step) => `<div class="admin-field"><label>${t(`setting_${key}`)}</label>
+      <span class="dehum-pct">${num(key, step)} ${escapeHtml(unit)}</span></div>`;
+  // Left empty, the automatic choice - its zone said in brackets.
+  const automatic = { bathroom_zone: data.zones.find(z => !z.cool_enabled), reference_zone: data.zones.find(z => z.cool_enabled) };
+  const zone = key => `<div class="admin-field vmc-auto-wide"><label>${t(`setting_${key}`)}</label>
+      <select data-vmc-auto-zone="${key}"><option value="">${t("vmc_auto_zone_auto", { zone: automatic[key] ? displayName(automatic[key].name) : "-" })}</option>
+      ${data.zones.map(z => `<option value="${escapeHtml(z.name)}"${s[key] === z.name ? " selected" : ""}>${escapeHtml(displayName(z.name))}</option>`).join("")}</select></div>`;
+  const check = (key, label) => `<label class="dehum-check dehum-check-long"><input type="checkbox" data-vmc-auto="${key}"${s[key] ? " checked" : ""} onchange="syncVmcAuto()">
+      <strong>${t(label)}</strong></label>`;
+  const under = data.under_way;
+  const now = under
+    ? t(`vmc_auto_now_${under.reason}`, { zone: displayName(under.zone || "?"), rh: fmt(under.humidity, 0), value: under.value,
+        out: fmt(under.reason === "cooling" ? under.outdoor : under.outdoor_dew, 1), in: fmt(under.reason === "cooling" ? under.indoor : under.indoor_dew, 1) })
+    : t("vmc_auto_now_none");
+  box.innerHTML = `
+    <h3>${t("vmc_auto_heading")}</h3>
+    <p class="hint-text">${t("vmc_auto_note")}</p>
+    <p class="hint-text vmc-auto-now" data-under-way="${!!under}">${now}</p>
+    <div class="vmc-auto-rule" data-rule="shower">
+      ${check("shower", "vmc_auto_shower")}
+      <div class="dehum-grid vmc-auto-fields">
+        ${zone("bathroom_zone")}
+        ${field("shower_rise", tr("climate_admin.vmc_auto_points"))}
+        ${field("shower_window_minutes", tr("climate_admin.vmc_auto_minutes"))}
+        ${field("shower_back_within", tr("climate_admin.vmc_auto_points"))}
+        ${field("shower_min_minutes", tr("climate_admin.vmc_auto_minutes"))}
+        ${field("shower_max_minutes", tr("climate_admin.vmc_auto_minutes"))}
+      </div>
+      ${data.bathroom ? "" : `<p class="hint-text admin-error">${t("vmc_auto_needs_bathroom")}</p>`}
+      <p class="hint-text">${t("vmc_auto_shower_help")}</p>
+    </div>
+    <div class="vmc-auto-rule">
+      <strong>${t("vmc_auto_quiet")}</strong>
+      <div class="dehum-grid">${field("quiet_from_hour", "")}${field("quiet_to_hour", "")}</div>
+      <p class="hint-text">${t("vmc_auto_quiet_help")}</p>
+    </div>
+    <div class="vmc-auto-rule">
+      <strong>${t("vmc_auto_summer")}</strong>
+      <p class="hint-text">${t("vmc_auto_summer_help")}</p>
+      ${data.outdoor ? "" : `<p class="hint-text admin-error">${t("vmc_auto_needs_outdoor")}</p>`}
+      <div class="dehum-grid">${zone("reference_zone")}</div>
+      <div class="vmc-auto-sub" data-rule="humid">
+        ${check("humid", "vmc_auto_humid")}
+        <div class="dehum-grid vmc-auto-fields">${field("humid_margin_c", "°C", 0.5)}</div>
+        <p class="hint-text">${t("vmc_auto_humid_help")}</p>
+      </div>
+      <div class="vmc-auto-sub" data-rule="cooling">
+        ${check("cooling", "vmc_auto_cooling")}
+        <div class="dehum-grid vmc-auto-fields">
+          ${field("cooling_from_c", "°C", 0.5)}${field("cooling_delta_c", "°C", 0.5)}${field("cooling_outdoor_min_c", "°C", 0.5)}
+        </div>
+        <p class="hint-text">${t("vmc_auto_cooling_help")}</p>
+      </div>
+    </div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" type="button" onclick="saveVmcAuto(this)">${t("vmc_auto_save")}</button>
+      <button class="tbtn" type="button" onclick="saveVmcAuto(this, true)">${t("vmc_auto_reset")}</button>
+    </div>
+    <p class="hint-text" id="vmc-auto-result"></p>`;
+  syncVmcAuto();
+}
+
+// A switched-off automatic's fields are greyed out - still there, set for
+// when it's switched on.
+function syncVmcAuto() {
+  document.querySelectorAll("#vmc-auto [data-rule]").forEach(rule => {
+    const on = rule.querySelector(`[data-vmc-auto="${rule.dataset.rule}"]`);
+    const fields = rule.querySelector(".vmc-auto-fields");
+    if (!on || !fields) return;
+    fields.setAttribute("aria-disabled", String(!on.checked));
+  });
+}
+
+async function saveVmcAuto(button, reset = false) {
+  const box = document.getElementById("vmc-auto");
+  const result = document.getElementById("vmc-auto-result");
+  const body = {};
+  box.querySelectorAll("[data-vmc-auto]").forEach(i => { body[i.dataset.vmcAuto] = i.type === "checkbox" ? i.checked : Number(i.value); });
+  box.querySelectorAll("[data-vmc-auto-zone]").forEach(i => { body[i.dataset.vmcAutoZone] = i.value || null; });
+  button.disabled = true;
+  try {
+    const res = await fetch("/api/climate-admin/vmc-auto", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reset ? { reset: true } : body) });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
+      result.className = "hint-text admin-error";
+      return;
+    }
+    await loadVmcAuto();
+    const after = document.getElementById("vmc-auto-result");
+    after.textContent = tr(reset ? "climate_admin.vmc_auto_reset_done" : "climate_admin.vmc_auto_saved");
+    after.className = "hint-text admin-success";
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function saveVmcSpeeds(button) {
   const resultEl = document.getElementById("save-vmc-speeds-result");
   const body = {};
@@ -3010,6 +3127,7 @@ loadDehumSettings();
 loadExtraSensor();
 loadVmc();
 loadVmcSpeeds();
+loadVmcAuto();
 watchDeviceRows();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);

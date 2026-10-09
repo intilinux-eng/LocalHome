@@ -541,6 +541,15 @@
 .device-role .admin-zone-card { background: var(--surface); }
 .device-role .sec-pills { font-weight: 400; }
 .settings-extra { margin-top: 16px; }
+/* The VMC's automatics: one block each, the fields greyed out while it's off. */
+.vmc-auto-rule { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vmc-auto-sub { margin-top: 12px; }
+.vmc-auto-fields { margin-top: 8px; }
+#vmc-auto .dehum-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+#vmc-auto .dehum-pct input { min-width: 0; }
+#vmc-auto .vmc-auto-wide { grid-column: 1 / -1; }
+.vmc-auto-fields[aria-disabled="true"] { opacity: 0.5; }
+.vmc-auto-now[data-under-way="true"] { color: var(--accent); font-weight: 600; }
 
 /* Under a Shelly id field: what the device said when the id went in. */
 .shelly-check { margin: 4px 0 0; }

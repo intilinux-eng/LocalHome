@@ -19,6 +19,12 @@ A timed boost (`override`) is the one exception: a speed for so many
 minutes, then back to what the program says - or, with the program off,
 to the speed and on/off state from before it.
 
+The automatic adjustments (services/vmc_auto.py: a shower, humid outdoor
+air in summer, night cooling) sit between the two: on top of the speed
+the program set or someone picked, never over a timed boost, and a speed
+picked by hand while one is under way makes it step aside until its
+reason has passed. Without them the controller does just the above.
+
 The schedule lives in its own small JSON file so it can change while
 LocalHome runs: the control loop re-reads it every tick, so a save takes
 effect without a restart.
@@ -33,6 +39,7 @@ from datetime import datetime, timedelta
 
 from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
+from localhome.services.vmc_auto import Adjustment, VmcAuto
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -42,6 +49,9 @@ PERIODS = ("day", "night")
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 WEEK_HOURS = 7 * 24
 MAX_OVERRIDE_MINUTES = 24 * 60
+# After writing a speed, how long a different reading is the unit not
+# having answered yet rather than someone's hand.
+SETTLE_SECONDS = 90
 DEFAULT_DAY_NIGHT = {"day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 25}}
 
 
@@ -208,11 +218,18 @@ class VmcScheduleController:
     startup; a timed boost while it lasts, and what comes after it. Reads
     the schedule every tick, so a save takes effect without a restart."""
 
-    def __init__(self, manager, store: VmcScheduleStore, poll_interval_seconds: float = 60):
+    def __init__(self, manager, store: VmcScheduleStore, poll_interval_seconds: float = 60,
+                 auto: VmcAuto | None = None):
         self.manager = manager
         self.store = store
         self.poll_interval_seconds = poll_interval_seconds
+        self.auto = auto
         self._applied: tuple | None = None
+        # The speed it would run at without the adjustments - the program's,
+        # or one picked by hand - and the adjustment written, while it lasts.
+        self._base: int | None = None
+        self._adjusted: Adjustment | None = None
+        self._written_at = 0.0
         self._failures = FailureLog(logger)
         self._started = False
         self._lock = threading.RLock()
@@ -234,26 +251,77 @@ class VmcScheduleController:
     def tick(self, now: datetime | None = None) -> None:
         with self._lock:
             now = now or datetime.now()
+            # The readings every tick, so a shower's rise is seen even while
+            # something else decides the speed.
+            settings = self.auto.observe(now.timestamp()) if self.auto else None
             schedule = self.store.get()
             override = schedule["override"]
             if override_active(override, now):
                 wanted = ("override", override["device"], override["value"], override["until"])
                 if self._applied != wanted and self._apply(override["device"], override["value"], "timed speed"):
                     self._applied = wanted
+                self._base, self._adjusted = None, None   # the adjustments step aside, and look again after
                 return
             if override:
                 self._end_override(schedule)
                 schedule = self.store.get()
-            if not schedule["enabled"] or not schedule["target"]:
+                self._base, self._adjusted = None, None
+            if schedule["enabled"] and schedule["target"]:
+                value = speed_at(schedule["week"], now)
+                start = stretch_start(schedule["week"], now)
+                wanted = (schedule["target"], start, value)
+                if self._applied != wanted:
+                    # A new stretch: the program's speed, adjusted if an
+                    # adjustment is under way - a hand pick it replaces no
+                    # longer holds the adjustments back.
+                    if self.auto:
+                        self.auto.automation.dismissed.clear()
+                    adjustment = self.auto.adjust(value, schedule["target"], settings, now.hour) if self.auto else None
+                    if self._apply(schedule["target"], adjustment.value if adjustment else value,
+                                   adjustment.reason if adjustment else "program"):
+                        self._applied = wanted
+                        self._base, self._adjusted = value, adjustment
+                        self._written_at = now.timestamp()
+                    return
+                # Mid-stretch: a speed picked by hand stays - the adjustments
+                # below work on top of it.
+            else:
                 self._applied = None  # switched off: the next change applies again
-                return
-            value = speed_at(schedule["week"], now)
-            start = stretch_start(schedule["week"], now)
-            wanted = (schedule["target"], start, value)
-            if self._applied == wanted:
-                return  # mid-stretch: whatever speed was picked by hand stays
-            if self._apply(schedule["target"], value, "program"):
-                self._applied = wanted
+            if self.auto:
+                self._automate(schedule, settings, now)
+
+    def _automate(self, schedule: dict, settings: dict, now: datetime) -> None:
+        """The adjustments on top of the speed it runs at now."""
+        program = schedule["enabled"] and schedule["target"]
+        device = schedule["target"] if program else self.auto.device()
+        if not device or device not in self.manager.numbers:
+            return
+        switch = getattr(self.manager, "paired_switch", {}).get(device)
+        reading = self._poller_reading(device).get("value")
+        on = self._poller_reading(switch).get("is_on") is True if switch else True
+        if not on or not isinstance(reading, (int, float)):
+            # Off - by the program, or by someone during an adjustment, who
+            # meant it: nothing is switched back on.
+            if self._adjusted is not None:
+                self.auto.automation.dismiss()
+            self._adjusted = None
+            return
+        current = round(reading)
+        expected = self._adjusted.value if self._adjusted else self._base
+        if self._base is None:
+            self._base = current
+        elif current != expected and now.timestamp() - self._written_at > SETTLE_SECONDS:
+            # Picked by hand - on the home page, in the Shelly app, on the
+            # unit's regulator: it stands, and what's under way steps aside.
+            self.auto.automation.dismiss()
+            self._base, self._adjusted = current, None
+        adjustment = self.auto.adjust(self._base, device, settings, now.hour)
+        target = adjustment.value if adjustment else self._base
+        if target == current:
+            self._adjusted = adjustment
+        elif self._apply(device, target, f"automatic, {adjustment.reason}" if adjustment else "automatic, over"):
+            self._adjusted = adjustment
+            self._written_at = now.timestamp()
 
     def speeds_changed(self, moves: dict[int, int]) -> None:
         """The unit's speeds were given new values (the admin panel), and
@@ -263,6 +331,10 @@ class VmcScheduleController:
             if self._applied and self._applied[0] != "override":
                 target, start, value = self._applied
                 self._applied = (target, start, moves.get(value, value))
+            if self._base is not None:
+                self._base = moves.get(self._base, self._base)
+            if self._adjusted is not None:
+                self._adjusted = Adjustment(self._adjusted.reason, moves.get(self._adjusted.value, self._adjusted.value))
 
     def boost(self, device: str, value: int, minutes: int, now: datetime | None = None) -> dict:
         """`value` on `device` for `minutes`, then back to the program -
@@ -356,6 +428,9 @@ class VmcScheduleController:
         if override_active(override, now):
             status["override"] = {"device": override["device"], "value": override["value"],
                                   "until": override["until"], "until_hhmm": override["until"][11:16]}
+        elif self._adjusted is not None and self.auto is not None:
+            status["auto"] = {"reason": self._adjusted.reason, "value": self._adjusted.value,
+                              **self.auto.describe(self._adjusted.reason)}
         if not status["enabled"]:
             return status
         week = schedule["week"]

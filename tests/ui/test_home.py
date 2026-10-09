@@ -581,6 +581,29 @@ def test_the_vmc_runs_at_its_maximum_for_a_while_and_back(open_page, api):
     _reset_vmc(api)
 
 
+@pytest.mark.parametrize("width", [390, 1280])
+def test_an_automatic_vmc_change_says_why_on_its_card(open_page, width):
+    """A shower in the bathroom, humid air outside, night cooling: the
+    card says which, with what it went by - as the status would bring it."""
+    opened = _open_home(open_page, width)
+    page = opened.page
+    page.wait_for_selector("#vmc-card", timeout=20000)
+    for auto, words in (({"reason": "shower", "value": 100, "zone": "Bagni", "humidity": 78, "baseline": 55},
+                         ["doccia in Bagni", "78%", "massimo"]),
+                        ({"reason": "humid", "value": 25, "zone": "Stanze", "outdoor_dew": 19.5, "indoor_dew": 15.2},
+                         ["più umida", "19,5", "15,2"]),
+                        ({"reason": "cooling", "value": 50, "zone": "Stanze", "outdoor": 19, "indoor": 26.5},
+                         ["raffrescamento notturno", "26,5"])):
+        page.evaluate("auto => { state.vmc.status = { ...(state.vmc.status || {}), auto }; renderPlant(); }", auto)
+        note = page.locator("#vmc-card .vmc-auto-note")
+        assert note.count() == 1 and all(w in note.inner_text() for w in words), note.inner_text()
+        assert page.locator("#vmc-card .vmc-boost").count() == 1, "the timed boost still there"
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    page.evaluate("() => { delete state.vmc.status.auto; renderPlant(); }")
+    assert page.locator("#vmc-card .vmc-auto-note").count() == 0
+    assert opened.errors == []
+
+
 def test_an_air_quality_sensor_shows_its_co2_day_and_levels(open_page):
     """The test server has no Tuya air sensor: its reading - tonight's,
     from the real one - is handed to the page as refreshDevices() would."""

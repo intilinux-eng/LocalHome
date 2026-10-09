@@ -1580,6 +1580,15 @@ function vmcTile(speed) {
     : `<div class="vmc-boost">${ICONS.wind}<span class="vmc-boost-text">${esc(tr("home.vmc_boost_for", { level: vmcLevelName(speed, top) }))}</span>
         <span class="vmc-boost-times">${VMC_BOOST_MINUTES.map(m => `<button class="chip" type="button" data-vmc-boost="${m}" data-value="${top}" data-device="${esc(speed.name)}">${esc(m < 60 ? tr("home.vmc_minutes", { m }) : tr("home.vmc_hours", { h: m / 60 }))}</button>`).join("")}</span></div>`;
 
+  // An automatic change under way (services/vmc_auto.py): why the speed
+  // isn't the program's or the one picked, in a line of its own.
+  const auto = !boost && state.vmc && state.vmc.status && state.vmc.status.auto;
+  const autoNote = auto
+    ? `<p class="vmc-auto-note">${auto.reason === "cooling" ? ICONS.moon : ICONS.drop}<span>${esc(tr(`home.vmc_auto_${auto.reason}`, {
+        zone: displayName(auto.zone || ""), rh: fmt(auto.humidity, 0), level: vmcLevelName(speed, auto.value).toLowerCase(),
+        out: fmt(auto.reason === "cooling" ? auto.outdoor : auto.outdoor_dew), in: fmt(auto.reason === "cooling" ? auto.indoor : auto.indoor_dew) }))}</span></p>`
+    : "";
+
   // The rest of the time: one choice, manual or a program. A week set
   // elsewhere shows as "custom", only while it's the one running.
   const choice = vmcChoice(speed);
@@ -1618,7 +1627,7 @@ function vmcTile(speed) {
         <span class="tile-value">${!on ? "" : value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
       </div>
       <div class="vmc-presets" data-count="${speed.presets.length + (offButton ? 1 : 0)}" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
-      ${boostRow}
+      ${autoNote ? `<div class="vmc-under">${autoNote}${boostRow}</div>` : boostRow}
     </div>
     ${programs}
   </div>`;

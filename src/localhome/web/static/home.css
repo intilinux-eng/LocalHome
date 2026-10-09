@@ -795,11 +795,16 @@ body[data-running="true"] .hero-season::before {
 .vmc-boost[data-active="true"] { padding: 6px 6px 6px 12px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--accent); }
 .vmc-boost[data-active="true"] .vmc-boost-text { color: var(--accent); flex: 1; }
 
+/* An automatic change under way, above the timed boost. */
+.vmc-auto-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius-s);
+                 background: var(--accent-soft); color: var(--accent); font-size: 0.86rem; font-weight: 600; line-height: 1.35; }
+.vmc-auto-note svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+
 @media (min-width: 760px) {
   .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "boost presets"; column-gap: 28px; align-items: center; }
   .vmc-head { grid-area: head; }
   .vmc-presets { grid-area: presets; }
-  .vmc-boost { grid-area: boost; }
+  .vmc-boost, .vmc-under { grid-area: boost; }
 }
 
 /* The program: manual, or one of the ready-made ones (home.js vmcTile). */

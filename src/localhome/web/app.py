@@ -79,6 +79,8 @@ from localhome.services.thermostat import MODES, ScheduleStore, ThermostatContro
 from localhome.errors import InputError
 from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
+from localhome.services import vmc_auto
+from localhome.services.vmc_auto import VmcAuto, VmcAutoSettingsStore
 from localhome.services.vmc_schedule import VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -357,7 +359,18 @@ def create_app(config_path: str | None = None) -> Flask:
     # its file every tick so the admin panel can change it without a
     # restart.
     vmc_schedule = VmcScheduleStore(config.resolve("vmc_schedule.json"))
-    vmc = VmcScheduleController(manager, vmc_schedule)
+    # Its automatic adjustments - a shower, humid outdoor air, night
+    # cooling (services/vmc_auto.py) - from the zones' sensors and the
+    # outdoor one, set in the admin panel and read at every check.
+    vmc_auto_settings = VmcAutoSettingsStore(config.resolve("vmc_auto.json"))
+    vmc = VmcScheduleController(manager, vmc_schedule, auto=VmcAuto(
+        manager, vmc_auto_settings,
+        season=lambda: thermostat.schedule_store.get_mode() if thermostat else None,
+        zones=lambda: _auto_zones(thermostat),
+        outdoor_sensor=OUTDOOR_SENSOR_NAME,
+        device=lambda: _vmc_speed_device(manager),
+        speeds=lambda device: _vmc_speeds_in_use(app, device),
+    ))
 
     # What each Shelly says about itself - signal, temperature, restarts,
     # battery reports on time: see services/shelly_health.py. Listening
@@ -439,6 +452,7 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["THERMOSTAT"] = thermostat
     app.config["INTERLOCK"] = interlock
     app.config["VMC_SCHEDULE"] = vmc
+    app.config["VMC_AUTO_SETTINGS"] = vmc_auto_settings
     app.config["DEHUMIDIFIER"] = dehumidifier
     app.config["DEHUMIDIFIER_SETTINGS"] = dehumidifier_settings
     # The VMC's night/day/boost speeds as set in the admin panel, laid over
@@ -546,6 +560,29 @@ def _vmc_speed_device(manager: DeviceManager) -> str | None:
         if name in manager.numbers and (manager.ui_options.get(name) or {}).get("presets") and switch:
             return name
     return None
+
+
+def _auto_zones(thermostat) -> list[dict]:
+    """The zones with a sensor, for the VMC's adjustments to go by."""
+    if thermostat is None:
+        return []
+    return [{"name": z.name, "sensor": z.sensor, "cool_enabled": z.cool_enabled}
+            for z in thermostat.zones if z.sensor_configured]
+
+
+def _vmc_auto_answer(app: Flask) -> dict:
+    """The VMC's adjustments for the admin panel: the settings and their
+    defaults, the zones they can go by and the ones they go by now, what
+    they'd need that isn't there, and the one under way."""
+    manager: DeviceManager = app.config["MANAGER"]
+    settings = app.config["VMC_AUTO_SETTINGS"].get()
+    zones = _auto_zones(app.config["THERMOSTAT"])
+    bathroom, reference = vmc_auto.zones_for(settings, zones)
+    return {"settings": settings, "defaults": vmc_auto.DEFAULTS, "ranges": vmc_auto.RANGES,
+            "zones": [{"name": z["name"], "cool_enabled": z["cool_enabled"]} for z in zones],
+            "bathroom": bathroom["name"] if bathroom else None, "reference": reference["name"] if reference else None,
+            "vmc": _vmc_speed_device(manager) is not None, "outdoor": OUTDOOR_SENSOR_NAME in manager.pollers,
+            "under_way": app.config["VMC_SCHEDULE"].status().get("auto")}
 
 
 def _vmc_speeds_in_use(app: Flask, device: str | None) -> dict:
@@ -1835,6 +1872,31 @@ def _register_routes(app: Flask) -> None:
             vmc.speeds_changed(moves)
             _move_vmc_to_new_speed(manager, device, moves)
         return jsonify(ok=True, device=device, saved=True, speeds=new)
+
+    @app.route("/api/climate-admin/vmc-auto")
+    def api_vmc_auto_get():
+        return jsonify(ok=True, **_vmc_auto_answer(app))
+
+    @app.route("/api/climate-admin/vmc-auto", methods=["POST"])
+    def api_vmc_auto_save():
+        """Only what the body names changes; `{"reset": true}` puts the
+        defaults back. Takes effect at once - no restart."""
+        store: VmcAutoSettingsStore = app.config["VMC_AUTO_SETTINGS"]
+        body = _json_body()
+        try:
+            if body.get("reset") is True:
+                store.set(dict(vmc_auto.DEFAULTS))
+            else:
+                names = {z["name"] for z in _auto_zones(app.config["THERMOSTAT"])}
+                for key in vmc_auto.ZONE_KEYS:
+                    if isinstance(body.get(key), str) and body[key] not in names:
+                        raise InputError("vmc_auto_zone_unknown", f"{key}: no zone named {body[key]!r}",
+                                         zone=body[key])
+                store.set(body)
+        except InputError as exc:
+            return _refusal(exc, 400)
+        app.config["VMC_SCHEDULE"].tick()     # a change shows on the unit now, not in a minute
+        return jsonify(ok=True, **_vmc_auto_answer(app))
 
     @app.route("/api/climate-admin/restart", methods=["POST"])
     def api_climate_admin_restart():
