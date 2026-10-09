@@ -292,6 +292,15 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- **The administrator's guide explains the whole system; the admin page
+  is shorter.** The guide (linked at the top of the admin page, printable
+  to PDF) now has three parts with a table of contents: how the software
+  and the plant work - seasons, the bathrooms, the VMC, the sensors,
+  safety, restarts and power cuts as measured on the board, Wi-Fi, data
+  and maintenance, diagnostic mode - then installing the Shellys, then
+  what to do when something is missing. The admin page's "How it works"
+  section is gone, its content now in the guide, and diagnostic mode and
+  maintenance are one section.
 - **The safety close comes 3 hours after a zone's sensor is unreachable,
   not 24.** An H&T is unreachable after 4 hours without a report, so its
   valve now closes 7 hours after the last one instead of 28 - a radiant
