@@ -11,13 +11,14 @@ Shelly relays themselves say on the broker, not only what the page says.
 Made for a plant whose Shellys are powered but not yet wired to their
 valves - every relay clicks for real, nothing flows - and safe after:
 each valve opens for a second or two, the dehumidifier for a few. Besides
-what a resident does it switches the season, uses diagnostic mode and,
-when the air is too dry for the dehumidifier to start, lowers its start
-threshold for the test. It puts back the season, the threshold and
-diagnostic mode as it found them, whatever happens; it never edits the
-week, other settings, a VMC or a plug; and it stops at once if a manual
-change, an absence or diagnostic mode is already on - someone is using
-the house.
+what a resident does it switches the season, uses diagnostic mode, sets
+a week of its own for the "away" part (so that the hour asks for heat)
+and, when the air is too dry for the dehumidifier to start, lowers its
+start threshold for the test. It puts back the season, the weeks, the
+threshold and diagnostic mode as it found them, whatever happens; it
+never touches other settings, a VMC or a plug; and it stops at once if a
+manual change, an absence or diagnostic mode is already on - someone is
+using the house.
 
 Needs Playwright (pip install -e ".[ui]") and paho-mqtt.
 """
@@ -27,12 +28,13 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 import paho.mqtt.client as mqtt
 
-PARTS = ("winter", "diagnostic", "seasons", "summer")
+PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -49,7 +51,14 @@ summer      the zone kept out of cooling: no controls, closed; a cooled zone as
             its week says, "Off" closes, a target above the room stays closed;
             the dehumidifier on from the home opens the bathrooms' valve, off
             closes it; away: everything off but the bypass, still closed
-at the end  the season, the dehumidifier's threshold and diagnostic mode as found"""
+away        away and home again and again, with the week asking for heat and with
+            no week: from a card and from the sheet, for a day and until a time two
+            minutes ahead (it ends by itself); every kind of manual change before
+            (dropped); while away, a manual change, the week and a valve switched
+            from outside all refused or undone - a stale second phone too; the
+            season and diagnostic mode changed while away; rapid toggles
+at the end  the season, the weeks, the dehumidifier's threshold and diagnostic mode
+            as found"""
 
 BYPASS, DEHUMIDIFIER = "Bathroom Bypass Valve", "Dehumidifier"
 
@@ -66,6 +75,7 @@ class Board:
         self.relay_state: dict[str, bool | None] = {}
         self.commands: list[tuple[float, str, str]] = []
         self.results: list[tuple[str, bool]] = []
+        self.saved_weeks: dict = {}
         maps = self.get("/api/climate-admin/map")["zones"]
         switches = self.get("/api/climate-admin/extra-switches")
         self.relays = {z["valve_device_id"]: f"{z['name']} Valve" for z in maps if z.get("valve_device_id")}
@@ -104,6 +114,42 @@ class Board:
 
     def zone(self, name):
         return next(z for z in self.climate()["zones"] if z["name"] == name)
+
+    def week(self, name, mode):
+        return self.get(f"/api/climate/zones/{urllib.parse.quote(name)}/schedule?mode={mode}")["week"]
+
+    def set_week(self, name, mode, week):
+        """A week of the test's own - the real one kept first, put back by
+        restore_weeks()."""
+        key = (name, mode)
+        if key not in self.saved_weeks:
+            self.saved_weeks[key] = self.week(name, mode)
+        self.post(f"/api/climate/zones/{urllib.parse.quote(name)}/schedule", {"week": week, "mode": mode})
+
+    def restore_weeks(self):
+        for (name, mode), week in self.saved_weeks.items():
+            self.post(f"/api/climate/zones/{urllib.parse.quote(name)}/schedule", {"week": week, "mode": mode})
+        back = all(self.week(name, mode) == week for (name, mode), week in self.saved_weeks.items())
+        if self.saved_weeks:
+            say(f"  weeks put back as they were: {back}")
+        self.saved_weeks.clear()
+        return back
+
+    def now(self):
+        """The board's wall clock - what its calendar and its week go by."""
+        from datetime import datetime, timedelta, timezone
+        t = self.get("/api/server-time")
+        return datetime.fromtimestamp(t["epoch_ms"] / 1000, timezone.utc).replace(tzinfo=None) \
+            + timedelta(minutes=t["utc_offset_minutes"])
+
+    def refused(self, path, body, code):
+        req = urllib.request.Request(self.base + path, data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=20):
+                return False
+        except urllib.error.HTTPError as err:
+            return json.load(err).get("code") == code
 
     def season(self, mode):
         say(f"  season -> {'summer' if mode == 'cool' else 'winter'}")
@@ -242,6 +288,27 @@ class Home:
             time.sleep(0.5)
         self.refresh()
         return sheet
+
+    def away_until(self, day, hhmm):
+        """Away until a day and time picked in the sheet's calendar."""
+        self.page.click("#away-chip")
+        self.page.wait_for_timeout(700)
+        self.page.fill("#away-day", day)
+        self.page.fill("#away-time", hhmm)
+        self.page.locator("#sheet button[data-away='day']").click()
+        end = time.time() + 15
+        while time.time() < end and not self.board.climate()["away_until"]:
+            time.sleep(0.5)
+        self.refresh()
+
+    def back_home_from_sheet(self):
+        self.page.click("#away-chip")
+        self.page.wait_for_timeout(700)
+        self.page.locator("#sheet button[data-away='back']").click()
+        end = time.time() + 15
+        while time.time() < end and self.board.climate()["away_until"]:
+            time.sleep(0.5)
+        self.refresh()
 
     def back_home(self):
         self.page.locator(".zone .away-note button[data-action=back]").first.click()
@@ -501,6 +568,160 @@ def summer(board, home, dehumidifier):
         away_walk(board, home, cooled, winter=False)
 
 
+def away_and_home(board, home, browser):
+    """Away and home again and again - looking for what breaks."""
+    say("== AWAY AND HOME, MANY TIMES")
+    if board.climate()["mode"] != "heat":
+        board.season("heat")
+        home.open()
+    zones = [z for z in board.climate()["zones"] if z["temperature_c"] is not None]
+    if len(zones) < 2:
+        say("  needs two zones with a temperature - skipped")
+        return
+    warm, bare = zones[0]["name"], zones[1]["name"]
+    hour = board.now().hour
+
+    def week(target=None, hours=3):
+        """This hour and the next ones at `target`, the rest of the week off."""
+        days = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+        return {d: [target if hour <= h < hour + hours else None for h in range(24)] for d in days}
+
+    heat_target = round((board.zone(warm)["temperature_c"] + 2) * 2) / 2
+    board.set_week(warm, "heat", week(heat_target))     # the hour asks for heat
+    board.set_week(bare, "heat", week())                 # no week at all
+    home.open()
+    board.check(f"a week asking for {heat_target}°: {warm} opens", board.becomes(f"{warm} Valve", True))
+    board.check(f"no week: {bare} closed", board.becomes(f"{bare} Valve", False))
+
+    def both_closed(label):
+        board.check(f"{label}: {warm} closed", board.becomes(f"{warm} Valve", False))
+        board.check(f"{label}: {bare} closed", board.becomes(f"{bare} Valve", False))
+
+    def as_home(label):
+        board.check(f"{label}: nobody away", board.climate()["away_until"] is None)
+        board.check(f"{label}: {warm} open again (its week)", board.becomes(f"{warm} Valve", True))
+        board.check(f"{label}: {bare} still closed (no week)", board.stays(f"{bare} Valve", False, 3))
+
+    # 1. Away from the sheet, with a stale second phone; refusals; back from a card.
+    stale = browser.new_page(viewport={"width": 390, "height": 900})
+    stale.goto(board.base)
+    stale.wait_for_selector(".zone", timeout=30000)
+    stale.wait_for_timeout(1000)
+    home.away()
+    both_closed("away for a day")
+    board.check("away: the title says until when", home.page.inner_text("#hero-title").startswith("Fuori casa"))
+    board.check("away: the week can't be painted (locked)",
+                home.page.locator(f".zone[data-zone='{warm}'] .zone-plan").count() == 0
+                or home.page.locator(f".zone[data-zone='{warm}'] .plan-edit[inert], .zone[data-zone='{warm}'] .zone-plan[hidden]").count() > 0
+                or not home.page.locator(f".zone[data-zone='{warm}'] .zone-plan").is_visible())
+    board.check("away: a manual change refused by the board",
+                board.refused(f"/api/climate/zones/{urllib.parse.quote(warm)}/override", {"target": 26, "hours": 1},
+                              "override_while_away"))
+    board.check("away: the week refused by the board",
+                board.refused(f"/api/climate/zones/{urllib.parse.quote(warm)}/schedule",
+                              {"week": week(heat_target), "mode": "heat"}, "schedule_while_away"))
+    # A valve switched on from outside the page (another app, a script):
+    # the thermostat closes it again within a cycle.
+    board.post(f"/api/sensors/{urllib.parse.quote(warm + ' Valve')}/on", {})
+    board.becomes(f"{warm} Valve", True, 10)
+    board.check(f"away: {warm} switched on from outside, closed again within a cycle",
+                board.becomes(f"{warm} Valve", False, board.poll_seconds + 15))
+    # The stale phone still shows the cards: its tap is refused, and said.
+    card = stale.locator(f".zone[data-zone='{warm}']")
+    if card.locator("button[data-action=start][data-delta='0.5']").count():
+        card.locator("button[data-action=start][data-delta='0.5']").click()
+        card.locator(".pending button[data-action=duration][data-hours='2']").click()
+        card.locator(".pending button[data-action=apply]").click()
+        stale.wait_for_timeout(2500)
+        message = stale.evaluate("tr('errors.override_while_away')")
+        board.check("a stale phone's tap while away: refused, and it says why", message in stale.inner_text("body"))
+        board.check("the stale phone's tap changed nothing", board.zone(warm)["override"] is None
+                    and board.stays(f"{warm} Valve", False, 3))
+    stale.close()
+    home.back_home()
+    as_home("back from a card")
+
+    # 2. Every kind of manual change, then away: all dropped; back: the week.
+    for label, kwargs in (("27° for 2 h", {"target": heat_target + 1, "hours": "2"}),
+                          ("off until the next change", {"off": True, "hours": "next"}),
+                          ("27° until changed", {"target": heat_target + 1, "hours": "manual"}),
+                          ("off for 2 h", {"off": True, "hours": "2"})):
+        home.manual(warm, **kwargs)
+        home.manual(bare, target=heat_target + 1, hours="2")
+        board.becomes(f"{bare} Valve", True)
+        home.away()
+        both_closed(f"away after {label}")
+        board.check(f"away after {label}: every manual change dropped",
+                    all(z["override"] is None for z in board.climate()["zones"]))
+        home.back_home_from_sheet()
+        as_home(f"back after {label}")
+
+    # 3. Rapid toggles, as two phones at once: where it ends is what counts.
+    for _ in range(3):
+        board.post("/api/climate/away", {"hours": 24})
+        board.post("/api/climate/away/cancel", {})
+    home.refresh()
+    as_home("away and back three times in a row")
+    board.post("/api/climate/away", {"hours": 24})
+    board.post("/api/climate/away/cancel", {})
+    board.post("/api/climate/away", {"hours": 72})
+    home.refresh()
+    both_closed("ending away after quick changes")
+    board.post("/api/climate/away/cancel", {})
+    home.refresh()
+    as_home("and back")
+
+    # 4. The season changed while away: still away, all closed, the bypass
+    # with the new season; back: the new season's week.
+    home.away()
+    board.season("cool")
+    home.open()
+    board.check("season changed while away: still away", board.climate()["away_until"] is not None)
+    both_closed("summer while away")
+    if board.has(BYPASS):
+        board.check("summer while away: the bypass closes", board.becomes(BYPASS, True))
+    board.season("heat")
+    home.open()
+    board.check("winter again while away: still away", board.climate()["away_until"] is not None)
+    if board.has(BYPASS):
+        board.check("winter again while away: the bypass opens", board.becomes(BYPASS, False))
+    both_closed("winter again while away")
+
+    # 5. Diagnostic mode while away: the installer's hand wins; off: away again.
+    board.post("/api/climate/diagnostic-mode", {"enabled": True})
+    board.post(f"/api/sensors/{urllib.parse.quote(warm + ' Valve')}/on", {})
+    board.check("diagnostic while away: a valve switched on by hand", board.becomes(f"{warm} Valve", True, 15))
+    board.check("diagnostic while away: left on for a cycle", board.stays(f"{warm} Valve", True, board.poll_seconds + 5))
+    board.post("/api/climate/diagnostic-mode", {"enabled": False})
+    board.check("diagnostic off while away: the valve closed at once", board.becomes(f"{warm} Valve", False, 15))
+    home.open()
+    home.back_home()
+    as_home("back after all that")
+
+    # 6. Away until a time two minutes ahead, from the calendar: it ends by
+    # itself and the week takes over.
+    until = board.now().replace(second=0, microsecond=0)
+    from datetime import timedelta
+    until += timedelta(minutes=3)
+    home.away_until(until.strftime("%Y-%m-%d"), until.strftime("%H:%M"))
+    away = board.climate()["away_until"]
+    board.check(f"away until {until:%H:%M} from the calendar", away is not None and away.startswith(until.strftime("%Y-%m-%dT%H:%M")),
+                str(away))
+    both_closed("away until a time")
+    wait = (until - board.now()).total_seconds() + board.poll_seconds + 10
+    say(f"  waiting {wait:.0f} s for the absence to end by itself")
+    end = time.time() + wait + 30
+    while time.time() < end and board.climate()["away_until"]:
+        time.sleep(2)
+    # The page left open says so by itself, at its own next refresh.
+    end = time.time() + 30
+    while time.time() < end and home.page.inner_text("#hero-title").startswith("Fuori casa"):
+        time.sleep(1)
+    board.check("its end: a page left open stops saying away by itself",
+                not home.page.inner_text("#hero-title").startswith("Fuori casa"))
+    as_home("the absence ended by itself")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--board", default="antonio.local")
@@ -548,6 +769,8 @@ def main(argv=None):
                     seasons(board, home, dehumidifier)
                 elif part == "summer":
                     summer(board, home, dehumidifier)
+                elif part == "away":
+                    away_and_home(board, home, browser)
             board.check("no script error on the pages", errors == [], str(errors))
         finally:
             # As it was: diagnostic off, nobody away, nothing by hand, the
@@ -562,6 +785,8 @@ def main(argv=None):
             if board.relay_state.get(DEHUMIDIFIER):
                 board.post("/api/dehumidifier/off", {})
             dehumidifier.restore()
+            if board.saved_weeks:
+                board.check("at the end: the weeks put back exactly", board.restore_weeks())
             if board.climate()["mode"] != start["mode"]:
                 board.season(start["mode"])
             browser.close()
