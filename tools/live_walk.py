@@ -7,6 +7,7 @@ Shelly relays themselves say on the broker, not only what the page says.
     python tools/live_walk.py --board antonio.local          # the plan only
     python tools/live_walk.py --board antonio.local --yes    # run it all
     python tools/live_walk.py --yes --parts diagnostic       # one part
+    python tools/live_walk.py --yes --parts reboot           # then reboot it by hand
 
 Made for a plant whose Shellys are powered but not yet wired to their
 valves - every relay clicks for real, nothing flows - and safe after:
@@ -35,8 +36,9 @@ import urllib.request
 import paho.mqtt.client as mqtt
 
 PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
-# Run only when named: it restarts LocalHome, and with it the VMC's driver.
-EXTRA_PARTS = ("restart",)
+# Run only when named: they restart LocalHome, and with it the VMC's driver;
+# "reboot" waits for someone to reboot or unplug the board.
+EXTRA_PARTS = ("restart", "reboot")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -61,9 +63,14 @@ away        away and home again and again, with the week asking for heat and wit
             season and diagnostic mode changed while away; rapid toggles
 at the end  the season, the weeks, the dehumidifier's threshold and diagnostic mode
             as found
-restart     only when named: LocalHome restarted while away - still away after it,
-            the valves closed though the week asks for heat, nothing opened meanwhile,
-            the VMC as it was; back home, the week"""
+restart     only when named: LocalHome restarted from the admin while away - still
+            away after it until the same time, the valves closed though the week asks
+            for heat, nothing opened meanwhile; the settings, the plant, the weeks and
+            the VMC as they were, every device answering again, no new problem; back
+            home, the week
+reboot      only when named, and by hand: the same with the whole board rebooted - it
+            waits for "sudo reboot" over SSH, or the board unplugged and plugged back
+            in (a power cut while nobody's home); its clock synchronized again"""
 
 BYPASS, DEHUMIDIFIER = "Bathroom Bypass Valve", "Dehumidifier"
 
@@ -91,6 +98,8 @@ class Board:
                                   if s["key"] == "thermostat_poll_seconds"), 60)
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"live-walk-{int(time.time())}")
         self.client.on_message = self._on_message
+        # The broker may be the board's own: back within seconds of a reboot.
+        self.client.reconnect_delay_set(1, 4)
         self.client.on_connect = lambda c, u, f, r, p=None: [
             c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0")]
         self.client.connect(host, 1883, 60)
@@ -727,9 +736,50 @@ def away_and_home(board, home, browser):
     as_home("the absence ended by itself")
 
 
-def restart_while_away(board, home):
-    """A power cut while nobody's home, as LocalHome sees it."""
-    say("== LOCALHOME RESTARTED WHILE AWAY")
+def kept(board):
+    """What a restart must leave as it was: the settings, the plant, the
+    weeks (not the history's figures, beside the settings)."""
+    out = {"settings": board.get("/api/climate-admin/settings")["settings"]}
+    for path in ("/api/climate-admin/map", "/api/climate-admin/extra-switches", "/api/climate-admin/extra-sensors",
+                 "/api/climate-admin/extra-dimmers", "/api/climate-admin/vmc-speeds",
+                 "/api/climate-admin/season-rules", "/api/vmc-schedule", "/api/dehumidifier/settings"):
+        out[path] = board.get(path)
+    for z in board.climate()["zones"]:
+        for mode in ("heat", "cool"):
+            out[f"week {z['name']} {mode}"] = board.week(z["name"], mode)
+    return out
+
+
+def answering(board):
+    """The devices LocalHome reads fine, and how it reads the VMC."""
+    devices = {d["name"]: board.get(f"/api/sensors/{urllib.parse.quote(d['name'])}")
+               for d in board.get("/api/devices")["sensors"]}
+    vmc = {n: {k: d.get(k) for k in ("is_on", "value")} for n, d in devices.items() if n.startswith("VMC")}
+    return {n for n, d in devices.items() if d.get("ok")}, vmc
+
+
+def problems(board):
+    return {(p["code"], p["subject"]) for p in board.get("/api/problems")["problems"]}
+
+
+def back_within(seconds, ready):
+    """Seconds until ready() holds - None if it never does in time."""
+    since = time.time()
+    while time.time() < since + seconds:
+        try:
+            if ready():
+                return time.time() - since
+        except (OSError, ValueError):
+            pass
+        time.sleep(2)
+    return None
+
+
+def restarted_while_away(board, home, how):
+    """Away with the week asking for heat, and then LocalHome restarted
+    from the admin ("restart") or the whole board rebooted or unplugged by
+    hand ("reboot": a power cut while nobody's home)."""
+    say(f"== {'LOCALHOME RESTARTED' if how == 'restart' else 'THE BOARD REBOOTED'} WHILE AWAY")
     if board.climate()["mode"] != "heat":
         board.season("heat")
         home.open()
@@ -745,47 +795,71 @@ def restart_while_away(board, home):
     board.set_week(bare, "heat", {d: [None] * 24 for d in days})
     home.open()
     board.check(f"before: {warm}'s week asks for {target}° - open", board.becomes(f"{warm} Valve", True))
-    vmc = [d["name"] for d in board.get("/api/devices")["sensors"] if d["name"].startswith("VMC")]
-    vmc_before = {n: {k: board.get(f"/api/sensors/{urllib.parse.quote(n)}").get(k) for k in ("is_on", "value")} for n in vmc}
-    say(f"  VMC before: {vmc_before}")
     home.away()
     board.check(f"away: {warm} closed", board.becomes(f"{warm} Valve", False))
     away_until = board.climate()["away_until"]
-    started = board.get("/api/server-time")["started_at"]
+    settings_before = kept(board)
+    ok_before, vmc_before = answering(board)
+    problems_before = problems(board)
+    say(f"  answering: {len(ok_before)} devices; VMC {vmc_before}; problems {sorted(problems_before)}")
+    clock = board.get("/api/server-time")
+    key = "started_at" if how == "restart" else "booted_at"
     since = time.time()
-    say("  restarting LocalHome")
-    board.post("/api/climate-admin/restart", {})
-    back = None
-    end = time.time() + 180
-    while time.time() < end:
-        time.sleep(2)
+    if how == "restart":
+        say("  restarting LocalHome")
+        board.post("/api/climate-admin/restart", {})
+    else:
+        say(f"  >>> now reboot {board.base.split('//')[1].split(':')[0]}: sudo reboot over SSH, or unplug it "
+            "and plug it back in - waiting up to 15 minutes")
+    down_at, back = None, None
+    while time.time() < since + (60 * 15 if how == "reboot" else 180):
+        time.sleep(1)
         try:
-            if board.get("/api/server-time")["started_at"] != started:
-                back = time.time() - since
-                break
-        except OSError:
+            now = board.get("/api/server-time")
+        except (OSError, ValueError):
+            down_at = down_at or time.time()
             continue
-    board.check("LocalHome back after its restart", back is not None, f"in {back:.0f} s" if back else "")
+        if now[key] != clock[key]:
+            back = time.time() - (down_at or since)
+            break
+    board.check(f"{'LocalHome' if how == 'restart' else 'the board'} back", back is not None,
+                f"LocalHome answering {back:.0f} s after it went down" if back is not None else "not seen in time")
     if back is None:
         return
-    time.sleep(5)
+    if how == "reboot":
+        boots = board.get("/api/system-status").get("boots") or []
+        if len(boots) > 1:
+            say(f"  the board's last boot ended: {boots[1].get('ended')}")
+        synced = back_within(300, lambda: board.get("/api/server-time")["clock_synced"] is not False)
+        board.check("after the reboot: the clock synchronized", synced is not None,
+                    f"{synced:.0f} s after LocalHome was back" if synced is not None else "not in 5 minutes")
+    took = back_within(180, lambda: ok_before <= answering(board)[0])
+    board.check("after it: every device answering before answers again", took is not None,
+                f"in {took:.0f} s" if took is not None else str(sorted(ok_before - answering(board)[0])))
     climate = board.climate()
-    board.check("after the restart: still away, until the same time", climate["away_until"] == away_until,
+    board.check("after it: still away, until the same time", climate["away_until"] == away_until,
                 f"{climate['away_until']} (was {away_until})")
-    board.check("after the restart: no manual change came back", all(z["override"] is None for z in climate["zones"]))
-    board.check(f"after the restart: {warm} stays closed for a whole cycle though its week asks for heat",
+    board.check("after it: no manual change came back", all(z["override"] is None for z in climate["zones"]))
+    board.poll_seconds = next((x["value"] for x in board.get("/api/climate-admin/settings")["settings"]
+                               if x["key"] == "thermostat_poll_seconds"), board.poll_seconds)
+    # A whole cycle: the relays' own status comes in on it, so an opening
+    # sent before this script was back on the broker would show here too.
+    board.check(f"after it: {warm} stays closed for a whole cycle though its week asks for heat",
                 board.stays(f"{warm} Valve", False, board.poll_seconds + 10))
-    board.check(f"after the restart: {bare} stays closed", board.stays(f"{bare} Valve", False, 3))
+    board.check(f"after it: {bare} stays closed", board.stays(f"{bare} Valve", False, 3))
     opened = [(n, text) for at, n, text in board.commands if at >= since and text.startswith("on") and n.endswith("Valve")]
-    board.check("across the restart: no valve was told to open", not opened, str(opened))
-    poll = next((s["value"] for s in board.get("/api/climate-admin/settings")["settings"]
-                 if s["key"] == "thermostat_poll_seconds"), None)
-    say(f"  the thermostat now checks every {poll} s")
-    board.poll_seconds = poll or board.poll_seconds
-    vmc_after = {n: {k: board.get(f"/api/sensors/{urllib.parse.quote(n)}").get(k) for k in ("is_on", "value")} for n in vmc}
-    board.check("across the restart: the VMC as it was", vmc_after == vmc_before, f"{vmc_after}")
+    board.check("across it: no valve was told to open", not opened, str(opened))
+    settings_after = kept(board)
+    changed = [k for k in settings_before if settings_after.get(k) != settings_before[k]]
+    board.check("across it: the settings, the plant and the weeks as they were", not changed, str(changed))
+    vmc_after = answering(board)[1]
+    board.check("across it: the VMC as it was", vmc_after == vmc_before, str(vmc_after))
+    # A problem of the first minutes (the clock, the network coming up)
+    # goes by itself: what's new and stays is.
+    settled = back_within(180, lambda: problems(board) <= problems_before)
+    board.check("after it: no new problem", settled is not None, str(sorted(problems(board) - problems_before)))
     home.open()
-    board.check("after the restart: the home says away", home.page.inner_text("#hero-title").startswith("Fuori casa"))
+    board.check("after it: the home says away", home.page.inner_text("#hero-title").startswith("Fuori casa"))
     home.back_home()
     board.check(f"back home: {warm} opens (its week)", board.becomes(f"{warm} Valve", True))
     board.check(f"back home: {bare} closed (no week)", board.stays(f"{bare} Valve", False, 3))
@@ -841,8 +915,8 @@ def main(argv=None):
                     summer(board, home, dehumidifier)
                 elif part == "away":
                     away_and_home(board, home, browser)
-                elif part == "restart":
-                    restart_while_away(board, home)
+                elif part in EXTRA_PARTS:
+                    restarted_while_away(board, home, part)
             board.check("no script error on the pages", errors == [], str(errors))
         finally:
             # As it was: diagnostic off, nobody away, nothing by hand, the
