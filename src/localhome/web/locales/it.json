@@ -758,7 +758,7 @@
     "check_settings_ok": "Impostazioni a posto ✓",
     "check_settings_unread": "Non sono riuscito a leggere le impostazioni: riprova.",
     "check_fix": "Da correggere nell'app Shelly - {settings}.",
-    "guide_plus1": "Collegamento e impostazioni degli Shelly (1 Gen3 o Plus 1) e come leggere lo stato dei dispositivi: la guida per l'installatore.",
+    "guide_plus1": "Come funziona l'impianto, come collegare e configurare gli Shelly, cosa succede quando manca qualcosa e come leggere lo stato dei dispositivi: la guida per l'amministratore.",
     "guide_open": "Apri",
     "shelly_mqtt_server": "Negli Shelly, server MQTT: {board}:1883.",
     "how_hold": "Le valvole di zona e il deumidificatore restano accesi solo finché LocalHome lo conferma: il comando è 'acceso per 15 minuti', rinnovato ogni 5 minuti. Se la scheda si spegne o si blocca, entro 15 minuti ogni valvola torna chiusa da sola, senza la scheda; finché LocalHome c'è, il relè non si stacca mai. Se il timer scatta, Stato sistema lo dice per 72 ore in «Successo nelle ultime 72 ore», con l'ora, e resta nello Storico watchdog. Per questo negli Shelly servono Detached, spento all'accensione e spegnimento automatico a 15 minuti - vedi la guida in Dispositivi.",

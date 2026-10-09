@@ -379,10 +379,11 @@ and logs "network back".
      line under the field), and again after the Shelly restarts: one
      set otherwise shows in *Devices*, by name, with the value it
      should have.
-     For the installer there's a guide in Italian - wiring diagram,
-     the Shelly app step by step, LocalHome - served by the board
-     itself: admin panel, *Devices*, "Open"
-     (`src/localhome/web/static/guide/`).
+     For whoever looks after the plant there's a guide in Italian -
+     how it works, wiring, the Shelly app step by step, the H&T
+     sensors, what the plant does when something is missing and how
+     soon it notices - served by the board itself: admin panel,
+     *Devices*, "Open" (`src/localhome/web/static/guide/`).
 
   The panel's per-zone status then says whether the device is really
   being heard, and tells "not reachable yet" (a battery sensor that

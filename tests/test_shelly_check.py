@@ -116,9 +116,10 @@ def test_the_admin_api_answers_with_the_check(tmp_path):
     assert body["answered"] is True and [s["key"] for s in body["settings_wrong"]] == ["in_mode", "auto_off"]
 
 
-def test_the_installers_guide_is_served_and_linked_from_the_admin(tmp_path):
-    """The Plus 1 guide, HTML and PDF, from the board itself - always there,
-    for whoever installs a valve."""
+def test_the_administrators_guide_is_served_and_linked_from_the_admin(tmp_path):
+    """The guide for whoever looks after the plant - how it works, the
+    Shellys' wiring and settings, what it does when something is missing -
+    from the board itself, always there."""
     config = tmp_path / "config.yaml"
     config.write_text("web:\n  port: 5000\n  language: it\nintegrations: []\n", encoding="utf-8")
     client = create_app(str(config)).test_client()
@@ -127,9 +128,10 @@ def test_the_installers_guide_is_served_and_linked_from_the_admin(tmp_path):
     res = client.get("/static/guide/shelly-plus1-valvole.html")
     assert res.status_code == 200 and len(res.data) > 2000
     html = client.get("/static/guide/shelly-plus1-valvole.html").get_data(as_text=True)
-    for setting in ("Detached", "spegnersi quando è alimentato", "00:15:00", "ponte", "comando a tempo"):
+    for setting in ("Detached", "spegnersi quando è alimentato", "00:15:00", "ponte", "comando a tempo",
+                    "Da configurare", "Chiusura di sicurezza", "H&amp;T Gen3", "Prefisso"):
         assert setting in html
     images = re.findall(r'<img src="([^"]+)"', html)
-    assert len(images) == 5
+    assert len(images) == 6
     for image in images:
         assert client.get(f"/static/guide/{image}").status_code == 200, image
