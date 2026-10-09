@@ -165,6 +165,11 @@ def test_the_vmc_automatics_are_off_until_switched_on_here(open_page, api):
         assert box.locator("[data-rule='shower'] .vmc-auto-fields").get_attribute("aria-disabled") == "true"
         assert box.locator("[data-vmc-auto='shower_rise']").input_value() == "8"
         assert "Scegli la zona del bagno" in box.inner_text(), "neither test zone is kept out of cooling"
+        speeds = api("/api/climate-admin/vmc-speeds")["speeds"]
+        said = box.locator(".vmc-auto-speed").all_inner_texts()
+        assert said == [f"Se va più piano: Massimo ({speeds['boost']}%). Nelle ore silenziose: Giorno ({speeds['day']}%).",
+                        f"Se va più veloce: Notte ({speeds['night']}%), mai spenta.",
+                        f"Se va più piano: Giorno ({speeds['day']}%), mai Massimo."]
         box.locator("[data-vmc-auto='shower']").check()
         box.locator("[data-vmc-auto-zone='bathroom_zone']").select_option(ZONE_B)
         box.locator("[data-vmc-auto='shower_max_minutes']").fill("45")

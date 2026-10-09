@@ -544,6 +544,7 @@
 /* The VMC's automatics: one block each, the fields greyed out while it's off. */
 .vmc-auto-rule { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .vmc-auto-sub { margin-top: 12px; }
+.vmc-auto-speed { margin: 4px 0 0 30px; font-size: 0.9rem; font-weight: 600; color: var(--accent); }
 .vmc-auto-fields { margin-top: 8px; }
 #vmc-auto .dehum-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 #vmc-auto .dehum-pct input { min-width: 0; }

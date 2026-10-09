@@ -660,6 +660,9 @@ async function loadVmcAuto() {
       ${data.zones.map(z => `<option value="${escapeHtml(z.name)}"${s[key] === z.name ? " selected" : ""}>${escapeHtml(displayName(z.name))}</option>`).join("")}</select></div>`;
   const check = (key, label) => `<label class="dehum-check dehum-check-long"><input type="checkbox" data-vmc-auto="${key}"${s[key] ? " checked" : ""} onchange="syncVmcAuto()">
       <strong>${t(label)}</strong></label>`;
+  // The speed each one sets, by name and in the percentages in use (Speeds VMC above).
+  const level = key => `${tr(`vmc_presets.${key}`)}${data.speeds && data.speeds[key] != null ? ` (${data.speeds[key]}%)` : ""}`;
+  const speed = key => `<p class="vmc-auto-speed">${t(`vmc_auto_speed_${key}`, { night: level("night"), day: level("day"), boost: level("boost") })}</p>`;
   const under = data.under_way;
   const now = under
     ? t(`vmc_auto_now_${under.reason}`, { zone: displayName(under.zone || "?"), rh: fmt(under.humidity, 0), value: under.value,
@@ -671,6 +674,7 @@ async function loadVmcAuto() {
     <p class="hint-text vmc-auto-now" data-under-way="${!!under}">${now}</p>
     <div class="vmc-auto-rule" data-rule="shower">
       ${check("shower", "vmc_auto_shower")}
+      ${speed("shower")}
       <div class="dehum-grid vmc-auto-fields">
         ${zone("bathroom_zone")}
         ${field("shower_rise", tr("climate_admin.vmc_auto_points"))}
@@ -694,11 +698,13 @@ async function loadVmcAuto() {
       <div class="dehum-grid">${zone("reference_zone")}</div>
       <div class="vmc-auto-sub" data-rule="humid">
         ${check("humid", "vmc_auto_humid")}
+        ${speed("humid")}
         <div class="dehum-grid vmc-auto-fields">${field("humid_margin_c", "°C", 0.5)}</div>
         <p class="hint-text">${t("vmc_auto_humid_help")}</p>
       </div>
       <div class="vmc-auto-sub" data-rule="cooling">
         ${check("cooling", "vmc_auto_cooling")}
+        ${speed("cooling")}
         <div class="dehum-grid vmc-auto-fields">
           ${field("cooling_from_c", "°C", 0.5)}${field("cooling_delta_c", "°C", 0.5)}${field("cooling_outdoor_min_c", "°C", 0.5)}
         </div>

@@ -582,6 +582,7 @@ def _vmc_auto_answer(app: Flask) -> dict:
             "zones": [{"name": z["name"], "cool_enabled": z["cool_enabled"]} for z in zones],
             "bathroom": bathroom["name"] if bathroom else None, "reference": reference["name"] if reference else None,
             "vmc": _vmc_speed_device(manager) is not None, "outdoor": OUTDOOR_SENSOR_NAME in manager.pollers,
+            "speeds": _vmc_speeds_in_use(app, _vmc_speed_device(manager)),
             "under_way": app.config["VMC_SCHEDULE"].status().get("auto")}
 
 
