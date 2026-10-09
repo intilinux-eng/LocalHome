@@ -51,7 +51,8 @@ date rather than by tag.
   page - and each time what the Shelly relays themselves say on the
   broker. Prints the plan without `--yes`; puts back the season, the
   dehumidifier's threshold and diagnostic mode as it found them; stops if
-  someone is using the house.
+  someone is using the house. `--parts restart`, only when named, restarts
+  LocalHome while away and checks it stays away with the valves closed.
 - **A demo that runs in a minute**: `docker compose -f
   docker-compose.demo.yml up --build` starts LocalHome with every device
   simulated - two zones with a sample week, the outdoor sensor, the VMC,
