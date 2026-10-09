@@ -175,7 +175,7 @@ del relè. Non serve ricordarsi le impostazioni: LocalHome interroga lo Shelly e
   <tr><td>Abilita MQTT</td><td class="value">attivo</td></tr>
   <tr><td>Server</td><td class="value"><code>&lt;nome-scheda&gt;.local:1883</code> (es. <code>antonio.local:1883</code>)</td></tr>
   <tr><td>Prefisso</td><td class="value">quello proposto o uno tuo (es. <code>shelly1g3-stanze</code>): in LocalHome scrivi il
-      prefisso se l'hai cambiato (sezione 13)</td></tr>
+      prefisso se l'hai cambiato (sezione 14)</td></tr>
   <tr><td>Generic status update / RPC over MQTT</td><td class="value">attivi</td></tr>
   <tr><td>SSL, utente, password</td><td class="value">spenti / vuoti</td></tr>
 </table>
@@ -237,7 +237,7 @@ dettaglio.</p>
   <tr><th>Stato</th><th>Significato</th></tr>
   <tr><td><span class="pill ok">OK</span></td><td>Funziona. Nel dettaglio, in grigio, le note che non sono guasti: corrente mancata, riavvii voluti, segnale debole.</td></tr>
   <tr><td><span class="pill check">Batteria scarica</span></td><td>C'è qualcosa da fare: l'etichetta dice cosa, il riquadro arancione nel dettaglio dice come.</td></tr>
-  <tr><td><span class="pill bad">Non risponde</span></td><td>Niente da LocalHome: corrente, Wi-Fi o MQTT (o un nome sbagliato, sezione 13).</td></tr>
+  <tr><td><span class="pill bad">Non risponde</span></td><td>Niente da LocalHome: corrente, Wi-Fi o MQTT (o un nome sbagliato, sezione 14).</td></tr>
   <tr><td><span class="pill todo">Da configurare</span></td><td>Il suo ID non è ancora stato inserito (sezione 5).</td></tr>
 </table>
 <div class="pair">
@@ -346,8 +346,11 @@ ore</strong> comunque (misurato: puntuale al minuto). In casa stabile parla quas
 <table>
   <tr><th>Nell'app Shelly</th><th>Valore</th></tr>
   <tr><td>MQTT</td><td class="value">come la sezione 3</td></tr>
-  <tr><td>Soglie di invio</td><td class="value">0,5 °C e 1%</td></tr>
+  <tr><td>Soglia temperatura</td><td class="value">0,5 °C (già di serie)</td></tr>
+  <tr><td>Soglia umidità</td><td class="value">1% (di serie è 5%: da cambiare)</td></tr>
 </table>
+<p>Con il 5%, un cambio di umidità più piccolo arriva solo al battito delle 2 ore: il deumidificatore, che si ferma sotto il
+50%, può restare acceso fino a 2 ore di troppo.</p>
 <div class="box"><strong>Il pulsante</strong> (dietro il coperchio) lo sveglia e lo fa inviare subito. Premilo per provarlo,
 dopo aver cambiato un'impostazione nell'app (a batteria la prende solo da sveglio), dopo un riavvio di LocalHome.</div>
 <p>In LocalHome: <span class="pill bad">Non risponde</span> dopo 4 ore senza invii; batteria segnalata sotto il 10%. Un segnale
@@ -356,7 +359,43 @@ Wi-Fi debole non è un problema finché gli invii arrivano.</p>
 <h2>10. Dimmer Gen3 (VMC)</h2>
 <p>MQTT come nella sezione 3, poi ID o prefisso in admin → Dispositivi → VMC.</p>
 
-<h2>11. Quando manca qualcosa</h2>
+<h2>11. Regolazioni nell'admin</h2>
+<p>Quelle che vale la pena conoscere. Le altre vanno bene di serie.</p>
+<div class="keep">
+<h3>Termostato: admin → Impostazioni</h3>
+<table>
+  <tr><th>Impostazione</th><th>Di serie e cosa fa</th></tr>
+  <tr><td>Isteresi</td><td>0,5 °C. La valvola si ferma all'obiettivo e riparte quando la stanza se ne allontana di tanto
+      (sotto d'inverno, sopra d'estate). 0,5 è il passo degli H&amp;T: meno non serve.</td></tr>
+  <tr><td>Tolleranza Economy</td><td>0,5 °C. Per gli obiettivi Economy (inverno sotto 20°, estate da 26°) riparte ancora più
+      in là: risparmio. 0 = come il Comfort.</td></tr>
+  <tr><td>Chiusura di sicurezza</td><td>24 ore. Sensore muto: la valvola si chiude (sezione 12).</td></tr>
+  <tr><td>Controllo termostato</td><td>60 s. Le modifiche dalla home valgono comunque subito.</td></tr>
+</table>
+<p>Esempio con i valori di serie: d'inverno a 20,5° (Comfort) riparte a 20,0°, a 19,5° (Economy) a 18,5°. Si salvano con
+<em>Salva impostazioni</em> e valgono dopo il riavvio.</p>
+<figure class="shot wide"><img src="admin-termostato.jpg" alt="Admin, Impostazioni: isteresi, tolleranza Economy, controllo termostato, chiusura di sicurezza"></figure>
+</div>
+<div class="keep">
+<h3>VMC: admin → Impostazioni → Velocità VMC</h3>
+<p>Notte, Giorno e Massimo in percentuale: le velocità dei pulsanti e dei programmi della home. Valgono subito. Il programma
+giorno/notte si sceglie dalla home, sulla scheda della VMC.</p>
+<figure class="shot wide"><img src="admin-vmc-velocita.jpg" alt="Admin, Velocità VMC: notte 25%, giorno 50%, massimo 100%"></figure>
+</div>
+<div class="keep">
+<h3>Deumidificatore: admin → Stagione → Deumidificatore</h3>
+<table>
+  <tr><th>Impostazione</th><th>Di serie</th></tr>
+  <tr><td>Si spegne sotto</td><td>50% di umidità (di Stanze)</td></tr>
+  <tr><td>Si può accendere dal</td><td>55%</td></tr>
+  <tr><td>Durate nella home</td><td>1, 2, 4 ore e "fino all'obiettivo" (al massimo 8 ore)</td></tr>
+  <tr><td>Accensione automatica</td><td>spenta: consuma molto</td></tr>
+</table>
+<p>Valgono subito.</p>
+<figure class="shot wide"><img src="admin-deumidificatore.jpg" alt="Admin, Deumidificatore: spegnimento sotto il 50%, accensione dal 55%, durate, accensione automatica spenta"></figure>
+</div>
+
+<h2>12. Quando manca qualcosa</h2>
 <table>
   <tr><th>Situazione</th><th>Cosa fa LocalHome</th></tr>
   <tr><td>Sensore mai sentito (nuovo o rinominato)</td><td>Valvola chiusa. Premi il pulsante del sensore.</td></tr>
@@ -369,7 +408,7 @@ Wi-Fi debole non è un problema finché gli invii arrivano.</p>
   <tr><td>Fuori casa</td><td>Zone e deumidificatore spenti; niente si cambia fino a <em>Sono rientrato</em>.</td></tr>
 </table>
 
-<h2>12. Quanto ci mette ad accorgersene</h2>
+<h2>13. Quanto ci mette ad accorgersene</h2>
 <table>
   <tr><th>Cosa succede</th><th>In admin dopo</th></tr>
   <tr><td>Shelly a corrente collegato</td><td>pochi secondi</td></tr>
@@ -379,7 +418,7 @@ Wi-Fi debole non è un problema finché gli invii arrivano.</p>
 </table>
 <p>La home al più tardi un minuto dopo. Misurato sulla scheda di produzione, 8–9 ottobre 2026.</p>
 
-<h2>13. Rinominare uno Shelly</h2>
+<h2>14. Rinominare uno Shelly</h2>
 <p>LocalHome riconosce ogni Shelly dal <strong>prefisso MQTT</strong>. Se lo cambi nell'app (Impostazioni → MQTT →
 Prefisso), metti lo stesso nome in admin, salva e riavvia; un H&amp;T lo prende al risveglio: premi il pulsante.</p>
 <div class="box warn">Controlla lettera per lettera: con <code>shellyhtg3-stanze</code> in admin e <code>shellyhtg3-tstanze</code>

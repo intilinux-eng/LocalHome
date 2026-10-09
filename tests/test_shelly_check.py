@@ -132,6 +132,6 @@ def test_the_administrators_guide_is_served_and_linked_from_the_admin(tmp_path):
                     "Da configurare", "Chiusura di sicurezza", "H&amp;T Gen3", "Prefisso"):
         assert setting in html
     images = re.findall(r'<img src="([^"]+)"', html)
-    assert len(images) == 6
+    assert len(images) == 9
     for image in images:
         assert client.get(f"/static/guide/{image}").status_code == 200, image
