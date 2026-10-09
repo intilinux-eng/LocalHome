@@ -433,17 +433,23 @@ def test_a_problem_is_said_as_a_resident_would_take_it(open_page):
     opened = _open_home(open_page)
     page = opened.page
 
+    # Seen on the production board: a sensor not answering listed again
+    # for its reports missed, and that one by its English name.
     def with_problems(route):
         route.fulfill(json={"ok": True, "problems": [
             {"code": "device_offline", "subject": f"{ZONE_A} Sensor", "detail": "x"},
+            {"code": "device_reports_missed", "subject": f"{ZONE_A} Sensor"},
+            {"code": "device_reports_missed", "subject": f"{ZONE_B} Sensor"},
             {"code": "cpu_hot", "subject": "82 °C"}]})
     page.route("**/api/problems", with_problems)
     page.evaluate("refreshProblems()")
-    assert eventually(page, lambda: page.inner_text("#health-text") == "2 da controllare")
+    assert eventually(page, lambda: page.inner_text("#health-text") == "3 da controllare")
     page.click("#health")
     text = page.locator("#sheet").inner_text()
-    assert f"Il sensore di {ZONE_A} non risponde." in text
+    assert f"Il sensore di {ZONE_A} non risponde." in text and f"Il sensore di {ZONE_A}: invii persi" not in text
+    assert f"Da far vedere a chi gestisce l'impianto: Il sensore di {ZONE_B}: invii persi" in text
     assert "Da far vedere a chi gestisce l'impianto: CPU molto calda (82 °C)" in text
+    assert " Sensor" not in text
     assert opened.errors == []
 
 

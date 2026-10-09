@@ -1134,12 +1134,21 @@ function problemText(problem) {
   const subject = subjectName(problem.subject);
   const key = RESIDENT_PROBLEMS[problem.code];
   if (key) return tr(key, { subject });
-  const technical = tr(`climate_admin.system_problem_${problem.code}`, { subject: problem.subject || "" });
+  const technical = tr(`climate_admin.system_problem_${problem.code}`, { subject });
   return tr("home.problem_technical", { what: technical.startsWith("climate_admin.") ? problem.code : technical });
 }
 
+// A device that doesn't answer is one line: its reports missed, its
+// lateness, follow from it.
+const FOLLOWS_OFFLINE = new Set(["device_reports_missed", "device_report_late"]);
+
+function residentProblems(problems) {
+  const offline = new Set(problems.filter(p => RESIDENT_PROBLEMS[p.code] === "home.problem_offline").map(p => p.subject));
+  return problems.filter(p => !(FOLLOWS_OFFLINE.has(p.code) && offline.has(p.subject)));
+}
+
 function openHealth() {
-  const problems = state.problems || [];
+  const problems = residentProblems(state.problems || []);
   const zones = (state.climate && state.climate.zones) || [];
   const todo = (state.climate && state.climate.to_configure) || [];
   let body;
@@ -2096,7 +2105,7 @@ async function refreshProblems() {
 function renderHealth() {
   const health = document.getElementById("health");
   if (!state.problems) return;
-  const count = state.problems.length;
+  const count = residentProblems(state.problems).length;
   const todo = ((state.climate && state.climate.to_configure) || []).length;
   health.dataset.state = count ? "warn" : todo ? "setup" : "ok";
   setText(document.getElementById("health-text"), count ? tr("home.health_problems", { count })

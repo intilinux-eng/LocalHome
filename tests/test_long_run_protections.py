@@ -241,6 +241,20 @@ def test_every_battery_sensor_silent_at_once_is_the_network():
     assert not system_status.battery_sensors_silent(late, names, uptime_seconds=20000), "its own age by default"
 
 
+def test_battery_sensors_silent_with_a_mains_shelly_answering_is_the_sensors():
+    """Both H&T renamed in the Shelly app, the VMC's dimmer answering on
+    the same Wi-Fi: "restart the router" was the wrong advice."""
+    names = {"Stanze Sensor", "Bagni Sensor"}
+    late = [{"name": "Stanze Sensor", "seconds_since_update": 9000, "ok": False},
+            {"name": "Bagni Sensor", "seconds_since_update": 8200, "ok": False}]
+    vmc = {"name": "VMC Dimmer", "seconds_since_update": 30, "ok": True}
+    relay_off = {"name": "Stanze Valve", "seconds_since_update": None, "ok": False}
+    ages = {"uptime_seconds": 20000, "listening_seconds": 20000}
+    assert not system_status.battery_sensors_silent(late + [vmc], names, mains_names={"VMC Dimmer"}, **ages)
+    assert system_status.battery_sensors_silent(late + [relay_off], names, mains_names={"Stanze Valve"}, **ages), \
+        "a mains Shelly not answering either: still the network"
+
+
 def test_devices_not_reaching_the_board_is_a_problem_and_rt_on_the_matrix():
     from localhome.services import led_matrix
     found = system_status.problems([], [], {}, lan_silent_seconds=900)
