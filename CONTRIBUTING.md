@@ -72,6 +72,12 @@ config.yaml before it fails silently. Both are exactly how the thermostat
 and its scheduling UI were built and tested end to end before any real
 valve/sensor was involved.
 
+## Building the package
+
+`python tools/build_deb.py` makes the .deb for the UNO Q - LocalHome
+compiled with Nuitka, in Docker under QEMU: see [docs/package.md](docs/package.md).
+Development goes on as before; the package is for boards that just run.
+
 ## Running tests
 
 ```bash

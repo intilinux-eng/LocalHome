@@ -33,6 +33,10 @@ it frees ~270 MB of RAM and ~2.3 GB of disk that Arduino App Lab uses.
 
 ## Install
 
+A board that only has to run can take the compiled package instead of
+steps 3-8: see [package.md](package.md). Below, the install from git -
+the way for a development board.
+
 You need the board on your Wi-Fi and a way into it: SSH (`ssh
 arduino@<board-ip>`, the board's own password) or `adb shell` over USB.
 The first boot and the Wi-Fi setup are done with Arduino App Lab, as for

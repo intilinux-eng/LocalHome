@@ -6,6 +6,16 @@ date rather than by tag.
 
 ## Unreleased
 
+### Added
+- **A .deb for the UNO Q, LocalHome compiled with Nuitka** (on the
+  `feature/installer_standalone` branch, being evaluated). `tools/build_deb.py`
+  builds it in an arm64 Debian under QEMU; it installs the program in
+  `/opt/localhome` with no Python or pip, the service, mosquitto's setup
+  and the board's tuning, and keeps the configuration and history in
+  `/var/lib/localhome` - brought over from a git installation the first
+  time. `tools/deploy_board.py --deb` installs or updates it, `--rollback`
+  goes back. Development boards keep updating from git. See docs/package.md.
+
 ### Removed
 - **TP-Link Kasa/Tapo LED strip support.** The `tplink_led_strip`
   drivers, the `[tplink]` extra (`python-kasa`), `tools/tplink_discover.py`
