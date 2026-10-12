@@ -142,8 +142,11 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     page = opened.page
     card = _card(page, ZONE_A)
     assert card.locator(".quick-title").inner_text() == "Programmazione semplice"
-    _open_details(page, ZONE_A)
+    # What the modes do: behind the title's "i", each on its mode at a hover.
+    assert card.locator(".quick-hint").count() == 0
+    card.locator("button[data-action=quick-info]").click()
     assert "Manuale: una temperatura" in card.locator(".quick-hint").inner_text()
+    assert "tabella oraria" in card.locator("button[data-action=mode-schedule]").get_attribute("title")
     card.locator("button[data-action=mode-manual]").click()
     durations = card.locator(".pending button[data-action=duration]").all_inner_texts()
     assert durations[:4] == ["2 h", "4 h", "8 h", "24 h"] and durations[-1] == "Finché non lo cambi"
@@ -918,7 +921,13 @@ def test_the_card_names_the_targets_level_and_the_palette_has_half_degrees(open_
     _open_plan(page, ZONE_A)
     swatches = _card(page, ZONE_A).locator(".sched-swatch").all_inner_texts()
     assert "19,5" in swatches and "20,5" in swatches, swatches
-    note = _card(page, ZONE_A).locator(".sched-tier-note").inner_text()
+    # What each level does: on its box at a hover, both behind the "i".
+    card = _card(page, ZONE_A)
+    assert "0,5" in card.locator(".sched-tier-comfort").get_attribute("title")
+    assert "1,0" in card.locator(".sched-tier-economy").get_attribute("title")
+    assert card.locator(".sched-tier-note").is_hidden()
+    card.locator("button[data-action=tier-info]").click()
+    note = card.locator(".sched-tier-note").inner_text()
     assert "Comfort" in note and "Economy" in note and "0,5" in note and "1,0" in note, note
     assert opened.errors == []
 

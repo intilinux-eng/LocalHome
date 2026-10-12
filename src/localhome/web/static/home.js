@@ -68,6 +68,8 @@ const state = {
   // over how many days, and the bar picked.
   runHours: null,
   runsOpen: {},
+  // Which zones show what their quick schedule's modes do.
+  quickInfo: {},
   // Which zones show their details - remembered on this phone.
   moreOpen: storedMoreOpen(),
   // Each zone's lowest and highest of the last 7 days, and when
@@ -364,14 +366,35 @@ function tierChip(tier, mode) {
   return `<span class="tier-chip" data-tier="${tier}">${TIER_ICONS[tier === "comfort" ? mode : "economy"]}${esc(tr(`climate.tier_${tier}`))}</span>`;
 }
 
-// Under the palette: what the two levels do, in this season, with the
-// thermostat's numbers.
-function tierNoteHtml() {
+// What the two levels do, in this season, with the thermostat's numbers:
+// each level's on its box (a hover), both behind an "i" at the palette's
+// end (a tap - a phone has no hover), out of the way until asked for.
+function tierNumbers() {
   const climate = state.climate || {};
   const h = climate.hysteresis_c, e = climate.economy_tolerance_c;
-  if (h == null) return "";
-  return `<p class="sched-tier-note">${esc(tr(climateMode === "cool" ? "climate.tier_note_cool" : "climate.tier_note_heat",
-    { comfort: fmt(h), economy: fmt(h + (e || 0)) }))}</p>`;
+  return h == null ? null : { comfort: fmt(h), economy: fmt(h + (e || 0)) };
+}
+
+function tierNoteHtml() {
+  const numbers = tierNumbers();
+  if (!numbers) return "";
+  return `<p class="sched-tier-note" hidden>${esc(tr(climateMode === "cool" ? "climate.tier_note_cool" : "climate.tier_note_heat", numbers))}</p>`;
+}
+
+function wireTierInfo(plan) {
+  const numbers = tierNumbers();
+  const palette = plan.querySelector(".sched-palette");
+  if (!numbers || !palette || plan.querySelector(".tier-info")) return;
+  ["comfort", "economy"].forEach(tier => {
+    const box = palette.querySelector(`.sched-tier-${tier}`);
+    if (box) box.title = tr(`home.tier_tip_${tier}_${climateMode === "cool" ? "cool" : "heat"}`, numbers);
+  });
+  const hint = plan.querySelector(".hint-text");
+  const note = plan.querySelector(".sched-tier-note");
+  if (!hint) return;
+  hint.insertAdjacentHTML("beforeend", ` <button class="tier-info" type="button" data-action="tier-info"
+    aria-expanded="false" aria-label="${esc(tr("home.tier_info"))}" title="${esc(tr("home.tier_info"))}">i</button>`);
+  if (note) hint.after(note);
 }
 
 // "0.8° below target", "at target" - to the tenth the sensor reports.
@@ -564,8 +587,6 @@ function fillZone(card, zone, climate) {
         <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
         <div class="ribbon-readout">${legendHtml()}</div>
       </div>`}
-      ${zoneReady(zone) && !excludedNow && !climate.away_until && !state.pending[zone.name]
-        ? `<p class="quick-hint">${esc(tr("home.quick_hint"))}</p>` : ""}
       <div class="zone-foot">${foot.join(" · ")}</div>
       ${compact ? "" : runsHtml(zone)}
       ${tempsHtml(zone)}
@@ -854,8 +875,14 @@ function quickHtml(zone, climate, change) {
   const current = pending ? (pending.target == null ? "off" : "manual")
     : !held ? "schedule" : held.target == null ? "off" : "manual";
   const modeButton = (key, label) => `<button type="button" role="radio" data-action="mode-${key}"
-    aria-checked="${current === key}">${esc(tr(label))}</button>`;
-  const modes = `<div class="quick-title">${esc(tr("home.quick_title"))}</div>
+    aria-checked="${current === key}" title="${esc(tr(`home.mode_tip_${key}`))}">${esc(tr(label))}</button>`;
+  // What the modes do: on each at a hover, all three behind the title's
+  // "i" (a tap - a phone has no hover).
+  const info = !!state.quickInfo[zone.name];
+  const modes = `<div class="quick-title">${esc(tr("home.quick_title"))}
+      <button class="tier-info" type="button" data-action="quick-info" aria-expanded="${info}"
+        aria-label="${esc(tr("home.quick_info"))}" title="${esc(tr("home.quick_info"))}">i</button></div>
+    ${info ? `<p class="quick-hint">${esc(tr("home.quick_hint"))}</p>` : ""}
     <div class="mode-row" role="radiogroup" aria-label="${esc(tr("home.mode_label"))}">
       ${modeButton("schedule", "home.mode_schedule")}${modeButton("manual", "home.mode_manual")}${modeButton("off", "home.mode_off")}
     </div>`;
@@ -949,6 +976,19 @@ async function onZoneClick(event) {
     plan.classList.remove("is-shown");
     void plan.offsetWidth;          // the highlight again, on a second tap
     plan.classList.add("is-shown");
+    return;
+  }
+  if (action === "quick-info") {
+    state.quickInfo[zone.name] = !state.quickInfo[zone.name];
+    steady(() => fillZone(card, zone, state.climate), button);
+    return;
+  }
+  if (action === "tier-info") {
+    const note = card.querySelector(".sched-tier-note");
+    if (note) {
+      note.hidden = !note.hidden;
+      button.setAttribute("aria-expanded", String(!note.hidden));
+    }
     return;
   }
   if (action === "toggle-plan") {
@@ -1530,6 +1570,7 @@ function buildPlan(plan, zone) {
         <button class="btn" type="button" data-action="resume">${esc(tr("home.resume"))}</button></div>
       <div class="plan-edit">${schedulePaneHtml(zone, slug(zone.name), tierNoteHtml())}</div>
     </div>`;
+  wireTierInfo(plan);
   // Not loaded (the board didn't answer): the next refresh tries again.
   loadZoneSchedule(zone.name).then(loaded => { if (!loaded) delete plan.dataset.mode; });
 }
