@@ -345,7 +345,8 @@ Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10).</p>
   <tr><th>Azione</th><th>Cosa fa</th></tr>
   <tr><td>Scarica backup</td><td>Zone, dispositivi, programmazioni e config.yaml in un .zip. Senza password e chiavi: restano
       solo sulla scheda.</td></tr>
-  <tr><td>Cancella storico</td><td>Grafici e statistiche. Programmazioni e dispositivi restano.</td></tr>
+  <tr><td>Cancella storico</td><td>Grafici, statistiche e Ore e consumi: le ore di ogni giorno, la temperatura esterna e le
+      letture del contatore di calore. Programmazioni e dispositivi restano.</td></tr>
   <tr><td>Cancella programmazioni</td><td>Le settimane di inverno ed estate di tutte le zone; annulla fuori casa e diagnosi.
       Valvole chiuse finché non se ne disegna una nuova.</td></tr>
   <tr><td>Reset di fabbrica</td><td>Come una scheda nuova (sezione 15), poi riavvia LocalHome. Restano config.yaml, le
@@ -358,7 +359,7 @@ gli ultimi 10).</p>
 <p>Il clima arriva dalla centrale condominiale: i suoi consumi li conta il contatore di calore dell'appartamento, non il
 misuratore elettrico di casa. LocalHome conta invece le <strong>ore</strong>: quelle di ogni zona (valvola aperta) e quelle
 dell'<strong>impianto acceso</strong> (almeno una zona aperta, contata una volta sola). Le ore di ogni giorno restano 6 anni:
-quello in corso e i 5 prima.</p>
+quello in corso e i 5 prima. <em>Cancella storico</em> le toglie insieme alle letture del contatore.</p>
 <table>
   <tr><th>Dove</th><th>Cosa</th></tr>
   <tr><td>Home, in ogni zona: <em>Storico accensioni</em></td><td>Le ultime 24 ore; aperto, gli ultimi 7 o 30 giorni a barre.

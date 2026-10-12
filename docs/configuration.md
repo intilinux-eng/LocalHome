@@ -209,7 +209,8 @@ writes them all with one timestamp) - one row a day in `daily_runs`,
 filled from the samples while they still cover a whole day (the
 recorder does it once a day before pruning them, whether or not a page
 asked); a day they don't cover is unknown, not zero. Six years are kept
-- the current one and the five before. The home page shows each zone's
+- the current one and the five before - until the history is cleared,
+which takes the heat meter's readings too. The home page shows each zone's
 under "Running history" - the last 24 hours, the last 7 or 30 days as
 bars (`/api/climate/run-hours`); the admin panel's "Hours and
 consumption" a year month by month (`/api/climate-admin/usage?year=`).
@@ -876,13 +877,16 @@ A collapsed **Maintenance** section under *Tools* in `/climate-admin`:
   schedules and manual values as a `.zip`. Credentials are left out
   (`secrets_*.json`, `devices.json`, `tuya_cloud.json`, and the MQTT
   broker's password is blanked) - they never leave the board.
-- **Clear history** - empties the charts and the run statistics.
+- **Clear history** - empties the charts and the run statistics, each
+  day's totals (energy, valve hours, outdoor temperature) and the heat
+  meter's readings (`heat_meter.json`, in the backup saved first).
 - **Clear schedules** - empties every zone's grid for both seasons and
   cancels away and diagnostic mode; the season stays. Valves close until
   a new schedule is painted.
 - **Factory reset** - removes everything LocalHome created at runtime
   (the panel's zones/VMC/extra devices, schedules, manual values, cached
-  readings, shutter positions, history), then restarts. config.yaml,
+  readings, shutter positions, history, the heat meter's readings), then
+  restarts. config.yaml,
   credential files and the MQTT broker settings stay, so the board comes
   back as a fresh installation on the same network, ready to be mapped
   again from the panel.
