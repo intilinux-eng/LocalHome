@@ -363,14 +363,37 @@ quello in corso e i 5 prima.</p>
   <tr><th>Dove</th><th>Cosa</th></tr>
   <tr><td>Home, in ogni zona: <em>Storico accensioni</em></td><td>Le ultime 24 ore; aperto, gli ultimi 7 o 30 giorni a barre.
       Tocca una barra per il giorno: ore e accensioni.</td></tr>
-  <tr><td>Admin → <em>Ore e consumi</em></td><td>Un anno mese per mese: le ore d'impianto (e di ogni zona), i kWh del contatore
-      di calore e <strong>quanti kWh ha richiesto un'ora</strong>. Il mese in corso mostra le ore fin qui.</td></tr>
+  <tr><td>Admin → <em>Ore e consumi</em></td><td>Un anno mese per mese, accanto ai kWh del contatore di calore. Il mese in
+      corso mostra le ore fin qui.</td></tr>
 </table>
-<p>I valori del contatore: ogni tanto, o una volta all'anno, leggi sul display i valori di fine mese (un QUNDIS Q heat 5.5
-conserva gli ultimi 15 mesi, caldo e freddo separati) e scrivili in <em>Valori del contatore</em>, un anno alla volta. Sono il
-totale del contatore, che cresce sempre: il consumo di ogni mese lo calcola LocalHome (gennaio usa dicembre dell'anno prima).
-Se il display mostra MWh, moltiplica per 1000. Un mese non ancora finito non si scrive. I kWh per ora compaiono dove un mese ha
-sia il consumo sia tutte le ore; il prezzo lo applichi tu dal consuntivo condominiale.</p>
+</div>
+<div class="keep">
+<p>Le colonne della tabella dell'anno, in admin:</p>
+<table>
+  <tr><th>Colonna</th><th>Cosa c'è</th></tr>
+  <tr><td>Acceso (ore)</td><td>Le ore con almeno una zona aperta, contate una volta sola; sotto, quelle di ogni zona.
+      «–»: LocalHome non registrava ancora le valvole; «ore di N giorni su M»: mancano dei giorni.</td></tr>
+  <tr><td>Consumato nel mese (kWh)</td><td>La lettura di fine mese meno quella del mese prima; gennaio usa dicembre dell'anno
+      prima. «–»: manca una delle due letture.</td></tr>
+  <tr><td>kWh per ora</td><td>Il consumato nel mese diviso le ore di accensione, solo nei mesi con tutte le ore registrate.
+      Nel totale, la media su quei mesi.</td></tr>
+</table>
+</div>
+<div class="keep">
+<p><strong>Inserire le letture</strong> (<em>Valori del contatore</em>, un anno alla volta, ogni tanto o una volta all'anno):
+per ogni mese la lettura del display a fine mese, il totale che cresce sempre (un QUNDIS Q heat 5.5 conserva gli ultimi 15
+mesi, caldo e freddo separati). Se il display mostra MWh, moltiplica per 1000. Sotto ogni casella compare subito il consumo
+del mese, così un errore si vede prima di salvare:</p>
+<table>
+  <tr><th>Mese</th><th>Lettura caldo (display)</th><th>Consumato nel mese</th></tr>
+  <tr><td>novembre 2025</td><td>56.370</td><td>– (primo mese inserito)</td></tr>
+  <tr><td>dicembre 2025</td><td>56.827</td><td>56.827 − 56.370 = 457 kWh</td></tr>
+  <tr><td>gennaio 2026</td><td>57.583</td><td>57.583 − 56.827 = 756 kWh</td></tr>
+  <tr><td>febbraio 2026</td><td>(vuoto)</td><td>–</td></tr>
+  <tr><td>marzo 2026</td><td>58.380</td><td>– (manca febbraio)</td></tr>
+</table>
+<p>Un mese non ancora finito non si scrive; una lettura più bassa del mese prima viene rifiutata. Il prezzo lo applichi tu
+dal consuntivo condominiale.</p>
 </div>
 
 <h2 id="s10">10. Diagnosi e sensori di prova</h2>

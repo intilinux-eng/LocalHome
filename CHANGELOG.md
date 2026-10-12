@@ -59,9 +59,11 @@ date rather than by tag.
   and opened the last 7 or 30 days as bars, a tap naming the day's hours
   and starts. The admin panel's "Hours and consumption" shows a year
   month by month: the plant's hours - any zone open, counted once - and
-  each zone's, beside the heat meter's kWh and kWh per hour. The meter's
-  month-end values are typed a year at a time, as its display keeps
-  them; each month's kWh is worked out. Six years are kept.
+  each zone's, beside the heat meter's kWh and kWh per hour, each column
+  saying what it holds. The meter's month-end readings are typed a year
+  at a time, as its display keeps them, and under each the month's usage
+  shows as it's typed - the reading less the month before's - so a
+  mistake shows before saving. Six years are kept.
 - **The VMC's card, redone, with five levels and a fine slider.** Minimum
   (10%) and High (75%) join Night, Day and Boost - set in the admin panel
   with the others, worked out from them for a device or a file with only
