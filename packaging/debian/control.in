@@ -1,0 +1,14 @@
+Package: localhome
+Version: @VERSION@
+Architecture: arm64
+Maintainer: LocalHome <localhome@localhost>
+Installed-Size: @SIZE@
+Depends: mosquitto, avahi-daemon, libnss-mdns, systemd
+Section: misc
+Priority: optional
+Description: LocalHome - local climate control for the Arduino UNO Q
+ The two-zone radiant climate, the VMC, the dehumidifier and the Shellys
+ that drive them, from a web page on the LAN. Compiled with Nuitka: the
+ program and everything it needs in /opt/localhome, no Python to install;
+ configuration and history in /var/lib/localhome. Installs and updates the
+ same way: apt install ./localhome_<version>_arm64.deb

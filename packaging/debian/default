@@ -1,0 +1,10 @@
+# LocalHome's package (/etc/default/localhome): read at every install and
+# update, by the package's postinst.
+#
+# Tune the board for long unattended running (journal in RAM, Wi-Fi that
+# never dozes, watchdogs...) - see /usr/lib/localhome/tune-board.sh.
+TUNE_BOARD=1
+# Also remove what LocalHome doesn't use: Arduino App Lab, Docker, the
+# firmware updater (~270 MB of RAM, ~2.3 GB of disk back). App Lab can't
+# be used on the board until turned back on.
+TUNE_LEAN=0

@@ -1,0 +1,37 @@
+; LocalHome as the .deb installs it (packaging/): the compiled program in
+; /opt/localhome, its configuration and data in /var/lib/localhome. On a
+; board updated with git instead, deploy/localhome.service is the one.
+; What deploy/tune-board.sh's step 8 adds to that one is here already.
+
+[Unit]
+Description=LocalHome smart-home dashboard
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+; LocalHome tells systemd it's alive (services/service_watchdog.py): no
+; sign of life for two minutes - a hang, not only a crash - and it's
+; restarted; past MemoryMax (about four times what it uses) too.
+Type=notify
+NotifyAccess=main
+WatchdogSec=120
+TimeoutStartSec=180
+Restart=always
+RestartSec=5
+ExecStopPost=+/bin/sh /usr/lib/localhome/watchdog/localhome-service-stopped.sh
+OOMScoreAdjust=-500
+MemoryMax=512M
+User=arduino
+Group=arduino
+Environment=LOCALHOME_CONFIG=/var/lib/localhome/config.yaml
+WorkingDirectory=/var/lib/localhome
+ExecStart=/opt/localhome/localhome
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/localhome
+
+[Install]
+WantedBy=multi-user.target

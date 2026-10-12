@@ -1,0 +1,8 @@
+#!/bin/sh
+# LocalHome's package, before its files go: removed (not updated) - the
+# service stopped and no longer started at boot.
+set -e
+if [ "$1" = remove ]; then
+    systemctl disable --now localhome.service 2>/dev/null || true
+fi
+exit 0

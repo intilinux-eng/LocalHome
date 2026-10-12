@@ -1,0 +1,12 @@
+#!/bin/sh
+# LocalHome's package, once removed. Even purged, its data stays: the
+# configuration and years of history and heat meter readings are not
+# something a package removal should take. By hand: sudo rm -r /var/lib/localhome
+set -e
+case "$1" in
+    remove|purge)
+        systemctl daemon-reload 2>/dev/null || true
+        echo "localhome: the configuration and history stay in /var/lib/localhome - remove it by hand if wanted"
+        ;;
+esac
+exit 0

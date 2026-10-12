@@ -1,0 +1,62 @@
+#!/bin/sh
+# LocalHome's package, after its files are in place - a new board or an
+# update alike (apt install ./localhome_<version>_arm64.deb):
+#   1. its data folder, /var/lib/localhome, owned by the board's user;
+#   2. the first time, a board that ran LocalHome from git (~/localhome)
+#      brings its configuration and history along; a new one gets the
+#      factory configuration;
+#   3. the board tuned for unattended running (/etc/default/localhome);
+#   4. the service enabled and (re)started.
+set -e
+USER_NAME=arduino
+DATA=/var/lib/localhome
+LIB=/usr/lib/localhome
+OLD=/home/$USER_NAME/localhome/config
+OLD_UNIT=/etc/systemd/system/localhome.service
+
+[ "$1" = configure ] || exit 0
+
+if ! id "$USER_NAME" >/dev/null 2>&1; then
+    echo "localhome: no '$USER_NAME' user - this package is for the Arduino UNO Q's Debian" >&2
+    exit 1
+fi
+
+mkdir -p "$DATA"
+if [ ! -f "$DATA/config.yaml" ]; then
+    if [ -f "$OLD/config.yaml" ]; then
+        echo "localhome: bringing the configuration and history over from $OLD (left there as it is)"
+        systemctl stop localhome.service 2>/dev/null || true
+        cp -a "$OLD/." "$DATA/"
+    else
+        echo "localhome: a new installation - the factory configuration"
+        cp "$LIB/config.example.yaml" "$DATA/config.yaml"
+        [ -f "$DATA/mqtt_broker.json" ] || printf '{\n  "host": "localhost",\n  "port": 1883\n}\n' > "$DATA/mqtt_broker.json"
+    fi
+fi
+chown -R "$USER_NAME:$USER_NAME" "$DATA"
+
+# The service from a git installation (in /etc) would hide the package's
+# (in /usr/lib): kept aside, with tune-board's additions to it.
+if [ -f "$OLD_UNIT" ]; then
+    mv "$OLD_UNIT" "$OLD_UNIT.pre-deb"
+    rm -f /etc/systemd/system/localhome.service.d/localhome-watchdog.conf
+    rmdir /etc/systemd/system/localhome.service.d 2>/dev/null || true
+    echo "localhome: the git installation's service is set aside as $OLD_UNIT.pre-deb"
+fi
+systemctl daemon-reload
+
+TUNE_BOARD=1
+TUNE_LEAN=0
+[ -f /etc/default/localhome ] && . /etc/default/localhome
+if [ "$TUNE_BOARD" = 1 ]; then
+    lean=
+    [ "$TUNE_LEAN" = 1 ] && lean=--lean
+    # A step that fails is reported, never stops the installation.
+    LOCALHOME_DATA="$DATA" sh "$LIB/tune-board.sh" $lean || echo "localhome: tune-board.sh failed - see above; run it again by hand: sudo sh $LIB/tune-board.sh" >&2
+fi
+
+systemctl reload-or-restart mosquitto.service 2>/dev/null || true
+systemctl enable localhome.service >/dev/null
+systemctl restart localhome.service
+echo "localhome: running - http://$(hostname).local:5000"
+exit 0

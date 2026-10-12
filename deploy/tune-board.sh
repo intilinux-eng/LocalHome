@@ -153,7 +153,9 @@ echo "== 8. LocalHome restarted if it hangs, or grows past its memory"
 # leak can't take the board with it: past MemoryMax (about four times what
 # it uses) LocalHome alone is stopped and started again.
 UNIT=/etc/systemd/system/localhome.service
-if [ -f "$UNIT" ] && grep -q "WATCHDOG=1" "$HERE/../src/localhome/services/service_watchdog.py" 2>/dev/null; then
+if [ ! -f "$UNIT" ] && [ -f /usr/lib/systemd/system/localhome.service ]; then
+    echo "   LocalHome's package: its service has all of this already"
+elif [ -f "$UNIT" ] && grep -q "WATCHDOG=1" "$HERE/../src/localhome/services/service_watchdog.py" 2>/dev/null; then
     install -D -m 755 "$HERE/watchdog/localhome-service-stopped.sh" /usr/local/lib/localhome/localhome-service-stopped.sh
     mkdir -p /etc/systemd/system/localhome.service.d
     cat > /etc/systemd/system/localhome.service.d/localhome-watchdog.conf <<'EOF'
@@ -245,7 +247,9 @@ echo "== 11. File systems easy on the flash: timestamps in RAM, journal every 60
 # Applied at every boot by a small service: /etc/fstab is left alone, so
 # a mistake here can't stop the board from booting.
 targets="/"
-data_mount=$(findmnt -no TARGET -T "$HERE/.." 2>/dev/null || true)
+# LocalHome's data: the git checkout's, or the package's (LOCALHOME_DATA,
+# /var/lib/localhome - set by its postinst).
+data_mount=$(findmnt -no TARGET -T "${LOCALHOME_DATA:-$HERE/..}" 2>/dev/null || true)
 if [ -n "$data_mount" ] && [ "$data_mount" != "/" ]; then
     targets="$targets $data_mount"
 fi
