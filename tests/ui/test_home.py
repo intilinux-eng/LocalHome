@@ -1010,35 +1010,67 @@ def test_a_valve_not_answering_is_red_with_what_to_check_amber_just_after_a_boot
     assert opened.errors == []
 
 
-def test_a_zones_lowest_and_highest_today_against_yesterday_and_7_days(open_page):
-    """Under the readings: today's lowest and highest, and when, beside
-    yesterday's, and how they compare; folded, the last 7 days as bars."""
+def test_a_zones_lowest_and_highest_today_and_its_7_days(open_page, api):
+    """Under the readings, today's lowest and highest and where the room is
+    between them - nothing more there. Folded, the last 7 days as bars:
+    today's with when each came and how it went against yesterday, any
+    other day's on a tap."""
+    import json as _json
+    from datetime import date, datetime, time, timedelta
     opened = _open_home(open_page)
     page = opened.page
-    page.wait_for_function("() => state.climate && state.climate.zones.length", timeout=20000)
-    page.evaluate("""([name, daysAgo]) => {
-        const zone = state.climate.zones.find(z => z.name === name);
-        const at = (d, h, m) => { const t = new Date(); t.setDate(t.getDate() - d); t.setHours(h, m, 0, 0);
-                                  return Math.round(t.getTime() / 1000); };
-        const iso = d => { const t = new Date(); t.setDate(t.getDate() - d); return t.toISOString().slice(0, 10); };
-        const day = (d, lo, hi) => ({ min: lo, max: hi, min_at: at(d, 5, 40), max_at: at(d, 16, 20) });
-        state.temps = { days: daysAgo.map(iso), zones: { [name]: [null, day(5, 24.1, 25.9), day(4, 24.3, 26.0),
-            day(3, 24.6, 26.2), day(2, 24.8, 26.5), day(1, 25.5, 27.0), day(0, 25.0, 25.2)] } };
-        state.dayRanges = { [zone.sensor]: { temperature_c: { min: 25.8, max: 26.4, min_at: at(0, 6, 10), max_at: at(0, 18, 40) } } };
-        renderZones();
-    }""", [ZONE_A, [6, 5, 4, 3, 2, 1, 0]])
+    sensor = _zone(api, ZONE_A)["sensor"]
+
+    def at(days_ago, h, m):
+        return int(datetime.combine(date.today() - timedelta(days=days_ago), time(h, m)).timestamp())
+
+    def day(days_ago, low, high):
+        return {"min": low, "max": high, "min_at": at(days_ago, 5, 40), "max_at": at(days_ago, 16, 20)}
+
+    temps = {"days": [(date.today() - timedelta(days=d)).isoformat() for d in range(6, -1, -1)],
+             "zones": {ZONE_A: [None, day(5, 24.1, 25.9), day(4, 24.3, 26.0), day(3, 24.6, 26.2),
+                                day(2, 24.8, 26.5), day(1, 25.5, 27.0), day(0, 25.0, 25.2)]}}
+
+    def with_today(route):
+        response = route.fetch()
+        data = response.json()
+        data["day_ranges"] = {sensor: {"temperature_c": {"min": 25.8, "max": 26.4,
+                                                         "min_at": at(0, 6, 10), "max_at": at(0, 18, 40)}}}
+        route.fulfill(response=response, json=data)
+    page.route("**/api/readings", with_today)
+    page.route("**/api/climate/temps", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=_json.dumps(temps)))
+    _fake_zones(page, api, "cool", {ZONE_A: (26.1, 24.0, False, True)})
     card = _card(page, ZONE_A)
-    box = " ".join(card.locator(".day-range").inner_text().split())
-    assert "Oggi" in box and "26,4°" in box and "18:40" in box and "06:10" in box, "today's live, with when"
-    assert "Ieri" in box and "27,0°" in box and "16:20" in box
-    assert "Rispetto a ieri: massima 0,6° più bassa, minima 0,3° più alta" in box
+    gauge = card.locator(".readings .today-range")
+    assert eventually(page, lambda: gauge.count() == 1), "today's, inside the readings"
+    assert gauge.get_attribute("aria-label") == "Oggi: min 25,8° alle 06:10, max 26,4° alle 18:40"
+    shown = " ".join(gauge.inner_text().split())
+    assert "25,8°" in shown and "26,4°" in shown and "06:10" not in shown, "the times on it, not in the way"
+    assert "--at: 50.0%" in gauge.locator(".tr-now").get_attribute("style"), "the room now, halfway"
+    assert card.locator(".day-range").count() == 0 and "Ieri" not in card.locator(".zone-main").inner_text()
     folded = card.locator(".zone-temps")
     assert "24,1–27,0°" in folded.locator("summary").inner_text(), "the week's lowest to highest"
     folded.locator("summary").click()
     bars = folded.locator(".temp-bar")
     assert bars.count() == 7 and bars.first.is_disabled(), "a day not recorded: no bar"
+    assert bars.last.locator(".temp-now").count() == 1, "today's bar with the room now on it"
+    assert folded.locator(".temp-lines span").count() >= 2, "a line at each degree"
+    below = " ".join(folded.locator(".energy-total").inner_text().split())
+    assert "Oggi: min 25,8° alle 06:10, max 26,4° alle 18:40" in below
+    assert "Rispetto a ieri: massima 0,6° più bassa, minima 0,3° più alta" in below
     bars.nth(5).click()
     assert eventually(page, lambda: "min 25,5° alle 05:40, max 27,0° alle 16:20" in folded.inner_text())
+    assert "Rispetto a ieri" not in folded.inner_text() and bars.first.evaluate(
+        "b => b.parentElement.dataset.picked") == "true"
+    # The reading newer than the last sample counts, as outside's: a new
+    # highest is now's - a sensor not heard from is left out.
+    newest = page.evaluate("""(sensor) => [
+        todayRange({sensor, temperature_c: 26.63, sensor_ok: true, sensor_manual: false}),
+        todayRange({sensor, temperature_c: 30, sensor_ok: false, sensor_manual: false})]""", sensor)
+    assert newest[0]["max"] == 26.6 and abs(newest[0]["max_at"] - datetime.now().timestamp()) < 120
+    assert newest[0]["min"] == 25.8 and newest[0]["min_at"] == at(0, 6, 10)
+    assert newest[1]["max"] == 26.4
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
 

@@ -462,15 +462,18 @@ function fillZone(card, zone, climate) {
   card.dataset.zone = zone.name;
 
   // The two readings side by side, large: the temperature, and the
-  // humidity with what it means.
+  // humidity with what it means - today's lowest and highest under them.
   const temp = zone.temperature_c != null
     ? `<span class="now-value">${fmt(zone.temperature_c)}</span><span class="now-unit">°</span>`
     : `<span class="now-missing">--</span>`;
   const readings = `<div class="readings">
-      <div class="reading"><div class="reading-value">${temp}</div><div class="reading-label">${esc(tr("home.reading_temp"))}</div></div>
-      ${zone.humidity_pct != null ? `<div class="reading reading-rh" data-rh="${rhLevel(zone.humidity_pct)}">
-        <div class="reading-value"><span class="now-value">${fmt(zone.humidity_pct, 0)}</span><span class="now-unit">%</span></div>
-        <div class="reading-label">${ICONS.drop}${esc(humidityWord(zone.humidity_pct))}</div></div>` : ""}
+      <div class="readings-now">
+        <div class="reading"><div class="reading-value">${temp}</div><div class="reading-label">${esc(tr("home.reading_temp"))}</div></div>
+        ${zone.humidity_pct != null ? `<div class="reading reading-rh" data-rh="${rhLevel(zone.humidity_pct)}">
+          <div class="reading-value"><span class="now-value">${fmt(zone.humidity_pct, 0)}</span><span class="now-unit">%</span></div>
+          <div class="reading-label">${ICONS.drop}${esc(humidityWord(zone.humidity_pct))}</div></div>` : ""}
+      </div>
+      ${todayRangeHtml(zone)}
     </div>`;
   // The extras, one a row with its icon: on the right of the readings, or
   // under them in two columns on a narrow card.
@@ -519,7 +522,6 @@ function fillZone(card, zone, climate) {
       ${readings}
       ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
     </div>
-    ${dayRangeHtml(zone)}
     ${valveNoteHtml(zone, status, mode)}
     ${sensorNoteHtml(zone)}
     ${excludedNow ? "" : `<div class="ribbon">
@@ -1657,74 +1659,102 @@ function runsHtml(zone) {
 }
 
 // ------------------------------------------ a zone's lowest and highest --
-// Today's (live, /api/readings' day_ranges) and yesterday's, each with
-// when it came, and how today compares - under the readings; the last 7
-// days as bars from the lowest to the highest, in a fold of their own.
+// Today's under the readings: a bar from the lowest to the highest, and
+// where the room is now - when each came said on it (a hover, a screen
+// reader) and in the fold. There, the last 7 days as the same bars, a
+// day's own on a tap, and how today went against yesterday.
 
 function epochHhmm(seconds) {
   return seconds == null ? "" : hhmm(wall(seconds * 1000));
 }
 
-// This zone's day i of the last 7 (6 = today): today's live range first.
-function tempsDay(zone, i) {
-  const days = state.temps && state.temps.zones && state.temps.zones[zone.name];
-  if (i === 6) {
-    const live = ((state.dayRanges || {})[zone.sensor] || {}).temperature_c;
-    if (live) return live;
-  }
-  return days ? days[i] : null;
+// Today's lowest and highest so far, and when (epoch seconds) - the
+// board's, kept as it records (/api/readings' day_ranges), and the
+// reading itself: it may be newer than the last sample, as outside's.
+function todayRange(zone) {
+  const kept = ((state.dayRanges || {})[zone.sensor] || {}).temperature_c;
+  if (!kept || zone.temperature_c == null || !zone.sensor_ok || zone.sensor_manual) return kept || null;
+  const t = Math.round(zone.temperature_c * 10) / 10;
+  const now = Math.round(wallToEpoch(boardNow()) / 1000);
+  return { min: Math.min(kept.min, t), max: Math.max(kept.max, t),
+           min_at: t < kept.min ? now : kept.min_at, max_at: t > kept.max ? now : kept.max_at };
 }
 
-function dayRangeHtml(zone) {
-  const today = tempsDay(zone, 6), yesterday = tempsDay(zone, 5);
-  if (!today && !yesterday) return "";
-  const cell = (day, key) => (day
-    ? `<span class="dr-value"><span class="dr-word">${esc(tr(key === "min" ? "home.dr_min" : "home.dr_max"))}</span>
-        <b>${fmt(day[key])}°</b><span class="dr-time">${esc(epochHhmm(day[`${key}_at`]))}</span></span>`
-    : `<span class="dr-value">–</span>`);
-  const row = (label, day) => `<div class="dr-row"><span class="dr-label">${esc(tr(label))}</span>${cell(day, "min")}${cell(day, "max")}</div>`;
-  // Today against yesterday: the highest, then the lowest.
-  const versus = (key) => {
+// "Oggi: min 25,8° alle 06:10, max 26,4° alle 18:40" - without the times
+// for a day kept before they were.
+function dayRangeText(day, v) {
+  const values = { day, min: fmt(v.min), max: fmt(v.max) };
+  return v.min_at == null || v.max_at == null ? tr("home.temps_day_plain", values)
+    : tr("home.temps_day", { ...values, min_at: epochHhmm(v.min_at), max_at: epochHhmm(v.max_at) });
+}
+
+function todayRangeHtml(zone) {
+  const today = todayRange(zone);
+  // "min 25,8° max 25,8°" says nothing the reading doesn't.
+  if (!today || fmt(today.min) === fmt(today.max)) return "";
+  const said = dayRangeText(tr("home.dr_today"), today);
+  const t = zone.temperature_c;
+  const now = t == null ? ""
+    : `<span class="tr-now" style="--at: ${(Math.min(1, Math.max(0, (t - today.min) / (today.max - today.min))) * 100).toFixed(1)}%"></span>`;
+  return `<div class="today-range" role="img" aria-label="${esc(said)}" title="${esc(said)}">
+      <span class="tr-end"><small>${esc(tr("home.dr_min"))}</small><b>${fmt(today.min)}°</b></span>
+      <span class="tr-track">${now}</span>
+      <span class="tr-end"><small>${esc(tr("home.dr_max"))}</small><b>${fmt(today.max)}°</b></span>
+    </div>`;
+}
+
+// Today against yesterday: the highest, then the lowest.
+function againstYesterday(today, yesterday) {
+  const versus = key => {
     const gap = Math.round((today[key] - yesterday[key]) * 10) / 10;
     const what = tr(key === "max" ? "home.dr_max_word" : "home.dr_min_word");
     return gap === 0 ? tr("home.dr_same", { what })
       : tr(gap > 0 ? "home.dr_higher" : "home.dr_lower", { what, d: fmt(Math.abs(gap)) });
   };
-  const compare = today && yesterday
-    ? `<div class="dr-compare">${esc(tr("home.dr_compare", { max: versus("max"), min: versus("min") }))}</div>` : "";
-  return `<div class="day-range">${row("home.dr_today", today)}${row("home.dr_yesterday", yesterday)}${compare}</div>`;
+  return tr("home.dr_compare", { max: versus("max"), min: versus("min") });
 }
 
 function tempsHtml(zone) {
   if (!state.temps || !state.temps.days) return "";
-  const days = state.temps.days;
-  const values = days.map((d, i) => tempsDay(zone, i));
+  const days = state.temps.days, last = days.length - 1;
+  const kept = (state.temps.zones || {})[zone.name] || [];
+  // Today's live, as under the readings.
+  const values = days.map((d, i) => (i === last && todayRange(zone)) || kept[i] || null);
   const known = values.filter(Boolean);
   if (!known.length) return "";
   const low = Math.min(...known.map(v => v.min)), high = Math.max(...known.map(v => v.max));
   // A little room above and below, so the steadiest day is still a bar.
-  const span = Math.max(high - low, 1), bottom = low - span * 0.1, top = high + span * 0.1;
+  const span = Math.max(high - low, 1), bottom = low - span * 0.12, top = high + span * 0.12;
   const at = t => ((t - bottom) / (top - bottom) * 100).toFixed(1);
-  const title = i => {
-    const day = runsDayName(days[i], true);
-    const v = values[i];
-    return v ? tr("home.temps_day", { day, min: fmt(v.min), min_at: epochHhmm(v.min_at), max: fmt(v.max), max_at: epochHhmm(v.max_at) })
-      : tr("home.runs_day_unknown", { day });
-  };
+  // A line at each degree - each half on a steady week, fewer on a wide one.
+  const step = top - bottom <= 2.5 ? 0.5 : top - bottom <= 5 ? 1 : top - bottom <= 10 ? 2 : 5;
+  const lines = [];
+  for (let t = Math.ceil(bottom / step) * step; t <= top; t += step) lines.push(t);
+  const name = i => (i === last ? tr("home.dr_today") : runsDayName(days[i], true));
+  const title = i => (values[i] ? dayRangeText(name(i), values[i]) : tr("home.runs_day_unknown", { day: name(i) }));
   const pick = state.tempsPick[zone.name];
-  const picked = pick != null && pick < days.length ? pick : null;
-  const label = (iso, i) => (i === days.length - 1 ? tr("home.runs_today") : runsDayName(iso, false));
-  const line = picked != null ? title(picked) : tr("home.temps_range", { min: fmt(low), max: fmt(high) });
+  const picked = pick != null && pick <= last ? pick : null;
+  // Under the bars the day picked, or today - with how it went against
+  // yesterday.
+  const shown = picked != null ? picked : values[last] ? last : null;
+  const line = shown != null ? title(shown) : tr("home.temps_range", { min: fmt(low), max: fmt(high) });
+  const versus = shown === last && values[last] && values[last - 1] ? againstYesterday(values[last], values[last - 1]) : "";
+  // Today's bar has the room now on it, as the one under the readings.
+  const today = values[last], t = zone.temperature_c;
+  const now = today && t != null ? `<i class="temp-now" style="--now: ${at(Math.min(today.max, Math.max(today.min, t)))}%"></i>` : "";
   return `<details class="zone-temps" data-zone-temps="${esc(zone.name)}"${state.tempsOpen[zone.name] ? " open" : ""}>
     <summary><span class="runs-title">${esc(tr("home.temps_title"))}</span>
       <span class="runs-24h">${esc(tr("home.temps_summary", { min: fmt(low), max: fmt(high) }))}</span>${ICONS.chevron}</summary>
-    <div class="temp-bars" style="--n: ${days.length}">
-      ${days.map((d, i) => `<button type="button" class="temp-bar" data-action="temps-pick" data-pick="${i}"
-        ${values[i] ? `style="--lo: ${at(values[i].min)}%; --hi: ${at(values[i].max)}%"` : "disabled"}
-        data-current="${i === days.length - 1}" aria-pressed="${picked === i}" title="${esc(title(i))}" aria-label="${esc(title(i))}"><span></span></button>`).join("")}
+    <div class="temp-chart">
+      <div class="temp-lines" aria-hidden="true">${lines.map(v => `<span style="--y: ${at(v)}%"><i>${fmt(v, Number.isInteger(v) ? 0 : 1)}°</i></span>`).join("")}</div>
+      <div class="temp-bars" style="--n: ${days.length}" data-picked="${picked != null}">
+        ${days.map((d, i) => `<button type="button" class="temp-bar" data-action="temps-pick" data-pick="${i}"
+          ${values[i] ? `style="--lo: ${at(values[i].min)}%; --hi: ${at(values[i].max)}%"` : "disabled"}
+          data-current="${i === last}" aria-pressed="${picked === i}" title="${esc(title(i))}" aria-label="${esc(title(i))}">${values[i] ? "<span></span>" : ""}${i === last ? now : ""}</button>`).join("")}
+      </div>
     </div>
-    <div class="energy-labels" style="--n: ${days.length}">${days.map((d, i) => `<span>${esc(label(d, i))}</span>`).join("")}</div>
-    <div class="energy-total"><b>${esc(line)}</b></div>
+    <div class="energy-labels" style="--n: ${days.length}">${days.map((d, i) => `<span${picked === i ? ' class="on"' : ""}>${esc(i === last ? tr("home.runs_today") : runsDayName(d, false))}</span>`).join("")}</div>
+    <div class="energy-total"><b>${esc(line)}</b>${versus ? `<span class="temps-versus">${esc(versus)}</span>` : ""}</div>
     <p class="runs-note">${esc(tr("home.temps_note"))}</p>
   </details>`;
 }
@@ -2407,6 +2437,7 @@ async function refreshHistory() {
 
 async function refreshDevices(anchor) {
   const ticket = ++asked.devices;
+  let rangesMoved = false;
   try {
     if (!state.devices) state.devices = await api("/api/devices");
     // All of them in one request (a dozen on a real install, which a
@@ -2418,6 +2449,9 @@ async function refreshDevices(anchor) {
     ]);
     if (ticket !== asked.devices) return;
     state.devices.sensors.forEach(d => { state.readings[d.name] = all.readings[d.name] || { ok: false }; });
+    // Today's lowest and highest - outside's, and each zone's under its
+    // readings: those redrawn when they moved, not left to the next round.
+    rangesMoved = JSON.stringify(all.day_ranges || {}) !== JSON.stringify(state.dayRanges || {});
     state.dayRanges = all.day_ranges || {};
     state.vmc = vmc;
   } catch (e) {
@@ -2427,6 +2461,7 @@ async function refreshDevices(anchor) {
     renderOutdoor();
     renderPlant();
     renderHouse();
+    if (rangesMoved && state.climate) renderZones();
   }, anchor);
 }
 

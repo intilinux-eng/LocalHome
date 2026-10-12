@@ -438,13 +438,13 @@ body[data-running="true"] .hero-season::before {
 }
 
 .readings {
-  display: flex;
-  align-items: stretch;
-  gap: 18px;
+  display: grid;
+  gap: 12px;
   padding: 14px 18px 12px;
   border-radius: 18px;
   background: var(--surface-2);
 }
+.readings-now { display: flex; align-items: stretch; gap: 18px; }
 .zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"], [data-tone="bad"]) .readings {
   background: radial-gradient(150% 170% at 0% 0%, color-mix(in srgb, var(--tone) 20%, transparent), transparent 64%), var(--surface-2);
 }
@@ -467,6 +467,20 @@ body[data-running="true"] .hero-season::before {
 .reading-rh[data-rh="ok"] .reading-label { color: var(--ok); }
 .reading-rh[data-rh="dry"] .reading-label { color: var(--warn); }
 .reading-rh[data-rh="humid"] .reading-label { color: var(--cool); }
+/* Today's lowest and highest under the readings, and where the room is
+   between them now (home.js todayRangeHtml): the fold's bars laid flat,
+   from the season's colour light to full. */
+.today-range { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+  font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.tr-end { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.tr-end small { font-size: 0.66rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+.tr-end b { font-weight: 600; }
+.tr-track { position: relative; flex: 1 1 56px; min-width: 40px; height: 6px; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, var(--surface-2)), var(--accent)); }
+/* The room now: a ring on the bar - here and on today's in the fold. */
+.tr-now, .temp-now { position: absolute; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--text); }
+.tr-now { top: 50%; left: var(--at); transform: translate(-50%, -50%); }
 
 .zone-facts { display: grid; gap: 9px; min-width: 0; }
 @container (max-width: 439px) {
@@ -962,31 +976,32 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* The labels are words, not buttons: a tap goes to the bar under them. */
 .zone-runs .energy-labels { pointer-events: none; }
 .energy-total b { color: var(--text); font-weight: 600; }
-/* A zone's lowest and highest, today and yesterday (home.js dayRangeHtml). */
-.day-range { display: grid; gap: 4px; margin: 0 0 12px; padding: 8px 12px; border-radius: var(--radius-s);
-  background: var(--surface-2); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
-.dr-row { display: grid; grid-template-columns: 3.6em 1fr 1fr; gap: 8px; align-items: baseline; }
-.dr-label { color: var(--text-3); font-size: 0.8rem; }
-.dr-value { display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; color: var(--text-2); }
-.dr-value b { color: var(--text); font-weight: 600; }
-.dr-word, .dr-time { font-size: 0.78rem; color: var(--text-3); }
-.dr-compare { font-size: 0.8rem; color: var(--text-2); padding-top: 2px; }
-/* The last 7 days, each a bar from its lowest to its highest. */
+/* The last 7 days (home.js tempsHtml), each a bar from its lowest to its
+   highest as today's under the readings, over a line at each degree. */
 .zone-temps { margin-top: 0; padding-top: 6px; border-top: 1px solid var(--line); }
 .zone-temps > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; font-size: 0.9rem; }
 .zone-temps > summary::-webkit-details-marker { display: none; }
 .zone-temps > summary .chevron { width: 20px; height: 20px; flex: none; color: var(--text-3); transition: transform 0.2s; }
 .zone-temps[open] > summary .chevron { transform: rotate(180deg); }
 .zone-temps[open] { display: grid; gap: 8px; padding-bottom: 4px; }
-.temp-bars { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 96px; }
+.temp-chart { position: relative; height: 112px; margin-top: 6px; padding-left: 30px; }
+.temp-lines { position: absolute; inset: 0 0 0 30px; pointer-events: none; }
+.temp-lines > span { position: absolute; left: 0; right: 0; bottom: var(--y); border-top: 1px dashed color-mix(in srgb, var(--text) 13%, transparent); }
+.temp-lines i { position: absolute; right: calc(100% + 6px); top: 0; transform: translateY(-50%);
+  font-style: normal; font-size: 0.64rem; line-height: 1; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.temp-bars { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 100%; }
 .temp-bar { position: relative; padding: 0; border: 0; background: transparent; cursor: pointer; }
-.temp-bar > span { position: absolute; left: 22%; right: 22%; bottom: var(--lo); height: max(4px, calc(var(--hi) - var(--lo)));
-  border-radius: 4px; background: color-mix(in srgb, var(--text) 28%, transparent); }
-.temp-bar[data-current="true"] > span { background: var(--text-2); }
-.temp-bar[aria-pressed="true"] > span { background: var(--accent); }
+.temp-bar > span { position: absolute; left: 50%; width: 10px; bottom: var(--lo); height: max(10px, calc(var(--hi) - var(--lo)));
+  transform: translateX(-50%); border-radius: 999px; transition: opacity 0.2s;
+  background: linear-gradient(0deg, color-mix(in srgb, var(--accent) 28%, var(--surface)), var(--accent)); }
+.temp-now { left: 50%; bottom: var(--now); transform: translate(-50%, 50%); transition: opacity 0.2s; }
+/* One picked: the others step back. */
+.temp-bars[data-picked="true"] .temp-bar[aria-pressed="false"] > * { opacity: 0.35; }
 .temp-bar:disabled { cursor: default; }
-.zone-temps .energy-labels span:last-child { direction: rtl; text-align: right; overflow: visible; }
-.zone-temps .energy-labels { pointer-events: none; }
+/* The labels are words, not buttons: a tap goes to the bar above them. */
+.zone-temps .energy-labels { padding-left: 30px; pointer-events: none; }
+.zone-temps .energy-labels .on { color: var(--text); font-weight: 600; }
+.temps-versus { display: block; margin-top: 2px; font-size: 0.84rem; }
 
 /* An air-quality sensor (home.js airTile): CO2 with its day, the rest as
    dots - green under the usual limit, amber worth airing, red poor. */
@@ -1232,7 +1247,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 @media (max-width: 380px) {
   .now-value { font-size: 3rem; }
   .reading-rh .now-value { font-size: 2.3rem; }
-  .readings { gap: 14px; padding: 12px 14px 10px; }
+  .readings { padding: 12px 14px 10px; }
+  .readings-now { gap: 14px; }
   .reading-rh { padding-left: 14px; }
   .zone { padding: 16px 14px 12px; }
 }
