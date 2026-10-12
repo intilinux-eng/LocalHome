@@ -31,6 +31,8 @@ import sys
 import threading
 import time
 
+from localhome import runtime
+
 
 def is_supported() -> bool:
     """False on Windows - see the module docstring above. The route
@@ -57,14 +59,8 @@ def _restart() -> None:
     # actually turns over.
     time.sleep(1.0)
     _release_server_socket()
-    exe = sys.executable
-    is_frozen = getattr(sys, "frozen", False) or not (
-        exe.endswith("python") or exe.endswith("python3") or exe.endswith("python.exe") or exe.endswith("python3.exe")
-    )
-    if is_frozen:
-        os.execv(exe, sys.argv)
-    else:
-        os.execv(exe, [exe] + sys.argv)
+    argv = runtime.restart_argv()
+    os.execv(argv[0], argv)
 
 
 def schedule_restart() -> None:

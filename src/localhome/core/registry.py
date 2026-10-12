@@ -43,20 +43,32 @@ def register_driver(kind: str, type_name: str):
     return decorator
 
 
+# Every module under localhome.drivers. From source they're found by
+# walking the folders; a binary compiled by Nuitka (the .deb) has none to
+# walk, so this list says them - tests/test_registry_modules.py keeps it
+# the same as the folders.
 BUILTIN_DRIVER_MODULES = (
     "localhome.drivers.ewelink.cloud",
     "localhome.drivers.ewelink.power",
     "localhome.drivers.manual.climate",
     "localhome.drivers.meross.plug",
+    "localhome.drivers.mqtt.base",
+    "localhome.drivers.mqtt.client",
     "localhome.drivers.mqtt.cover",
     "localhome.drivers.mqtt.number",
+    "localhome.drivers.mqtt.paths",
+    "localhome.drivers.mqtt.rpc",
     "localhome.drivers.mqtt.sensor",
     "localhome.drivers.mqtt.shelly_light",
+    "localhome.drivers.mqtt.state_cache",
     "localhome.drivers.mqtt.switch",
+    "localhome.drivers.notifiers.telegram",
     "localhome.drivers.simulated.climate",
+    "localhome.drivers.simulated.number",
     "localhome.drivers.simulated.switch",
-    "localhome.drivers.telegram.notifier",
+    "localhome.drivers.simulated.world",
     "localhome.drivers.tuya.air_quality",
+    "localhome.drivers.tuya.client",
     "localhome.drivers.tuya.cover",
 )
 
@@ -77,7 +89,6 @@ def load_builtin_drivers() -> None:
     _loaded = True
     import localhome.drivers as drivers_pkg
 
-    # Collect module names from filesystem walk (development) plus static list (compiled standalone).
     module_names = set(BUILTIN_DRIVER_MODULES)
     try:
         for module_info in pkgutil.walk_packages(drivers_pkg.__path__, prefix="localhome.drivers."):

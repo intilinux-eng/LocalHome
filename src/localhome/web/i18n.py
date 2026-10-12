@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import sys
 from pathlib import Path
+
+from localhome import runtime
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +20,7 @@ DEFAULT_LANGUAGE = "en"
 
 
 def get_locales_dir() -> Path:
-    env = os.environ.get("LOCALHOME_WEB_DIR")
-    if env:
-        candidate = Path(env) / "locales"
-        if candidate.is_dir():
-            return candidate
-    exe = sys.executable
-    is_frozen = getattr(sys, "frozen", False) or not (
-        exe.endswith("python") or exe.endswith("python3") or exe.endswith("python.exe") or exe.endswith("python3.exe")
-    )
-    if is_frozen:
-        exe_dir = Path(exe).parent
-        for candidate in (
-            exe_dir.parent / "share" / "localhome" / "web" / "locales",
-            Path("/usr/local/share/localhome/web/locales"),
-            Path("/opt/localhome/web/locales"),
-            exe_dir / "web" / "locales",
-            exe_dir.parent / "web" / "locales",
-        ):
-            if candidate.is_dir():
-                return candidate
-    return Path(__file__).parent / "locales"
+    return runtime.web_dir() / "locales"
 
 
 def available_languages() -> list[str]:

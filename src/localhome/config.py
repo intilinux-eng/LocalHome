@@ -14,10 +14,13 @@ from pathlib import Path
 
 import yaml
 
+from localhome import runtime
+
 CONFIG_ENV_VAR = "LOCALHOME_CONFIG"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "config.yaml"
+# The checkout's config/ - or, compiled into the .deb, its data folder.
+DEFAULT_CONFIG_PATH = runtime.PACKAGED_CONFIG if runtime.COMPILED else _REPO_ROOT / "config" / "config.yaml"
 
 
 @dataclass
