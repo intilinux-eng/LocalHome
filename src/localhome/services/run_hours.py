@@ -150,7 +150,8 @@ def year_report(history: HistoryStore, zones: list[dict], interval: float, meter
     each month counted (its value less the month before's - January's
     December), the plant's and each zone's hours and how many of its days
     they know, and kWh per hour where a month has both its kWh and all its
-    hours; then the year's total - kWh per hour over those months."""
+    hours; then the year's total - kWh per hour over those months; and
+    the December before's values, for January's usage as it's typed."""
     now = now or datetime.now()
     today = now.date()
     sensors = [z["valve"] for z in zones]
@@ -180,7 +181,8 @@ def year_report(history: HistoryStore, zones: list[dict], interval: float, meter
 
     paired = [r for r in rows if r["kwh_per_hour"] is not None]
     paired_hours = sum(r["plant_hours"] for r in paired)
-    return {"year": year, "months": rows,
+    december = meter.get(f"{year - 1}-12", {})
+    return {"year": year, "months": rows, "before": {r: december.get(r) for r in REGISTERS},
             "total": {**{k: total(lambda r, k=k: r[k]) for k in ("heat_kwh", "cool_kwh", "kwh", "plant_hours")},
                       "zones": {z["name"]: total(lambda r, n=z["name"]: r["zones"][n]) for z in zones},
                       "kwh_per_hour": round(sum(r["kwh"] for r in paired) / paired_hours, 2) if paired_hours else None,

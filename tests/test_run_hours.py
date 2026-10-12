@@ -144,6 +144,7 @@ def test_a_year_month_by_month_the_kwh_beside_the_plants_hours(store, tmp_path):
                           "09": {"heat_kwh": 1490, "cool_kwh": 600}})
     report = run_hours.year_report(store, ZONES, STEP, meter.get(), 2026, now=NOW)
     months = {m["month"]: m for m in report["months"]}
+    assert report["before"] == {"heat_kwh": 1000.0, "cool_kwh": 500.0}, "December, for January as it's typed"
     assert list(months)[0] == "2026-01" and list(months)[-1] == "2026-10", "up to this month"
     january, february, september, october = (months[k] for k in ("2026-01", "2026-02", "2026-09", "2026-10"))
     assert (january["heat_kwh"], january["cool_kwh"], january["kwh"]) == (300.0, 0.0, 300.0), "December's before"

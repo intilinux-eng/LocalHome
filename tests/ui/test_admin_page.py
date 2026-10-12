@@ -228,18 +228,26 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
         page.evaluate("document.getElementById('usage').open = true")
         assert page.locator("#usage .usage-years button.active").inner_text() == str(this_year)
         assert "finora" in page.inner_text("#usage .usage-table"), "this month, still running"
+        assert "meno quella del mese prima" in page.inner_text("#usage .usage-legend"), "each column says what it holds"
         page.click(f"#usage .usage-years button:has-text('{last_year}')")
         assert eventually(page, lambda: page.locator("#usage .usage-table tr").count() == 14)   # head, 12, total
         page.click(f"#usage button:has-text('Valori del contatore {last_year}')")
         page.fill("#usage .usage-edit input[data-month='11'][data-register='heat_kwh']", "1000")
         page.fill("#usage .usage-edit input[data-month='12'][data-register='heat_kwh']", "1200")
         page.fill("#usage .usage-edit input[data-month='12'][data-register='cool_kwh']", "50")
+        december = page.locator("#usage .usage-edit input[data-month='12'][data-register='heat_kwh']")
+        assert december.get_attribute("placeholder") == "al 31/12"
+        # As it's typed: the month's usage, or why there's none.
+        assert december.locator("xpath=following-sibling::span").inner_text() == "consumo 200 kWh"
+        november = page.locator("#usage .usage-edit input[data-month='11'][data-register='heat_kwh']")
+        assert november.locator("xpath=following-sibling::span").inner_text() == "consumo: manca ottobre"
         page.click(f"#usage button:has-text('Salva {last_year}')")
         assert eventually(page, lambda: "Salvato" in page.inner_text("#usage-result"))
         assert "200 caldo" in page.inner_text("#usage .usage-table"), "December: its value less November's"
         assert page.locator("#usage .usage-edit").count() == 0, "closed once saved"
         page.click(f"#usage button:has-text('Valori del contatore {last_year}')")
         page.fill("#usage .usage-edit input[data-month='12'][data-register='heat_kwh']", "900")
+        assert december.locator("xpath=following-sibling::span").inner_text() == "più bassa di novembre (1000)"
         page.click(f"#usage button:has-text('Salva {last_year}')")
         assert eventually(page, lambda: "più basso del mese prima" in page.inner_text("#usage-result"))
         assert f"12/{last_year}" in page.inner_text("#usage-result")

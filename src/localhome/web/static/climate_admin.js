@@ -845,12 +845,19 @@ function renderUsage(data) {
 
   // The meter's month-end values, the months over: all of the year at once.
   const ended = data.months.filter(m => !m.open);
+  const lastDay = key => `${new Date(Number(key.slice(0, 4)), Number(key.slice(5)), 0).getDate()}/${key.slice(5)}`;
   const input = (m, register, label) => `<input type="number" min="0" step="0.001" inputmode="decimal"
       data-month="${m.month.slice(5)}" data-register="${register}" value="${m[register === "heat_kwh" ? "heat_meter" : "cool_meter"] ?? ""}"
-      aria-label="${escapeHtml(`${usageMonth(m.month)} ${label}`)}">`;
+      placeholder="${t("usage_reading_on", { day: lastDay(m.month) })}" aria-label="${escapeHtml(`${usageMonth(m.month)} ${label}`)}"><span
+      class="usage-calc"></span>`;
+  const legend = `<dl class="usage-legend">
+      <dt>${t("usage_col_on")}</dt><dd>${t("usage_legend_on")}</dd>
+      <dt>${t("usage_col_kwh")}</dt><dd>${t("usage_legend_kwh")}</dd>
+      <dt>${t("usage_col_kwh_h")}</dt><dd>${t("usage_legend_kwh_h")}</dd>
+    </dl>`;
   const edit = !ended.length ? "" : usageView.editing ? `<div class="admin-zone-card usage-form">
       <p class="hint-text">${t("usage_edit_note")}</p>
-      <table class="usage-table usage-edit">
+      <table class="usage-table usage-edit" oninput="usageCalc()">
         <tr><th>${t("usage_col_month")}</th><th>${t("usage_heat")}</th><th>${t("usage_cool")}</th></tr>
         ${ended.map(m => `<tr><th scope="row">${escapeHtml(usageMonth(m.month))}</th>
           <td>${input(m, "heat_kwh", tr("climate_admin.usage_heat"))}</td><td>${input(m, "cool_kwh", tr("climate_admin.usage_cool"))}</td></tr>`).join("")}
@@ -862,7 +869,35 @@ function renderUsage(data) {
     </div>` : `<div class="toolbar admin-actions">
       <button class="range-btn" type="button" onclick="editHeatYear(true)">${t("usage_edit", { year: data.year })}</button>
     </div>`;
-  body.innerHTML = `${years}${table}<p class="hint-text">${t("usage_hint")}</p>${edit}<p class="hint-text" id="usage-result"></p>`;
+  body.innerHTML = `${years}${table}${legend}${edit}<p class="hint-text" id="usage-result"></p>`;
+  if (usageView.editing) usageCalc();
+}
+
+// Under each value as it's typed: the month's usage - its reading less
+// the month before's (January's, December's before) - or why there's none.
+function usageCalc() {
+  const data = usageView.data;
+  for (const register of ["heat_kwh", "cool_kwh"]) {
+    let prev = data.before?.[register] ?? null;
+    let prevName = `${usageMonth(`${data.year - 1}-12`)} ${data.year - 1}`;
+    for (const el of document.querySelectorAll(`#usage-body .usage-edit input[data-register="${register}"]`)) {
+      const value = el.value === "" ? null : Number(el.value);
+      let text = "", state = "";
+      if (value != null && prev == null) {
+        text = tr("climate_admin.usage_calc_missing", { month: prevName });
+      } else if (value != null && value < prev) {
+        text = tr("climate_admin.usage_calc_lower", { month: prevName, value: usageNumber(prev, 0) });
+        state = "bad";
+      } else if (value != null) {
+        const used = value - prev;
+        text = tr("climate_admin.usage_calc_used", { n: usageNumber(used, Number.isInteger(used) ? 0 : 1) });
+      }
+      el.nextElementSibling.textContent = text;
+      el.nextElementSibling.dataset.state = state;
+      prev = value;
+      prevName = usageMonth(`${data.year}-${el.dataset.month}`);
+    }
+  }
 }
 
 async function saveHeatYear(button) {
