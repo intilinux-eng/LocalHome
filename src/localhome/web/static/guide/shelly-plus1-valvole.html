@@ -179,18 +179,25 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
 
 <h2 id="s4">4. VMC</h2>
 <ul>
-  <li><strong>Dalla home</strong>: Spenta, Notte, Giorno o Massimo; oppure Massimo per 30 minuti, 1 o 2 ore, poi torna
-      com'era. Scegliere una velocità riaccende la VMC se era spenta.</li>
-  <li><strong>Programma</strong> (sulla scheda della VMC, nella home): Manuale, Giorno e notte (giorno 7–22), Fuori per
+  <li><strong>Dalla home</strong>: cinque livelli - Minimo, Notte, Giorno, Alto, Massimo - e una barra per la regolazione fine,
+      dal Minimo al 100%. Si accende e si spegne con il suo interruttore; un livello o la barra la riaccendono. Sotto il nome la
+      scheda dice sempre perché va a quella velocità: dal programma, scelta a mano fino alla prossima fascia, a tempo,
+      automatico, fuori casa.</li>
+  <li><strong>Per un po'</strong>: Massimo per 30 minuti, 1 o 2 ore (doccia, cucina), oppure <em>Ospiti</em>: Alto per 3 ore.
+      Poi torna com'era.</li>
+  <li><strong>Programma</strong> (sulla scheda della VMC, nella home, in una riga che si apre): Manuale, Giorno e notte (giorno 7–22), Fuori per
       lavoro, Mattina e sera intense, Personalizzato. Un programma cambia velocità solo quando inizia la sua fascia
       successiva: una velocità scelta a mano resta fino ad allora.</li>
-  <li><strong>Percentuali</strong> di Notte, Giorno e Massimo (di serie 25, 50 e 100%): admin → <em>Regolazioni
-      impianto</em> (sezione 20). Valgono subito.</li>
-  <li><strong>Fuori casa</strong>: nel foglio si sceglie <em>Notte</em> (di serie, ricorda l'ultima scelta) o <em>Spenta</em>.
+  <li><strong>Percentuali</strong> dei cinque livelli (di serie 10, 25, 50, 75 e 100%): admin → <em>Regolazioni
+      impianto</em> (sezione 20). Valgono subito; la barra parte dal Minimo. La AERA 320 gira anche al 5%, a 0% si spegne.</li>
+  <li><strong>Filtri</strong>: la scheda avvisa 14 giorni prima della pulizia e quando è ora, con <em>Puliti oggi</em>.
+      Intervallo e ultima pulizia in admin (sezione 20). Senza una pulizia segnata, nessun avviso.</li>
+  <li><strong>Fuori casa</strong>: nel foglio si sceglie <em>Minimo</em>, <em>Notte</em> (di serie, ricorda l'ultima scelta) o <em>Spenta</em>.
       Vince su tutto il resto: programma, automatismi, "Massimo per"; dalla home non si cambia, e se qualcuno la cambia
-      dall'app Shelly torna com'era entro un minuto. Al rientro torna al suo programma, o com'era prima. Notte ricambia ancora
-      l'aria della casa chiusa; Spenta risparmia di più, ma l'aria ristagna.</li>
-  <li><strong>Automatismi</strong> (spenti di serie, sezione 20): doccia, aria fuori più umida e raffrescamento notturno.
+      dall'app Shelly torna com'era entro un minuto. Al rientro torna al suo programma, o com'era prima. Minimo e Notte
+      ricambiano ancora l'aria della casa chiusa; Spenta risparmia di più, ma l'aria ristagna.</li>
+  <li><strong>Automatismi</strong> (spenti di serie, sezione 20): doccia, aria fuori più umida, raffrescamento notturno e
+      aria troppo secca d'inverno.
       Cambiano velocità sopra al programma, non accendono mai la VMC spenta, e una velocità scelta a mano li ferma finché
       il motivo non passa. La scheda della VMC dice quale è in corso e perché.</li>
   <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva. Se non risponde, LocalHome la interroga sempre
@@ -584,9 +591,10 @@ Massimo (sezione 20) sono quelle vere.</p>
 </div>
 <div class="keep">
 <h3>VMC: admin → Regolazioni impianto → Velocità VMC</h3>
-<p>Notte, Giorno e Massimo in percentuale: le velocità dei pulsanti e dei programmi della home. Valgono subito. Il programma
-giorno/notte si sceglie dalla home, sulla scheda della VMC.</p>
-<figure class="shot wide"><img src="admin-vmc-velocita.jpg" alt="Admin, Velocità VMC: notte 25%, giorno 50%, massimo 100%"></figure>
+<p>I cinque livelli in percentuale, ognuno più alto del precedente: i pulsanti della home e la sua barra (che parte dal Minimo),
+i programmi, "Massimo per", "Ospiti", gli automatismi, il fuori casa. Valgono subito. Il programma si sceglie dalla home,
+sulla scheda della VMC.</p>
+<figure class="shot wide"><img src="admin-vmc-velocita.jpg" alt="Admin, Velocità VMC: minimo 10%, notte 25%, giorno 50%, alto 75%, massimo 100%"></figure>
 </div>
 <div class="keep">
 <h3>Automatismi VMC: admin → Regolazioni impianto → Automatismi VMC</h3>
@@ -599,11 +607,19 @@ giorno/notte si sceglie dalla home, sulla scheda della VMC.</p>
       spenta</td></tr>
   <tr><td>Raffrescamento notturno (estate)</td><td>Stanze da 24 °C, fuori almeno 3 °C più fresco, non sotto 16 °C e non più
       umido</td><td>Giorno, mai Massimo</td></tr>
+  <tr><td>Aria troppo secca (inverno)</td><td>Stanze sotto il 35% di umidità; finisce risalita di 3 punti</td><td>Notte, mai
+      spenta</td></tr>
 </table>
 <p>Conta la salita dell'umidità, non un valore fisso: d'estate il bagno è umido anche senza doccia. I 16 °C sono quelli del bypass
 estivo della VMC (sezione 4): sotto, l'aria passa dallo scambiatore e non raffresca. Le due estive vogliono la sonda
 esterna. I valori della doccia sono pensati per la soglia umidità dell'H&amp;T all'1% (sezione 5): un invio a ogni punto, la salita
 si vede entro un paio di minuti.</p>
+</div>
+<div class="keep">
+<h3>Filtri VMC: admin → Regolazioni impianto → Filtri VMC</h3>
+<p>Ogni quanti giorni pulire i filtri (di serie 90, come chiede il manuale) e quando è stato fatto l'ultima volta; <em>Filtri puliti
+oggi</em> fa ripartire il conto. La home avvisa 14 giorni prima e quando è ora; da lì si può segnare <em>Puliti oggi</em>. Finché
+non si segna una pulizia, nessun avviso.</p>
 </div>
 <div class="keep">
 <h3>Deumidificatore: admin → Stagione → Deumidificatore</h3>

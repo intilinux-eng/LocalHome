@@ -14,6 +14,9 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **The VMC's program applied at startup, not a minute later.** The
+  loop's first check asked for the speeds before the app was ready, failed
+  and logged it, and the program's speed waited for the next check.
 - **Save, pressed right after typing a Shelly's id, saves.** Leaving the
   field starts the id's check, and the line it wrote under the field
   moved the button from under the pointer between press and release -
@@ -51,6 +54,20 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **The VMC's card, redone, with five levels and a fine slider.** Minimum
+  (10%) and High (75%) join Night, Day and Boost - set in the admin panel
+  with the others, worked out from them for a device or a file with only
+  three. A slider for any speed between the minimum and 100%; on and off
+  is a switch of its own. Under its name the card says why it runs at that
+  speed (program, hand pick until the next change, timed, automatic,
+  away). "Guests": high for 3 hours, beside "Boost for". The program is a
+  line that opens. Away, the VMC can also be held at its minimum.
+- **The VMC filters' reminder**: how often and when last cleaned, set in
+  the admin panel; the home card warns two weeks before and once due, and
+  "cleaned today" starts it over. Nothing recorded, no reminder.
+- **Winter's dry-air automatic** (off by default, with the others): the
+  reference room under 35% humidity, the VMC at its night speed until it's
+  3 points over again.
 - **Away from home, the VMC at its night speed or off** - chosen in the
   away sheet (night unless chosen otherwise; the last choice is kept).
   It wins over the program, the automatics and a timed boost; the VMC's

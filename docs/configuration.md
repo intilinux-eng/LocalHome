@@ -512,20 +512,33 @@ A file in the older form - `"day": {"at": "07:00", "value": 50},
 "night": {"at": "22:00", "value": 20}` in place of `week` - is still
 read, as the week it stands for.
 
-**The speeds themselves** - the percentages of night, day and boost - are
-set in the admin panel's VMC section (`config/vmc_speeds.json`), over
-the device's own `presets`, hand-written or the panel's defaults (25, 50,
-100). They're in use at once, no restart: the card's buttons and the
-ready-made programs show them, a running program's hours move to them
-(its night stays night), and a unit running at an old speed goes to its
-new value.
+**The speeds themselves** - five levels: minimum, night, day, high,
+boost - are set in the admin panel's VMC section (`config/vmc_speeds.json`),
+over the device's own `presets`, hand-written or the panel's defaults
+(10, 25, 50, 75, 100). Each must be faster than the one before. A device
+or a file with only night, day and boost (the older three) gets the
+other two worked out: the minimum at 10% under night (else half of it),
+high at 75% between day and boost (else halfway). They're in use at
+once, no restart: the card's buttons and its fine slider (from the
+minimum to 100%; off is the card's own switch) and the ready-made
+programs show them, a running program's hours move to them (its night
+stays night), and a unit running at an old speed goes to its new value.
+
+**The card** says under the VMC's name why it runs at that speed - the
+program, a hand pick until the program's next change, a timed speed, an
+automatic, away. Its timed speeds: boost for 30 min / 1 h / 2 h, and
+"guests", high for 3 h. **The filters' reminder** (`config/vmc_filters.json`,
+`services/vmc_filters.py`): the interval (90 days by default) and the
+day they were last cleaned, set in the admin panel; the card warns from
+14 days before and once due, with "cleaned today". No day recorded, no
+reminder.
 
 **A timed speed** ("Boost for 30 min / 1 h / 2 h" on the card) is the
 `override`: that speed until its end, then back to the program - or,
 with the program off, to the speed and on/off state from before. A
 speed picked by hand meanwhile ends it.
 
-**Away from home** the VMC runs at its night speed or is off - picked
+**Away from home** the VMC runs at its minimum or night speed, or is off - picked
 in the away sheet on the home page (`away_choice` in the file, night
 unless one is made; the API's `"vmc"` on `POST /api/climate/away`, with
 `"keep"` to leave it alone - what `tools/live_walk.py` sends). It wins
@@ -546,6 +559,7 @@ use at once:
 | Shower | the bathroom's humidity rises fast | boost; day in the quiet hours | +8 points within 10 min; over when back within 5 points of where it started, after 15 to 60 min |
 | Humid outside (summer) | the outdoor dew point above the reference room's | night (never off) | 1 °C over to start, back at the indoor dew point |
 | Night cooling (summer) | the house warm, the outdoor air cooler and no more humid | day | house from 24 °C, outside 3 °C cooler and not under 16 °C |
+| Dry air (winter) | the reference room's humidity under the threshold | night (never off) | under 35%, back 3 points over |
 
 The quiet hours (22-7) never get the boost - it's loud. The bathroom is
 the zone kept out of cooling and the reference room the first one
