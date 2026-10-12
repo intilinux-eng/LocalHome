@@ -24,7 +24,7 @@ def test_the_lowest_and_highest_of_today_from_each_cycle():
     assert days.get(*OUT) is None, "one value says nothing the reading doesn't"
     days.sample(_ts(14), {"Outdoor Sensor": {"temperature_c": 21.66}, "Other": {"temperature_c": 40.0}})
     days.sample(_ts(9), {"Outdoor Sensor": {"temperature_c": 15.0}})
-    assert days.get(*OUT) == {"min": 12.0, "max": 21.7}
+    assert days.get(*OUT) == {"min": 12.0, "max": 21.7, "min_at": int(_ts(6)), "max_at": int(_ts(14))}
 
 
 def test_the_first_value_after_midnight_starts_the_new_day():
@@ -36,7 +36,8 @@ def test_the_first_value_after_midnight_starts_the_new_day():
     assert days.get(*OUT) is None, "yesterday's isn't today's"
     days.sample(_ts(0, 5, day=9), {"Outdoor Sensor": {"temperature_c": 13.5}})
     days.sample(_ts(0, 35, day=9), {"Outdoor Sensor": {"temperature_c": 13.1}})
-    assert days.get(*OUT) == {"min": 13.1, "max": 13.5}
+    assert days.get(*OUT) == {"min": 13.1, "max": 13.5, "min_at": int(_ts(0, 35, day=9)),
+                              "max_at": int(_ts(0, 5, day=9))}
 
 
 def test_start_up_reads_what_today_already_had_from_the_history(tmp_path):
@@ -46,7 +47,7 @@ def test_start_up_reads_what_today_already_had_from_the_history(tmp_path):
     store.record("Outdoor Sensor", int(_ts(13)), {"temperature_c": 19.5})
     days = DayRange([OUT], clock=lambda: _ts(15))
     days.seed(store)
-    assert days.get(*OUT) == {"min": 11.0, "max": 19.5}
+    assert days.get(*OUT) == {"min": 11.0, "max": 19.5, "min_at": int(_ts(7)), "max_at": int(_ts(13))}
     store.close()
 
 
@@ -69,7 +70,8 @@ def test_the_home_page_gets_it_with_the_readings_and_the_history_isnt_read(tmp_p
         return history_connect()
     monkeypatch.setattr(app.config["HISTORY"], "_connect", counted)
     body = client.get("/api/readings").get_json()
-    assert body["day_ranges"] == {"Outdoor Sensor": {"temperature_c": {"min": 10.0, "max": 18.0}}}
+    assert body["day_ranges"] == {"Outdoor Sensor": {"temperature_c": {
+        "min": 10.0, "max": 18.0, "min_at": int(now - 60), "max_at": int(now)}}}
     assert reads == [], "a page's refresh doesn't read the history"
     monkeypatch.undo()
     app.config["HISTORY"].close()
@@ -94,5 +96,37 @@ def test_the_recorder_feeds_it_each_cycle(tmp_path):
     recorder.poll_once()
     poller.value = 16.5
     recorder.poll_once()
-    assert recorder.day_range.get(*OUT) == {"min": 9.0, "max": 16.5}
+    today = recorder.day_range.get(*OUT)
+    assert (today["min"], today["max"]) == (9.0, 16.5) and today["min_at"] <= today["max_at"]
+    store.close()
+
+
+def test_the_first_moment_counts_and_the_zones_join_with_what_today_had(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"), write_every_seconds=0)
+    store.record("Stanze Sensor", int(_ts(6)), {"temperature_c": 25.8})
+    store.record("Stanze Sensor", int(_ts(18, 40)), {"temperature_c": 26.4})
+    days = DayRange([OUT], clock=lambda: _ts(19))
+    days.watch([("Stanze Sensor", "temperature_c")], store)
+    days.sample(_ts(19), {"Stanze Sensor": {"temperature_c": 26.4}})       # the highest again: still 18:40
+    assert days.get("Stanze Sensor", "temperature_c") == {
+        "min": 25.8, "max": 26.4, "min_at": int(_ts(6)), "max_at": int(_ts(18, 40))}
+    days.watch([("Stanze Sensor", "temperature_c")], store)               # twice: nothing read again
+    assert days.get("Stanze Sensor", "temperature_c")["max_at"] == int(_ts(18, 40))
+    store.close()
+
+
+def test_a_history_from_before_keeps_its_days_and_gains_their_times(tmp_path):
+    import sqlite3
+    path = tmp_path / "history.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE daily_temps (sensor TEXT NOT NULL, day TEXT NOT NULL, mean_c REAL NOT NULL, "
+                 "min_c REAL NOT NULL, max_c REAL NOT NULL, PRIMARY KEY (sensor, day))")
+    conn.execute("INSERT INTO daily_temps VALUES ('Outdoor Sensor', '2026-10-01', 15.0, 10.0, 20.0)")
+    conn.commit()
+    conn.close()
+    from datetime import date
+    from localhome.services.history import temp_days_of
+    store = HistoryStore(str(path))
+    kept = temp_days_of(store, "Outdoor Sensor", "temperature_c", 30, date(2026, 10, 1), datetime(2026, 10, 1, 12))
+    assert kept["2026-10-01"] == (15.0, 10.0, 20.0, None, None)
     store.close()

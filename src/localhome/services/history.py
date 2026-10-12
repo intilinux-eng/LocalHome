@@ -355,10 +355,18 @@ class HistoryStore:
                     mean_c REAL NOT NULL,
                     min_c REAL NOT NULL,
                     max_c REAL NOT NULL,
+                    min_at INTEGER,
+                    max_at INTEGER,
                     PRIMARY KEY (sensor, day)
                 )
                 """
             )
+            # When the lowest and the highest came - a table from before
+            # they were kept gets them, empty for the days it has.
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_temps)")}
+            for column in ("min_at", "max_at"):
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE daily_temps ADD COLUMN {column} INTEGER")
             conn.commit()
         finally:
             conn.close()
@@ -635,9 +643,11 @@ def _on_in(conn, sensors: list[str], field: str, t0: int, t1: int, min_off: floa
 
 
 def temp_days_of(store: "HistoryStore", sensor: str, field: str, sample_interval_seconds: float,
-                 first_day: date, now: datetime | None = None) -> dict[str, tuple[float, float, float]]:
-    """{"YYYY-MM-DD": (mean, lowest, highest)} of `sensor`'s `field` from
-    `first_day` to today. Days before today come from daily_temps, filled
+                 first_day: date, now: datetime | None = None) -> dict[str, tuple]:
+    """{"YYYY-MM-DD": (mean, lowest, highest, lowest at, highest at)} of
+    `sensor`'s `field` from `first_day` to today - the times the first
+    moment each was reached, epoch seconds (None for a day kept before
+    they were). Days before today come from daily_temps, filled
     from the samples the first time they're asked while the samples cover
     them and hold at least half the day's cycles (a sensor silent for most
     of a day gives no mean worth comparing); today from the samples so far.
@@ -645,16 +655,26 @@ def temp_days_of(store: "HistoryStore", sensor: str, field: str, sample_interval
     now = now or datetime.now()
     today = now.date()
     enough = 86400 / sample_interval_seconds / 2
-    out: dict[str, tuple[float, float, float]] = {}
+    out: dict[str, tuple] = {}
     stats = ("SELECT AVG(value), MIN(value), MAX(value), COUNT(*) FROM readings "
              "WHERE sensor = ? AND field = ? AND ts >= ? AND ts < ?")
+    first_at = ("SELECT MIN(ts) FROM readings WHERE sensor = ? AND field = ? AND ts >= ? AND ts < ? AND value = ?")
+
+    def day_of(conn, t0: int, t1: int):
+        mean, low, high, count = conn.execute(stats, (sensor, field, t0, t1)).fetchone()
+        if not count:
+            return None, 0
+        low_at = conn.execute(first_at, (sensor, field, t0, t1, low)).fetchone()[0]
+        high_at = conn.execute(first_at, (sensor, field, t0, t1, high)).fetchone()[0]
+        return (round(mean, 2), low, high, low_at, high_at), count
+
     with store._lock:
         conn = store._connect()
         try:
-            for day, mean, low, high in conn.execute(
-                    "SELECT day, mean_c, min_c, max_c FROM daily_temps WHERE sensor = ? AND day >= ?",
+            for day, mean, low, high, low_at, high_at in conn.execute(
+                    "SELECT day, mean_c, min_c, max_c, min_at, max_at FROM daily_temps WHERE sensor = ? AND day >= ?",
                     (sensor, first_day.isoformat())):
-                out[day] = (mean, low, high)
+                out[day] = (mean, low, high, low_at, high_at)
             (oldest,) = conn.execute("SELECT MIN(ts) FROM readings").fetchone()
             day = first_day
             stored = False
@@ -662,21 +682,19 @@ def temp_days_of(store: "HistoryStore", sensor: str, field: str, sample_interval
                 iso = day.isoformat()
                 start = _day_start(day)
                 if iso not in out and oldest is not None and oldest <= start:
-                    mean, low, high, count = conn.execute(
-                        stats, (sensor, field, start, _day_start(day + timedelta(days=1)))).fetchone()
+                    kept, count = day_of(conn, start, _day_start(day + timedelta(days=1)))
                     if count >= enough:
-                        out[iso] = (round(mean, 2), low, high)
-                        conn.execute("INSERT OR REPLACE INTO daily_temps (sensor, day, mean_c, min_c, max_c) "
-                                     "VALUES (?, ?, ?, ?, ?)", (sensor, iso, round(mean, 2), low, high))
+                        out[iso] = kept
+                        conn.execute("INSERT OR REPLACE INTO daily_temps (sensor, day, mean_c, min_c, max_c, min_at, max_at) "
+                                     "VALUES (?, ?, ?, ?, ?, ?, ?)", (sensor, iso, *kept))
                         stored = True
                 day += timedelta(days=1)
             if stored:
                 conn.commit()
             if first_day <= today:
-                mean, low, high, count = conn.execute(
-                    stats, (sensor, field, _day_start(today), int(now.timestamp()) + 1)).fetchone()
+                kept, count = day_of(conn, _day_start(today), int(now.timestamp()) + 1)
                 if count:
-                    out[today.isoformat()] = (round(mean, 2), low, high)
+                    out[today.isoformat()] = kept
         finally:
             conn.close()
     return out

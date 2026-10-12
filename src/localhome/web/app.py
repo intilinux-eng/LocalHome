@@ -321,9 +321,14 @@ def create_app(config_path: str | None = None) -> Flask:
             if (target := thermostat.applied_target(zone.name)) is not None
         }
         # The valves' hours of each day kept before their samples go.
-        recorder.keep_runs = lambda: run_hours.keep_days(store, _valve_zones(thermostat), history_poll_interval,
-                                                         int(recorder.retention_days) + 2,
-                                                         outdoor=OUTDOOR_SENSOR_NAME)
+        recorder.keep_runs = lambda: run_hours.keep_days(
+            store, _valve_zones(thermostat), history_poll_interval, int(recorder.retention_days) + 2,
+            temps=[OUTDOOR_SENSOR_NAME, *(z["sensor"] for z in _sensor_zones(thermostat))])
+        # Each zone's lowest and highest today, and when - with the outdoor's.
+        try:
+            day_range.watch([(z["sensor"], "temperature_c") for z in _sensor_zones(thermostat)], store)
+        except Exception:
+            logger.exception("Zones' minimum/maximum: couldn't read today's history - from now on")
 
         interlocks = [
             Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
@@ -595,6 +600,13 @@ def _valve_zones(thermostat) -> list[dict]:
     if thermostat is None:
         return []
     return [{"name": z.name, "valve": z.valve} for z in thermostat.zones if z.valve_configured]
+
+
+def _sensor_zones(thermostat) -> list[dict]:
+    """The zones with a sensor, for their temperatures' days: {"name", "sensor"}."""
+    if thermostat is None:
+        return []
+    return [{"name": z.name, "sensor": z.sensor} for z in thermostat.zones if z.sensor_configured]
 
 
 def _usage_answer(app: Flask, year=None) -> dict:
@@ -1734,6 +1746,14 @@ def _register_routes(app: Flask) -> None:
         """Each zone's hours open - the last 24 hours, each of the last 30
         days - and the plant's (any zone open, counted once)."""
         report = run_hours.zone_report(app.config["HISTORY"], _valve_zones(app.config["THERMOSTAT"]),
+                                       app.config["HISTORY_POLL_INTERVAL"])
+        return jsonify(ok=True, **report)
+
+    @app.route("/api/climate/temps")
+    def api_climate_temps():
+        """Each zone's lowest and highest of each of the last 7 days, and
+        when - today's live in /api/sensors' day_ranges."""
+        report = run_hours.temp_report(app.config["HISTORY"], _sensor_zones(app.config["THERMOSTAT"]),
                                        app.config["HISTORY_POLL_INTERVAL"])
         return jsonify(ok=True, **report)
 

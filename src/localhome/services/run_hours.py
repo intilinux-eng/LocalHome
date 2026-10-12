@@ -57,17 +57,34 @@ def zone_report(history: HistoryStore, zones: list[dict], interval: float, days:
 
 
 def keep_days(history: HistoryStore, zones: list[dict], interval: float, days: int,
-              now: datetime | None = None, outdoor: str | None = None) -> None:
-    """The last `days` days' hours into daily_runs, and the outdoor
-    temperature's into daily_temps, while the samples still have them -
-    once a day, before the old samples go (HistoryRecorder): no day is
-    lost because no page asked for it in time."""
+              now: datetime | None = None, temps: list[str] = ()) -> None:
+    """The last `days` days' hours into daily_runs, and the temperatures'
+    (`temps`: the outdoor sensor, the zones') into daily_temps, while the
+    samples still have them - once a day, before the old samples go
+    (HistoryRecorder): no day is lost because no page asked for it in time."""
     now = now or datetime.now()
     first = now.date() - timedelta(days=days)
     if zones:
         run_days_of(history, [z["valve"] for z in zones], FIELD, interval, first, now)
-    if outdoor:
-        temp_days_of(history, outdoor, "temperature_c", interval, first, now)
+    for sensor in temps:
+        temp_days_of(history, sensor, "temperature_c", interval, first, now)
+
+
+def temp_report(history: HistoryStore, zones: list[dict], interval: float, days: int = 7,
+                now: datetime | None = None) -> dict:
+    """For the home page: each zone's ({"name", "sensor"}) last `days`
+    days, today included, oldest first - its lowest and highest and when
+    (epoch seconds), None for a day not recorded."""
+    now = now or datetime.now()
+    first = now.date() - timedelta(days=days - 1)
+    day_list = [(first + timedelta(days=i)).isoformat() for i in range(days)]
+
+    def one(sensor: str) -> list:
+        kept = temp_days_of(history, sensor, "temperature_c", interval, first, now)
+        return [None if d not in kept else {"min": round(kept[d][1], 1), "max": round(kept[d][2], 1),
+                                            "min_at": kept[d][3], "max_at": kept[d][4]} for d in day_list]
+
+    return {"days": day_list, "zones": {z["name"]: one(z["sensor"]) for z in zones}}
 
 
 def first_year(today: date) -> int:

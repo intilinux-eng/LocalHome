@@ -119,13 +119,29 @@ def test_the_outdoor_days_mean_kept_once_the_samples_go(store):
     record(store, two, (0, 24), outdoor=lambda h: 10.0 if h < 12 else 20.0)
     record(store, one, (0, 24), outdoor=lambda h: 8.0 if h < 6 else None)        # silent from 6 on
     days = temp_days_of(store, OUTDOOR, "temperature_c", STEP, two, NOW)
-    assert days[two.isoformat()] == (15.0, 10.0, 20.0)
+    assert days[two.isoformat()][:3] == (15.0, 10.0, 20.0)
+    assert days[two.isoformat()][3:] == (at(two, 0), at(two, 12)), "when the lowest and the highest first came"
     assert one.isoformat() not in days, "a quarter of the day: no mean worth comparing"
-    run_hours.keep_days(store, ZONES, STEP, 3, now=NOW, outdoor=OUTDOOR)
+    run_hours.keep_days(store, ZONES, STEP, 3, now=NOW, temps=[OUTDOOR])
     store.prune(at(NOW.date(), 0))
-    assert temp_days_of(store, OUTDOOR, "temperature_c", STEP, two, NOW)[two.isoformat()] == (15.0, 10.0, 20.0)
+    assert temp_days_of(store, OUTDOOR, "temperature_c", STEP, two, NOW)[two.isoformat()] ==         (15.0, 10.0, 20.0, at(two, 0), at(two, 12)), "kept with their times"
     # Both days' hours - each valve's and the plant's - and the one mean.
     assert store.prune_days(NOW.date()) == 2 * 3 + 1
+
+
+def test_each_zones_last_7_days_lowest_and_highest_and_when(store):
+    yesterday = NOW.date() - timedelta(days=1)
+    rooms = lambda h: 25.0 + abs(h - 5) / 10                                  # lowest at 5:00, highest at the end
+    store_zone = lambda day, hours, f: record(store, day, hours, outdoor=f)
+    store_zone(yesterday, (0, 24), rooms)
+    store_zone(NOW.date(), (0, 18), lambda h: 26.0)
+    report = run_hours.temp_report(store, [{"name": "Stanze", "sensor": OUTDOOR}], STEP, now=NOW)
+    assert len(report["days"]) == 7 and report["days"][-1] == NOW.date().isoformat()
+    *older, day_before, today = report["zones"]["Stanze"]
+    assert older == [None] * 5, "not recorded"
+    assert (day_before["min"], day_before["max"]) == (25.0, 26.9)
+    assert day_before["min_at"] == at(yesterday, 5) and day_before["max_at"] >= at(yesterday, 23.9)
+    assert (today["min"], today["max"], today["min_at"]) == (26.0, 26.0, at(NOW.date(), 0))
 
 
 def test_degree_days_the_year_before_and_this_months_estimate(store, tmp_path):
@@ -221,6 +237,8 @@ def test_the_routes(tmp_path):
     app = create_app(str(tmp_path / "config.yaml"))
     try:
         c = app.test_client()
+        temps = c.get("/api/climate/temps").get_json()
+        assert set(temps["zones"]) == {"Stanze", "Bagni"} and len(temps["days"]) == 7
         hours = c.get("/api/climate/run-hours").get_json()
         assert set(hours["zones"]) == {"Stanze", "Bagni"} and len(hours["days"]) == 30
         usage = c.get("/api/climate-admin/usage").get_json()

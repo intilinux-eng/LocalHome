@@ -1,5 +1,5 @@
-"""Today's lowest and highest value of a few readings - the outdoor
-temperature's minimum and maximum on the home page.
+"""Today's lowest and highest value of a few readings, and when each
+came - the outdoor temperature's and each zone's on the home page.
 
 Kept in memory and fed by the history recorder's own cycle (the same
 samples it writes), not read from the history at every page refresh: a
@@ -32,12 +32,19 @@ class DayRange:
         self._lock = threading.Lock()
         self._ranges: dict[tuple[str, str], dict] = {}
 
-    def seed(self, store) -> None:
+    def seed(self, store, watched=None) -> None:
         """What today already had, from the history - once, at start-up."""
         now = self.clock()
-        for sensor, field in self.watched:
+        for sensor, field in self.watched if watched is None else watched:
             for ts, value in store.values_since(sensor, field, _midnight(now)):
                 self._add(sensor, field, ts, value)
+
+    def watch(self, watched: list[tuple[str, str]], store) -> None:
+        """More readings to follow - the zones' sensors, known once the
+        thermostat is built - with what today already had."""
+        new = [pair for pair in watched if pair not in self.watched]
+        self.watched.update(new)
+        self.seed(store, new)
 
     def sample(self, ts: float, batch: dict[str, dict[str, float]]) -> None:
         """One cycle's values: {sensor: {field: value}}."""
@@ -51,17 +58,23 @@ class DayRange:
         with self._lock:
             current = self._ranges.get((sensor, field))
             if current is None or current["day"] != day:
-                self._ranges[(sensor, field)] = {"day": day, "min": value, "max": value, "count": 1}
+                self._ranges[(sensor, field)] = {"day": day, "min": value, "max": value, "count": 1,
+                                                 "min_at": ts, "max_at": ts}
                 return
-            current["min"] = min(current["min"], value)
-            current["max"] = max(current["max"], value)
+            # The first moment each was reached.
+            if value < current["min"]:
+                current["min"], current["min_at"] = value, ts
+            if value > current["max"]:
+                current["max"], current["max_at"] = value, ts
             current["count"] += 1
 
     def get(self, sensor: str, field: str) -> dict | None:
-        """{"min", "max"} so far today - None before two values today (one
-        says nothing a reading doesn't), or when today has none yet."""
+        """{"min", "max", "min_at", "max_at"} so far today (the times epoch
+        seconds) - None before two values today (one says nothing a
+        reading doesn't), or when today has none yet."""
         with self._lock:
             current = self._ranges.get((sensor, field))
             if current is None or current["day"] != _day(self.clock()) or current["count"] < 2:
                 return None
-            return {"min": round(current["min"], 1), "max": round(current["max"], 1)}
+            return {"min": round(current["min"], 1), "max": round(current["max"], 1),
+                    "min_at": int(current["min_at"]), "max_at": int(current["max_at"])}
