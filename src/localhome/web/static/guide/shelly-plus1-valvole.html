@@ -353,6 +353,24 @@ Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10).</p>
 </table>
 <p>Ogni cancellazione chiede di scrivere <code>RESET</code> e salva prima un backup sulla scheda (<code>config/backups</code>,
 gli ultimi 10).</p>
+<div class="keep">
+<h3>Ore di accensione e consumi</h3>
+<p>Il clima arriva dalla centrale condominiale: i suoi consumi li conta il contatore di calore dell'appartamento, non il
+misuratore elettrico di casa. LocalHome conta invece le <strong>ore</strong>: quelle di ogni zona (valvola aperta) e quelle
+dell'<strong>impianto acceso</strong> (almeno una zona aperta, contata una volta sola). Le ore di ogni giorno restano per sempre,
+anche oltre i 30 giorni dello storico.</p>
+<table>
+  <tr><th>Dove</th><th>Cosa</th></tr>
+  <tr><td>Home, in ogni zona: <em>Storico accensioni</em></td><td>Le ultime 24 ore; aperto, gli ultimi 7 o 30 giorni a barre.
+      Tocca una barra per il giorno: ore e accensioni.</td></tr>
+  <tr><td>Admin → <em>Ore e consumi</em></td><td>Le ore per mese, dell'impianto e di ogni zona. Le letture del contatore di
+      calore, scritte a mano: tra due letture i kWh, le ore d'impianto e <strong>quanti kWh ha richiesto un'ora</strong>; con il
+      prezzo per kWh termico del riparto condominiale, gli euro.</td></tr>
+</table>
+<p>Le letture: il valore a fine mese che il contatore conserva sul display (un QUNDIS Q heat 5.5 ne tiene 15, con la data,
+caldo e freddo separati), o quello del giorno. Se il display mostra MWh, moltiplica per 1000. Un mese con giorni non registrati
+lo dice ("ore di 18 giorni su 30").</p>
+</div>
 
 <h2 id="s10">10. Diagnosi e sensori di prova</h2>
 <p><strong>Modalità diagnosi</strong> (admin → <em>Diagnosi e manutenzione</em>): termostato e sicurezze si fermano, ogni
