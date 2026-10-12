@@ -406,11 +406,18 @@ _LAST_LINE = re.compile(
 )
 
 
-def boot_history(limit: int = 5, run=None) -> list[dict]:
+def boot_history(limit: int = 5, run=None, uptime=None) -> list[dict]:
     """The board's last boots, newest first, each with how that session
     ended: "running" (this one), "clean" (a proper shutdown or reboot) or
     "crash" (the power went, or the board hung) - from the system's own
-    login records (`last`). Empty where they aren't available."""
+    login records (`last`). Empty where they aren't available.
+
+    `last` notes a boot's time at the boot, before NTP has set the clock:
+    a UNO Q - no clock battery - starts from the time it was switched off,
+    and a board off from 18:25 to 20:03 said it came up at 18:25 (seen on
+    a test board). This boot's time comes from the kernel's uptime
+    instead, like boot_times(); the earlier ones can only be as `last`
+    noted them."""
     try:
         out = (run or subprocess.run)(["last", "-x", "-F", "-n", str(limit), "reboot"],
                                       capture_output=True, text=True, timeout=5)
@@ -428,6 +435,10 @@ def boot_history(limit: int = 5, run=None) -> list[dict]:
         end = match.group(2)
         boots.append({"booted_at": round(booted),
                       "ended": "running" if end == "still running" else "crash" if end == "crash" else "clean"})
+    uptime = _uptime_seconds() if uptime is None else uptime
+    for boot in boots:
+        if boot["ended"] == "running" and uptime is not None:
+            boot["booted_at"] = round(time.time() - uptime)
     return boots
 
 

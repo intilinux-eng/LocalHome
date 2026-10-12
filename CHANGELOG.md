@@ -14,6 +14,11 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **The admin panel's list of boots shows when this one really began.**
+  A UNO Q has no clock battery: it starts from the time it was switched
+  off, and the system notes the boot before NTP corrects the clock - a
+  board off from 18:25 to 20:03 was listed as up since 18:25. This boot's
+  time now comes from the kernel's uptime; earlier boots stay as noted.
 - **The VMC's program applied at startup, not a minute later.** The
   loop's first check asked for the speeds before the app was ready, failed
   and logged it, and the program's speed waited for the next check.

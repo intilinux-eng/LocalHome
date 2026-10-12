@@ -334,6 +334,16 @@ def test_boot_history_reads_how_each_session_ended():
     assert boots[0]["booted_at"] > boots[1]["booted_at"] > boots[2]["booted_at"]
 
 
+def test_this_boots_time_comes_from_the_uptime_not_the_clock_before_ntp():
+    """A UNO Q switched off at 18:25 and on at 20:03 starts from 18:25 -
+    `last` notes that; the kernel's uptime knows better."""
+    output = ("reboot   system boot  7.0.0-g122c2c22d Sun Oct 11 18:25:45 2026 - still running\n"
+              "reboot   system boot  7.0.0-g122c2c22d Sat Oct 10 11:47:12 2026 - crash                    (30:36)\n")
+    boots = system_status.boot_history(run=lambda *a, **k: _Out(output), uptime=1727)
+    assert abs(boots[0]["booted_at"] - (time.time() - 1727)) <= 2
+    assert boots[1]["booted_at"] == round(time.mktime((2026, 10, 10, 11, 47, 12, 0, 0, -1))), "earlier ones as noted"
+
+
 def test_boot_history_is_empty_without_last():
     def missing(*args, **kwargs):
         raise OSError("no last here")
