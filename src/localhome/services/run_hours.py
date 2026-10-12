@@ -1,15 +1,14 @@
 """How long each zone's valve was open, and the plant's - any of them
-open, counted once: the last 24 hours, day by day for the home page,
-month by month for the admin panel - and, beside the plant's hours, the
-heat meter's own readings, typed in the admin panel (a heat meter like a
-QUNDIS Q heat 5.5 keeps 15 month-end values on its display, heat and
-cooling apart): the kWh those hours took, per hour, and in euros with a
-price per kWh.
+open, counted once: the last 24 hours and day by day for the home page;
+for the admin panel a year month by month, beside the heat meter's
+month-end values typed there (a heat meter like a QUNDIS Q heat 5.5
+keeps the last 15 on its display, heat and cooling apart): the kWh each
+month took, and per hour of the plant running. Six years kept.
 
 The hours come from the valves' recorded state (services/history.py:
-the samples for a month, then one row a day kept for good). They are
-the time the plant was asked to run, not its energy: the heat meter's
-kWh are what it delivered, and their ratio is what an hour costs.
+the samples for a month, then one row a day). They are the time the
+plant was asked to run, not its energy: the heat meter's kWh are what
+it delivered, and their ratio is what an hour takes.
 """
 from __future__ import annotations
 
@@ -18,10 +17,12 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 
 from localhome.errors import InputError
-from localhome.services.history import PLANT_KEY, HistoryStore, run_days_of, run_window_of
+from localhome.services.history import (PLANT_KEY, RUN_YEARS, HistoryStore, first_run_day, run_days_of,
+                                        run_window_of)
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 FIELD = "is_on"
+REGISTERS = ("heat_kwh", "cool_kwh")
 DAY_SECONDS = 86400
 
 
@@ -50,136 +51,146 @@ def zone_report(history: HistoryStore, zones: list[dict], interval: float, days:
     return {"days": day_list, "zones": {z["name"]: one(z["valve"]) for z in zones}, "plant": one(PLANT_KEY)}
 
 
-def month_report(history: HistoryStore, zones: list[dict], interval: float, months: int = 12,
-                 now: datetime | None = None) -> list[dict]:
-    """For the admin panel, newest first: each of the last `months`
-    months' hours - the plant's and each zone's - its starts, and how many
-    of its days are known (the rest before LocalHome ran, or lost)."""
-    now = now or datetime.now()
-    today = now.date()
-    year, month = today.year, today.month
-    starts_of = []
-    for _ in range(months):
-        starts_of.append(date(year, month, 1))
-        year, month = (year, month - 1) if month > 1 else (year - 1, 12)
-    sensors = [z["valve"] for z in zones]
-    by_day = run_days_of(history, sensors, FIELD, interval, starts_of[-1], now)
-    out = []
-    for first in starts_of:
-        last = min(today, date(first.year, first.month, monthrange(first.year, first.month)[1]))
-        days = [(first + timedelta(days=i)).isoformat() for i in range((last - first).days + 1)]
-        known = [d for d in days if d in by_day[PLANT_KEY]]
-        total = lambda key: _hours(sum(by_day[key].get(d, (0, 0))[0] for d in days))
-        out.append({"month": first.strftime("%Y-%m"), "days": len(days), "days_known": len(known),
-                    "plant_hours": total(PLANT_KEY),
-                    "plant_starts": sum(by_day[PLANT_KEY].get(d, (0, 0))[1] for d in days),
-                    "zones": {z["name"]: total(z["valve"]) for z in zones}})
-    return out
+def keep_days(history: HistoryStore, zones: list[dict], interval: float, days: int,
+              now: datetime | None = None) -> None:
+    """The last `days` days' hours into daily_runs, while the samples still
+    have them - once a day, before the old samples go (HistoryRecorder):
+    no day is lost because no page asked for it in time."""
+    if zones:
+        now = now or datetime.now()
+        run_days_of(history, [z["valve"] for z in zones], FIELD, interval, now.date() - timedelta(days=days), now)
+
+
+def first_year(today: date) -> int:
+    """The oldest year kept: this one and the five before."""
+    return today.year - RUN_YEARS + 1
+
+
+def _month_label(key: str) -> str:
+    return f"{key[5:7]}/{key[:4]}"
 
 
 class HeatMeterStore:
-    """config/heat_meter.json: the heat meter's readings, typed in the
-    admin panel - {"day", "heat_kwh", "cool_kwh"} (cumulative, as its
-    display shows them; cooling only on a meter with the cooling range) -
-    and an optional price per kWh."""
+    """config/heat_meter.json: the heat meter's month-end values, as its
+    display keeps them (a QUNDIS Q heat 5.5: the last 15 months, heat and
+    cooling apart, totals that only count up), typed in the admin panel a
+    year at a time - {"months": {"2026-01": {"heat_kwh", "cool_kwh"}}} -
+    a month only once it's over; the last six years kept."""
 
     def __init__(self, path: str, today=date.today):
         self.path = path
         self.today = today
         self._lock = threading.Lock()
 
-    def get(self) -> dict:
+    def get(self) -> dict[str, dict]:
         try:
             data = load_json(self.path)
         except (OSError, ValueError):
             data = {}
-        if not isinstance(data, dict):
-            data = {}
-        readings = [r for r in data.get("readings") or [] if isinstance(r, dict) and r.get("day")]
-        price = data.get("price_eur_kwh")
-        return {"readings": sorted(readings, key=lambda r: r["day"]),
-                "price_eur_kwh": price if isinstance(price, (int, float)) and not isinstance(price, bool) else None}
+        months = data.get("months") if isinstance(data, dict) else None
+        oldest = f"{first_year(self.today())}-01"
+        return {k: v for k, v in sorted((months or {}).items())
+                if isinstance(v, dict) and len(k) == 7 and k >= oldest}
 
-    def _save(self, data: dict) -> dict:
-        save_json_atomic(self.path, data)
-        return data
-
-    def add(self, values: dict) -> dict:
-        """A reading - replacing the one of its day - each register at
-        least the reading before and at most the one after: the meter
-        only counts up."""
-        try:
-            day = date.fromisoformat(str(values.get("day")))
-        except ValueError:
-            raise InputError("heat_meter_day_invalid", "day: a date like 2026-10-31")
-        if day > self.today():
-            raise InputError("heat_meter_day_invalid", "day: not in the future")
-        reading = {"day": day.isoformat()}
-        for key, required in (("heat_kwh", True), ("cool_kwh", False)):
-            value = values.get(key)
-            if value is None and not required:
-                continue
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value < 1e9:
-                raise InputError("heat_meter_value_invalid", f"{key}: a reading in kWh, 0 or more", key=key)
-            reading[key] = round(float(value), 3)
-        with self._lock:
-            data = self.get()
-            others = [r for r in data["readings"] if r["day"] != reading["day"]]
-            before = [r for r in others if r["day"] < reading["day"]]
-            after = [r for r in others if r["day"] > reading["day"]]
-            for key in ("heat_kwh", "cool_kwh"):
-                if key not in reading:
+    def set_year(self, year, months) -> dict[str, dict]:
+        """The year's months at once - {"01": {"heat_kwh", "cool_kwh"} or
+        none for it} - each over already, each register at least the month
+        before's and at most the month after's: the meter only counts up."""
+        today = self.today()
+        if isinstance(year, bool) or not isinstance(year, int) or not first_year(today) <= year <= today.year:
+            raise InputError("heat_meter_year_invalid", f"year: {first_year(today)} to {today.year}")
+        if not isinstance(months, dict):
+            raise InputError("heat_meter_year_invalid", "months: {\"01\": {...}, ...}")
+        mine = {}
+        for number, values in months.items():
+            if str(number) not in {f"{m:02d}" for m in range(1, 13)}:
+                raise InputError("heat_meter_year_invalid", f"months: 01 to 12, not {number}")
+            key = f"{year}-{number}"
+            if values is not None and not isinstance(values, dict):
+                raise InputError("heat_meter_value_invalid", f"{key}: {{\"heat_kwh\", \"cool_kwh\"}}",
+                                 month=_month_label(key))
+            month = {}
+            for register in REGISTERS:
+                value = (values or {}).get(register)
+                if value is None:
                     continue
-                low = next((r[key] for r in reversed(before) if key in r), None)
-                high = next((r[key] for r in after if key in r), None)
-                if (low is not None and reading[key] < low) or (high is not None and reading[key] > high):
-                    raise InputError("heat_meter_not_increasing",
-                                     f"{key}: the meter only counts up - between {low} and {high}", key=key)
-            data["readings"] = sorted(others + [reading], key=lambda r: r["day"])
-            return self._save(data)
-
-    def remove(self, day: str) -> dict:
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value < 1e9:
+                    raise InputError("heat_meter_value_invalid", f"{key} {register}: kWh, 0 or more",
+                                     month=_month_label(key))
+                month[register] = round(float(value), 3)
+            if month and (year, int(number)) >= (today.year, today.month):
+                raise InputError("heat_meter_month_open", f"{key}: not over yet", month=_month_label(key))
+            if month:
+                mine[key] = month
         with self._lock:
-            data = self.get()
-            data["readings"] = [r for r in data["readings"] if r["day"] != day]
-            return self._save(data)
+            kept = {k: v for k, v in self.get().items() if not k.startswith(f"{year}-")}
+            kept.update(mine)
+            kept = dict(sorted(kept.items()))
+            for register in REGISTERS:
+                last = None
+                for key, month in kept.items():
+                    if register not in month:
+                        continue
+                    if last is not None and month[register] < last:
+                        raise InputError("heat_meter_not_increasing", f"{key} {register}: below the month before",
+                                         month=_month_label(key))
+                    last = month[register]
+            save_json_atomic(self.path, {"months": kept})
+            return kept
 
-    def set_price(self, price) -> dict:
-        if price is not None and (isinstance(price, bool) or not isinstance(price, (int, float)) or not 0 <= price <= 10):
-            raise InputError("heat_meter_price_invalid", "price_eur_kwh: euros per kWh, 0 to 10, or null")
-        with self._lock:
-            data = self.get()
-            data["price_eur_kwh"] = None if price is None else round(float(price), 4)
-            return self._save(data)
+
+def _before(key: str) -> str:
+    year, month = int(key[:4]), int(key[5:])
+    return f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
 
 
-def meter_report(history: HistoryStore, zones: list[dict], interval: float, meter: dict,
-                 now: datetime | None = None) -> list[dict]:
-    """Between each two readings, newest first: the kWh the meter counted
-    (heat, cooling, both), the plant's hours from the day after the first
-    reading to the day of the second (a reading is the meter at the end
-    of its day), how many of those days' hours are known, kWh per hour,
-    and with a price the euros, in all and per hour."""
-    readings = meter["readings"]
-    if len(readings) < 2:
-        return []
+def year_report(history: HistoryStore, zones: list[dict], interval: float, meter: dict[str, dict], year: int,
+                now: datetime | None = None) -> dict:
+    """A year month by month, up to this one: the meter's values, the kWh
+    each month counted (its value less the month before's - January's
+    December), the plant's and each zone's hours and how many of its days
+    they know, and kWh per hour where a month has both its kWh and all its
+    hours; then the year's total - kWh per hour over those months."""
+    now = now or datetime.now()
+    today = now.date()
     sensors = [z["valve"] for z in zones]
-    first = date.fromisoformat(readings[0]["day"]) + timedelta(days=1)
-    plant = run_days_of(history, sensors, FIELD, interval, first, now)[PLANT_KEY]
-    price = meter.get("price_eur_kwh")
-    out = []
-    for a, b in zip(readings, readings[1:]):
-        start, end = date.fromisoformat(a["day"]) + timedelta(days=1), date.fromisoformat(b["day"])
-        days = [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
-        known = [d for d in days if d in plant]
-        hours = _hours(sum(plant[d][0] for d in known))
-        heat = round(b["heat_kwh"] - a["heat_kwh"], 3)
-        cool = round(b["cool_kwh"] - a["cool_kwh"], 3) if "cool_kwh" in a and "cool_kwh" in b else None
-        kwh = round(heat + (cool or 0), 3)
-        row = {"from": a["day"], "to": b["day"], "days": len(days), "days_known": len(known),
-               "heat_kwh": heat, "cool_kwh": cool, "kwh": kwh, "plant_hours": hours,
-               "kwh_per_hour": round(kwh / hours, 2) if hours > 0 else None,
-               "eur": round(kwh * price, 2) if price is not None else None}
-        row["eur_per_hour"] = round(row["eur"] / hours, 2) if row["eur"] is not None and hours > 0 else None
-        out.append(row)
-    return list(reversed(out))
+    by_day = run_days_of(history, sensors, FIELD, interval, date(year, 1, 1), now)
+    rows = []
+    for number in range(1, 13 if year < today.year else today.month + 1):
+        key = f"{year}-{number:02d}"
+        first = date(year, number, 1)
+        last = min(today, date(year, number, monthrange(year, number)[1]))
+        days = [(first + timedelta(days=i)).isoformat() for i in range((last - first).days + 1)]
+        known = [d for d in days if d in by_day[PLANT_KEY]]
+        hours = lambda k: _hours(sum(by_day[k].get(d, (0, 0))[0] for d in known)) if known else None
+        values, before = meter.get(key, {}), meter.get(_before(key), {})
+        used = {r: round(values[r] - before[r], 3) if r in values and r in before else None for r in REGISTERS}
+        kwh = None if all(v is None for v in used.values()) else round(sum(v or 0 for v in used.values()), 3)
+        row = {"month": key, "open": (year, number) == (today.year, today.month),
+               "heat_meter": values.get("heat_kwh"), "cool_meter": values.get("cool_kwh"), **used, "kwh": kwh,
+               "days": len(days), "days_known": len(known), "plant_hours": hours(PLANT_KEY),
+               "zones": {z["name"]: hours(z["valve"]) for z in zones}}
+        whole = known and len(known) == len(days) and row["plant_hours"] and not row["open"]
+        row["kwh_per_hour"] = round(kwh / row["plant_hours"], 2) if whole and kwh is not None else None
+        rows.append(row)
+
+    def total(pick):
+        values = [v for r in rows if (v := pick(r)) is not None]
+        return round(sum(values), 2) if values else None
+
+    paired = [r for r in rows if r["kwh_per_hour"] is not None]
+    paired_hours = sum(r["plant_hours"] for r in paired)
+    return {"year": year, "months": rows,
+            "total": {**{k: total(lambda r, k=k: r[k]) for k in ("heat_kwh", "cool_kwh", "kwh", "plant_hours")},
+                      "zones": {z["name"]: total(lambda r, n=z["name"]: r["zones"][n]) for z in zones},
+                      "kwh_per_hour": round(sum(r["kwh"] for r in paired) / paired_hours, 2) if paired_hours else None,
+                      "months_paired": len(paired)}}
+
+
+def years_of(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
+    """The years there's something for, newest first - this one and the
+    one before always (the meter's 15 months reach into it), none before
+    the six kept."""
+    firsts = [int(k[:4]) for k in meter] + ([int(d[:4])] if (d := first_run_day(history)) else [])
+    oldest = max(first_year(today), min([today.year - 1, *firsts]))
+    return list(range(today.year, oldest - 1, -1))

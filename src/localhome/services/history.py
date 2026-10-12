@@ -65,6 +65,8 @@ MIN_OFF_SECONDS = 300
 # daily_runs' key for the plant as a whole: any zone valve open, counted
 # once however many are - what a heat meter's kWh go with.
 PLANT_KEY = "*plant*"
+# daily_runs' years: this one and the five before.
+RUN_YEARS = 6
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
@@ -442,6 +444,17 @@ class HistoryStore:
         finally:
             conn.close()
 
+    def prune_runs(self, before_day: date) -> int:
+        """The valves' days before `before_day` go: six years are kept."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                removed = conn.execute("DELETE FROM daily_runs WHERE day < ?", (before_day.isoformat(),)).rowcount
+                conn.commit()
+                return removed
+            finally:
+                conn.close()
+
     def prune(self, older_than_ts: int) -> int:
         """Deletes readings older than older_than_ts. The dashboard only
         ever queries up to a 7-day window, but nothing removed rows past
@@ -603,6 +616,16 @@ def _on_in(conn, sensors: list[str], field: str, t0: int, t1: int, min_off: floa
     return out
 
 
+def first_run_day(store: "HistoryStore") -> str | None:
+    """The oldest day daily_runs keeps, if any."""
+    with store._lock:
+        conn = store._connect()
+        try:
+            return conn.execute("SELECT MIN(day) FROM daily_runs").fetchone()[0]
+        finally:
+            conn.close()
+
+
 def run_days_of(store: "HistoryStore", sensors: list[str], field: str, sample_interval_seconds: float,
                 first_day: date, now: datetime | None = None) -> dict[str, dict[str, tuple[float, int]]]:
     """{key: {"YYYY-MM-DD": (seconds on, starts)}} from `first_day` to
@@ -729,6 +752,9 @@ class HistoryRecorder:
         # Each power meter's day - energy and peak - kept for good
         # (services/energy.py); set by create_app().
         self.energy = None
+        # Optional callable: the valves' last days into daily_runs before
+        # their samples go - set by create_app() (services/run_hours.py).
+        self.keep_runs = None
         # When the last cycle's samples were written, on the monotonic
         # clock - see ThermostatController.last_tick_ok_ts for why.
         self.last_write_ok_ts: float | None = None
@@ -871,10 +897,16 @@ class HistoryRecorder:
         if now - self._last_prune_ts < 86400:  # once a day is plenty for a DELETE scan
             return
         self._last_prune_ts = now
+        if self.keep_runs is not None:
+            try:
+                self.keep_runs()
+            except Exception:
+                logger.exception("Failed to keep the valves' hours")
         try:
             removed = self.store.prune(now - int(self.retention_days * 86400))
             if removed:
                 logger.info("Pruned %d history rows older than %s days", removed, self.retention_days)
+            self.store.prune_runs(date(datetime.now().year - RUN_YEARS + 1, 1, 1))
         except Exception:
             logger.exception("Failed to prune old history rows")
 

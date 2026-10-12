@@ -771,96 +771,119 @@ async function saveVmcAuto(button, reset = false) {
   }
 }
 
-// Hours and consumption (services/run_hours.py): the plant's hours -
-// any zone open, counted once - and each zone's, month by month; the heat
-// meter's readings typed here (its display keeps the month-end values,
-// heat and cooling apart), and between two readings the kWh, the plant's
-// hours, kWh per hour and, with a price, euros.
+// Hours and consumption (services/run_hours.py): a year month by month -
+// the plant's hours (any zone open, counted once) and each zone's, beside
+// the kWh the heat meter counted and, where a month has both, kWh per
+// hour - and the meter's month-end values, typed a year at a time.
+const usageView = { data: null, editing: false };
+
 function usageNumber(value, digits) {
   return typeof value === "number"
     ? value.toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "–";
 }
 
-async function loadUsage() {
+async function loadUsage(year) {
   const body = document.getElementById("usage-body");
   if (!body) return;
   let data;
   try {
-    data = await (await fetch("/api/climate-admin/usage", { cache: "no-store" })).json();
+    data = await (await fetch(`/api/climate-admin/usage${year ? `?year=${year}` : ""}`, { cache: "no-store" })).json();
   } catch (e) {
     return;
   }
   if (data.ok) renderUsage(data);
 }
 
-function renderUsage(data) {
-  const body = document.getElementById("usage-body");
-  const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
-  const hours = h => (typeof h === "number" ? `${usageNumber(h, 1)} h` : "–");
-  const month = m => new Date(`${m}-15T12:00:00`).toLocaleDateString(LOCALE, { month: "long", year: "numeric" });
-  const day = d => new Date(`${d}T12:00:00`).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
-  const zones = data.zones || [];
-  const months = (data.months || []).filter(m => m.days_known > 0);
-  const now = (data.months || [])[0];
-  setPill("usage-summary", now && now.days_known ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(now.plant_hours, 0) })) : "");
-  const partial = m => (m.days_known < m.days ? `<span class="usage-partial">${t("usage_days_known", { known: m.days_known, days: m.days })}</span>` : "");
-  const monthTable = months.length ? `<table class="usage-table">
-      <tr><th>${t("usage_col_month")}</th><th>${t("usage_col_plant")}</th>${zones.map(z => `<th>${escapeHtml(displayName(z))}</th>`).join("")}<th>${t("usage_col_starts")}</th></tr>
-      ${months.map(m => `<tr><th scope="row">${escapeHtml(month(m.month))}${partial(m)}</th><td><b>${hours(m.plant_hours)}</b></td>
-        ${zones.map(z => `<td>${hours(m.zones[z])}</td>`).join("")}<td>${m.plant_starts}</td></tr>`).join("")}
-    </table>` : `<p class="hint-text">${t("usage_no_hours")}</p>`;
-  const meter = data.meter || { readings: [], periods: [] };
-  const periods = meter.periods || [];
-  const periodTable = periods.length ? `<table class="usage-table">
-      <tr><th>${t("usage_col_period")}</th><th>kWh</th><th>${t("usage_col_plant")}</th><th>${t("usage_col_kwh_h")}</th>
-        ${meter.price_eur_kwh != null ? `<th>€</th><th>${t("usage_col_eur_h")}</th>` : ""}</tr>
-      ${periods.map(p => `<tr><th scope="row">${escapeHtml(day(p.from))} → ${escapeHtml(day(p.to))}${p.days_known < p.days
-          ? `<span class="usage-partial">${t("usage_hours_partial", { known: p.days_known, days: p.days })}</span>` : ""}</th>
-        <td>${usageNumber(p.kwh, 0)}${p.cool_kwh ? `<span class="usage-partial">${t("usage_heat_cool", { heat: usageNumber(p.heat_kwh, 0), cool: usageNumber(p.cool_kwh, 0) })}</span>` : ""}</td>
-        <td>${hours(p.plant_hours)}</td><td><b>${usageNumber(p.kwh_per_hour, 1)}</b></td>
-        ${meter.price_eur_kwh != null ? `<td>${usageNumber(p.eur, 2)}</td><td>${usageNumber(p.eur_per_hour, 2)}</td>` : ""}</tr>`).join("")}
-    </table>` : `<p class="hint-text">${t(meter.readings.length ? "usage_one_reading" : "usage_no_readings")}</p>`;
-  const today = new Date().toISOString().slice(0, 10);
-  const readings = meter.readings.length ? `<table class="usage-table usage-readings">
-      <tr><th>${t("usage_col_day")}</th><th>${t("usage_heat")}</th><th>${t("usage_cool")}</th><th></th></tr>
-      ${[...meter.readings].reverse().map(r => `<tr><th scope="row">${escapeHtml(day(r.day))}</th><td>${usageNumber(r.heat_kwh, 0)}</td>
-        <td>${r.cool_kwh != null ? usageNumber(r.cool_kwh, 0) : "–"}</td>
-        <td><button class="range-btn" type="button" onclick="deleteHeatReading(this, '${escapeHtml(r.day)}')">${t("usage_delete")}</button></td></tr>`).join("")}
-    </table>` : "";
-  body.innerHTML = `
-    <h3 class="admin-subheading">${t("usage_months")}</h3>
-    ${monthTable}
-    <h3 class="admin-subheading">${t("usage_meter")}</h3>
-    <p class="hint-text">${t("usage_meter_note")}</p>
-    ${periodTable}
-    <div class="admin-zone-card usage-form">
-      <div class="dehum-grid">
-        <div class="admin-field"><label for="usage-day">${t("usage_col_day")}</label><input type="date" id="usage-day" value="${today}" max="${today}"></div>
-        <div class="admin-field"><label for="usage-heat">${t("usage_heat")}</label><input type="number" id="usage-heat" min="0" step="0.001" inputmode="decimal"></div>
-        <div class="admin-field"><label for="usage-cool">${t("usage_cool_optional")}</label><input type="number" id="usage-cool" min="0" step="0.001" inputmode="decimal"></div>
-      </div>
-      <div class="toolbar admin-actions"><button class="tbtn open" type="button" onclick="addHeatReading(this)">${t("usage_add")}</button></div>
-      <div class="dehum-grid usage-price">
-        <div class="admin-field"><label for="usage-price">${t("usage_price")}</label>
-          <input type="number" id="usage-price" min="0" max="10" step="0.0001" inputmode="decimal" value="${meter.price_eur_kwh ?? ""}"></div>
-      </div>
-      <div class="toolbar admin-actions"><button class="tbtn" type="button" onclick="saveHeatPrice(this)">${t("usage_price_save")}</button></div>
-      <p class="hint-text" id="usage-result"></p>
-    </div>
-    ${readings}`;
+function pickUsageYear(year) {
+  usageView.editing = false;
+  return loadUsage(year);
 }
 
-async function postUsage(button, path, body) {
+function editHeatYear(on) {
+  usageView.editing = on;
+  renderUsage(usageView.data);
+}
+
+function usageMonth(key, open) {
+  const name = new Date(`${key}-15T12:00:00`).toLocaleDateString(LOCALE, { month: "long" });
+  return open ? tr("climate_admin.usage_month_open", { month: name }) : name;
+}
+
+function renderUsage(data) {
+  usageView.data = data;
+  const body = document.getElementById("usage-body");
+  const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
+  const hours = h => (typeof h === "number" ? `${usageNumber(h, h < 10 ? 1 : 0)} h` : "–");
+  const zones = data.zones || [];
+  setPill("usage-summary", data.this_month_hours
+    ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(data.this_month_hours, 0) })) : "");
+  const years = `<div class="toolbar usage-years" role="group" aria-label="${t("usage_years")}">
+      ${data.years.map(y => `<button type="button" class="range-btn${y === data.year ? " active" : ""}" aria-pressed="${y === data.year}"
+        onclick="pickUsageYear(${y})">${y}</button>`).join("")}
+    </div>`;
+  const partial = r => (r.days_known && r.days_known < r.days
+    ? `<span class="usage-partial">${t("usage_days_known", { known: r.days_known, days: r.days })}</span>` : "");
+  const zoneHours = r => (zones.length > 1 && r.plant_hours != null
+    ? `<span class="usage-partial">${zones.map(z => escapeHtml(`${displayName(z)} ${hours(r.zones[z])}`)).join(" · ")}</span>` : "");
+  const kwh = r => {
+    if (r.open) return `<span class="usage-partial">${t("usage_month_end")}</span>`;
+    const lines = [];
+    if (r.heat_kwh) lines.push(t("usage_heat_short", { n: usageNumber(r.heat_kwh, 0) }));
+    if (r.cool_kwh) lines.push(t("usage_cool_short", { n: usageNumber(r.cool_kwh, 0) }));
+    return lines.length ? lines.join("<br>") : usageNumber(r.kwh, 0);
+  };
+  const line = (r, head, cls, note = "") => `<tr class="${cls}"><th scope="row">${head}${partial(r)}</th>
+      <td><b>${hours(r.plant_hours)}</b>${zoneHours(r)}</td><td>${kwh(r)}</td>
+      <td><b>${r.open ? "" : usageNumber(r.kwh_per_hour, 1)}</b>${note}</td></tr>`;
+  const total = data.total;
+  const table = `<table class="usage-table">
+      <tr><th>${t("usage_col_month")}</th><th>${t("usage_col_on")}</th><th>${t("usage_col_kwh")}</th><th>${t("usage_col_kwh_h")}</th></tr>
+      ${data.months.map(m => line(m, escapeHtml(usageMonth(m.month, m.open)), m.open ? "usage-open" : "")).join("")}
+      ${line(total, t("usage_total"), "usage-total", total.months_paired
+        ? `<span class="usage-partial">${t(total.months_paired === 1 ? "usage_paired_one" : "usage_paired", { n: total.months_paired })}</span>` : "")}
+    </table>`;
+
+  // The meter's month-end values, the months over: all of the year at once.
+  const ended = data.months.filter(m => !m.open);
+  const input = (m, register, label) => `<input type="number" min="0" step="0.001" inputmode="decimal"
+      data-month="${m.month.slice(5)}" data-register="${register}" value="${m[register === "heat_kwh" ? "heat_meter" : "cool_meter"] ?? ""}"
+      aria-label="${escapeHtml(`${usageMonth(m.month)} ${label}`)}">`;
+  const edit = !ended.length ? "" : usageView.editing ? `<div class="admin-zone-card usage-form">
+      <p class="hint-text">${t("usage_edit_note")}</p>
+      <table class="usage-table usage-edit">
+        <tr><th>${t("usage_col_month")}</th><th>${t("usage_heat")}</th><th>${t("usage_cool")}</th></tr>
+        ${ended.map(m => `<tr><th scope="row">${escapeHtml(usageMonth(m.month))}</th>
+          <td>${input(m, "heat_kwh", tr("climate_admin.usage_heat"))}</td><td>${input(m, "cool_kwh", tr("climate_admin.usage_cool"))}</td></tr>`).join("")}
+      </table>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" type="button" onclick="saveHeatYear(this)">${t("usage_save", { year: data.year })}</button>
+        <button class="range-btn" type="button" onclick="editHeatYear(false)">${t("usage_cancel")}</button>
+      </div>
+    </div>` : `<div class="toolbar admin-actions">
+      <button class="range-btn" type="button" onclick="editHeatYear(true)">${t("usage_edit", { year: data.year })}</button>
+    </div>`;
+  body.innerHTML = `${years}${table}<p class="hint-text">${t("usage_hint")}</p>${edit}<p class="hint-text" id="usage-result"></p>`;
+}
+
+async function saveHeatYear(button) {
   const result = document.getElementById("usage-result");
+  const months = {};
+  for (const el of document.querySelectorAll("#usage-body .usage-edit input")) {
+    const month = (months[el.dataset.month] = months[el.dataset.month] || {});
+    if (el.value !== "") month[el.dataset.register] = Number(el.value);
+  }
+  for (const key of Object.keys(months)) if (!Object.keys(months[key]).length) months[key] = null;
   button.disabled = true;
   try {
-    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch("/api/climate-admin/heat-meter/year", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ year: usageView.data.year, months }) });
     const data = await res.json();
     if (!data.ok) {
       result.textContent = tr("sensors.error_prefix") + apiError(data);
       result.className = "hint-text admin-error";
       return;
     }
+    usageView.editing = false;
     renderUsage(data);
     const after = document.getElementById("usage-result");
     after.textContent = tr("climate_admin.usage_saved");
@@ -871,22 +894,6 @@ async function postUsage(button, path, body) {
   } finally {
     button.disabled = false;
   }
-}
-
-function addHeatReading(button) {
-  const value = id => (document.getElementById(id).value === "" ? null : Number(document.getElementById(id).value));
-  const body = { day: document.getElementById("usage-day").value, heat_kwh: value("usage-heat") };
-  if (value("usage-cool") != null) body.cool_kwh = value("usage-cool");
-  return postUsage(button, "/api/climate-admin/heat-meter/reading", body);
-}
-
-function deleteHeatReading(button, day) {
-  return postUsage(button, "/api/climate-admin/heat-meter/reading/delete", { day });
-}
-
-function saveHeatPrice(button) {
-  const raw = document.getElementById("usage-price").value;
-  return postUsage(button, "/api/climate-admin/heat-meter/price", { price_eur_kwh: raw === "" ? null : Number(raw) });
 }
 
 // The VMC's filters (services/vmc_filters.py): how often, when last

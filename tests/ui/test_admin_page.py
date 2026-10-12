@@ -214,42 +214,40 @@ def test_the_vmc_filters_are_set_here_and_cleaned_today(open_page, api):
     assert opened.errors == []
 
 
-def test_hours_and_the_heat_meter_kwh_per_hour_and_euros(open_page, api):
-    """Two readings make a period - its kWh, the plant's hours, kWh per
-    hour; a price adds euros; a reading that would count down is refused;
-    one deleted, the period goes."""
-    from datetime import date, timedelta
-    days = [(date.today() - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
+def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
+    """A year's months beside the plant's hours; the meter's month-end
+    values typed for the whole year at once, each month's kWh worked out;
+    a value below the month before's refused; this month still running."""
+    from datetime import date
+    this_year = date.today().year
+    last_year = this_year - 1
     opened = open_page("/climate-admin", 390)
     page = opened.page
     try:
-        page.wait_for_selector("#usage-body #usage-heat", state="attached", timeout=20000)
+        page.wait_for_selector("#usage-body .usage-years", state="attached", timeout=20000)
         page.evaluate("document.getElementById('usage').open = true")
-        assert "Ore per mese" in page.inner_text("#usage")
-
-        def reading(day, heat):
-            page.fill("#usage-day", day)
-            page.fill("#usage-heat", str(heat))
-            page.click("#usage button.open")
-
-        reading(days[0], 1000)
-        assert eventually(page, lambda: "Una lettura" in page.inner_text("#usage"))
-        reading(days[2], 1050)
-        assert eventually(page, lambda: page.locator("#usage .usage-table").count() == 3)
-        assert "kWh per ora" in page.inner_text("#usage") and "50" in page.inner_text("#usage")
-        reading(days[1], 1100)                                 # more than the day after: refused
-        assert eventually(page, lambda: "solo in avanti" in page.inner_text("#usage-result"))
-        page.fill("#usage-price", "0.2")
-        page.click("#usage button:has-text('Salva prezzo')")
-        assert eventually(page, lambda: api("/api/climate-admin/usage")["meter"]["price_eur_kwh"] == 0.2)
-        assert eventually(page, lambda: "€ per ora" in page.inner_text("#usage"))
-        page.locator("#usage .usage-readings button").first.click()
-        assert eventually(page, lambda: len(api("/api/climate-admin/usage")["meter"]["readings"]) == 1)
+        assert page.locator("#usage .usage-years button.active").inner_text() == str(this_year)
+        assert "finora" in page.inner_text("#usage .usage-table"), "this month, still running"
+        page.click(f"#usage .usage-years button:has-text('{last_year}')")
+        assert eventually(page, lambda: page.locator("#usage .usage-table tr").count() == 14)   # head, 12, total
+        page.click(f"#usage button:has-text('Valori del contatore {last_year}')")
+        page.fill("#usage .usage-edit input[data-month='11'][data-register='heat_kwh']", "1000")
+        page.fill("#usage .usage-edit input[data-month='12'][data-register='heat_kwh']", "1200")
+        page.fill("#usage .usage-edit input[data-month='12'][data-register='cool_kwh']", "50")
+        page.click(f"#usage button:has-text('Salva {last_year}')")
+        assert eventually(page, lambda: "Salvato" in page.inner_text("#usage-result"))
+        assert "200 caldo" in page.inner_text("#usage .usage-table"), "December: its value less November's"
+        assert page.locator("#usage .usage-edit").count() == 0, "closed once saved"
+        page.click(f"#usage button:has-text('Valori del contatore {last_year}')")
+        page.fill("#usage .usage-edit input[data-month='12'][data-register='heat_kwh']", "900")
+        page.click(f"#usage button:has-text('Salva {last_year}')")
+        assert eventually(page, lambda: "più basso del mese prima" in page.inner_text("#usage-result"))
+        assert f"12/{last_year}" in page.inner_text("#usage-result")
         assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+        page.click("#usage button:has-text('Annulla')")
+        assert api(f"/api/climate-admin/usage?year={last_year}")["months"][11]["heat_meter"] == 1200
     finally:
-        for day in days:
-            api("/api/climate-admin/heat-meter/reading/delete", {"day": day})
-        api("/api/climate-admin/heat-meter/price", {"price_eur_kwh": None})
+        api("/api/climate-admin/heat-meter/year", {"year": last_year, "months": {}})
     assert [e for e in opened.errors if "400" not in e] == []
 
 

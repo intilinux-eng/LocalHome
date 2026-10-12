@@ -18,7 +18,7 @@ import socket
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
@@ -316,6 +316,9 @@ def create_app(config_path: str | None = None) -> Flask:
             for zone in thermostat.zones
             if (target := thermostat.applied_target(zone.name)) is not None
         }
+        # The valves' hours of each day kept before their samples go.
+        recorder.keep_runs = lambda: run_hours.keep_days(store, _valve_zones(thermostat), history_poll_interval,
+                                                         int(recorder.retention_days) + 2)
 
         interlocks = [
             Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
@@ -588,16 +591,21 @@ def _valve_zones(thermostat) -> list[dict]:
     return [{"name": z.name, "valve": z.valve} for z in thermostat.zones if z.valve_configured]
 
 
-def _usage_answer(app: Flask) -> dict:
-    """The admin panel's hours and consumption: month by month, and the
-    heat meter's readings with what's between them."""
+def _usage_answer(app: Flask, year=None) -> dict:
+    """The admin panel's hours and consumption: `year` (this one by
+    default) month by month beside the heat meter's values, the years
+    there's something for, and this month's hours."""
     zones = _valve_zones(app.config["THERMOSTAT"])
     history = app.config["HISTORY"]
     interval = app.config["HISTORY_POLL_INTERVAL"]
     meter = app.config["HEAT_METER"].get()
-    return {"zones": [z["name"] for z in zones],
-            "months": run_hours.month_report(history, zones, interval),
-            "meter": {**meter, "periods": run_hours.meter_report(history, zones, interval, meter)}}
+    today = date.today()
+    years = run_hours.years_of(history, meter, today)
+    year = year if year in years else today.year
+    report = run_hours.year_report(history, zones, interval, meter, year)
+    now = report if year == today.year else run_hours.year_report(history, zones, interval, meter, today.year)
+    return {"zones": [z["name"] for z in zones], "years": years, **report,
+            "this_month_hours": now["months"][-1]["plant_hours"]}
 
 
 def _auto_zones(thermostat) -> list[dict]:
@@ -1972,31 +1980,19 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/climate-admin/usage")
     def api_usage():
-        return jsonify(ok=True, **_usage_answer(app))
+        """?year=2025: that year; this one without."""
+        return jsonify(ok=True, **_usage_answer(app, request.args.get("year", type=int)))
 
-    @app.route("/api/climate-admin/heat-meter/reading", methods=["POST"])
-    def api_heat_meter_reading():
-        """{"day", "heat_kwh", "cool_kwh"?}: a reading of the heat meter -
-        replacing the one of the same day."""
+    @app.route("/api/climate-admin/heat-meter/year", methods=["POST"])
+    def api_heat_meter_year():
+        """{"year": 2026, "months": {"01": {"heat_kwh", "cool_kwh"} or null,
+        ...}}: the heat meter's month-end values for that year, all at once."""
+        body = _json_body()
         try:
-            app.config["HEAT_METER"].add(_json_body())
+            app.config["HEAT_METER"].set_year(body.get("year"), body.get("months"))
         except InputError as exc:
             return _refusal(exc, 400)
-        return jsonify(ok=True, **_usage_answer(app))
-
-    @app.route("/api/climate-admin/heat-meter/reading/delete", methods=["POST"])
-    def api_heat_meter_reading_delete():
-        app.config["HEAT_METER"].remove(str(_json_body().get("day") or ""))
-        return jsonify(ok=True, **_usage_answer(app))
-
-    @app.route("/api/climate-admin/heat-meter/price", methods=["POST"])
-    def api_heat_meter_price():
-        """{"price_eur_kwh": euros per kWh of heat, or null}."""
-        try:
-            app.config["HEAT_METER"].set_price(_json_body().get("price_eur_kwh"))
-        except InputError as exc:
-            return _refusal(exc, 400)
-        return jsonify(ok=True, **_usage_answer(app))
+        return jsonify(ok=True, **_usage_answer(app, body.get("year")))
 
     @app.route("/api/climate-admin/vmc-auto")
     def api_vmc_auto_get():

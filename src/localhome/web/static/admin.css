@@ -561,7 +561,13 @@
 .usage-table th[scope="row"] { font-weight: 600; color: var(--text); }
 .usage-partial { display: block; font-size: 0.75rem; font-weight: 400; color: var(--text-3); }
 .usage-form { margin: 8px 0 12px; }
-.usage-price { margin-top: 12px; }
+.usage-years { flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
+.usage-table tr.usage-total th, .usage-table tr.usage-total td { border-top: 2px solid var(--line); font-weight: 650; }
+.usage-table tr.usage-open th, .usage-table tr.usage-open td { color: var(--text-2); }
+.usage-edit input { width: 100%; min-width: 0; min-height: 40px; box-sizing: border-box; text-align: right; }
+.usage-edit td { padding-left: 4px; padding-right: 0; }
+.usage-edit th[scope="row"] { width: 1%; white-space: nowrap; overflow-wrap: normal; }
+.usage-edit th, .usage-edit td { vertical-align: middle; }
 @media (max-width: 480px) { .usage-table { font-size: 0.8rem; } .usage-table th, .usage-table td { padding: 6px 4px; } }
 .vmc-filters-now[data-state="soon"] { color: var(--accent); }
 .vmc-filters-now[data-state="due"] { color: var(--bad); }
