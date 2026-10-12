@@ -550,7 +550,6 @@ function fillZone(card, zone, climate) {
     <div class="zone-head">${name}${inline}
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
     </div>
-    ${manualBannerHtml(zone, climate)}
     ${compact ? "" : main}
     ${valveNoteHtml(zone, status, mode)}
     ${sensorNoteHtml(zone)}
@@ -866,18 +865,19 @@ function quickHtml(zone, climate, change) {
       options.push(`<button type="button" data-action="duration" data-hours="next" aria-pressed="${pending.hours === "next"}">${esc(untilText(change.at))}</button>`);
     }
     options.push(`<button type="button" data-action="duration" data-hours="manual" aria-pressed="${pending.hours === "manual"}">${esc(tr("home.until_changed_button"))}</button>`);
-    // A temperature, or off: both a manual change, for the time chosen.
+    // A temperature, or off: both a manual change, for the time chosen -
+    // off, only how long is left to choose.
     const off = pending.target == null;
     return `${modes}
-      <div class="pending">
-        <div class="pending-title">${esc(tr("home.pending_title"))}</div>
+      <div class="pending" data-off="${off}">
+        <div class="pending-title">${esc(tr(off ? "home.pending_title_off" : "home.pending_title"))}</div>
         <div class="stepper" ${off ? "hidden" : ""}>
           <button type="button" data-action="step" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
           <span class="stepper-value">${fmtTarget(pending.target)}</span>
           <button type="button" data-action="step" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
         </div>
-        <div class="pending-label">${esc(tr("home.for_how_long"))}</div>
-        <div class="segmented" role="group" aria-label="${esc(tr("home.for_how_long"))}">${options.join("")}</div>
+        ${off ? "" : `<div class="pending-label">${esc(tr("home.for_how_long"))}</div>`}
+        <div class="segmented durations" role="group" aria-label="${esc(tr("home.for_how_long"))}">${options.join("")}</div>
         <div class="pending-actions">
           <button class="btn" type="button" data-action="cancel-pending">${esc(tr("home.cancel"))}</button>
           <button class="btn btn-primary" type="button" data-action="apply">${esc(tr("home.apply"))}</button>
@@ -893,7 +893,11 @@ function quickHtml(zone, climate, change) {
     follows = [tr("home.mode_follows"), change && change.target != null ? `${next} · ${switchesOnText(change.target, mode)}` : next]
       .filter(Boolean).join(". ");
   }
-  return `${modes}${follows ? `<p class="mode-line">${esc(follows)}</p>` : ""}`;
+  // By hand: what it holds, until when, and the way back - in the place
+  // the week's line has.
+  const line = follows ? `<p class="mode-line"><span>${esc(follows)}</span>
+    <button class="btn-link" type="button" data-action="show-plan">${esc(tr("home.show_plan"))}</button></p>` : "";
+  return `${modes}${held ? manualBannerHtml(zone, climate) : line}`;
 }
 
 function lastTarget(zone) {
@@ -929,6 +933,22 @@ async function onZoneClick(event) {
       state.runsPick[zone.name] = state.runsPick[zone.name] === i ? undefined : i;
     }
     steady(() => renderZones());
+    return;
+  }
+  if (action === "show-plan") {
+    const more = card.querySelector(".zone-more");
+    if (more && !more.open) more.open = true;
+    card.dataset.more = "open";
+    const plan = card.querySelector(".zone-plan");
+    const toggle = plan.querySelector(".plan-toggle");
+    if (toggle && getComputedStyle(toggle).display !== "none" && plan.dataset.open !== "true") {
+      plan.dataset.open = "true";
+      toggle.setAttribute("aria-expanded", "true");
+    }
+    plan.scrollIntoView({ behavior: "smooth", block: "start" });
+    plan.classList.remove("is-shown");
+    void plan.offsetWidth;          // the highlight again, on a second tap
+    plan.classList.add("is-shown");
     return;
   }
   if (action === "toggle-plan") {
@@ -1482,6 +1502,12 @@ function fillPlan(card, zone) {
   // Held by hand: the week is what comes back - shown, not changed until
   // then (the board refuses it too); the way back right above it.
   const locked = !!zone.override;
+  // "In use" on its heading while the zone follows it - by hand, the note
+  // below says what holds instead.
+  const inUse = locked ? "" : tr("home.plan_in_use");
+  plan.querySelectorAll(".sched-season-label, .plan-toggle-label").forEach(label => {
+    if (label.dataset.inUse !== inUse) label.dataset.inUse = inUse;
+  });
   const note = plan.querySelector(".plan-manual");
   if (note) note.hidden = !locked;
   const editor = plan.querySelector(".plan-edit");

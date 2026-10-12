@@ -650,29 +650,26 @@ body[data-running="true"] .hero-season::before {
 .segmented button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .pending-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
-/* A zone changed by hand: at the top of its card, in the season's colour. */
+/* A zone held by hand: under its modes, where the week's line goes - what
+   it holds, until when, and the way back. */
 .manual-banner {
+  flex-basis: 100%;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-s);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  font-size: 0.92rem;
-  font-weight: 600;
+  gap: 6px 10px;
+  font-size: 0.88rem;
+  line-height: 1.35;
   color: var(--text);
 }
-.manual-banner svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.manual-banner span { flex: 1 1 12em; }
-.manual-banner .btn { font-weight: 600; color: var(--text); }
+.manual-banner svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.manual-banner span { flex: 1 1 12em; font-weight: 600; }
+.manual-banner .btn { min-height: 38px; padding: 6px 14px; font-size: 0.86rem; font-weight: 600; color: var(--text); }
 /* The controls say what they are. */
 .quick-title { flex-basis: 100%; font-size: 0.86rem; font-weight: 650; color: var(--text); }
 .quick-hint { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--text-3); }
-/* The zone's mode - the week, by hand, off by hand - one of three, as a
-   phone's segmented control; what it does next beside the - and +. */
+/* The zone's mode - the hourly table, by hand, off by hand - one of
+   three, as a phone's segmented control; under it what that means. */
 .mode-row { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px;
   border-radius: 999px; background: var(--surface-2); }
 .mode-row button { min-height: 40px; padding: 6px 8px; border: 0; border-radius: 999px; background: transparent;
@@ -680,6 +677,25 @@ body[data-running="true"] .hero-season::before {
 .mode-row button[aria-checked="true"] { background: var(--surface); box-shadow: var(--shadow); color: var(--accent); font-weight: 650; }
 .mode-row button[data-action="mode-off"][aria-checked="true"] { color: var(--text); }
 .mode-line { flex-basis: 100%; min-width: 0; margin: 0; font-size: 0.84rem; line-height: 1.35; color: var(--text-2); }
+.btn-link { margin-left: 4px; padding: 0; border: 0; background: none; color: var(--accent); font-size: inherit; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+/* The way to change by hand: the time as a tidy grid - the hours four in
+   a row, the longer two side by side - picked as the mode is. */
+.pending .durations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pending .durations button { padding-inline: 6px; }
+.pending .durations button:nth-child(n+5) { grid-column: span 2; }
+.pending .durations button:nth-child(5):last-child { grid-column: span 4; }
+.pending .segmented button[aria-pressed="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset; font-weight: 650; }
+/* The hourly table in use - its heading says so (home.js fillPlan). */
+:is(.sched-season-label, .plan-toggle-label)[data-in-use]:not([data-in-use=""])::after {
+  content: attr(data-in-use); margin-left: 8px; padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
+  background: var(--accent-soft); color: var(--accent); font-size: 0.68rem; letter-spacing: 0.04em;
+}
+/* Reached from "See the table": shown a moment. */
+.zone-plan.is-shown { animation: plan-shown 1.6s ease-out; border-radius: var(--radius-s); }
+@keyframes plan-shown { 0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; } }
 .pending-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: -4px; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */

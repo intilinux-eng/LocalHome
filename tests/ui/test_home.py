@@ -959,13 +959,20 @@ def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
         assert card.locator(".mode-row button").all_inner_texts() == ["Oraria", "Manuale", "Spenta"]
         assert card.locator(".quick .stepper").count() == 0, "a temperature through Manual"
         assert mode("schedule").get_attribute("aria-checked") == "true"
-        assert "Segue la programmazione oraria" in card.locator(".mode-line").inner_text()
+        assert "In uso la programmazione oraria" in card.locator(".mode-line").inner_text()
+        # Hourly is the table: its heading says it's the one in use, and the
+        # line leads to it - on a phone, out of the card's details.
+        label = card.locator(".plan-toggle-label")
+        assert eventually(page, lambda: label.get_attribute("data-in-use") == "in uso")
+        card.locator("button[data-action=show-plan]").click()
+        assert eventually(page, lambda: card.locator(".sched-grid").is_visible())
         mode("off").click()
         assert mode("off").get_attribute("aria-checked") == "true" and card.locator(".pending .stepper").is_hidden()
         card.locator("button[data-action=apply]").click()
         assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
         assert eventually(page, lambda: mode("off").get_attribute("aria-checked") == "true")
-        assert card.locator(".mode-line").count() == 0, "by hand: the banner above says until when"
+        assert card.locator(".mode-line").count() == 0, "by hand: its own line says until when"
+        assert card.locator(".quick .manual-banner").count() == 1 and label.get_attribute("data-in-use") == ""
         mode("manual").click()
         assert mode("manual").get_attribute("aria-checked") == "true" and card.locator(".pending .stepper").is_visible()
         card.locator("button[data-action=cancel-pending]").click()
