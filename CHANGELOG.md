@@ -59,6 +59,13 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **Pages that load lighter and open again without downloading.** Text
+  goes gzipped to the browser - the home page and its scripts and styles
+  from 322 KB to 93 KB, the admin panel from 407 KB to 109 KB - and the
+  scripts and styles, whose URLs carry the dashboard's version, are kept
+  by the browser for good: reopening a page no longer asks for them
+  again. An update still shows at once (a new version, new URLs); the
+  pages themselves are never kept. See `web/transfer.py`.
 - **How long each zone ran, and the plant - beside the heat meter.** Each
   zone's card has a "Running history": the last 24 hours on one line,
   and opened the last 7 or 30 days as bars, a tap naming the day's hours

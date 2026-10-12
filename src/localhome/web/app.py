@@ -86,6 +86,7 @@ from localhome.services.vmc_filters import VmcFilterStore
 from localhome.services.vmc_schedule import AWAY_CHOICES, VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
+from localhome.web.transfer import register_transfer
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,9 @@ def create_app(config_path: str | None = None) -> Flask:
     def _version_static_urls(endpoint, values):
         if endpoint == "static" and "filename" in values:
             values.setdefault("v", asset_version)
+
+    # Versioned static files kept by the browser, text sent gzipped - see web/transfer.py.
+    register_transfer(app, asset_version)
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc):
