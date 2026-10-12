@@ -32,6 +32,17 @@ const TARGET_RANGE = { min: 5, max: 35 };
 const DURATIONS = [2, 4, 8, 24];
 const AWAY_OPTIONS = [24, 72, 168];
 const AWAY_BACK_TIME = "18:00";   // the day back: from when, unless changed
+// Which zones' details are open, kept in this browser: a convenience - a
+// private window, or storage blocked, just starts as a first visit.
+const MORE_OPEN_KEY = "localhome.zoneDetails";
+function storedMoreOpen() {
+  try {
+    const kept = JSON.parse(localStorage.getItem(MORE_OPEN_KEY) || "{}");
+    return kept && typeof kept === "object" ? kept : {};
+  } catch (e) {
+    return {};
+  }
+}
 
 // The fixed roles' names, in the page's language.
 const DISPLAY_NAMES = {
@@ -57,6 +68,8 @@ const state = {
   // over how many days, and the bar picked.
   runHours: null,
   runsOpen: {},
+  // Which zones show their details - remembered on this phone.
+  moreOpen: storedMoreOpen(),
   // Each zone's lowest and highest of the last 7 days, and when
   // (/api/climate/temps) - today's live in dayRanges; which zones show
   // theirs open, and the bar picked.
@@ -476,9 +489,11 @@ function fillZone(card, zone, climate) {
       ${todayRangeHtml(zone)}
     </div>`;
   // The extras, one a row with its icon: on the right of the readings, or
-  // under them in two columns on a narrow card.
+  // under them in two columns on a narrow card. The target and what the
+  // valve waits for in sight; the next change and the dew point in the
+  // details.
   const fact = (icon, html, extra = "") => `<div class="fact${extra}"><span class="fact-icon">${icon}</span><span class="fact-text">${html}</span></div>`;
-  const facts = [];
+  const facts = [], moreFacts = [];
   const excluded = mode === "cool" && !zone.cool_enabled;
   // Away: nothing to reach - every zone off until the way back.
   if (zone.target_c != null && !excluded && !climate.away_until) {
@@ -491,10 +506,10 @@ function fillZone(card, zone, climate) {
   }
   if (change && !zone.override && !climate.away_until && !excluded) {
     const next = tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) });
-    facts.push(fact(ICONS.clock, esc(change.target == null ? next : `${next} · ${switchesOnText(change.target, mode)}`)));
+    moreFacts.push(fact(ICONS.clock, esc(change.target == null ? next : `${next} · ${switchesOnText(change.target, mode)}`)));
   }
   if (mode === "cool" && zone.humidity_pct != null && zone.dew_point_c != null) {
-    facts.push(fact(ICONS.drop, esc(tr("home.dew_point_long", { value: fmt(zone.dew_point_c) }))));
+    moreFacts.push(fact(ICONS.drop, esc(tr("home.dew_point_long", { value: fmt(zone.dew_point_c) }))));
   }
 
   const foot = [];
@@ -512,28 +527,54 @@ function fillZone(card, zone, climate) {
   const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
+  // At a glance: the readings, the target and the way to change it, and
+  // what needs doing. The rest - the day's strip, the sensor, the hours,
+  // the week's temperatures, on a phone the week's plan - in its details,
+  // closed until asked for (remembered on this phone). A zone out of the
+  // season: one line, its readings beside its name.
+  // As they are on the card (a tap's "toggle" event comes a moment after
+  // it, a redraw may come first); new, as last left here - open from the
+  // start on a wide screen, where the week's plan beside the card leaves
+  // the room for them.
+  const shownMore = card.querySelector(".zone-more");
+  const open = shownMore ? shownMore.open
+    : zone.name in state.moreOpen ? !!state.moreOpen[zone.name] : window.matchMedia("(min-width: 960px)").matches;
+  card.dataset.more = open ? "open" : "closed";
+  const compact = excludedNow && zoneReady(zone);
+  card.dataset.compact = compact ? "true" : "false";
+  const name = `<h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>`;
+  const inline = compact && zone.temperature_c != null
+    ? `<span class="zone-inline">${fmt(zone.temperature_c)}°${zone.humidity_pct != null ? ` · ${fmt(zone.humidity_pct, 0)}%` : ""}</span>` : "";
+  const main = `<div class="zone-main">
+      ${readings}
+      ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
+    </div>`;
+  const quick = `<div class="quick">${quickHtml(zone, climate, change)}</div>`;
   morph(card.querySelector(".zone-live"), `
-    <div class="zone-head">
-      <h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>
+    <div class="zone-head">${name}${inline}
       <span class="state" data-tone="${status.tone}">${esc(status.text)}</span>
     </div>
     ${manualBannerHtml(zone, climate)}
-    <div class="zone-main">
-      ${readings}
-      ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
-    </div>
+    ${compact ? "" : main}
     ${valveNoteHtml(zone, status, mode)}
     ${sensorNoteHtml(zone)}
-    ${excludedNow ? "" : `<div class="ribbon">
-      ${ribbonSvg(zone, week, history, mode)}
-      <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
-      <div class="ribbon-readout">${legendHtml()}</div>
-    </div>`}
-    <div class="quick">${quickHtml(zone, climate, change)}</div>
+    ${compact ? "" : quick}
     ${zone.sensor_manual ? manualHtml(zone) : ""}
-    <div class="zone-foot">${foot.join(" · ")}</div>
-    ${runsHtml(zone)}
-    ${tempsHtml(zone)}`);
+    <details class="zone-more" data-zone-more="${esc(zone.name)}"${open ? " open" : ""}>
+      <summary><span class="runs-title">${esc(tr("home.details"))}</span>${ICONS.chevron}</summary>
+      ${compact ? quick + main : ""}
+      ${moreFacts.length ? `<div class="zone-facts zone-facts-more">${moreFacts.join("")}</div>` : ""}
+      ${excludedNow ? "" : `<div class="ribbon">
+        ${ribbonSvg(zone, week, history, mode)}
+        <div class="ribbon-caption"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+        <div class="ribbon-readout">${legendHtml()}</div>
+      </div>`}
+      ${zoneReady(zone) && !excludedNow && !climate.away_until && !state.pending[zone.name]
+        ? `<p class="quick-hint">${esc(tr("home.quick_hint"))}</p>` : ""}
+      <div class="zone-foot">${foot.join(" · ")}</div>
+      ${runsHtml(zone)}
+      ${tempsHtml(zone)}
+    </details>`);
   wireRibbon(card, week, history, mode);
 }
 
@@ -847,8 +888,7 @@ function quickHtml(zone, climate, change) {
       <button type="button" data-action="start" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
       <span class="stepper-value">${shown == null ? esc(tr("home.st_off")) : fmtTarget(shown)}</span>
       <button type="button" data-action="start" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
-    </div>
-    <p class="quick-hint">${esc(tr("home.quick_hint"))}</p>`;
+    </div>`;
 }
 
 function lastTarget(zone) {
@@ -2502,6 +2542,15 @@ document.getElementById("zones").addEventListener("click", onZoneClick);
 document.getElementById("zones").addEventListener("toggle", event => {
   if (event.target.matches && event.target.matches(".zone-runs")) state.runsOpen[event.target.dataset.zoneRuns] = event.target.open;
   if (event.target.matches && event.target.matches(".zone-temps")) state.tempsOpen[event.target.dataset.zoneTemps] = event.target.open;
+  // Its details: remembered on this phone, and the week's plan (on a
+  // phone, inside them - CSS) follows at once.
+  if (event.target.matches && event.target.matches(".zone-more")) {
+    const name = event.target.dataset.zoneMore;
+    state.moreOpen[name] = event.target.open;
+    try { localStorage.setItem(MORE_OPEN_KEY, JSON.stringify(state.moreOpen)); } catch (e) { /* kept for this visit */ }
+    const card = event.target.closest(".zone");
+    if (card) card.dataset.more = event.target.open ? "open" : "closed";
+  }
 }, true);
 document.getElementById("zones").addEventListener("submit", onManualSubmit);
 document.getElementById("plant-body").addEventListener("click", onPlantClick);

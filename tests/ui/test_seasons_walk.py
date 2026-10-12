@@ -151,7 +151,10 @@ def test_summer_the_week_and_every_manual_change(browser, house):
     assert "Torna alla programmazione (24°)" in banner.inner_text()
     # "fino alle 18:30", or after 22:00 "fino a domani alle 00:25".
     assert re.search(r"manuale fino (alle|a domani alle) \d", page.inner_text("#hero-detail"))
-    # its week is shown, not changed
+    # its week is shown, not changed - on a phone, in the card's details
+    more = home.card(ROOMS).locator(".zone-more")
+    if more.get_attribute("open") is None:
+        more.locator(":scope > summary").click()
     home.card(ROOMS).locator(".plan-toggle").click()
     assert eventually(page, lambda: home.card(ROOMS).locator(".plan-edit.is-locked").count() == 1)
     week = home.call(f"/api/climate/zones/{ROOMS}/schedule?mode=cool")["week"]

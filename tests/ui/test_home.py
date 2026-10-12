@@ -142,6 +142,7 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     page = opened.page
     card = _card(page, ZONE_A)
     assert card.locator(".quick-title").inner_text() == "Cambia la temperatura"
+    _open_details(page, ZONE_A)
     assert "Tocca − o +" in card.locator(".quick-hint").inner_text()
     card.locator("button[data-action=start][data-delta='0.5']").click()
     durations = card.locator(".pending button[data-action=duration]").all_inner_texts()
@@ -197,9 +198,22 @@ def test_the_week_is_locked_while_a_zone_is_held_by_hand(open_page, api):
     assert opened.errors == []
 
 
+def _open_details(page, name):
+    """A zone's details - the day's strip, the hours, the week's
+    temperatures, on a phone its plan - closed there until asked for."""
+    more = _card(page, name).locator(".zone-more")
+    more.wait_for(state="attached", timeout=20000)
+    if more.get_attribute("open") is None:
+        more.locator(":scope > summary").click()
+    # The card follows (its plan, on a phone) once the browser says so.
+    assert eventually(page, lambda: more.get_attribute("open") is not None
+                      and _card(page, name).get_attribute("data-more") == "open")
+
+
 def _open_plan(page, name):
-    """The week is on the card itself - behind its button on a phone:
-    opens it, and waits for its grid to be filled."""
+    """The week is on the card itself - in its details and behind its
+    button on a phone: opens them, and waits for its grid to be filled."""
+    _open_details(page, name)
     toggle = _card(page, name).locator(".plan-toggle")
     toggle.wait_for(state="attached", timeout=20000)
     if toggle.is_visible() and toggle.get_attribute("aria-expanded") != "true":
@@ -409,6 +423,7 @@ def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api
     assert eventually(page, lambda: api("/api/climate/zones")["away_until"] is None)
     assert eventually(page, lambda: card.locator(".stepper").count() == 1)
     assert card.locator(".manual-banner").count() == 0, "back to the schedule, not the old change"
+    _open_details(page, ZONE_A)
     assert card.locator(".zone-plan").is_visible()
     assert opened.errors == []
 
@@ -726,6 +741,7 @@ def test_a_zones_running_history_last_24_hours_closed_days_as_bars_open(open_pag
     page = opened.page
     runs = _card(page, ZONE_A).locator(".zone-runs")
     page.wait_for_function("() => document.querySelector('.zone-runs') !== null", timeout=20000)
+    _open_details(page, ZONE_A)
     assert "ultime 24 ore" in runs.locator("summary").inner_text()
     runs.locator("summary").click()
     bars = runs.locator(".energy-bar")
@@ -913,6 +929,9 @@ def test_on_a_phone_the_week_waits_behind_its_button(open_page):
     beside the card and there's no button."""
     phone = _open_home(open_page).page
     toggle = _card(phone, ZONE_A).locator(".plan-toggle")
+    toggle.wait_for(state="attached", timeout=20000)
+    assert not toggle.is_visible(), "on a phone the week is one of the card's details"
+    _open_details(phone, ZONE_A)
     toggle.wait_for(timeout=20000)
     assert toggle.is_visible() and "Programmazione" in toggle.text_content()
     phone.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .sched-cell", state="attached", timeout=20000)
@@ -927,6 +946,32 @@ def test_on_a_phone_the_week_waits_behind_its_button(open_page):
     assert not _card(desktop, ZONE_A).locator(".plan-toggle").is_visible()
 
 
+def test_a_zone_shows_what_matters_and_keeps_the_rest_in_its_details(open_page):
+    """Seen on the production board: one zone took more than a phone's
+    screen. In sight its readings, its target and the way to change it;
+    the day's strip, the sensor, the hours, the week's temperatures and
+    its plan in its details - closed on a phone until opened, and that
+    remembered; open from the start on a wide screen, beside the week."""
+    opened = _open_home(open_page)
+    page = opened.page
+    card = _card(page, ZONE_A)
+    card.locator(".zone-more").wait_for(state="attached", timeout=20000)
+    assert card.locator(".zone-more").get_attribute("open") is None
+    assert card.locator(".readings").is_visible() and card.locator(".stepper").is_visible()
+    for part in (".ribbon", ".zone-foot", ".zone-runs", ".zone-temps", ".zone-plan"):
+        assert card.locator(part).is_hidden(), part
+    _open_details(page, ZONE_A)
+    assert card.locator(".ribbon").is_visible() and card.locator(".zone-plan").is_visible()
+    page.reload()
+    page.wait_for_selector(".zone .zone-more", timeout=20000)
+    assert eventually(page, lambda: card.locator(".zone-more").get_attribute("open") is not None), "remembered here"
+    assert _card(page, ZONE_B).locator(".zone-more").get_attribute("open") is None, "each zone its own"
+    assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+    wide = _open_home(open_page, 1280)
+    assert _card(wide.page, ZONE_A).locator(".zone-more").get_attribute("open") is not None, "open beside the week"
+    assert wide.errors == []
+
+
 def test_a_zone_out_of_the_season_has_no_empty_strip(open_page, api):
     opened = _open_home(open_page)
     page = opened.page
@@ -937,7 +982,10 @@ def test_a_zone_out_of_the_season_has_no_empty_strip(open_page, api):
     assert _card(page, ZONE_A).locator(".ribbon > svg").count() == 1
     excluded = _card(page, ZONE_B)
     assert excluded.get_attribute("data-plan") == "none" and excluded.locator(".ribbon").count() == 0
-    assert excluded.locator(".excluded-note").is_visible()
+    assert excluded.get_attribute("data-compact") == "true" and excluded.locator(".readings").is_hidden()
+    assert "24,0°" in excluded.locator(".zone-inline").inner_text(), "its readings beside its name"
+    _open_details(page, ZONE_B)
+    assert excluded.locator(".excluded-note").is_visible() and excluded.locator(".readings").is_visible()
     assert opened.errors == []
 
 
@@ -967,6 +1015,7 @@ def test_a_sensor_says_in_plain_words_whether_it_runs_on_battery_or_is_powered(o
     _fake_zones(page, api, "heat", {ZONE_A: (20.0, 21.0, False, True)})
     set_zone = "([name, values]) => { Object.assign(state.climate.zones.find(z => z.name === name), values); renderZones(); }"
     card = _card(page, ZONE_A)
+    _open_details(page, ZONE_A)
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": 80, "external_power": False, "sensor_seconds_since_update": 120}])
     assert "a batteria 80%" in card.locator(".zone-foot").inner_text() and card.locator(".sensor-note").count() == 0
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": None, "external_power": True}])
@@ -1049,6 +1098,7 @@ def test_a_zones_lowest_and_highest_today_and_its_7_days(open_page, api):
     assert "25,8°" in shown and "26,4°" in shown and "06:10" not in shown, "the times on it, not in the way"
     assert "--at: 50.0%" in gauge.locator(".tr-now").get_attribute("style"), "the room now, halfway"
     assert card.locator(".day-range").count() == 0 and "Ieri" not in card.locator(".zone-main").inner_text()
+    _open_details(page, ZONE_A)
     folded = card.locator(".zone-temps")
     assert "24,1–27,0°" in folded.locator("summary").inner_text(), "the week's lowest to highest"
     folded.locator("summary").click()
@@ -1086,7 +1136,7 @@ def test_the_top_says_every_zone_reached_its_target_only_when_it_has(open_page, 
     assert page.inner_text("#hero-title") == "Tutte le zone hanno raggiunto l'obiettivo"
     _fake_zones(page, api, "cool", {ZONE_A: (23.7, 24.0, False, False), ZONE_B: (23.9, 24.0, False, True)})
     assert page.inner_text("#hero-title") != "Tutte le zone hanno raggiunto l'obiettivo"
-    assert f"{ZONE_A}: la valvola non risponde" in page.inner_text("#hero-detail")
+    assert f"{ZONE_A}: da controllare" in page.inner_text("#hero-detail"), "the card says what"
     assert opened.errors == []
 
 
@@ -1249,6 +1299,10 @@ def test_the_page_opens_at_the_top(iphone):
 
 def test_a_refresh_rebuilds_nothing(iphone):
     page = iphone.page
+    # The page's first round in first (on a busy machine the history - the
+    # week's temperatures - may still be on its way): then a refresh.
+    page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
+    page.wait_for_timeout(500)
     page.evaluate(FRESH_JS)
     page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
     page.wait_for_timeout(500)
@@ -1285,6 +1339,7 @@ def test_a_tap_on_the_day_strip_stays_to_be_read(iphone):
     """On a phone the finger leaves the strip as soon as it's lifted: what
     it touched used to vanish with it - a tap showed nothing."""
     page = iphone.page
+    _open_details(page, ZONE_A)
     svg = _card(page, ZONE_A).locator(".ribbon > svg")
     svg.scroll_into_view_if_needed()
     box = svg.bounding_box()

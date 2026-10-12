@@ -401,6 +401,22 @@ body[data-running="true"] .hero-season::before {
 
 .zone-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
 .zone-name { margin: 0; font-size: 1.12rem; font-weight: 650; }
+/* A zone out of the season: one line - its readings beside its name. */
+.zone-inline { margin-right: auto; font-size: 1.05rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.zone[data-compact="true"] { padding-bottom: 8px; }
+/* The rest of a zone (home.js fillZone): closed until asked for. */
+.zone-more { margin-top: 12px; border-top: 1px solid var(--line); }
+.zone-more > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; font-size: 0.9rem; }
+.zone-more > summary::-webkit-details-marker { display: none; }
+.zone-more > summary .chevron { width: 20px; height: 20px; flex: none; margin-left: auto; color: var(--text-3); transition: transform 0.2s; }
+.zone-more[open] > summary .chevron { transform: rotate(180deg); }
+.zone-more[open] > summary { margin-bottom: 4px; }
+.zone-facts-more { margin: 4px 0 10px; }
+.zone-more .quick { margin-top: 0; padding-top: 0; border-top: 0; }
+/* On a phone the week's plan is under the card: one of its details. */
+@media (max-width: 959px) {
+  .zone[data-more="closed"] .zone-plan { display: none; }
+}
 
 .state {
   display: inline-flex;
