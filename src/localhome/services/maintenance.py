@@ -1,5 +1,6 @@
-"""Maintenance actions for the climate admin panel: clear the history,
-clear every schedule, reset to a fresh installation, and back up the
+"""Maintenance actions for the climate admin panel: clear the history
+(the samples, each day's totals and the heat meter's readings), clear
+every schedule, reset to a fresh installation, and back up the
 configuration.
 
 Every destructive action first saves a backup on the board itself
@@ -38,13 +39,17 @@ CREDENTIAL_PREFIX = "secrets_"
 
 
 class Maintenance:
-    def __init__(self, config_dir: str, history_store, schedule_store=None, runtime_files: list[str] = ()):
+    def __init__(self, config_dir: str, history_store, schedule_store=None, runtime_files: list[str] = (),
+                 history_files: list[str] = ()):
         self.config_dir = config_dir
         self.backup_dir = os.path.join(config_dir, "backups")
         self.history_store = history_store
         self.schedule_store = schedule_store
         # Absolute paths of the files the reset removes (see module docstring).
         self.runtime_files = list(runtime_files)
+        # And those that go with the history - the heat meter's readings
+        # beside the plant's hours: removed with it, and by the reset.
+        self.history_files = list(history_files)
 
     # ------------------------------------------------------------ backups --
 
@@ -137,10 +142,17 @@ class Maintenance:
     # ------------------------------------------------------------ actions --
 
     def clear_history(self) -> dict:
+        """The samples, each day's totals and the files that go with them
+        (the heat meter's readings) - all of it backed up first."""
         backup = self.save_history_backup()
+        files = [p for p in self.history_files if os.path.exists(p)]
+        files_backup = self.save_backup("history") if files else None
         removed = self.history_store.clear()
-        logger.warning("Maintenance: history cleared (%d rows) - backup %s", removed, backup)
-        return {"rows_removed": removed, "backup": backup}
+        for path in files:
+            os.remove(path)
+        logger.warning("Maintenance: history cleared (%d rows, %s) - backups %s, %s", removed,
+                       [os.path.basename(p) for p in files], backup, files_backup)
+        return {"rows_removed": removed, "backup": backup, "files_backup": files_backup}
 
     def clear_schedules(self) -> dict:
         if self.schedule_store is None:
@@ -158,7 +170,7 @@ class Maintenance:
         history_backup = self.save_history_backup()
         self.history_store.clear()
         removed = []
-        for path in self.runtime_files:
+        for path in self.runtime_files + self.history_files:
             if os.path.exists(path):
                 os.remove(path)
                 removed.append(os.path.basename(path))

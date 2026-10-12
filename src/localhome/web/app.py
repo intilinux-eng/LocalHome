@@ -530,6 +530,7 @@ def create_app(config_path: str | None = None) -> Flask:
         store,
         thermostat.schedule_store if thermostat is not None else None,
         [str(p) for p in runtime_files],
+        history_files=[app.config["HEAT_METER"].path],
     )
 
     _register_routes(app)

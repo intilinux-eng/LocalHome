@@ -49,6 +49,7 @@ def setup(tmp_path):
     _write(cfg / "manual_override.json", {})
     _write(cfg / "mqtt_state_cache.json", {})
     _write(cfg / "positions.json", {})
+    _write(cfg / "heat_meter.json", {"months": {"2026-01": {"heat_kwh": 57583}}})
     store = HistoryStore(str(cfg / "data" / "history.db"))
     store.record_many(int(time.time()), {"Rooms Sensor": {"temperature_c": 21.0}})
     schedules = ScheduleStore(str(cfg / "schedules.json"))
@@ -59,7 +60,7 @@ def setup(tmp_path):
     schedules.set_diagnostic_mode(True)
     runtime = [str(cfg / n) for n in ("climate_map.json", "manual_override.json", "mqtt_state_cache.json",
                                       "positions.json", "schedules.json")]
-    maintenance = Maintenance(str(cfg), store, schedules, runtime)
+    maintenance = Maintenance(str(cfg), store, schedules, runtime, history_files=[str(cfg / "heat_meter.json")])
     yield cfg, maintenance, store, schedules
     store.close()
 
@@ -110,6 +111,11 @@ def test_clear_history_backs_up_then_empties(setup):
     assert result["rows_removed"] == 1
     assert store.stats()["rows"] == 0
     assert (cfg / "backups" / result["backup"]).stat().st_size > 0
+    # The heat meter's readings go with it, kept in the board's backup.
+    assert not (cfg / "heat_meter.json").exists()
+    assert "heat_meter.json" in _names((cfg / "backups" / result["files_backup"]).read_bytes())
+    assert (cfg / "climate_map.json").exists(), "the panel's devices stay"
+    assert maintenance.clear_history()["files_backup"] is None, "nothing to back up the second time"
 
 
 def test_clear_schedules_keeps_the_season_only(setup):
@@ -127,13 +133,14 @@ def test_factory_reset_removes_only_what_localhome_created(setup):
 
     result = maintenance.factory_reset()
 
-    for name in ("climate_map.json", "manual_override.json", "mqtt_state_cache.json", "positions.json", "schedules.json"):
+    for name in ("climate_map.json", "manual_override.json", "mqtt_state_cache.json", "positions.json", "schedules.json",
+                 "heat_meter.json"):
         assert not (cfg / name).exists(), name
     for name in ("config.yaml", "mqtt_broker.json", "secrets_meross.json", "devices.json", "config.example.yaml"):
         assert (cfg / name).exists(), name
     assert store.stats()["rows"] == 0
     backup = _names((cfg / "backups" / result["backup"]).read_bytes())
-    assert "climate_map.json" in backup and "schedules.json" in backup
+    assert "climate_map.json" in backup and "schedules.json" in backup and "heat_meter.json" in backup
 
 
 # ------------------------------------------------------------------ API ----
