@@ -1005,6 +1005,8 @@
     "health_problems": "{count} to check",
     "loading": "One moment…",
     "offline": "The board isn't answering: the values below are the last ones received.",
+    "offline_since": "The house hasn't answered for {age}: the values are the last received. Trying again every 5 seconds…",
+    "offline_moments": "a few seconds",
     "request_failed": "Request failed",
     "no_answer": "The board didn't answer in time: try again shortly.",
     "unreachable": "The board can't be reached: check you're on the home network and try again.",

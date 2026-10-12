@@ -53,7 +53,14 @@
     </section>
 
     <main>
-      <div class="zones" id="zones"></div>
+      <!-- Until the board answers: the cards' shapes, not an empty page -
+           renderZones() puts the zones in their place. -->
+      <div class="zones" id="zones">
+        <div class="skeleton-card" aria-hidden="true"><span class="sk sk-title"></span><span class="sk sk-readings"></span>
+          <span class="sk sk-line"></span><span class="sk sk-line sk-short"></span></div>
+        <div class="skeleton-card" aria-hidden="true"><span class="sk sk-title"></span><span class="sk sk-readings"></span>
+          <span class="sk sk-line"></span><span class="sk sk-line sk-short"></span></div>
+      </div>
 
       <section class="block" id="plant" hidden>
         <h2 class="block-title">{{ t.home.plant_heading }}</h2>

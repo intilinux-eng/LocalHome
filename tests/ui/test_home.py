@@ -605,18 +605,21 @@ def test_the_outdoor_tile_says_when_there_is_no_sensor_or_it_is_simulated(open_p
 
 
 def test_the_home_page_says_when_the_board_stops_answering(open_page):
-    """Two of its own refreshes failing (every 20 s) and it says so; the
-    first that answers and it's gone - its clock run forward, not waited."""
+    """Seen with the router stuck: the page just sat there. The first
+    refresh failing and it says so, since when, the values greyed as the
+    last received; asked again every 5 s, so the first that answers takes
+    it away - its clock run forward, not waited."""
     page = _open_home(open_page, clock=True).page
     assert page.locator("#offline").is_hidden()
     page.route("**/api/**", lambda route: route.abort())
-    for _ in range(2):
-        page.clock.run_for(20000)
-        page.wait_for_timeout(500)
-    assert eventually(page, page.locator("#offline").is_visible, timeout_ms=5000)
-    page.unroute("**/api/**")
     page.clock.run_for(20000)
+    assert eventually(page, page.locator("#offline").is_visible, timeout_ms=5000)
+    assert "La casa non risponde da" in page.locator("#offline").inner_text()
+    assert page.evaluate("document.body.dataset.offline") == "true"
+    page.unroute("**/api/**")
+    page.clock.run_for(5000)
     assert eventually(page, page.locator("#offline").is_hidden, timeout_ms=5000)
+    assert page.evaluate("document.body.dataset.offline") is None
 
 
 def _vmc(api):

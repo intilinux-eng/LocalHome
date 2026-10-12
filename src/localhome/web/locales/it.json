@@ -1005,6 +1005,8 @@
     "health_problems": "{count} da controllare",
     "loading": "Un attimo…",
     "offline": "La scheda non risponde: i valori qui sotto sono gli ultimi ricevuti.",
+    "offline_since": "La casa non risponde da {age}: i valori sono gli ultimi ricevuti. Riprovo ogni 5 secondi…",
+    "offline_moments": "qualche secondo",
     "request_failed": "Richiesta non riuscita",
     "no_answer": "La scheda non ha risposto in tempo: riprova tra poco.",
     "unreachable": "Scheda non raggiungibile: controlla di essere sulla rete di casa e riprova.",

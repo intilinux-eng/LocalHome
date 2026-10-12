@@ -184,13 +184,26 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
 .update-banner button { min-height: 40px; border: 0; border-radius: 999px; padding: 6px 16px; background: #fff; color: var(--text); font-weight: 600; }
 
 .offline {
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: -6px 0 14px;
   padding: 10px 14px;
   border-radius: var(--radius-s);
-  background: rgba(210, 70, 59, 0.1);
-  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, var(--surface));
+  box-shadow: var(--shadow);
+  color: var(--text);
   font-size: 0.9rem;
+  line-height: 1.35;
 }
+/* Trying again: a dot that breathes. */
+.offline::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad);
+  animation: pulse 1.6s ease-in-out infinite; }
+/* The board not answering: what's shown is the last received - greyed. */
+body[data-offline="true"] :is(.hero-main, .outdoor, .zones, .plant, .tiles) { opacity: 0.55; filter: grayscale(0.6); transition: opacity 0.3s, filter 0.3s; }
 
 /* --------------------------------------------------------------- hero -- */
 
@@ -381,6 +394,14 @@ body[data-running="true"] .hero-season::before {
   gap: 16px;
 }
 .zone-plan { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+/* A zone's shape while the page loads (templates/home.html). */
+.skeleton-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow); }
+.sk { display: block; height: 14px; border-radius: 10px; background: var(--surface-2); animation: sk 1.1s ease-in-out infinite alternate; }
+.sk-title { width: 38%; height: 20px; }
+.sk-readings { height: 128px; border-radius: 18px; }
+.sk-short { width: 60%; }
+@keyframes sk { from { opacity: 1; } to { opacity: 0.45; } }
 @media (min-width: 960px) {
   .zone { display: grid; grid-template-columns: minmax(380px, 480px) minmax(0, 1fr); column-gap: 28px; align-items: start; }
   /* No week to plan this season (a zone left out of the cooling): all the width. */

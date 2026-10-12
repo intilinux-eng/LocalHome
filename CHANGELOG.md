@@ -395,6 +395,12 @@ date rather than by tag.
   zone's card. Outside's lowest and highest are the zones' bar, with when
   each came. What Comfort, Economy and the three modes do sits behind an
   "i" (and on each at a hover) instead of lines always shown.
+- **The board not answering, said at once.** Seen with the router stuck:
+  the page just sat there. Now the first failed refresh brings a banner
+  that stays in view - since when, and that it tries again every 5
+  seconds - and greys the values as the last received; the first answer
+  takes it away and asks everything else again. While the page loads,
+  the zones' shapes are drawn instead of an empty page.
 - **Energy: the last 7 days, not the week from Monday.** A Monday no
   longer shows one bar and six empty days; today is always the last.
 - **The tests in parallel, and the slowest without real waits.**

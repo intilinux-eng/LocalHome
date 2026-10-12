@@ -23,6 +23,7 @@ function tr(path, vars) {
 const LOCALE = (window.I18N && window.I18N.locale) || undefined;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const REFRESH_MS = 20000;
+const OFFLINE_RETRY_MS = 5000;   // the board not answering: asked again this often
 const HISTORY_MS = 5 * 60000;
 const PROBLEMS_MS = 60000;
 const DEFAULT_TARGET = { heat: 21, cool: 25 };
@@ -84,6 +85,9 @@ const state = {
   problems: null,
   pending: {},            // zone -> {target, hours | "next"}
   failures: 0,
+  // Since when the board hasn't answered (null: it has), and the next try.
+  offlineSince: null,
+  retryTimer: null,
   sheet: null,            // what the sheet shows
 };
 
@@ -2539,17 +2543,32 @@ async function refreshClimate(anchor) {
   } catch (e) {
     if (ticket !== asked.climate) return;
     state.failures += 1;
-    if (state.failures >= 2) {
-      const offline = document.getElementById("offline");
-      steady(() => {
-        offline.hidden = false;
-        setText(offline, tr("home.offline"));
-      }, anchor);
-    }
+    if (!state.offlineSince) state.offlineSince = Date.now();
+    // Not answering: said at once, with since when, the page's values
+    // greyed as the last ones received - and asked again every few
+    // seconds instead of every 20, so it's back as soon as the board is.
+    const offline = document.getElementById("offline");
+    steady(() => {
+      offline.hidden = false;
+      const gone = (Date.now() - state.offlineSince) / 1000;
+      setText(offline, tr("home.offline_since", { age: gone < 60 ? tr("home.offline_moments") : fmtDuration(gone / 3600) }));
+      document.body.dataset.offline = "true";
+    }, anchor);
+    clearTimeout(state.retryTimer);
+    state.retryTimer = setTimeout(() => refreshClimate(), OFFLINE_RETRY_MS);
     return;
+  }
+  const wasOffline = !!state.offlineSince;
+  state.offlineSince = null;
+  clearTimeout(state.retryTimer);
+  // Back: everything else asked again now, not at its next round.
+  if (wasOffline) {
+    refreshDevices();
+    refreshProblems();
   }
   steady(() => {
     document.getElementById("offline").hidden = true;
+    delete document.body.dataset.offline;
     renderHero();
     renderZones();
     renderPlant();
