@@ -25,8 +25,8 @@ def _set_week(api, name, week):
     api(f"/api/climate/zones/{urllib.parse.quote(name, safe='')}/schedule", {"week": week, "mode": "cool"})
 
 
-def _open_home(open_page, width=390, scheme="light"):
-    opened = open_page("/", width)
+def _open_home(open_page, width=390, scheme="light", clock=False):
+    opened = open_page("/", width, clock=clock)
     opened.page.emulate_media(color_scheme=scheme)
     opened.page.wait_for_selector(".zone", timeout=20000)
     opened.page.wait_for_timeout(800)
@@ -584,12 +584,18 @@ def test_the_outdoor_tile_says_when_there_is_no_sensor_or_it_is_simulated(open_p
 
 
 def test_the_home_page_says_when_the_board_stops_answering(open_page):
-    page = _open_home(open_page).page
+    """Two of its own refreshes failing (every 20 s) and it says so; the
+    first that answers and it's gone - its clock run forward, not waited."""
+    page = _open_home(open_page, clock=True).page
     assert page.locator("#offline").is_hidden()
     page.route("**/api/**", lambda route: route.abort())
-    assert eventually(page, page.locator("#offline").is_visible, timeout_ms=60000)
+    for _ in range(2):
+        page.clock.run_for(20000)
+        page.wait_for_timeout(500)
+    assert eventually(page, page.locator("#offline").is_visible, timeout_ms=5000)
     page.unroute("**/api/**")
-    assert eventually(page, page.locator("#offline").is_hidden, timeout_ms=60000)
+    page.clock.run_for(20000)
+    assert eventually(page, page.locator("#offline").is_hidden, timeout_ms=5000)
 
 
 def _vmc(api):
@@ -1189,6 +1195,7 @@ def test_an_action_the_board_never_answers_frees_its_button_and_says_so(iphone):
     """Without a time limit the button waited for ever - and a refresh
     meanwhile enabled it again, so the same action could go twice."""
     page = iphone.page
+    page.clock.install()        # its 15 s time limit run forward, not waited
     page.route("**/override", lambda route: None)          # never answered
     card = _card(page, ZONE_A)
     card.locator("button[data-action=start][data-delta='0.5']").tap()
@@ -1197,8 +1204,8 @@ def test_an_action_the_board_never_answers_frees_its_button_and_says_so(iphone):
     page.evaluate("refreshClimate()")
     page.wait_for_timeout(1500)
     assert apply.get_attribute("aria-busy") == "true" and apply.is_disabled(), "still waiting after a refresh"
-    page.wait_for_timeout(15000)
-    assert apply.get_attribute("aria-busy") is None and apply.is_enabled()
+    page.clock.run_for(15000)
+    assert eventually(page, lambda: apply.get_attribute("aria-busy") is None and apply.is_enabled(), timeout_ms=5000)
     assert "non ha risposto" in page.locator(".toast-host").inner_text()
     page.unroute("**/override")
     card.locator("button[data-action=cancel-pending]").tap()

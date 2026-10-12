@@ -114,18 +114,20 @@ def test_a_refusal_is_explained_in_the_page_language(open_page, api):
 
 
 def test_the_admin_page_says_when_the_board_stops_answering(open_page):
-    pages = [open_page("/climate-admin", 390).page]
-    for page in pages:
-        page.wait_for_timeout(1500)
-        assert page.locator("#connection-banner").is_hidden()
-        page.route("**/api/**", lambda route: route.abort())
-    for page in pages:
-        assert eventually(page, page.locator("#connection-banner").is_visible, timeout_ms=40000)
-        assert "non raggiungibile" in page.inner_text("#connection-banner")
-    for page in pages:
-        page.unroute("**/api/**")
-    for page in pages:
-        assert eventually(page, page.locator("#connection-banner").is_hidden, timeout_ms=40000), "recovers by itself"
+    """Its own checks (every 5 s) failing for over 15 s and it says so; the
+    first that answers and it's gone - its clock run forward, not waited."""
+    page = open_page("/climate-admin", 390, clock=True).page
+    page.wait_for_timeout(1500)
+    assert page.locator("#connection-banner").is_hidden()
+    page.route("**/api/**", lambda route: route.abort())
+    for _ in range(5):
+        page.clock.run_for(5000)
+        page.wait_for_timeout(300)
+    assert eventually(page, page.locator("#connection-banner").is_visible, timeout_ms=5000)
+    assert "non raggiungibile" in page.inner_text("#connection-banner")
+    page.unroute("**/api/**")
+    page.clock.run_for(5000)
+    assert eventually(page, page.locator("#connection-banner").is_hidden, timeout_ms=5000), "recovers by itself"
 
 
 def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):

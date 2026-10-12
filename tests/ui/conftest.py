@@ -176,13 +176,17 @@ def browser():
 @pytest.fixture
 def open_page(browser, server):
     """open_page(path, width) -> Opened, in a fresh context (its own
-    storage, like another phone)."""
+    storage, like another phone). clock=True: the page's own clock is
+    Playwright's - time flows as usual, and a test can jump it forward
+    (page.clock.run_for) instead of waiting out a long refresh."""
     contexts = []
 
-    def _open(path="/", width=1280, height=900):
+    def _open(path="/", width=1280, height=900, clock=False):
         context = browser.new_context(viewport={"width": width, "height": height})
         contexts.append(context)
         opened = Opened(context.new_page())
+        if clock:
+            opened.page.clock.install()
         opened.page.goto(server + path)
         return opened
 
