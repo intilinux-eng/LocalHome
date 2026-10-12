@@ -35,7 +35,6 @@ idna==3.20
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
-mashumaro==3.22
 meross_iot==0.4.10.4
 msgpack==1.2.2
 multidict==6.9.0
