@@ -90,13 +90,39 @@ from localhome.web.i18n import load_translations
 logger = logging.getLogger(__name__)
 
 
+def web_asset_dir() -> str:
+    """The directory containing static/, templates/ and locales/.
+    In development, this is this file's own directory (src/localhome/web).
+    In a standalone binary or .deb install, it looks in /usr/local/share/localhome/web,
+    /opt/localhome/web, or beside the executable."""
+    env = os.environ.get("LOCALHOME_WEB_DIR")
+    if env and os.path.isdir(env):
+        return env
+    exe = sys.executable
+    is_frozen = getattr(sys, "frozen", False) or not (
+        exe.endswith("python") or exe.endswith("python3") or exe.endswith("python.exe") or exe.endswith("python3.exe")
+    )
+    if is_frozen:
+        exe_dir = os.path.dirname(os.path.abspath(exe))
+        for candidate in (
+            os.path.join(exe_dir, "..", "share", "localhome", "web"),
+            "/usr/local/share/localhome/web",
+            "/opt/localhome/web",
+            os.path.join(exe_dir, "web"),
+            os.path.join(exe_dir, "..", "web"),
+        ):
+            if os.path.isdir(candidate):
+                return candidate
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def _asset_version() -> str:
     """Changes whenever the dashboard's own files do (an update copied to
     the board): the newest modification time among static files and
     templates. Appended to every static URL, so no browser keeps an old
     copy, and reported by /api/server-time, so an already-open page can
     tell it's out of date."""
-    base = os.path.dirname(os.path.abspath(__file__))
+    base = web_asset_dir()
     newest = 0.0
     for folder in ("static", "templates", "locales"):
         for root, _, files in os.walk(os.path.join(base, folder)):
@@ -109,8 +135,17 @@ def _asset_version() -> str:
 
 
 def _software_version() -> dict:
-    """The installed code's commit and date, when it's a git checkout (the
-    usual install) - so it's visible whether the board runs the latest."""
+    """The installed code's commit and date, when it's a git checkout or
+    a standalone install with version.json - so it's visible whether the board runs the latest."""
+    web_dir = web_asset_dir()
+    vfile = os.path.join(web_dir, "version.json")
+    if os.path.isfile(vfile):
+        try:
+            with open(vfile, encoding="utf-8") as f:
+                data = json.load(f)
+                return {"commit": data.get("commit"), "date": data.get("date")}
+        except Exception:
+            pass
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     try:
         out = subprocess.run(["git", "-C", repo, "log", "-1", "--format=%h %cI"],
@@ -124,7 +159,12 @@ def _software_version() -> dict:
 
 
 def create_app(config_path: str | None = None) -> Flask:
-    app = Flask(__name__)
+    web_dir = web_asset_dir()
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(web_dir, "templates"),
+        static_folder=os.path.join(web_dir, "static"),
+    )
     asset_version = _asset_version()
     app.config["SOFTWARE_VERSION"] = _software_version()
     app.config["ASSET_VERSION"] = asset_version

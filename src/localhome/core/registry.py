@@ -43,6 +43,24 @@ def register_driver(kind: str, type_name: str):
     return decorator
 
 
+BUILTIN_DRIVER_MODULES = (
+    "localhome.drivers.ewelink.cloud",
+    "localhome.drivers.ewelink.power",
+    "localhome.drivers.manual.climate",
+    "localhome.drivers.meross.plug",
+    "localhome.drivers.mqtt.cover",
+    "localhome.drivers.mqtt.number",
+    "localhome.drivers.mqtt.sensor",
+    "localhome.drivers.mqtt.shelly_light",
+    "localhome.drivers.mqtt.switch",
+    "localhome.drivers.simulated.climate",
+    "localhome.drivers.simulated.switch",
+    "localhome.drivers.telegram.notifier",
+    "localhome.drivers.tuya.air_quality",
+    "localhome.drivers.tuya.cover",
+)
+
+
 def load_builtin_drivers() -> None:
     """Import every module under localhome.drivers so its @register_driver
     calls run. Safe to call more than once.
@@ -59,16 +77,24 @@ def load_builtin_drivers() -> None:
     _loaded = True
     import localhome.drivers as drivers_pkg
 
-    for module_info in pkgutil.walk_packages(drivers_pkg.__path__, prefix="localhome.drivers."):
+    # Collect module names from filesystem walk (development) plus static list (compiled standalone).
+    module_names = set(BUILTIN_DRIVER_MODULES)
+    try:
+        for module_info in pkgutil.walk_packages(drivers_pkg.__path__, prefix="localhome.drivers."):
+            module_names.add(module_info.name)
+    except (OSError, AttributeError):
+        pass
+
+    for mod_name in sorted(module_names):
         try:
-            importlib.import_module(module_info.name)
+            importlib.import_module(mod_name)
         except ImportError as exc:
             missing = (exc.name or "?").split(".")[0]
-            _SKIPPED[module_info.name] = missing
+            _SKIPPED[mod_name] = missing
             logger.warning(
                 "Skipping driver module %s - package %r isn't installed "
                 "(if this is a driver you need: %s)",
-                module_info.name,
+                mod_name,
                 missing,
                 install_hint(missing),
             )

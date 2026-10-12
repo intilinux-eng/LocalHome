@@ -57,7 +57,14 @@ def _restart() -> None:
     # actually turns over.
     time.sleep(1.0)
     _release_server_socket()
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    exe = sys.executable
+    is_frozen = getattr(sys, "frozen", False) or not (
+        exe.endswith("python") or exe.endswith("python3") or exe.endswith("python.exe") or exe.endswith("python3.exe")
+    )
+    if is_frozen:
+        os.execv(exe, sys.argv)
+    else:
+        os.execv(exe, [exe] + sys.argv)
 
 
 def schedule_restart() -> None:
