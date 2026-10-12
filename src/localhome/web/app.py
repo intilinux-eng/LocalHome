@@ -80,6 +80,7 @@ from localhome.errors import InputError
 from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
 from localhome.services import vmc_auto
+from localhome.services import run_hours
 from localhome.services.vmc_auto import VmcAuto, VmcAutoSettingsStore
 from localhome.services.vmc_filters import VmcFilterStore
 from localhome.services.vmc_schedule import AWAY_CHOICES, VmcScheduleController, VmcScheduleStore
@@ -458,6 +459,9 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["HISTORY"] = store
     app.config["DAY_RANGE"] = day_range
     app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
+    # The heat meter's readings, typed in the admin panel - beside the
+    # plant's hours (services/run_hours.py).
+    app.config["HEAT_METER"] = run_hours.HeatMeterStore(config.resolve("heat_meter.json"))
     app.config["RECORDER"] = recorder
     app.config["POWER_BUDGET"] = power_budget
     app.config["POWER_SENSOR"] = power_sensor
@@ -575,6 +579,25 @@ def _vmc_speed_device(manager: DeviceManager) -> str | None:
         if name in manager.numbers and (manager.ui_options.get(name) or {}).get("presets") and switch:
             return name
     return None
+
+
+def _valve_zones(thermostat) -> list[dict]:
+    """The zones with a valve, for their hours: {"name", "valve"}."""
+    if thermostat is None:
+        return []
+    return [{"name": z.name, "valve": z.valve} for z in thermostat.zones if z.valve_configured]
+
+
+def _usage_answer(app: Flask) -> dict:
+    """The admin panel's hours and consumption: month by month, and the
+    heat meter's readings with what's between them."""
+    zones = _valve_zones(app.config["THERMOSTAT"])
+    history = app.config["HISTORY"]
+    interval = app.config["HISTORY_POLL_INTERVAL"]
+    meter = app.config["HEAT_METER"].get()
+    return {"zones": [z["name"] for z in zones],
+            "months": run_hours.month_report(history, zones, interval),
+            "meter": {**meter, "periods": run_hours.meter_report(history, zones, interval, meter)}}
 
 
 def _auto_zones(thermostat) -> list[dict]:
@@ -1683,6 +1706,14 @@ def _register_routes(app: Flask) -> None:
         thermostat.tick()
         return jsonify(ok=True, week=thermostat.schedule_store.get_week(name, mode))
 
+    @app.route("/api/climate/run-hours")
+    def api_climate_run_hours():
+        """Each zone's hours open - the last 24 hours, each of the last 30
+        days - and the plant's (any zone open, counted once)."""
+        report = run_hours.zone_report(app.config["HISTORY"], _valve_zones(app.config["THERMOSTAT"]),
+                                       app.config["HISTORY_POLL_INTERVAL"])
+        return jsonify(ok=True, **report)
+
     @app.route("/api/climate/zones/<name>/on-hours")
     def api_climate_on_hours(name):
         thermostat: ThermostatController | None = app.config["THERMOSTAT"]
@@ -1938,6 +1969,34 @@ def _register_routes(app: Flask) -> None:
             vmc.speeds_changed(moves)
             _move_vmc_to_new_speed(manager, device, moves)
         return jsonify(ok=True, device=device, saved=True, speeds=new)
+
+    @app.route("/api/climate-admin/usage")
+    def api_usage():
+        return jsonify(ok=True, **_usage_answer(app))
+
+    @app.route("/api/climate-admin/heat-meter/reading", methods=["POST"])
+    def api_heat_meter_reading():
+        """{"day", "heat_kwh", "cool_kwh"?}: a reading of the heat meter -
+        replacing the one of the same day."""
+        try:
+            app.config["HEAT_METER"].add(_json_body())
+        except InputError as exc:
+            return _refusal(exc, 400)
+        return jsonify(ok=True, **_usage_answer(app))
+
+    @app.route("/api/climate-admin/heat-meter/reading/delete", methods=["POST"])
+    def api_heat_meter_reading_delete():
+        app.config["HEAT_METER"].remove(str(_json_body().get("day") or ""))
+        return jsonify(ok=True, **_usage_answer(app))
+
+    @app.route("/api/climate-admin/heat-meter/price", methods=["POST"])
+    def api_heat_meter_price():
+        """{"price_eur_kwh": euros per kWh of heat, or null}."""
+        try:
+            app.config["HEAT_METER"].set_price(_json_body().get("price_eur_kwh"))
+        except InputError as exc:
+            return _refusal(exc, 400)
+        return jsonify(ok=True, **_usage_answer(app))
 
     @app.route("/api/climate-admin/vmc-auto")
     def api_vmc_auto_get():

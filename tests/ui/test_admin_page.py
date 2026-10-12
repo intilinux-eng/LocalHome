@@ -214,6 +214,45 @@ def test_the_vmc_filters_are_set_here_and_cleaned_today(open_page, api):
     assert opened.errors == []
 
 
+def test_hours_and_the_heat_meter_kwh_per_hour_and_euros(open_page, api):
+    """Two readings make a period - its kWh, the plant's hours, kWh per
+    hour; a price adds euros; a reading that would count down is refused;
+    one deleted, the period goes."""
+    from datetime import date, timedelta
+    days = [(date.today() - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    try:
+        page.wait_for_selector("#usage-body #usage-heat", state="attached", timeout=20000)
+        page.evaluate("document.getElementById('usage').open = true")
+        assert "Ore per mese" in page.inner_text("#usage")
+
+        def reading(day, heat):
+            page.fill("#usage-day", day)
+            page.fill("#usage-heat", str(heat))
+            page.click("#usage button.open")
+
+        reading(days[0], 1000)
+        assert eventually(page, lambda: "Una lettura" in page.inner_text("#usage"))
+        reading(days[2], 1050)
+        assert eventually(page, lambda: page.locator("#usage .usage-table").count() == 3)
+        assert "kWh per ora" in page.inner_text("#usage") and "50" in page.inner_text("#usage")
+        reading(days[1], 1100)                                 # more than the day after: refused
+        assert eventually(page, lambda: "solo in avanti" in page.inner_text("#usage-result"))
+        page.fill("#usage-price", "0.2")
+        page.click("#usage button:has-text('Salva prezzo')")
+        assert eventually(page, lambda: api("/api/climate-admin/usage")["meter"]["price_eur_kwh"] == 0.2)
+        assert eventually(page, lambda: "€ per ora" in page.inner_text("#usage"))
+        page.locator("#usage .usage-readings button").first.click()
+        assert eventually(page, lambda: len(api("/api/climate-admin/usage")["meter"]["readings"]) == 1)
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    finally:
+        for day in days:
+            api("/api/climate-admin/heat-meter/reading/delete", {"day": day})
+        api("/api/climate-admin/heat-meter/price", {"price_eur_kwh": None})
+    assert [e for e in opened.errors if "400" not in e] == []
+
+
 def test_the_plants_tuning_and_the_boards_settings_are_one_form(open_page, api):
     """Shown in two places - the thermostat's next to the zones, the rest
     under Board - and either Save sends every field: none is lost."""

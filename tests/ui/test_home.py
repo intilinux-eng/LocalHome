@@ -719,6 +719,29 @@ def test_away_asks_what_the_vmc_does_and_its_card_says_so(open_page, api):
     assert opened.errors == []
 
 
+def test_a_zones_running_history_last_24_hours_closed_days_as_bars_open(open_page):
+    """Closed, one line: the last 24 hours. Open: the last 7 days as bars -
+    or 30 - a day not recorded yet has none; a tap names the day."""
+    opened = _open_home(open_page)
+    page = opened.page
+    runs = _card(page, ZONE_A).locator(".zone-runs")
+    page.wait_for_function("() => document.querySelector('.zone-runs') !== null", timeout=20000)
+    assert "ultime 24 ore" in runs.locator("summary").inner_text()
+    runs.locator("summary").click()
+    bars = runs.locator(".energy-bar")
+    assert bars.count() == 7 and runs.locator(".energy-labels span").last.inner_text() == "oggi"
+    assert bars.last.is_enabled(), "today is being recorded"
+    runs.locator("button[data-range='30']").click()
+    assert eventually(page, lambda: bars.count() == 30)
+    bars.last.click()
+    assert eventually(page, lambda: "accension" in runs.locator(".energy-total").inner_text())
+    page.evaluate("refreshClimate()")
+    page.wait_for_timeout(800)
+    assert runs.evaluate("d => d.open") is True, "stays open across the card's redraws"
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
+
+
 def test_an_air_quality_sensor_shows_its_co2_day_and_levels(open_page):
     """The test server has no Tuya air sensor: its reading - tonight's,
     from the real one - is handed to the page as refreshDevices() would."""

@@ -552,6 +552,17 @@
 .vmc-auto-fields[aria-disabled="true"] { opacity: 0.5; }
 .vmc-auto-now[data-under-way="true"] { color: var(--accent); font-weight: 600; }
 .vmc-filters-now { font-weight: 600; }
+/* Hours and consumption: months, and the heat meter's periods. */
+.usage-table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.usage-table th, .usage-table td { padding: 7px 8px; border-top: 1px solid var(--line); text-align: right; vertical-align: top;
+  overflow-wrap: anywhere; }
+.usage-table th[scope="row"], .usage-table tr:first-child th:first-child { text-align: left; }
+.usage-table tr:first-child th { border-top: 0; font-weight: 650; color: var(--text-2); font-size: 0.8rem; }
+.usage-table th[scope="row"] { font-weight: 600; color: var(--text); }
+.usage-partial { display: block; font-size: 0.75rem; font-weight: 400; color: var(--text-3); }
+.usage-form { margin: 8px 0 12px; }
+.usage-price { margin-top: 12px; }
+@media (max-width: 480px) { .usage-table { font-size: 0.8rem; } .usage-table th, .usage-table td { padding: 6px 4px; } }
 .vmc-filters-now[data-state="soon"] { color: var(--accent); }
 .vmc-filters-now[data-state="due"] { color: var(--bad); }
 .vmc-filters-fields { margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }

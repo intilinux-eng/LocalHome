@@ -771,6 +771,124 @@ async function saveVmcAuto(button, reset = false) {
   }
 }
 
+// Hours and consumption (services/run_hours.py): the plant's hours -
+// any zone open, counted once - and each zone's, month by month; the heat
+// meter's readings typed here (its display keeps the month-end values,
+// heat and cooling apart), and between two readings the kWh, the plant's
+// hours, kWh per hour and, with a price, euros.
+function usageNumber(value, digits) {
+  return typeof value === "number"
+    ? value.toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "–";
+}
+
+async function loadUsage() {
+  const body = document.getElementById("usage-body");
+  if (!body) return;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/usage", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  if (data.ok) renderUsage(data);
+}
+
+function renderUsage(data) {
+  const body = document.getElementById("usage-body");
+  const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
+  const hours = h => (typeof h === "number" ? `${usageNumber(h, 1)} h` : "–");
+  const month = m => new Date(`${m}-15T12:00:00`).toLocaleDateString(LOCALE, { month: "long", year: "numeric" });
+  const day = d => new Date(`${d}T12:00:00`).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
+  const zones = data.zones || [];
+  const months = (data.months || []).filter(m => m.days_known > 0);
+  const now = (data.months || [])[0];
+  setPill("usage-summary", now && now.days_known ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(now.plant_hours, 0) })) : "");
+  const partial = m => (m.days_known < m.days ? `<span class="usage-partial">${t("usage_days_known", { known: m.days_known, days: m.days })}</span>` : "");
+  const monthTable = months.length ? `<table class="usage-table">
+      <tr><th>${t("usage_col_month")}</th><th>${t("usage_col_plant")}</th>${zones.map(z => `<th>${escapeHtml(displayName(z))}</th>`).join("")}<th>${t("usage_col_starts")}</th></tr>
+      ${months.map(m => `<tr><th scope="row">${escapeHtml(month(m.month))}${partial(m)}</th><td><b>${hours(m.plant_hours)}</b></td>
+        ${zones.map(z => `<td>${hours(m.zones[z])}</td>`).join("")}<td>${m.plant_starts}</td></tr>`).join("")}
+    </table>` : `<p class="hint-text">${t("usage_no_hours")}</p>`;
+  const meter = data.meter || { readings: [], periods: [] };
+  const periods = meter.periods || [];
+  const periodTable = periods.length ? `<table class="usage-table">
+      <tr><th>${t("usage_col_period")}</th><th>kWh</th><th>${t("usage_col_plant")}</th><th>${t("usage_col_kwh_h")}</th>
+        ${meter.price_eur_kwh != null ? `<th>€</th><th>${t("usage_col_eur_h")}</th>` : ""}</tr>
+      ${periods.map(p => `<tr><th scope="row">${escapeHtml(day(p.from))} → ${escapeHtml(day(p.to))}${p.days_known < p.days
+          ? `<span class="usage-partial">${t("usage_hours_partial", { known: p.days_known, days: p.days })}</span>` : ""}</th>
+        <td>${usageNumber(p.kwh, 0)}${p.cool_kwh ? `<span class="usage-partial">${t("usage_heat_cool", { heat: usageNumber(p.heat_kwh, 0), cool: usageNumber(p.cool_kwh, 0) })}</span>` : ""}</td>
+        <td>${hours(p.plant_hours)}</td><td><b>${usageNumber(p.kwh_per_hour, 1)}</b></td>
+        ${meter.price_eur_kwh != null ? `<td>${usageNumber(p.eur, 2)}</td><td>${usageNumber(p.eur_per_hour, 2)}</td>` : ""}</tr>`).join("")}
+    </table>` : `<p class="hint-text">${t(meter.readings.length ? "usage_one_reading" : "usage_no_readings")}</p>`;
+  const today = new Date().toISOString().slice(0, 10);
+  const readings = meter.readings.length ? `<table class="usage-table usage-readings">
+      <tr><th>${t("usage_col_day")}</th><th>${t("usage_heat")}</th><th>${t("usage_cool")}</th><th></th></tr>
+      ${[...meter.readings].reverse().map(r => `<tr><th scope="row">${escapeHtml(day(r.day))}</th><td>${usageNumber(r.heat_kwh, 0)}</td>
+        <td>${r.cool_kwh != null ? usageNumber(r.cool_kwh, 0) : "–"}</td>
+        <td><button class="range-btn" type="button" onclick="deleteHeatReading(this, '${escapeHtml(r.day)}')">${t("usage_delete")}</button></td></tr>`).join("")}
+    </table>` : "";
+  body.innerHTML = `
+    <h3 class="admin-subheading">${t("usage_months")}</h3>
+    ${monthTable}
+    <h3 class="admin-subheading">${t("usage_meter")}</h3>
+    <p class="hint-text">${t("usage_meter_note")}</p>
+    ${periodTable}
+    <div class="admin-zone-card usage-form">
+      <div class="dehum-grid">
+        <div class="admin-field"><label for="usage-day">${t("usage_col_day")}</label><input type="date" id="usage-day" value="${today}" max="${today}"></div>
+        <div class="admin-field"><label for="usage-heat">${t("usage_heat")}</label><input type="number" id="usage-heat" min="0" step="0.001" inputmode="decimal"></div>
+        <div class="admin-field"><label for="usage-cool">${t("usage_cool_optional")}</label><input type="number" id="usage-cool" min="0" step="0.001" inputmode="decimal"></div>
+      </div>
+      <div class="toolbar admin-actions"><button class="tbtn open" type="button" onclick="addHeatReading(this)">${t("usage_add")}</button></div>
+      <div class="dehum-grid usage-price">
+        <div class="admin-field"><label for="usage-price">${t("usage_price")}</label>
+          <input type="number" id="usage-price" min="0" max="10" step="0.0001" inputmode="decimal" value="${meter.price_eur_kwh ?? ""}"></div>
+      </div>
+      <div class="toolbar admin-actions"><button class="tbtn" type="button" onclick="saveHeatPrice(this)">${t("usage_price_save")}</button></div>
+      <p class="hint-text" id="usage-result"></p>
+    </div>
+    ${readings}`;
+}
+
+async function postUsage(button, path, body) {
+  const result = document.getElementById("usage-result");
+  button.disabled = true;
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
+      result.className = "hint-text admin-error";
+      return;
+    }
+    renderUsage(data);
+    const after = document.getElementById("usage-result");
+    after.textContent = tr("climate_admin.usage_saved");
+    after.className = "hint-text admin-success";
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function addHeatReading(button) {
+  const value = id => (document.getElementById(id).value === "" ? null : Number(document.getElementById(id).value));
+  const body = { day: document.getElementById("usage-day").value, heat_kwh: value("usage-heat") };
+  if (value("usage-cool") != null) body.cool_kwh = value("usage-cool");
+  return postUsage(button, "/api/climate-admin/heat-meter/reading", body);
+}
+
+function deleteHeatReading(button, day) {
+  return postUsage(button, "/api/climate-admin/heat-meter/reading/delete", { day });
+}
+
+function saveHeatPrice(button) {
+  const raw = document.getElementById("usage-price").value;
+  return postUsage(button, "/api/climate-admin/heat-meter/price", { price_eur_kwh: raw === "" ? null : Number(raw) });
+}
+
 // The VMC's filters (services/vmc_filters.py): how often, when last
 // cleaned - the home card reminds from two weeks before.
 function isoDay(iso) {
@@ -3226,6 +3344,7 @@ loadVmc();
 loadVmcSpeeds();
 loadVmcAuto();
 loadVmcFilters();
+loadUsage();
 watchDeviceRows();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);

@@ -52,6 +52,13 @@ const state = {
   energyRange: {},        // meter or plug -> the period its bars show
   energyPick: {},         // meter or plug -> the bar tapped, to read its numbers
   onHours: {},
+  // Each zone's valve hours - the last 24 hours, the last 30 days - and
+  // the plant's (services/run_hours.py); which zones show theirs open,
+  // over how many days, and the bar picked.
+  runHours: null,
+  runsOpen: {},
+  runsRange: {},
+  runsPick: {},
   vmc: null,
   problems: null,
   pending: {},            // zone -> {target, hours | "next"}
@@ -510,7 +517,8 @@ function fillZone(card, zone, climate) {
     </div>`}
     <div class="quick">${quickHtml(zone, climate, change)}</div>
     ${zone.sensor_manual ? manualHtml(zone) : ""}
-    <div class="zone-foot">${foot.join(" · ")}</div>`);
+    <div class="zone-foot">${foot.join(" · ")}</div>
+    ${runsHtml(zone)}`);
   wireRibbon(card, week, history, mode);
 }
 
@@ -835,6 +843,17 @@ async function onZoneClick(event) {
   const zone = state.climate.zones.find(z => z.name === card.dataset.zone);
   if (!zone) return;
   const action = button.dataset.action;
+  if (action === "runs-range" || action === "runs-pick") {
+    if (action === "runs-range") {
+      state.runsRange[zone.name] = Number(button.dataset.range);
+      delete state.runsPick[zone.name];
+    } else {
+      const i = Number(button.dataset.pick);
+      state.runsPick[zone.name] = state.runsPick[zone.name] === i ? undefined : i;
+    }
+    steady(() => renderZones());
+    return;
+  }
   if (action === "toggle-plan") {
     const plan = card.querySelector(".zone-plan");
     const open = plan.dataset.open !== "true";
@@ -1552,6 +1571,59 @@ async function flipSwitch(toggle) {
   await refreshDevices(toggle);
 }
 
+// ---------------------------------------------------- a zone's hours --
+// How long its valve was open (services/run_hours.py): closed, the last
+// 24 hours; open, the last 7 or 30 days as bars - the energy card's -
+// a tap naming the day, its hours and its starts. Hours with the valve
+// open: what the plant was asked for, not what it used - the heat meter
+// counts that.
+
+function runsDayName(iso, long) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(LOCALE, long
+    ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short" });
+}
+
+function runsHtml(zone) {
+  const data = state.runHours && state.runHours.zones && state.runHours.zones[zone.name];
+  if (!data) return "";
+  const range = state.runsRange[zone.name] || 7;
+  const days = state.runHours.days.slice(-range);
+  const hours = data.hours.slice(-range), starts = data.starts.slice(-range);
+  const known = hours.filter(h => h != null);
+  const total = known.reduce((a, b) => a + b, 0);
+  const top = Math.max(0.5, ...known);
+  const title = (i) => {
+    const day = runsDayName(days[i], true);
+    if (hours[i] == null) return tr("home.runs_day_unknown", { day });
+    const n = starts[i] || 0;
+    return tr("home.runs_day", { day, time: fmtDuration(hours[i]),
+      starts: n === 1 ? tr("home.runs_starts_one") : tr("home.runs_starts_many", { n }) });
+  };
+  // Under the bars: a week by its days, a month every week, and today.
+  const label = (iso, i) => (i === days.length - 1 ? tr("home.runs_today")
+    : range === 7 ? runsDayName(iso, false) : (days.length - 1 - i) % 7 === 0 ? String(Number(iso.slice(8))) : "");
+  const pick = state.runsPick[zone.name];
+  const picked = pick != null && pick < days.length ? pick : null;
+  const line = picked != null ? title(picked)
+    : known.length ? tr("home.runs_total", { days: range, time: fmtDuration(total), avg: fmtDuration(total / known.length) })
+    : tr("home.runs_none");
+  return `<details class="zone-runs" data-zone-runs="${esc(zone.name)}"${state.runsOpen[zone.name] ? " open" : ""}>
+    <summary><span class="runs-title">${esc(tr("home.runs_title"))}</span>
+      <span class="runs-24h">${esc(tr("home.runs_24h", { time: fmtDuration(data.last_24h) }))}</span>${ICONS.chevron}</summary>
+    <div class="segmented energy-ranges" role="group" aria-label="${esc(tr("home.runs_title"))}">
+      ${[7, 30].map(n => `<button type="button" data-action="runs-range" data-range="${n}" aria-pressed="${n === range}">${esc(tr("home.runs_days", { n }))}</button>`).join("")}
+    </div>
+    <div class="energy-bars" style="--n: ${days.length}">
+      ${days.map((d, i) => `<button type="button" class="energy-bar" data-action="runs-pick" data-pick="${i}"
+        style="--h: ${hours[i] == null ? 0 : Math.max(2, hours[i] / top * 100).toFixed(1)}%" ${hours[i] == null ? "disabled" : ""}
+        data-current="${i === days.length - 1}" aria-pressed="${picked === i}" title="${esc(title(i))}" aria-label="${esc(title(i))}"></button>`).join("")}
+    </div>
+    <div class="energy-labels" style="--n: ${days.length}">${days.map((d, i) => `<span>${esc(label(d, i))}</span>`).join("")}</div>
+    <div class="energy-total"><b>${esc(line)}</b></div>
+    <p class="runs-note">${esc(tr("home.runs_note"))}</p>
+  </details>`;
+}
+
 // ------------------------------------------------------------- the VMC --
 // Its switch, five levels and a fine slider, a speed for a while (boost,
 // guests), the filters' reminder, and one choice for the rest of the
@@ -2213,7 +2285,7 @@ async function loadWeeks(names) {
 async function refreshHistory() {
   if (!state.climate) return;
   historyAt = Date.now();
-  await Promise.all(state.climate.zones.map(async zone => {
+  await Promise.all([...state.climate.zones.map(async zone => {
     try {
       const [temps, runs, hours] = await Promise.all([
         api(`/api/sensors/${encodeURIComponent(zone.sensor)}/history?field=temperature_c&range=24h`),
@@ -2223,7 +2295,7 @@ async function refreshHistory() {
       state.history[zone.name] = { temps: temps.series.temperature_c || [], runs: runs.series.is_on || [] };
       state.onHours[zone.name] = hours;
     } catch (e) { /* keep what we had */ }
-  }));
+  }), api("/api/climate/run-hours").then(runs => { state.runHours = runs; }).catch(() => {})]);
   steady(() => { renderHero(); renderZones(); });
 }
 
@@ -2285,6 +2357,10 @@ function setupName(item) {
 // ---------------------------------------------------------------- start --
 
 document.getElementById("zones").addEventListener("click", onZoneClick);
+// A zone's hours, opened or closed, stay so across the card's redraws.
+document.getElementById("zones").addEventListener("toggle", event => {
+  if (event.target.matches && event.target.matches(".zone-runs")) state.runsOpen[event.target.dataset.zoneRuns] = event.target.open;
+}, true);
 document.getElementById("zones").addEventListener("submit", onManualSubmit);
 document.getElementById("plant-body").addEventListener("click", onPlantClick);
 document.getElementById("plant-body").addEventListener("input", onVmcSlide);

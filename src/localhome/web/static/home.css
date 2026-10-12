@@ -940,6 +940,21 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .energy-labels { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; font-size: 0.68rem; color: var(--text-3); text-align: center; margin-top: -4px; }
 .energy-labels span { white-space: nowrap; overflow: visible; }
 .energy-total { font-size: 0.9rem; color: var(--text-2); }
+/* A zone's hours (home.js runsHtml): one line closed, the energy card's
+   bars open. */
+.zone-runs { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+.zone-runs > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; font-size: 0.9rem; }
+.zone-runs > summary::-webkit-details-marker { display: none; }
+.runs-title { font-weight: 600; color: var(--text); }
+.runs-24h { flex: 1; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.zone-runs > summary .chevron { width: 20px; height: 20px; flex: none; color: var(--text-3); transition: transform 0.2s; }
+.zone-runs[open] > summary .chevron { transform: rotate(180deg); }
+.zone-runs[open] { display: grid; gap: 8px; padding-bottom: 4px; }
+.runs-note { margin: 0; font-size: 0.78rem; color: var(--text-3); }
+/* "Today" under the last bar: kept inside the card, not cut at its edge. */
+.zone-runs .energy-labels span:last-child { direction: rtl; text-align: right; overflow: visible; }
+/* The labels are words, not buttons: a tap goes to the bar under them. */
+.zone-runs .energy-labels { pointer-events: none; }
 .energy-total b { color: var(--text); font-weight: 600; }
 
 /* An air-quality sensor (home.js airTile): CO2 with its day, the rest as

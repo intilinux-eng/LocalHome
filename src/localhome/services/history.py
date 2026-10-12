@@ -16,7 +16,7 @@ import threading
 import time
 import weakref
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,10 @@ RANGE_BUCKETS = {
 # leaves a gap of a sample or two, while a real valve cycle lasts far
 # longer.
 MIN_OFF_SECONDS = 300
+
+# daily_runs' key for the plant as a whole: any zone valve open, counted
+# once however many are - what a heat meter's kWh go with.
+PLANT_KEY = "*plant*"
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
@@ -249,11 +253,12 @@ class HistoryStore:
             conn.close()
 
     def clear(self) -> int:
-        """Removes every sample - and every day's energy - and gives the
-        space back to the disk."""
+        """Removes every sample - and every day's energy and run time - and
+        gives the space back to the disk."""
         conn = self._connect()
         try:
             conn.execute("DELETE FROM daily_energy")
+            conn.execute("DELETE FROM daily_runs")
             removed = conn.execute("DELETE FROM readings").rowcount
             conn.commit()
             self._on_stats_cache.clear()
@@ -320,6 +325,19 @@ class HistoryStore:
                     peak_w REAL,
                     peak_ts INTEGER,
                     PRIMARY KEY (sensor, day)
+                )
+                """
+            )
+            # Each zone valve's time open and its starts, and the plant's
+            # (PLANT_KEY), one row a day, never pruned - see run_days().
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_runs (
+                    key TEXT NOT NULL,
+                    day TEXT NOT NULL,
+                    seconds REAL NOT NULL,
+                    starts INTEGER NOT NULL,
+                    PRIMARY KEY (key, day)
                 )
                 """
             )
@@ -554,6 +572,97 @@ class HistoryStore:
         finally:
             conn.close()
         return {key: (row[2 * i], row[2 * i + 1]) for i, key in enumerate(since)}
+
+
+def _day_start(day: date) -> int:
+    return int(datetime(day.year, day.month, day.day).timestamp())
+
+
+def _on_in(conn, sensors: list[str], field: str, t0: int, t1: int, min_off: float) -> dict[str, tuple[int, int]]:
+    """{sensor: (samples on, starts)} between t0 and t1, and PLANT_KEY's:
+    the cycles with any of `sensors` on - one recording cycle writes them
+    all with one timestamp, so a cycle is counted once however many are
+    open. A start is an "on" sample more than `min_off` after the one
+    before; the hour before t0 is read so a run carried over isn't one."""
+    counted = """
+        SELECT COUNT(*), COALESCE(SUM(after IS NULL OR after > :min_off), 0) FROM (
+            SELECT ts, ts - LAG(ts) OVER (ORDER BY ts) AS after FROM ({source})
+        ) WHERE ts >= :t0"""
+    params = {"field": field, "t0": t0, "t1": t1, "lookback": t0 - 3600, "min_off": min_off}
+    out = {}
+    for sensor in sensors:
+        row = conn.execute(counted.format(source="SELECT ts FROM readings WHERE sensor = :sensor AND field = :field "
+                                                 "AND ts >= :lookback AND ts < :t1 AND value >= 0.5"),
+                           {**params, "sensor": sensor}).fetchone()
+        out[sensor] = (row[0], row[1])
+    marks = ", ".join(f":s{i}" for i in range(len(sensors))) or "NULL"
+    row = conn.execute(counted.format(source=f"SELECT DISTINCT ts FROM readings WHERE sensor IN ({marks}) "
+                                             "AND field = :field AND ts >= :lookback AND ts < :t1 AND value >= 0.5"),
+                       {**params, **{f"s{i}": sensor for i, sensor in enumerate(sensors)}}).fetchone()
+    out[PLANT_KEY] = (row[0], row[1])
+    return out
+
+
+def run_days_of(store: "HistoryStore", sensors: list[str], field: str, sample_interval_seconds: float,
+                first_day: date, now: datetime | None = None) -> dict[str, dict[str, tuple[float, int]]]:
+    """{key: {"YYYY-MM-DD": (seconds on, starts)}} from `first_day` to
+    today, for each of `sensors` and PLANT_KEY. Days before today come
+    from daily_runs, filled from the samples the first time they're asked
+    while the samples still cover them whole - the samples last a month,
+    these for good; today from the samples, each time. A day neither kept
+    nor covered (before LocalHome ran, or past the samples) is missing."""
+    now = now or datetime.now()
+    today = now.date()
+    keys = [*sensors, PLANT_KEY]
+    min_off = max(MIN_OFF_SECONDS, 3 * sample_interval_seconds)
+    out: dict[str, dict[str, tuple[float, int]]] = {key: {} for key in keys}
+    with store._lock:
+        conn = store._connect()
+        try:
+            marks = ", ".join("?" for _ in keys)
+            for key, day, seconds, starts in conn.execute(
+                    f"SELECT key, day, seconds, starts FROM daily_runs WHERE key IN ({marks}) AND day >= ?",
+                    (*keys, first_day.isoformat())):
+                out[key][day] = (seconds, starts)
+            (oldest,) = conn.execute("SELECT MIN(ts) FROM readings").fetchone()
+            day = first_day
+            stored = False
+            while day < today:
+                iso = day.isoformat()
+                start = _day_start(day)
+                # Whole in the samples: kept from now on.
+                if any(iso not in out[key] for key in keys) and oldest is not None and oldest <= start:
+                    counts = _on_in(conn, sensors, field, start, _day_start(day + timedelta(days=1)), min_off)
+                    for key, (samples, starts) in counts.items():
+                        out[key][iso] = (samples * sample_interval_seconds, starts)
+                        conn.execute("INSERT OR REPLACE INTO daily_runs (key, day, seconds, starts) VALUES (?, ?, ?, ?)",
+                                     (key, iso, samples * sample_interval_seconds, starts))
+                    stored = True
+                day += timedelta(days=1)
+            if stored:
+                conn.commit()
+            if first_day <= today:
+                counts = _on_in(conn, sensors, field, _day_start(today), int(now.timestamp()) + 1, min_off)
+                for key, (samples, starts) in counts.items():
+                    out[key][today.isoformat()] = (samples * sample_interval_seconds, starts)
+        finally:
+            conn.close()
+    return out
+
+
+def run_window_of(store: "HistoryStore", sensors: list[str], field: str, sample_interval_seconds: float,
+                  seconds: int, now: datetime | None = None) -> dict[str, tuple[float, int]]:
+    """{key: (seconds on, starts)} over the last `seconds` - the last 24
+    hours - for each of `sensors` and PLANT_KEY."""
+    now = now or datetime.now()
+    until = int(now.timestamp()) + 1
+    min_off = max(MIN_OFF_SECONDS, 3 * sample_interval_seconds)
+    conn = store._connect()
+    try:
+        counts = _on_in(conn, sensors, field, until - 1 - seconds, until, min_off)
+    finally:
+        conn.close()
+    return {key: (samples * sample_interval_seconds, starts) for key, (samples, starts) in counts.items()}
 
 
 @dataclass
