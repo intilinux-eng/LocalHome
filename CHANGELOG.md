@@ -376,6 +376,18 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- **A zone's card: what matters in sight, the rest in its details.** In
+  sight the readings with today's low and high, the target, and the
+  "Quick schedule": three modes - Hourly (the week's table, whose heading
+  says "in use"; "See the table" leads to it), Manual and Off, each one
+  tap. Manual and Off open the same choice as before (the temperature,
+  how long), the time now a tidy grid; held by hand, what holds and the
+  way back sit under the modes instead of a box at the top. The day's
+  strip, the sensor, the hours, the week's temperatures and, on a phone,
+  the table are in "Details" - closed on a phone, open beside the table on
+  a wide screen, remembered in the browser. A zone out of the season is
+  one line, its readings beside its name; a valve not answering is said
+  once in the card, the top only says "needs checking".
 - **The tests in parallel, and the slowest without real waits.**
   `pytest -n auto` (pytest-xdist, a development dependency) runs the
   suite in about 15 s instead of 50, `pytest -m ui -n 6` the browser
