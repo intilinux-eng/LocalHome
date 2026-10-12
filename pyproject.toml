@@ -28,7 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0,<10"]
+# pytest-xdist runs the tests in parallel: `pytest -n auto`.
+dev = ["pytest>=8.0,<10", "pytest-xdist>=3.6,<4"]
 # The browser tests (tests/ui, `pytest -m ui`) - also needs
 # `python -m playwright install chromium` once.
 ui = ["playwright>=1.40,<2"]

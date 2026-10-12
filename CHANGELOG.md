@@ -335,6 +335,13 @@ date rather than by tag.
   the previous season's palette in place until a reload.
 
 ### Changed
+- **The tests in parallel, and the slowest without real waits.**
+  `pytest -n auto` (pytest-xdist, a development dependency) runs the
+  suite in about 15 s instead of 50, `pytest -m ui -n 6` the browser
+  tests in about a minute instead of five; CI does the same. The three
+  browser tests that waited out the pages' 20 s refreshes and 15 s time
+  limit run the page's clock forward instead - the same checks, a few
+  seconds each instead of 97.
 - **The administrator's guide explains the whole system; the admin page
   is shorter.** The guide (linked at the top of the admin page, printable
   to PDF) now has three parts with a table of contents: how the software

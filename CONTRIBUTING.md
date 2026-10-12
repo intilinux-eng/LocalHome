@@ -78,8 +78,11 @@ valve/sensor was involved.
 python3 -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]" -c constraints.txt
-pytest
+pytest -n auto        # in parallel (pytest-xdist): about 15 s instead of 50
 ```
+
+`pytest` alone runs them one after the other - handy for a single file or
+test (`pytest tests/test_vmc_auto.py`).
 
 (Same venv from the [README](README.md)'s Quick start works fine here
 too - just add `[dev]` to the `pip install -e . -c constraints.txt` you already ran.)
@@ -91,14 +94,18 @@ construct fake driver instances instead (see `tests/` for examples).
 
 `tests/ui` drives the real pages in a real Chromium, against a LocalHome
 it starts itself from a throwaway config (simulated devices only, two
-zones named to break careless HTML). A plain `pytest` leaves them out;
-they take a minute or two:
+zones named to break careless HTML). A plain `pytest` leaves them out:
 
 ```bash
 pip install -e ".[dev,ui]" -c constraints.txt
 python -m playwright install chromium    # once
-pytest -m ui
+pytest -m ui -n 6     # about a minute; one after the other (no -n) about five
 ```
+
+Each worker starts its own LocalHome and its own Chromium, so a few are
+enough. A test that would wait out one of the pages' long timers (a 20 s
+refresh, a 15 s time limit) runs the page's clock forward instead -
+`open_page(..., clock=True)`, then `page.clock.run_for(ms)`.
 
 CI runs them as their own job (`.github/workflows/tests.yml`). A change
 to a page - `templates/`, `static/`, the locale files - should keep them

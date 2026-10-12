@@ -18,7 +18,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # With the versions the board runs - see constraints.txt.
       - run: pip install -e ".[dev]" -c constraints.txt
-      - run: pytest
+      - run: pytest -n auto
 
   # The browser tests (tests/ui): a real LocalHome started from a throwaway
   # config, driven by a real Chromium - the pages at phone and desktop
@@ -33,7 +33,8 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[dev,ui]" -c constraints.txt
       - run: python -m playwright install --with-deps chromium
-      - run: pytest -m ui
+      # Each worker starts its own LocalHome and Chromium.
+      - run: pytest -m ui -n 4
 
   # The README's "try it in one minute": the demo image builds, starts with
   # every device simulated, and shows two zones with their sample week.
