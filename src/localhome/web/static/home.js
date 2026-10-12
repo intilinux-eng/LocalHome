@@ -1611,9 +1611,9 @@ function vmcTile(speed) {
       </div>
     </div>`;
   }
-  // Each button names the device it sets: with light strips on the Home
-  // tab there's more than one level paired with a switch. Off first, as
-  // on a fan's dial; a speed switches it back on.
+  // Each button names the device it sets: a light with its own level (a
+  // Shelly dimmer on the Home tab) is another level paired with a switch.
+  // Off first, as on a fan's dial; a speed switches it back on.
   const power = deviceByName(speed.paired_switch);
   const offButton = power && power.controllable
     ? `<button class="vmc-preset vmc-off" type="button" data-vmc-off data-device="${esc(speed.paired_switch)}" aria-pressed="${!on}">

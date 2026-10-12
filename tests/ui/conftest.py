@@ -37,8 +37,9 @@ web:
   language: "it"
 
 integrations:
-  # A light with its own level, listed before the VMC's speed - as on the
-  # real board, where the Tapo strips come first (see test_home.py).
+  # A light with its own level, listed before the VMC's speed - the
+  # regression in test_home.py is that VMC buttons must not pick the
+  # first number on the page.
   - kind: switch
     type: simulated
     name: "Lampada"

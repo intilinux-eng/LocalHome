@@ -6,6 +6,13 @@ date rather than by tag.
 
 ## Unreleased
 
+### Removed
+- **TP-Link Kasa/Tapo LED strip support.** The `tplink_led_strip`
+  drivers, the `[tplink]` extra (`python-kasa`), `tools/tplink_discover.py`
+  and `docs/integrations/tplink.md` are gone. The GPL SDK was the only
+  copyleft runtime dependency; dropping the driver leaves every remaining
+  one permissive.
+
 ### Fixed
 - **Save, pressed right after typing a Shelly's id, saves.** Leaving the
   field starts the id's check, and the line it wrote under the field
@@ -676,8 +683,8 @@ date rather than by tag.
   one driver. Moved to its own `[tplink]` extra
   (`pip install -e ".[tplink]"`), and `load_builtin_drivers()` now logs
   and skips a driver module whose own package isn't installed instead
-  of aborting startup. See
-  [THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
+  of aborting startup. (The note on it in THIRD_PARTY_NOTICES.md went
+  with the driver - see *Removed* above.)
 - Every route now falls back to a clean `{"ok": false, "error": ...}`
   JSON response (logged server-side) for any exception nobody
   anticipated, instead of Flask's default HTML error page - which broke
@@ -798,10 +805,10 @@ date rather than by tag.
   [python-kasa](https://github.com/python-kasa/python-kasa) - on/off,
   read-only brightness on the switch card, and an optional brightness
   slider that renders inside the switch's own card via a new
-  `paired_switch` config option. See
-  [docs/integrations/tplink.md](docs/integrations/tplink.md) (includes
-  the "Third-Party Compatibility" step some Tapo firmware needs, since
-  python-kasa doesn't yet support its newer `TPAP` local-auth scheme).
+  `paired_switch` config option. Its guide, `docs/integrations/tplink.md`
+  (with the "Third-Party Compatibility" step some Tapo firmware needs,
+  since python-kasa doesn't yet support its newer `TPAP` local-auth
+  scheme), went with the driver - see *Removed* above.
 - `tools/tplink_discover.py` to find TP-Link devices' IPs on the LAN.
 - A startup log warning when two integration entries share a `name`
   (previously a silent card-swallowing bug, since `DeviceManager` keys

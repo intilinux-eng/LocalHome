@@ -7,11 +7,10 @@
 #
 #     .venv/bin/pip install -e . -c constraints.txt
 #
-# A constraint only fixes a version; it never installs anything by itself
-# (python-kasa, listed below, still comes only with the `tplink` extra).
+# A constraint only fixes a version; it never installs anything by itself.
 #
 # Updating (see docs/deployment.md#pinned-versions): in a fresh venv,
-# `pip install -U -e ".[dev,ui,tplink]"`, run `pytest` and
+# `pip install -U -e ".[dev,ui]"`, run `pytest` and
 # `pytest -m ui`, try it on a test board, then write the new versions here
 # (`pip freeze`, without pip and localhome itself).
 
@@ -53,13 +52,6 @@ urllib3==2.8.0
 waitress==3.0.2
 Werkzeug==3.1.8
 yarl==1.25.1
-
-# --------------------------------------------- tplink extra (GPL, opt-in) --
-# Python 3.11 and later only: on 3.10 pip picks an older python-kasa.
-asyncclick==8.4.2.1; python_version >= "3.11"
-python-kasa==0.10.2; python_version >= "3.11"
-# Only on Windows (a dev PC), where python-kasa asks for it.
-tzdata==2026.4; sys_platform == "win32"
 
 # ---------------------------------------------------------------- tests --
 greenlet==3.5.6

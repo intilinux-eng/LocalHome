@@ -112,8 +112,8 @@ deleting that one line and restarting.
 
 ```yaml
   - kind: switch
-    type: tplink_led_strip
-    name: "Divano"
+    type: simulated
+    name: "Future Lamp"
     enabled: false        # not installed yet
 ```
 
@@ -126,7 +126,6 @@ after installing to list what your checkout actually has registered):
 | `climate`     | `tuya_air_quality`    | [integrations/tuya.md](integrations/tuya.md) |
 | `power_meter` | `ewelink_powct`       | [integrations/ewelink.md](integrations/ewelink.md) |
 | `switch`      | `meross_plug`         | [integrations/meross.md](integrations/meross.md) |
-| `switch`/`number` | `tplink_led_strip`| [integrations/tplink.md](integrations/tplink.md) |
 | `cover`/`climate`/`power_meter`/`switch`/`number` | `mqtt_json` | [integrations/mqtt.md](integrations/mqtt.md) - generic, covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc. |
 | `climate`/`switch` | `simulated`      | [integrations/simulated.md](integrations/simulated.md) - no hardware required |
 | `notifier`    | `telegram`            | [integrations/telegram.md](integrations/telegram.md) |
@@ -921,8 +920,7 @@ localhome-cli doctor
 It catches two different kinds of problem:
 
 - A driver that fails to **load** - a missing `devices_file`, bad
-  credentials, or a driver whose optional package isn't installed (e.g.
-  `tplink_led_strip` without `pip install -e .[tplink]`) - is listed as
+  credentials, or a missing requirement - is listed as
   a problem with its error, which names the install command where one
   applies. Optional drivers that aren't installed but aren't used either
   are mentioned as a note, not a problem.

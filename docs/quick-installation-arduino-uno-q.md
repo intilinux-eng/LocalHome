@@ -165,11 +165,8 @@ python3 -m venv .venv
 .venv/bin/pip install -e . -c constraints.txt
 ```
 
-78 MB of virtualenv, 108 MB for the whole checkout. The optional TP-Link
-driver is deliberately left out (it is GPL - see
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)); LocalHome logs one
-line about it at startup and carries on. Install it with
-`.venv/bin/pip install -e .[tplink] -c constraints.txt` if you need Kasa/Tapo devices.
+78 MB of virtualenv, 108 MB for the whole checkout. All dependencies
+are permissively licensed (see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)).
 
 ## 6. An empty configuration
 
@@ -510,7 +507,6 @@ Measured on the 2 GB UNO Q right after this install:
 | `sudo: a terminal is required to read the password` | a `sudo` in the middle of a piped command over SSH; put `sudo` first and use `sudo -S` |
 | The clock in the dashboard header is wrong | step 1, or `timedatectl` says "synchronized: no" |
 | A Shelly never connects, a zone says "not reachable yet" forever | the broker still listens on the board only (step 3: `ss -ltn \| grep 1883` must show `0.0.0.0:1883`), or the device's MQTT server / id is wrong |
-| `localhome-cli doctor` lists a skipped driver | the optional TP-Link driver, not installed on purpose - step 5 |
 | Building the LED sketch: `Arduino_RouterBridge.h: No such file or directory` | the libraries aren't installed - step 11b |
 | Building the LED sketch: dozens of `undefined reference to 'arduino::String...'` / `'arduino::Stream...'`, even in the sketch's own lines | a broken core archive in arduino-cli's cache - seen after two compiles ran at the same time (its `core.a` held 16 of the core's 28 objects, none of `String`/`Stream`). Clear it and build once: `rm -rf ~/.cache/arduino/cores/arduino_zephyr_unoq_*`, then step 11c with `--clean` added |
 | The admin panel says "sketch not loaded" | step 11 hasn't been done on this board, or the upload failed - rerun 11c and read its last lines |

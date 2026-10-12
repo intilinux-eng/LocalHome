@@ -32,9 +32,6 @@ dev = ["pytest>=8.0,<10"]
 # The browser tests (tests/ui, `pytest -m ui`) - also needs
 # `python -m playwright install chromium` once.
 ui = ["playwright>=1.40,<2"]
-# GPL-3.0-or-later, unlike every other dependency here - opt-in on
-# purpose, see THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically
-tplink = ["python-kasa>=0.7,<0.11"]
 # tools/deploy_board.py, on the PC only - never installed on the board.
 deploy = ["paramiko>=3.0,<6"]
 

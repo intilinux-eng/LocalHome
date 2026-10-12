@@ -25,9 +25,9 @@ _loaded = False
 # admin panel's system status and `localhome-cli doctor` - a skipped
 # module otherwise only shows up as one warning line in the startup log.
 _SKIPPED: dict[str, str] = {}
-# Missing package -> the pyproject.toml extra that installs it, so the
+# Missing package -> optional extra that installs it (if any), so the
 # remedy shown is the project's own install command, not a bare pip name.
-_EXTRA_FOR_PACKAGE = {"kasa": "tplink"}
+_EXTRA_FOR_PACKAGE: dict[str, str] = {}
 
 
 def register_driver(kind: str, type_name: str):
@@ -47,9 +47,8 @@ def load_builtin_drivers() -> None:
     """Import every module under localhome.drivers so its @register_driver
     calls run. Safe to call more than once.
 
-    A module whose own third-party SDK isn't installed (e.g. the
-    optional `[tplink]` extra) is logged and skipped rather than
-    aborting startup entirely - the same "one broken thing shouldn't
+    A module whose own third-party SDK isn't installed is logged and skipped
+    rather than aborting startup entirely - the same "one broken thing shouldn't
     take down everything else" rule the rest of this app follows, just
     applied one import earlier than DeviceManager's own per-integration
     try/except.

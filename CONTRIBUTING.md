@@ -49,9 +49,7 @@ through the exact interface to implement. In short:
   copyleft one (GPL, AGPL, ...) isn't automatically disqualifying, but
   it needs its own extra (per the rule above, doubly so here) and an
   explicit note in THIRD_PARTY_NOTICES.md, not a silent addition to the
-  table as if it were just another MIT/BSD package. `python-kasa`
-  (GPL-3.0-or-later) is the one existing example of this - see
-  [THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
+  table as if it were just another MIT/BSD package.
 - **Never commit real device data.** `devices.json`, `secrets*.json`,
   `config.yaml` and anything else under `config/` other than the
   `*.example.*` files are gitignored on purpose - keep it that way, and

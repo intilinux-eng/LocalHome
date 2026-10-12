@@ -279,9 +279,9 @@ def _value(api, name):
 
 
 def test_the_vmc_buttons_set_the_vmc_not_the_first_level_on_the_page(open_page, api):
-    """On the real board the Tapo strips' levels come before the VMC's
-    speed; the VMC's buttons used to set the first one they found - the
-    sofa strip went to 50%, the VMC didn't move."""
+    """A light's level is listed before the VMC's speed; the VMC's
+    buttons used to set the first number they found - the lamp went to
+    50%, the VMC didn't move."""
     lamp_before = _value(api, "Lampada Livello")
     page = _open_home(open_page).page
     vmc = page.locator("#plant-body button[data-vmc]", has_text="Massimo")

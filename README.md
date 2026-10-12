@@ -213,7 +213,6 @@ generic, and a few other devices run in the same apartment:
 | `switch` / `number` | `shelly_light` | Shelly Gen2/Gen3 dimmers, over RPC on MQTT | Yes |
 | `cover` | `tuya_curtain_switch` | Tuya curtain switches (e.g. LoraTap roller shutter modules) | Yes (LAN) |
 | `climate` | `tuya_air_quality` | Tuya 9-in-1/12-in-1 air-quality sensors | Yes (LAN) |
-| `switch` / `number` | `tplink_led_strip` | TP-Link Kasa/Tapo LED strips, found again by MAC when their IP changes | Yes (LAN) - see [docs/integrations/tplink.md](docs/integrations/tplink.md) |
 | `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
 | `switch` | `meross_plug` | Meross smartplugs | No - Meross cloud, see [docs/integrations/meross.md](docs/integrations/meross.md) |
 | `climate` / `switch` / `number` | `simulated` | **No hardware** - try a whole setup before owning it | - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
@@ -229,7 +228,7 @@ config/            Your config.yaml, device inventories and secrets (gitignored,
 demo/config/       The demo: every device simulated
 src/localhome/
   core/            Driver interfaces, the plugin registry, background pollers
-  drivers/         One subpackage per brand/protocol (mqtt, tuya, tplink, meross, ewelink, simulated, ...)
+  drivers/         One subpackage per brand/protocol (mqtt, tuya, meross, ewelink, simulated, ...)
   services/        Thermostat, schedules, interlocks, history, Shelly health, system status, LED matrix
   web/             Flask app, templates, static files, locales/
 tests/             Unit tests (no hardware, no network) and browser tests (tests/ui)
@@ -244,7 +243,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 - [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation
 - [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: limits, tuning, updating
 - [docs/configuration.md](docs/configuration.md) - every `config.yaml` option, and the admin panel
-- [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, TP-Link, Meross, eWeLink, Telegram, simulated)
+- [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, Meross, eWeLink, Telegram, simulated)
 - [docs/deployment.md](docs/deployment.md) - Docker, systemd, addressing by name, pinned versions
 - [docs/troubleshooting.md](docs/troubleshooting.md) - known error messages and fixes
 - [ARCHITECTURE.md](ARCHITECTURE.md), [docs/adding-a-driver.md](docs/adding-a-driver.md), [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -265,9 +264,9 @@ testing in two real apartments were not:
   eMMC writes, report timings, signal levels: the numbers in these
   docs come from the devices, and the docs say where they don't.
 - **The field decides.** Most of the robustness in here - watchdogs,
-  lost-report counting, finding strips by MAC, the router checks -
-  exists because something went wrong in a real apartment first, and
-  was then reproduced, fixed, tested and written down.
+  lost-report counting, the router checks - exists because something
+  went wrong in a real apartment first, and was then reproduced, fixed,
+  tested and written down.
 - **Small commits, written for a reader.** Each says what changed and
   why; [CHANGELOG.md](CHANGELOG.md) tells the story at a higher level.
 
@@ -283,13 +282,11 @@ live with - and hand over to the next apartment.
 ## Legal & licensing
 
 LocalHome is [MIT licensed](LICENSE). Its dependencies are permissive
-(MIT/BSD/Apache) except `python-kasa` (GPL-3.0-or-later), pulled in only
-by the opt-in `[tplink]` extra - see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically).
+(MIT/BSD/Apache) - see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The `ewelink_powct` driver relies on unofficial eWeLink app credentials,
 not sanctioned by Coolkit/eWeLink - see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically).
 
 This project is not affiliated with, endorsed by, or sponsored by Shelly
-(Allterco), Arduino, Tuya, LoraTap, Sonoff, Coolkit/eWeLink, Meross,
-TP-Link or Telegram. All trademarks belong to their respective owners.
+(Allterco), Arduino, Tuya, LoraTap, Sonoff, Coolkit/eWeLink, Meross
+or Telegram. All trademarks belong to their respective owners.

@@ -11,7 +11,3 @@ requests>=2.31,<3
 PyYAML>=6.0,<7
 paho-mqtt>=2.0,<3
 msgpack>=1.0,<2
-# python-kasa (TP-Link Kasa/Tapo) is GPL-3.0-or-later, unlike everything
-# above - opt-in only, add it yourself (or `pip install -e ".[tplink]"`
-# instead of this file) if you're using tplink_led_strip. See
-# THIRD_PARTY_NOTICES.md#a-note-on-python-kasa-specifically.

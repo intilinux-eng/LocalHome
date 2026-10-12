@@ -70,7 +70,7 @@ def test_an_entry_with_enabled_false_is_left_out(tmp_path):
     path.write_text("""
 integrations:
   - kind: switch
-    type: tplink_led_strip
+    type: unconfigured_switch
     name: "Divano"
     enabled: false
   - kind: switch

@@ -7,10 +7,9 @@ of the passive subscribe-and-cache pattern the other generic MQTT drivers
 use, and docs/integrations/mqtt.md for the real device this was verified
 against.
 
-Registers under both `switch` (on/off) and `number` (brightness) kinds,
-same "two config.yaml entries, one physical device" split as
-drivers/tplink/led_strip.py - use `paired_switch` on the number entry so
-the dashboard shows one card with a toggle and a slider instead of two.
+Registers under both `switch` (on/off) and `number` (brightness) kinds -
+use `paired_switch` on the number entry so the dashboard shows one card
+with a toggle and a slider instead of two.
 
 config.yaml options:
   broker_file (or inline broker: {...}): connection details

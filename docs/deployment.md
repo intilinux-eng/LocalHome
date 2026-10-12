@@ -73,10 +73,6 @@ cd ~/localhome
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e . -c constraints.txt
-#    Some drivers need an optional extra on top - only if you use them,
-#    e.g. TP-Link Kasa devices: .venv/bin/pip install -e .[tplink] -c constraints.txt
-#    (GPL-licensed, hence opt-in - see THIRD_PARTY_NOTICES.md). Step 5's
-#    doctor names any extra a configured device is missing.
 
 # 3. Using MQTT devices? Point mosquitto at your LAN instead of just
 #    localhost (apt's package already enabled its systemd unit, so it
@@ -154,7 +150,7 @@ cp config/config.climate.example.yaml config/config.yaml
 cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
 ```
 
-It has no devices at all: no Tuya, Meross, eWeLink or TP-Link entries to
+It has no devices at all: no Tuya, Meross or eWeLink entries to
 remove, nothing that fails to load. Every device is already listed in
 `/climate-admin`, to configure - the two zones, Stanze and Bagni (H&T
 sensor + relay valve), the bathroom bypass valve, the dehumidifier, the
@@ -229,7 +225,7 @@ installs without the file.
 To move to newer versions, on a PC first:
 
 ```bash
-python3 -m venv /tmp/lh-new && /tmp/lh-new/bin/pip install -U -e ".[dev,ui,tplink]"
+python3 -m venv /tmp/lh-new && /tmp/lh-new/bin/pip install -U -e ".[dev,ui]"
 /tmp/lh-new/bin/pytest && /tmp/lh-new/bin/pytest -m ui
 /tmp/lh-new/bin/pip freeze --exclude-editable --exclude pip   # the new versions
 ```

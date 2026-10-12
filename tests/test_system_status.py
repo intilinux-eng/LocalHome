@@ -1,8 +1,7 @@
 """The admin panel's system status and `localhome-cli doctor` both exist to
 make an installation's own faults visible: before them, a driver whose
-optional package wasn't installed (the real case: python-kasa missing on
-the board) only left one warning line in the startup log, and doctor
-still said "No configuration problems found".
+optional package wasn't installed only left one warning line in the
+startup log, and doctor still said "No configuration problems found".
 """
 import time
 
@@ -47,33 +46,36 @@ def test_manager_keeps_the_reason_an_integration_failed(tmp_path):
 
 
 def test_unknown_driver_error_names_the_install_command_for_a_skipped_module(monkeypatch):
-    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.tplink.led_strip", "kasa")
+    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.custom.special", "custompkg")
+    monkeypatch.setitem(registry._EXTRA_FOR_PACKAGE, "custompkg", "custom")
 
     try:
-        registry.create("light", "tplink_led_strip", {})
+        registry.create("light", "custom_light", {})
     except ValueError as exc:
         message = str(exc)
     else:
         raise AssertionError("expected a ValueError")
 
-    assert "localhome.drivers.tplink.led_strip" in message
-    assert "pip install -e .[tplink]" in message
+    assert "localhome.drivers.custom.special" in message
+    assert "pip install -e .[custom]" in message
 
 
-def test_install_hint_falls_back_to_the_bare_package_name():
-    assert registry.install_hint("kasa") == "pip install -e .[tplink]"
+def test_install_hint_falls_back_to_the_bare_package_name(monkeypatch):
+    monkeypatch.setitem(registry._EXTRA_FOR_PACKAGE, "custompkg", "custom")
+    assert registry.install_hint("custompkg") == "pip install -e .[custom]"
     assert registry.install_hint("somepkg") == "pip install somepkg"
 
 
 def test_skipped_driver_modules_lists_each_with_its_remedy(monkeypatch):
-    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.tplink.led_strip", "kasa")
+    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.custom.special", "custompkg")
+    monkeypatch.setitem(registry._EXTRA_FOR_PACKAGE, "custompkg", "custom")
 
     listed = {item["module"]: item for item in registry.skipped_driver_modules()}
 
-    assert listed["localhome.drivers.tplink.led_strip"] == {
-        "module": "localhome.drivers.tplink.led_strip",
-        "missing_package": "kasa",
-        "install": "pip install -e .[tplink]",
+    assert listed["localhome.drivers.custom.special"] == {
+        "module": "localhome.drivers.custom.special",
+        "missing_package": "custompkg",
+        "install": "pip install -e .[custom]",
     }
 
 
@@ -89,15 +91,16 @@ def test_doctor_reports_a_failed_integration_as_a_problem(tmp_path, capsys):
 
 
 def test_doctor_mentions_a_skipped_optional_driver_without_failing(tmp_path, capsys, monkeypatch):
-    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.tplink.led_strip", "kasa")
+    monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.custom.special", "custompkg")
+    monkeypatch.setitem(registry._EXTRA_FOR_PACKAGE, "custompkg", "custom")
     config = load_config(_write(tmp_path, "integrations: []\n"))
 
     exit_code = _run_doctor(config, DeviceManager(config), apply_to_config(config))
 
     out = capsys.readouterr().out
     assert exit_code == 0
-    assert "Optional driver not installed: localhome.drivers.tplink.led_strip" in out
-    assert "pip install -e .[tplink]" in out
+    assert "Optional driver not installed: localhome.drivers.custom.special" in out
+    assert "pip install -e .[custom]" in out
 
 
 def test_doctor_shows_the_season_actually_in_force_not_the_config_default(tmp_path, capsys):
@@ -344,12 +347,12 @@ def test_an_unsynchronized_clock_is_a_problem():
 
 
 def test_problem_details_drop_the_list_of_every_driver():
-    error = ("ValueError: No driver registered for kind='switch' type='tplink_led_strip'. Driver modules skipped "
-             "for a missing package: localhome.drivers.tplink.led_strip (needs: pip install -e .[tplink]). "
+    error = ("ValueError: No driver registered for kind='switch' type='custom_switch'. Driver modules skipped "
+             "for a missing package: localhome.drivers.custom.special (needs: pip install custompkg). "
              "Available kind/type combinations: ['climate/simulated', 'switch/simulated']")
-    (problem,) = system_status.problems([], [{"kind": "switch", "type": "tplink_led_strip", "name": "Divano",
+    (problem,) = system_status.problems([], [{"kind": "switch", "type": "custom_switch", "name": "Divano",
                                               "error": error}], {"low": False})
-    assert problem["detail"].endswith("(needs: pip install -e .[tplink]).")
+    assert problem["detail"].endswith("(needs: pip install custompkg).")
     assert "Available kind/type" not in problem["detail"]
 
 
