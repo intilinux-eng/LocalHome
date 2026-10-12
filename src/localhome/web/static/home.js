@@ -1201,17 +1201,21 @@ function renderOutdoor() {
   chip.hidden = false;
   const rh = reading.humidity_pct != null
     ? `<span class="outdoor-rh">${ICONS.drop}${fmt(reading.humidity_pct, 0)}% ${esc(tr("home.humidity").toLowerCase())}</span>` : "";
-  // Today's lowest and highest so far (the board's, kept as it records) -
-  // the reading itself counted too: it may be newer than the last sample.
-  const today = ((state.dayRanges || {})["Outdoor Sensor"] || {}).temperature_c;
+  // Today's lowest and highest so far (the board's, kept as it records),
+  // and when each came - the reading itself counted too: it may be newer
+  // than the last sample (then it's now's).
+  const today = withReading(((state.dayRanges || {})["Outdoor Sensor"] || {}).temperature_c, reading.temperature_c);
   let range = "";
-  const low = today ? fmt(Math.min(today.min, reading.temperature_c)) : "";
-  const high = today ? fmt(Math.max(today.max, reading.temperature_c)) : "";
+  const low = today ? fmt(today.min) : "";
+  const high = today ? fmt(today.max) : "";
   // "min 19,4° · max 19,4°" says nothing the reading doesn't.
   if (today && low !== high) {
+    const at = key => (today[`${key}_at`] == null ? "" : ` <small>${esc(epochHhmm(today[`${key}_at`]))}</small>`);
+    const said = today.min_at == null || today.max_at == null ? tr("home.outdoor_range", { min: low, max: high })
+      : tr("home.outdoor_range_at", { min: low, max: high, min_at: epochHhmm(today.min_at), max_at: epochHhmm(today.max_at) });
     // Short, and broken only between the two on a narrow phone.
-    range = `<span class="outdoor-range" aria-label="${esc(tr("home.outdoor_range", { min: low, max: high }))}">
-      <span>${esc(tr("home.outdoor_min", { value: low }))}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}</span></span>`;
+    range = `<span class="outdoor-range" aria-label="${esc(said)}">
+      <span>${esc(tr("home.outdoor_min", { value: low }))}${at("min")}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}${at("max")}</span></span>`;
   }
   morph(chip, `${label}
     <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}`);
@@ -1806,8 +1810,15 @@ function epochHhmm(seconds) {
 // reading itself: it may be newer than the last sample, as outside's.
 function todayRange(zone) {
   const kept = ((state.dayRanges || {})[zone.sensor] || {}).temperature_c;
-  if (!kept || zone.temperature_c == null || !zone.sensor_ok || zone.sensor_manual) return kept || null;
-  const t = Math.round(zone.temperature_c * 10) / 10;
+  if (!zone.sensor_ok || zone.sensor_manual) return kept || null;
+  return withReading(kept, zone.temperature_c);
+}
+
+// A day's lowest and highest with a newer reading counted - a new lowest
+// or highest is now's.
+function withReading(kept, reading) {
+  if (!kept || reading == null) return kept || null;
+  const t = Math.round(reading * 10) / 10;
   const now = Math.round(wallToEpoch(boardNow()) / 1000);
   return { min: Math.min(kept.min, t), max: Math.max(kept.max, t),
            min_at: t < kept.min ? now : kept.min_at, max_at: t > kept.max ? now : kept.max_at };

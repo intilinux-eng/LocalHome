@@ -1019,6 +1019,7 @@
     "outdoor_none": "Sensore non ancora collegato",
     "outdoor_waiting": "In attesa del primo invio",
     "outdoor_range": "Oggi: minima {min}°, massima {max}°",
+    "outdoor_range_at": "Oggi: minima {min}° alle {min_at}, massima {max}° alle {max_at}",
     "outdoor_min": "min {value}°",
     "outdoor_max": "max {value}°",
     "outside": "Fuori",

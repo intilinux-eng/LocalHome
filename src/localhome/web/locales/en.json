@@ -1019,6 +1019,7 @@
     "outdoor_none": "No sensor connected yet",
     "outdoor_waiting": "Waiting for its first report",
     "outdoor_range": "Today: low {min}°, high {max}°",
+    "outdoor_range_at": "Today: low {min}° at {min_at}, high {max}° at {max_at}",
     "outdoor_min": "low {value}°",
     "outdoor_max": "high {value}°",
     "outside": "Outside",
