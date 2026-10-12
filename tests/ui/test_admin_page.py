@@ -138,13 +138,13 @@ def test_the_vmc_speeds_are_set_here_and_shown_on_the_home_page(open_page, api):
     page.evaluate("document.getElementById('plant-settings').open = true")
     page.fill("#vmc-speed-night", "60")
     page.click("#save-vmc-speeds-btn")
-    assert eventually(page, lambda: "Notte deve essere" in page.inner_text("#save-vmc-speeds-result"))
+    assert eventually(page, lambda: "più alta della precedente" in page.inner_text("#save-vmc-speeds-result"))
     page.fill("#vmc-speed-night", "30")
     page.click("#save-vmc-speeds-btn")
     assert eventually(page, lambda: api("/api/climate-admin/vmc-speeds")["speeds"]["night"] == 30)
     home = open_page("/", 390).page
     home.wait_for_selector("#vmc-card button[data-vmc]", timeout=20000)
-    assert "30%" in home.locator("#vmc-card button[data-vmc]").first.inner_text()
+    assert "30%" in home.locator("#vmc-card button[data-vmc]", has_text="Notte").inner_text()
     api("/api/climate-admin/vmc-speeds", before)
     # The browser logs the refused save's 400; nothing else.
     assert [e for e in opened.errors if "400" not in e] == []
@@ -169,7 +169,8 @@ def test_the_vmc_automatics_are_off_until_switched_on_here(open_page, api):
         said = box.locator(".vmc-auto-speed").all_inner_texts()
         assert said == [f"Se va più piano: Massimo ({speeds['boost']}%). Nelle ore silenziose: Giorno ({speeds['day']}%).",
                         f"Se va più veloce: Notte ({speeds['night']}%), mai spenta.",
-                        f"Se va più piano: Giorno ({speeds['day']}%), mai Massimo."]
+                        f"Se va più piano: Giorno ({speeds['day']}%), mai Massimo.",
+                        f"Se va più veloce: Notte ({speeds['night']}%), mai spenta."]
         box.locator("[data-vmc-auto='shower']").check()
         box.locator("[data-vmc-auto-zone='bathroom_zone']").select_option(ZONE_B)
         box.locator("[data-vmc-auto='shower_max_minutes']").fill("45")
@@ -184,6 +185,30 @@ def test_the_vmc_automatics_are_off_until_switched_on_here(open_page, api):
         assert api("/api/climate-admin/vmc-auto")["settings"]["shower"] is False
     finally:
         api("/api/climate-admin/vmc-auto", {"reset": True})
+    assert opened.errors == []
+
+
+def test_the_vmc_filters_are_set_here_and_cleaned_today(open_page, api):
+    """Under the VMC's automatics: no reminder until a cleaning is
+    recorded; how often, the last day, and "cleaned today" - the same
+    reminder the home card shows."""
+    api("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    try:
+        page.wait_for_selector("#vmc-filters:not([hidden]) #vmc-filters-cleaned-btn", state="attached", timeout=20000)
+        page.evaluate("document.getElementById('plant-settings').open = true")
+        box = page.locator("#vmc-filters")
+        assert "non ancora registrata" in box.inner_text()
+        page.fill("#vmc-filters-interval", "60")
+        page.click("#vmc-filters-save-btn")
+        assert eventually(page, lambda: api("/api/climate-admin/vmc-filters")["filters"]["interval_days"] == 60)
+        page.click("#vmc-filters-cleaned-btn")
+        assert eventually(page, lambda: api("/api/climate-admin/vmc-filters")["filters"]["state"] == "ok")
+        assert eventually(page, lambda: "tra 60 giorni" in box.inner_text())
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    finally:
+        api("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
     assert opened.errors == []
 
 

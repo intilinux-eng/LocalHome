@@ -218,7 +218,7 @@
       <h3>{{ t.climate_admin.vmc_speeds_title }}</h3>
       <p class="hint-text">{{ t.climate_admin.vmc_speeds_note }}</p>
       <div class="admin-speed-fields">
-        {% for key in ("night", "day", "boost") %}
+        {% for key in ("min", "night", "day", "high", "boost") %}
         <div class="admin-field">
           <label for="vmc-speed-{{ key }}">{{ t.vmc_presets[key] }} (%)</label>
           <input type="number" min="1" max="100" step="1" inputmode="numeric" id="vmc-speed-{{ key }}" data-speed="{{ key }}">
@@ -234,6 +234,9 @@
          night cooling (services/vmc_auto.py), all off by default: filled
          by loadVmcAuto(), hidden without a VMC. -->
     <div class="admin-zone-card settings-extra" id="vmc-auto" hidden></div>
+    <!-- The VMC's filters: the reminder the home card shows (services/
+         vmc_filters.py) - filled by loadVmcFilters(), hidden without a VMC. -->
+    <div class="admin-zone-card settings-extra" id="vmc-filters" hidden></div>
   </details>
 
   <!-- ========================================================== devices -->

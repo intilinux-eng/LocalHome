@@ -605,7 +605,8 @@ def test_vmc_card_has_modes_and_no_toggle():
     switch, speed = build_extra_dimmer_integrations({"vmc_device_id": "shelly0110dimg3-AAAA"}, "broker.json")
 
     assert switch.options["hide_toggle"] is True
-    assert [(p["key"], p["value"]) for p in speed.options["presets"]] == [("night", 25), ("day", 50), ("boost", 100)]
+    assert [(p["key"], p["value"]) for p in speed.options["presets"]] == [
+        ("min", 10), ("night", 25), ("day", 50), ("high", 75), ("boost", 100)]
     assert speed.options["on_with_value"] is True
 
 

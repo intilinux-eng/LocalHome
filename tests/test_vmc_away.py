@@ -1,5 +1,5 @@
-"""Away from home the VMC runs at its night speed or is off - the
-resident's choice in the away sheet, remembered, night unless one is made
+"""Away from home the VMC runs at its minimum or night speed, or is off -
+the resident's choice in the away sheet, remembered, night unless one is made
 - over everything else (program, automatics, a timed boost, a hand pick),
 and goes back to its program, or as it was, on return."""
 import json
@@ -11,7 +11,7 @@ from localhome.services.vmc_auto import DEFAULTS, VmcAuto, VmcAutoSettingsStore
 from localhome.services.vmc_schedule import DAYS, VmcScheduleController, VmcScheduleStore
 from localhome.web.app import create_app
 
-SPEEDS = {"night": 25, "day": 50, "boost": 100}
+SPEEDS = {"min": 10, "night": 25, "day": 50, "high": 75, "boost": 100}
 TUESDAY = datetime(2026, 1, 13)
 
 
@@ -112,6 +112,15 @@ def test_away_at_night_speed_then_back_as_it_was(tmp_path):
     assert house.control.status(now=at(9))["away"] == {"mode": "night", "device": "VMC Speed", "value": 25}
     house.back(at(18))
     assert house.manager.written == [25, 50] and "away" not in house.control.status(now=at(18))
+
+
+def test_away_at_the_minimum_then_back_as_it_was(tmp_path):
+    house = House(tmp_path, value=50)
+    house.leave("min", at(9))
+    assert house.manager.reading() == (10, True)
+    assert house.control.status(now=at(9))["away"] == {"mode": "min", "device": "VMC Speed", "value": 10}
+    house.back(at(18))
+    assert house.manager.reading() == (50, True)
 
 
 def test_away_off_then_back_on_at_its_speed(tmp_path):

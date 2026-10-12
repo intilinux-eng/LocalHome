@@ -808,15 +808,54 @@ body[data-running="true"] .hero-season::before {
 /* The away sheet's VMC choice: night or off, one lit. */
 .away-vmc .btn[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
+/* Its own switch, at the end of the head. */
+.vmc-power { flex: none; margin-left: 4px; }
+/* Five levels in one row, phone too. */
+.vmc-controls { display: grid; gap: 14px; }
+.vmc-presets[data-count="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.vmc-presets[data-count="5"] .vmc-preset { min-height: 82px; padding: 12px 2px 10px; }
+.vmc-presets[data-count="5"] .vmc-preset svg { width: 24px; height: 24px; }
+.vmc-presets[data-count="5"] .vmc-preset-name { font-size: 0.82rem; }
+@media (max-width: 359px) {
+  /* A small phone: three and two, and a head that fits its switch. */
+  .vmc-presets[data-count="5"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .vmc-head { gap: 8px; }
+  .vmc-head .tile-value { font-size: 1.5rem; }
+  .vmc-fan { width: 40px; height: 40px; }
+  .vmc-fan svg { width: 24px; height: 24px; }
+}
+/* The fine slider: the levels as ticks, from the minimum to 100%. */
+.vmc-fine { display: grid; gap: 2px; }
+.vmc-fine input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); height: 28px; }
+.vmc-fine-scale { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.vmc[data-on="false"] .vmc-fine input[type="range"] { accent-color: var(--text-3); }
+.vmc-side { display: grid; gap: 10px; align-content: start; }
+.vmc-side .vmc-auto-note { margin: 0; }
+/* The filters: from two weeks before, louder once due. */
+.vmc-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; border-radius: var(--radius-s);
+               background: var(--surface-2); color: var(--text-2); font-size: 0.88rem; font-weight: 600; }
+.vmc-filters > svg { flex: none; width: 18px; height: 18px; }
+.vmc-filters > span { flex: 1; min-width: 0; }
+.vmc-filters[data-state="due"] { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn); }
+.vmc-filters .chip { box-shadow: none; font-weight: 600; padding: 8px 14px; }
+
 @media (min-width: 760px) {
-  .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-areas: "head presets" "boost presets"; column-gap: 28px; align-items: center; }
+  .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "head controls" "side controls"; column-gap: 28px; align-items: start; }
   .vmc-head { grid-area: head; }
-  .vmc-presets { grid-area: presets; }
-  .vmc-boost, .vmc-under { grid-area: boost; }
+  .vmc-controls { grid-area: controls; }
+  .vmc-side { grid-area: side; }
 }
 
-/* The program: manual, or one of the ready-made ones (home.js vmcTile). */
-.vmc-plan { padding-top: 16px; border-top: 1px solid var(--line); }
+/* The program: manual, or one of the ready-made ones (home.js vmcTile),
+   behind one line that opens. */
+.vmc-plan { padding-top: 12px; border-top: 1px solid var(--line); }
+.vmc-plan > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; }
+.vmc-plan > summary::-webkit-details-marker { display: none; }
+.vmc-plan > summary .sched-season-label { margin: 0; }
+.vmc-plan-name { flex: 1; font-weight: 600; color: var(--text); }
+.vmc-plan > summary .chevron { width: 20px; height: 20px; color: var(--text-3); transition: transform 0.2s; }
+.vmc-plan[open] > summary .chevron { transform: rotate(180deg); }
+.vmc-plan[open] > summary { margin-bottom: 10px; }
 .vmc-programs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr)); gap: 8px; margin-bottom: 10px; }
 .vmc-template {
   display: grid;

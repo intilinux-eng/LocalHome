@@ -277,7 +277,7 @@
 .admin-field label, .admin-field > span { font-size: 0.82rem; color: var(--text-2); font-weight: 600; }
 
 .admin-page input[type="text"], .admin-page input[type="number"], .admin-page input[type="password"],
-.admin-page input[type="time"], .admin-page input:not([type]), .admin-page select {
+.admin-page input[type="time"], .admin-page input[type="date"], .admin-page input:not([type]), .admin-page select {
   min-height: 48px;
   width: 100%;
   padding: 10px 12px;
@@ -551,6 +551,10 @@
 #vmc-auto .vmc-auto-wide { grid-column: 1 / -1; }
 .vmc-auto-fields[aria-disabled="true"] { opacity: 0.5; }
 .vmc-auto-now[data-under-way="true"] { color: var(--accent); font-weight: 600; }
+.vmc-filters-now { font-weight: 600; }
+.vmc-filters-now[data-state="soon"] { color: var(--accent); }
+.vmc-filters-now[data-state="due"] { color: var(--bad); }
+.vmc-filters-fields { margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 
 /* Under a Shelly id field: what the device said when the id went in. */
 .shelly-check { margin: 4px 0 0; }

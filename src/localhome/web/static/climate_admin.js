@@ -692,10 +692,13 @@ async function loadVmcAuto() {
       <p class="hint-text">${t("vmc_auto_quiet_help")}</p>
     </div>
     <div class="vmc-auto-rule">
+      <div class="dehum-grid">${zone("reference_zone")}</div>
+      <p class="hint-text">${t("vmc_auto_reference_help")}</p>
+    </div>
+    <div class="vmc-auto-rule">
       <strong>${t("vmc_auto_summer")}</strong>
       <p class="hint-text">${t("vmc_auto_summer_help")}</p>
       ${data.outdoor ? "" : `<p class="hint-text admin-error">${t("vmc_auto_needs_outdoor")}</p>`}
-      <div class="dehum-grid">${zone("reference_zone")}</div>
       <div class="vmc-auto-sub" data-rule="humid">
         ${check("humid", "vmc_auto_humid")}
         ${speed("humid")}
@@ -709,6 +712,16 @@ async function loadVmcAuto() {
           ${field("cooling_from_c", "°C", 0.5)}${field("cooling_delta_c", "°C", 0.5)}${field("cooling_outdoor_min_c", "°C", 0.5)}
         </div>
         <p class="hint-text">${t("vmc_auto_cooling_help")}</p>
+      </div>
+    </div>
+    <div class="vmc-auto-rule">
+      <strong>${t("vmc_auto_winter")}</strong>
+      <p class="hint-text">${t("vmc_auto_winter_help")}</p>
+      <div class="vmc-auto-sub" data-rule="dry">
+        ${check("dry", "vmc_auto_dry")}
+        ${speed("dry")}
+        <div class="dehum-grid vmc-auto-fields">${field("dry_below_pct", "%")}</div>
+        <p class="hint-text">${t("vmc_auto_dry_help")}</p>
       </div>
     </div>
     <div class="toolbar admin-actions">
@@ -756,6 +769,84 @@ async function saveVmcAuto(button, reset = false) {
   } finally {
     button.disabled = false;
   }
+}
+
+// The VMC's filters (services/vmc_filters.py): how often, when last
+// cleaned - the home card reminds from two weeks before.
+function isoDay(iso) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(LOCALE, { day: "numeric", month: "long", year: "numeric" });
+}
+
+async function loadVmcFilters() {
+  const box = document.getElementById("vmc-filters");
+  if (!box) return;
+  let speeds, data;
+  try {
+    speeds = await (await fetch("/api/climate-admin/vmc-speeds", { cache: "no-store" })).json();
+    data = await (await fetch("/api/climate-admin/vmc-filters", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  box.hidden = !(speeds.ok && speeds.device && data.ok);
+  if (box.hidden) return;
+  const f = data.filters;
+  const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
+  const left = f.days_left > 0 ? t("vmc_filters_left_in", { n: f.days_left })
+    : f.days_left === 0 ? t("vmc_filters_left_today") : t("vmc_filters_left_late", { n: -f.days_left });
+  const now = f.cleaned_on
+    ? t("vmc_filters_last", { date: isoDay(f.cleaned_on), due: isoDay(f.due_on), left })
+    : t("vmc_filters_never");
+  box.innerHTML = `
+    <h3>${t("vmc_filters_heading")}</h3>
+    <p class="hint-text">${t("vmc_filters_note")}</p>
+    <p class="hint-text vmc-filters-now" data-state="${f.state}">${now}</p>
+    <div class="toolbar admin-actions">
+      <button class="tbtn open" type="button" id="vmc-filters-cleaned-btn" onclick="vmcFiltersCleaned(this)">${t("vmc_filters_cleaned_button")}</button>
+    </div>
+    <div class="dehum-grid vmc-filters-fields">
+      <div class="admin-field"><label for="vmc-filters-interval">${t("setting_interval_days")}</label>
+        <span class="dehum-pct"><input type="number" id="vmc-filters-interval" min="14" max="365" step="1" value="${f.interval_days}"> ${t("vmc_filters_days")}</span></div>
+      <div class="admin-field"><label for="vmc-filters-day">${t("setting_cleaned_on")}</label>
+        <input type="date" id="vmc-filters-day" value="${f.cleaned_on || ""}" max="${new Date().toISOString().slice(0, 10)}"></div>
+    </div>
+    <div class="toolbar admin-actions">
+      <button class="tbtn" type="button" id="vmc-filters-save-btn" onclick="saveVmcFilters(this)">${t("vmc_filters_save")}</button>
+    </div>
+    <p class="hint-text" id="vmc-filters-result"></p>`;
+}
+
+async function postVmcFilters(button, path, body, done) {
+  const result = document.getElementById("vmc-filters-result");
+  button.disabled = true;
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!data.ok) {
+      result.textContent = tr("sensors.error_prefix") + apiError(data);
+      result.className = "hint-text admin-error";
+      return;
+    }
+    await loadVmcFilters();
+    const after = document.getElementById("vmc-filters-result");
+    after.textContent = tr(done);
+    after.className = "hint-text admin-success";
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function vmcFiltersCleaned(button) {
+  return postVmcFilters(button, "/api/vmc-filters/cleaned", {}, "climate_admin.vmc_filters_cleaned_done");
+}
+
+function saveVmcFilters(button) {
+  const day = document.getElementById("vmc-filters-day").value;
+  return postVmcFilters(button, "/api/climate-admin/vmc-filters", {
+    interval_days: Number(document.getElementById("vmc-filters-interval").value), cleaned_on: day || null,
+  }, "climate_admin.vmc_filters_saved");
 }
 
 async function saveVmcSpeeds(button) {
@@ -3134,6 +3225,7 @@ loadExtraSensor();
 loadVmc();
 loadVmcSpeeds();
 loadVmcAuto();
+loadVmcFilters();
 watchDeviceRows();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);

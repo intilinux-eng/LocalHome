@@ -292,16 +292,82 @@ def test_the_vmc_buttons_set_the_vmc_not_the_first_level_on_the_page(open_page, 
     assert _value(api, "Lampada Livello") == lamp_before, "the lamp's level didn't move"
 
 
-def test_the_vmc_is_turned_off_from_its_card_and_a_speed_starts_it_again(open_page, api):
+def test_the_vmc_is_turned_off_by_its_switch_and_a_speed_or_the_switch_starts_it_again(open_page, api):
     page = _open_home(open_page).page
-    off = page.locator("#plant-body button[data-vmc-off]")
-    power = off.get_attribute("data-device")
-    off.click()
-    assert eventually(page, lambda: api(f"/api/sensors/{urllib.parse.quote(power, safe='')}")["is_on"] is False)
-    assert eventually(page, lambda: off.get_attribute("aria-pressed") == "true")
+    switch = page.locator("#plant-body button[data-vmc-power]")
+    power = switch.get_attribute("data-device")
+    is_on = lambda: api(f"/api/sensors/{urllib.parse.quote(power, safe='')}")["is_on"]
+    switch.click()
+    assert eventually(page, lambda: is_on() is False)
+    assert eventually(page, lambda: switch.get_attribute("aria-checked") == "false")
+    assert page.locator("#vmc-card .tile-note").inner_text() == "Spenta"
     page.locator("#plant-body button[data-vmc]", has_text="Notte").click()
-    assert eventually(page, lambda: api(f"/api/sensors/{urllib.parse.quote(power, safe='')}")["is_on"] is True)
-    assert eventually(page, lambda: off.get_attribute("aria-pressed") == "false")
+    assert eventually(page, lambda: is_on() is True)
+    assert eventually(page, lambda: switch.get_attribute("aria-checked") == "true")
+    switch.click()
+    assert eventually(page, lambda: is_on() is False)
+    switch.click()
+    assert eventually(page, lambda: is_on() is True), "the switch starts it again too"
+
+
+def test_five_levels_a_fine_slider_from_the_minimum_and_why_it_runs_so(open_page, api):
+    """The levels with their percentages; the slider from the slowest
+    level to 100, sent when let go - a speed between levels is "custom";
+    the line under the name says why it runs at that speed."""
+    _reset_vmc(api)
+    opened = _open_home(open_page)
+    page = opened.page
+    card = page.locator("#vmc-card")
+    names = [b.locator(".vmc-preset-name").inner_text() for b in card.locator("button[data-vmc]").all()]
+    assert names == ["Minimo", "Notte", "Giorno", "Alto", "Massimo"]
+    speed = card.get_attribute("data-device")
+    lowest = min(int(b.get_attribute("data-vmc")) for b in card.locator("button[data-vmc]").all())
+    fine = card.locator("input[data-vmc-fine]")
+    assert fine.get_attribute("min") == str(lowest) and fine.get_attribute("max") == "100"
+    fine.evaluate("(el) => { el.value = 62; el.dispatchEvent(new Event('input', { bubbles: true }));"
+                  " el.dispatchEvent(new Event('change', { bubbles: true })); }")
+    assert eventually(page, lambda: _value(api, speed) == 62)
+    assert eventually(page, lambda: "Personalizzata 62%" in card.locator(".tile-note").inner_text())
+    assert "scelta a mano" in card.locator(".tile-note").inner_text()
+    card.locator("button[data-vmc]", has_text="Alto").click()
+    assert eventually(page, lambda: _value(api, speed) == 75)
+    assert eventually(page, lambda: card.locator(".tile-note").inner_text().startswith("Alto"))
+    assert eventually(page, lambda: fine.input_value() == "75"), "the slider follows a level picked"
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert opened.errors == []
+
+
+def test_guests_high_for_three_hours_and_back(open_page, api):
+    _reset_vmc(api)
+    page = _open_home(open_page).page
+    guests = page.locator("#vmc-card .vmc-boost", has_text="Ospiti")
+    assert "Alto per" in guests.inner_text()
+    guests.locator("button[data-vmc-boost='180']").click()
+    assert eventually(page, lambda: (_vmc(api)["status"].get("override") or {}).get("value") == 75)
+    assert eventually(page, lambda: "Alto a tempo" in page.inner_text("#vmc-card"))
+    page.click("#vmc-card button[data-vmc-boost-cancel]")
+    assert eventually(page, lambda: "override" not in _vmc(api)["status"])
+    _reset_vmc(api)
+
+
+def test_the_filters_reminder_and_cleaned_today(open_page, api):
+    """Nothing until a cleaning is recorded; due, the card says so and
+    "cleaned today" from there starts it over."""
+    from datetime import date, timedelta
+    api("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
+    page = _open_home(open_page).page
+    assert page.locator("#vmc-card .vmc-filters").count() == 0
+    try:
+        api("/api/climate-admin/vmc-filters", {"cleaned_on": (date.today() - timedelta(days=95)).isoformat()})
+        page.evaluate("refreshDevices()")
+        row = page.locator("#vmc-card .vmc-filters")
+        assert eventually(page, lambda: row.count() == 1 and "da 5 giorni" in row.inner_text())
+        assert row.get_attribute("data-state") == "due"
+        row.locator("button[data-vmc-filters-cleaned]").click()
+        assert eventually(page, lambda: api("/api/climate-admin/vmc-filters")["filters"]["state"] == "ok")
+        assert eventually(page, lambda: row.count() == 0)
+    finally:
+        api("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
 
 
 def test_away_is_set_from_the_hero_and_ended(open_page, api):
@@ -543,6 +609,9 @@ def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
     _reset_vmc(api)
     page = _open_home(open_page).page
     assert page.get_attribute("#vmc-card [data-vmc-choice='manual']", "aria-checked") == "true"
+    plan = page.locator("#vmc-plan")
+    assert plan.evaluate("d => d.open") is False and "Manuale" in plan.locator("summary").inner_text()
+    plan.locator("summary").click()
     work = page.locator("#vmc-card [data-vmc-choice='work']")
     speed = work.get_attribute("data-device")
     work.click()
@@ -551,6 +620,9 @@ def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
     assert schedule["target"] == speed
     assert schedule["week"]["mon"][10] == 25 and schedule["week"]["sat"][10] == 50, "night 8-17 on weekdays only"
     assert eventually(page, lambda: page.get_attribute("#vmc-card [data-vmc-choice='work']", "aria-checked") == "true")
+    page.evaluate("refreshDevices()")
+    assert eventually(page, lambda: "Fuori per lavoro" in plan.locator("summary").inner_text())
+    assert plan.evaluate("d => d.open") is True, "stays open across the card's redraws"
     page.click("#vmc-card [data-vmc-choice='manual']")
     assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is False)
     assert _vmc(api)["schedule"]["week"]["mon"][10] == 25, "the week stays saved"
@@ -597,7 +669,7 @@ def test_an_automatic_vmc_change_says_why_on_its_card(open_page, width):
         page.evaluate("auto => { state.vmc.status = { ...(state.vmc.status || {}), auto }; renderPlant(); }", auto)
         note = page.locator("#vmc-card .vmc-auto-note")
         assert note.count() == 1 and all(w in note.inner_text() for w in words), note.inner_text()
-        assert page.locator("#vmc-card .vmc-boost").count() == 1, "the timed boost still there"
+        assert page.locator("#vmc-card button[data-vmc-boost]").count() >= 1, "the timed speeds still there"
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     page.evaluate("() => { delete state.vmc.status.auto; renderPlant(); }")
     assert page.locator("#vmc-card .vmc-auto-note").count() == 0
@@ -618,6 +690,7 @@ def test_away_asks_what_the_vmc_does_and_its_card_says_so(open_page, api):
         sheet = page.locator("#sheet")
         assert sheet.locator("[data-away-vmc='night']").get_attribute("aria-checked") == "true"
         assert "%" in sheet.locator("[data-away-vmc='night']").inner_text(), "night with its percentage"
+        assert [b.get_attribute("data-away-vmc") for b in sheet.locator("[data-away-vmc]").all()] == ["min", "night", "off"]
         sheet.locator("[data-away-vmc='off']").click()
         assert sheet.locator("[data-away-vmc='off']").get_attribute("aria-checked") == "true"
         sheet.locator("button[data-away='24']").click()

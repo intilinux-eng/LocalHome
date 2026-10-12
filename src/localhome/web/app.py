@@ -81,6 +81,7 @@ from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger, summary as energy_summary
 from localhome.services import vmc_auto
 from localhome.services.vmc_auto import VmcAuto, VmcAutoSettingsStore
+from localhome.services.vmc_filters import VmcFilterStore
 from localhome.services.vmc_schedule import AWAY_CHOICES, VmcScheduleController, VmcScheduleStore
 from localhome.web.auth import register_auth
 from localhome.web.i18n import load_translations
@@ -363,6 +364,10 @@ def create_app(config_path: str | None = None) -> Flask:
     # cooling (services/vmc_auto.py) - from the zones' sensors and the
     # outdoor one, set in the admin panel and read at every check.
     vmc_auto_settings = VmcAutoSettingsStore(config.resolve("vmc_auto.json"))
+    # Its speeds, as set in the admin panel over the device's own. Read
+    # through the manager and this store directly: the loop's first check
+    # runs before app.config is filled.
+    vmc_speed_store = vmc_speeds.VmcSpeedStore(config.resolve("vmc_speeds.json"))
     vmc = VmcScheduleController(
         manager, vmc_schedule,
         auto=VmcAuto(
@@ -371,12 +376,12 @@ def create_app(config_path: str | None = None) -> Flask:
             zones=lambda: _auto_zones(thermostat),
             outdoor_sensor=OUTDOOR_SENSOR_NAME,
             device=lambda: _vmc_speed_device(manager),
-            speeds=lambda device: _vmc_speeds_in_use(app, device),
+            speeds=lambda device: _speeds_in_use(manager, vmc_speed_store, device),
         ),
         # Away from home, at night speed or off - see api_climate_set_away.
         away_until=lambda: thermostat.schedule_store.get_away_until() if thermostat else None,
         device=lambda: _vmc_speed_device(manager),
-        speeds=lambda device: _vmc_speeds_in_use(app, device),
+        speeds=lambda device: _speeds_in_use(manager, vmc_speed_store, device),
     )
 
     # What each Shelly says about itself - signal, temperature, restarts,
@@ -464,7 +469,10 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["DEHUMIDIFIER_SETTINGS"] = dehumidifier_settings
     # The VMC's night/day/boost speeds as set in the admin panel, laid over
     # its device's presets - see services/vmc_speeds.py.
-    app.config["VMC_SPEEDS"] = vmc_speeds.VmcSpeedStore(config.resolve("vmc_speeds.json"))
+    app.config["VMC_SPEEDS"] = vmc_speed_store
+    # When its filters were last cleaned, and how often - the home card's
+    # reminder; see services/vmc_filters.py.
+    app.config["VMC_FILTERS"] = VmcFilterStore(config.resolve("vmc_filters.json"))
     # What each cover's last read said - covers are read on demand, not
     # polled, so this is where the system status learns about them.
     app.config["COVER_READS"] = {}
@@ -593,10 +601,16 @@ def _vmc_auto_answer(app: Flask) -> dict:
             "under_way": app.config["VMC_SCHEDULE"].status().get("auto")}
 
 
+def _speeds_in_use(manager: DeviceManager, store: vmc_speeds.VmcSpeedStore, device: str | None) -> dict:
+    """The VMC's five speeds in use: the device's presets, with those set
+    in the admin panel over them."""
+    presets = (manager.ui_options.get(device) or {}).get("presets") or [] if device else []
+    return vmc_speeds.of_presets(vmc_speeds.apply(presets, store.get()))
+
+
 def _vmc_speeds_in_use(app: Flask, device: str | None) -> dict:
     manager: DeviceManager = app.config["MANAGER"]
-    presets = (manager.ui_options.get(device) or {}).get("presets") or [] if device else []
-    return vmc_speeds.of_presets(vmc_speeds.apply(presets, app.config["VMC_SPEEDS"].get()))
+    return _speeds_in_use(manager, app.config["VMC_SPEEDS"], device)
 
 
 def _move_vmc_to_new_speed(manager: DeviceManager, device: str | None, moves: dict) -> None:
@@ -1189,7 +1203,28 @@ def _register_routes(app: Flask) -> None:
         return jsonify(ok=True)
 
     def vmc_answer(vmc: VmcScheduleController, schedule: dict | None = None):
-        return jsonify(ok=True, schedule=schedule or vmc.store.get(), status=vmc.status())
+        return jsonify(ok=True, schedule=schedule or vmc.store.get(), status=vmc.status(),
+                       filters=app.config["VMC_FILTERS"].status())
+
+    @app.route("/api/vmc-filters/cleaned", methods=["POST"])
+    def api_vmc_filters_cleaned():
+        """The filters cleaned today - from the home card's reminder or the
+        admin panel: the reminder starts over."""
+        return jsonify(ok=True, filters=app.config["VMC_FILTERS"].cleaned_today())
+
+    @app.route("/api/climate-admin/vmc-filters")
+    def api_vmc_filters_get():
+        return jsonify(ok=True, filters=app.config["VMC_FILTERS"].status())
+
+    @app.route("/api/climate-admin/vmc-filters", methods=["POST"])
+    def api_vmc_filters_save():
+        """{"interval_days"} and/or {"cleaned_on": "2026-10-12" or null}:
+        how often, and when they were last cleaned if not today."""
+        body = {k: v for k, v in _json_body().items() if k in ("interval_days", "cleaned_on")}
+        try:
+            return jsonify(ok=True, filters=app.config["VMC_FILTERS"].set(body))
+        except InputError as exc:
+            return _refusal(exc, 400)
 
     @app.route("/api/vmc-schedule")
     def api_vmc_schedule_get():

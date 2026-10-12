@@ -19,8 +19,8 @@ A timed boost (`override`) is the one exception: a speed for so many
 minutes, then back to what the program says - or, with the program off,
 to the speed and on/off state from before it.
 
-Away from home (the thermostat's away mode) the VMC runs at its night
-speed or is off, as chosen on the home page when leaving (`away`, the
+Away from home (the thermostat's away mode) the VMC runs at its minimum
+or night speed, or is off, as chosen on the home page when leaving (`away`, the
 choice remembered in `away_choice` - night unless one is made); nothing
 else moves it meanwhile, and on return it goes back to its program, or
 to the speed and on/off state from before.
@@ -62,7 +62,7 @@ SETTLE_SECONDS = 90
 DEFAULT_DAY_NIGHT = {"day": {"at": "07:00", "value": 50}, "night": {"at": "22:00", "value": 25}}
 # What the VMC does while nobody's home - and "keep", for a tool that
 # mustn't touch it (tools/live_walk.py).
-AWAY_MODES = ("night", "off")
+AWAY_MODES = ("min", "night", "off")      # each but off a speed key
 AWAY_CHOICES = (*AWAY_MODES, "keep")
 
 
@@ -386,9 +386,9 @@ class VmcScheduleController:
             if (switch and on is not False) or (not switch and value != 0):
                 self._apply(device, 0, "away")
             return
-        night = (self.speeds(device) if self.speeds else {}).get("night")
-        if night is not None and (on is False or not isinstance(value, (int, float)) or round(value) != night):
-            self._apply(device, night, "away")
+        level = (self.speeds(device) if self.speeds else {}).get(away["mode"])
+        if level is not None and (on is False or not isinstance(value, (int, float)) or round(value) != level):
+            self._apply(device, level, "away")
 
     def _end_away(self, schedule: dict) -> None:
         """Back home: the program's speed (applied right after), or the
@@ -544,9 +544,9 @@ class VmcScheduleController:
         override = schedule["override"]
         away = schedule["away"]
         if away and self._away_on(now):
-            night = (self.speeds(away["device"]) if self.speeds else {}).get("night")
+            level = (self.speeds(away["device"]) if self.speeds else {}).get(away["mode"])
             status["away"] = {"mode": away["mode"], "device": away["device"],
-                              "value": 0 if away["mode"] == "off" else night}
+                              "value": 0 if away["mode"] == "off" else level}
         elif override_active(override, now):
             status["override"] = {"device": override["device"], "value": override["value"],
                                   "until": override["until"], "until_hhmm": override["until"][11:16]}

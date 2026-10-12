@@ -27,6 +27,10 @@ cooling  summer only, night cooling: the house warm (the reference room at
          above it (a Maico AERA 320's opens with indoor > 22 °C, indoor >
          outdoor and outdoor > 16 °C), and air through the exchanger
          doesn't cool. Not the maximum: it's a night thing, and loud.
+dry      winter only: the reference room's humidity under `dry_below_pct`
+         (35% by default - the bottom of the comfortable band) - the night
+         speed: in winter the outdoor air is very dry, and ventilating
+         hard takes a house below it. Back when it's 3 points over again.
 
 The adjustments never switch the unit on (off is someone's choice); a
 speed picked by hand - on the home page, in the Shelly app, on the
@@ -70,6 +74,8 @@ DEFAULTS = {
     "cooling_from_c": 24.0,
     "cooling_delta_c": 3.0,
     "cooling_outdoor_min_c": 16.0,
+    "dry": False,
+    "dry_below_pct": 35,
     # None: the zone out of cooling (the bathrooms) and the first one
     # cooled - see zones_for().
     "bathroom_zone": None,
@@ -87,8 +93,9 @@ RANGES = {
     "cooling_from_c": (20, 30),
     "cooling_delta_c": (1, 10),
     "cooling_outdoor_min_c": (5, 25),
+    "dry_below_pct": (25, 45),
 }
-SWITCHES = ("shower", "humid", "cooling")
+SWITCHES = ("shower", "humid", "cooling", "dry")
 ZONE_KEYS = ("bathroom_zone", "reference_zone")
 HALF_DEGREE_KEYS = ("humid_margin_c", "cooling_from_c", "cooling_delta_c", "cooling_outdoor_min_c")
 # Stopping, a little past where it started - see the module's docstring.
@@ -96,7 +103,8 @@ COOLING_STOP_BELOW_BY = 0.5     # the house this much under cooling_from_c
 COOLING_STOP_DELTA_BY = 1.0     # the outdoor air this much less cool than the delta
 COOLING_STOP_OUTDOOR_BY = 0.5   # the outdoor air this much under its floor
 COOLING_STOP_HUMID_BY = 0.5     # the outdoor dew point this much over the indoor one
-REASONS = ("shower", "humid", "cooling")   # in this order, the first under way wins
+DRY_STOP_ABOVE_BY = 3           # the room this many points over dry_below_pct
+REASONS = ("shower", "humid", "dry", "cooling")   # in this order, the first under way wins
 
 
 def validate(values: dict, base: dict | None = None) -> dict:
@@ -211,6 +219,7 @@ class VmcAutomation:
         self.shower: dict | None = None                       # {"since", "baseline"}
         self.humid = False
         self.cooling = False
+        self.dry = False
         self.dismissed: set[str] = set()                      # under way, but someone picked a speed
         self.last: dict = {}                                  # what each one went by, for the pages
 
@@ -219,6 +228,7 @@ class VmcAutomation:
         self._shower(now, settings, bathroom)
         self._humid(settings, season, indoor, outdoor)
         self._cooling(settings, season, indoor, outdoor)
+        self._dry(settings, season, indoor)
         self.dismissed &= set(self.active())
 
     def _shower(self, now: float, settings: dict, bathroom: Air | None) -> None:
@@ -269,9 +279,20 @@ class VmcAutomation:
                             and t_out >= settings["cooling_outdoor_min_c"] and dew_out <= dew_in)
         self.last["cooling"] = {"outdoor": t_out, "indoor": t_in}
 
+    def _dry(self, settings: dict, season: str | None, indoor: Air | None) -> None:
+        if season != "heat" or not settings["dry"] or indoor is None:
+            self.dry = False
+            return
+        rh = indoor.humidity_pct
+        if self.dry:
+            self.dry = rh < settings["dry_below_pct"] + DRY_STOP_ABOVE_BY
+        else:
+            self.dry = rh < settings["dry_below_pct"]
+        self.last["dry"] = {"humidity": rh}
+
     def active(self) -> list[str]:
-        return [r for r, on in (("shower", self.shower is not None), ("humid", self.humid), ("cooling", self.cooling))
-                if on]
+        return [r for r, on in (("shower", self.shower is not None), ("humid", self.humid), ("dry", self.dry),
+                                ("cooling", self.cooling)) if on]
 
     def dismiss(self) -> None:
         """A speed picked by hand: what's under way now steps aside until
@@ -289,7 +310,7 @@ class VmcAutomation:
             if reason == "shower":
                 value = speeds["day"] if quiet else speeds["boost"]
                 return Adjustment(reason, value) if base < value else None
-            if reason == "humid":
+            if reason in ("humid", "dry"):
                 value = speeds["night"]
                 return Adjustment(reason, value) if base > value else None
             value = speeds["day"]

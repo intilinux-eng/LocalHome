@@ -21,7 +21,7 @@ from localhome.services.vmc_schedule import DAYS, VmcScheduleController, VmcSche
 SPEEDS = {"night": 25, "day": 50, "boost": 100}
 ZONES = [{"name": "Stanze", "sensor": "Stanze Sensor", "cool_enabled": True},
          {"name": "Bagni", "sensor": "Bagni Sensor", "cool_enabled": False}]
-ALL_ON = {**DEFAULTS, "shower": True, "humid": True, "cooling": True}
+ALL_ON = {**DEFAULTS, "shower": True, "humid": True, "cooling": True, "dry": True}
 TUESDAY = datetime(2026, 7, 14)     # a Tuesday in summer
 MIN = 60
 
@@ -33,7 +33,7 @@ def at(hour, minute=0):
 # ------------------------------------------------------------- settings --
 
 def test_off_by_default_with_the_recommended_thresholds():
-    assert not DEFAULTS["shower"] and not DEFAULTS["humid"] and not DEFAULTS["cooling"]
+    assert not DEFAULTS["shower"] and not DEFAULTS["humid"] and not DEFAULTS["cooling"] and not DEFAULTS["dry"]
     assert (DEFAULTS["shower_rise"], DEFAULTS["shower_window_minutes"], DEFAULTS["shower_max_minutes"]) == (8, 10, 60)
     assert (DEFAULTS["quiet_from_hour"], DEFAULTS["quiet_to_hour"]) == (22, 7)
     assert DEFAULTS["cooling_outdoor_min_c"] == 16.0
@@ -181,6 +181,22 @@ def test_night_cooling_stops_a_little_past_where_it_started():
     assert automation.cooling, "under 24 but not by half a degree"
     summer((23.4, 50), (20, 50), automation)
     assert not automation.cooling
+
+
+def test_winter_dry_air_the_night_speed_until_it_s_3_points_over_again():
+    automation = summer((21, 33), (2, 80), season="heat")
+    assert automation.dry and automation.adjust(50, SPEEDS, quiet=False).value == 25
+    assert automation.adjust(25, SPEEDS, quiet=False) is None, "already at night"
+    summer((21, 36), (2, 80), automation, season="heat")
+    assert automation.dry, "over 35 but not by 3 points"
+    summer((21, 38), (2, 80), automation, season="heat")
+    assert not automation.dry
+
+
+def test_dry_air_only_in_winter_and_only_when_switched_on():
+    assert not summer((26, 30), (28, 30)).dry, "summer"
+    assert not summer((21, 30), (2, 80), settings={**ALL_ON, "dry": False}, season="heat").dry
+    assert DEFAULTS["dry"] is False and DEFAULTS["dry_below_pct"] == 35
 
 
 def test_the_shower_comes_first():
