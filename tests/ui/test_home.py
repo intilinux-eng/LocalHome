@@ -474,7 +474,10 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     page.route("**/api/readings", with_range)
     page.reload()
     tile = page.locator("#outdoor-chip")
-    assert eventually(page, lambda: "min 5,0° · max 30,0°" in tile.inner_text())
+    # The zones' bar: lowest and highest at its ends.
+    assert eventually(page, lambda: tile.locator(".outdoor-range").count() == 1)
+    shown = tile.locator(".outdoor-range").inner_text()
+    assert "5,0°" in shown and "30,0°" in shown
     assert tile.locator(".outdoor-range").get_attribute("aria-label") == "Oggi: minima 5,0°, massima 30,0°"
     assert tile.evaluate("e => e.tagName") == "DIV", "no button: a tap did nothing a resident wanted"
     # Nothing to add while the day's lowest and highest are the reading itself.

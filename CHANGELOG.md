@@ -388,6 +388,15 @@ date rather than by tag.
   a wide screen, remembered in the browser. A zone out of the season is
   one line, its readings beside its name; a valve not answering is said
   once in the card, the top only says "needs checking".
+- **One look across the page.** One style for a section inside a card
+  (the quick schedule, the hourly table, the VMC's program) and one thin
+  arrow for every fold; what the valve waits for is said in the text's
+  colour, the season's kept for what's tapped; one spacing scale in the
+  zone's card. Outside's lowest and highest are the zones' bar, with when
+  each came. What Comfort, Economy and the three modes do sits behind an
+  "i" (and on each at a hover) instead of lines always shown.
+- **Energy: the last 7 days, not the week from Monday.** A Monday no
+  longer shows one bar and six empty days; today is always the last.
 - **The tests in parallel, and the slowest without real waits.**
   `pytest -n auto` (pytest-xdist, a development dependency) runs the
   suite in about 15 s instead of 50, `pytest -m ui -n 6` the browser

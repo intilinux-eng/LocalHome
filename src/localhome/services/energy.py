@@ -91,10 +91,11 @@ class EnergyLedger:
 
 
 def summary(store, meter: str, today: date | None = None) -> dict:
-    """Today, yesterday, this week (Monday on), this month and this year
-    by month - what the home page's energy card shows."""
+    """Today, yesterday, the last 7 days (today the last - never a week
+    with one bar on a Monday), this month and this year by month - what the
+    home page's energy card shows."""
     today = today or date.today()
-    week_start = today - timedelta(days=today.weekday())
+    week_start = today - timedelta(days=6)
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
     rows = store.energy_days(meter, since=min(week_start, year_start).isoformat())

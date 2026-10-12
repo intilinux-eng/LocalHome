@@ -555,11 +555,12 @@ function fillZone(card, zone, climate) {
   // it, a redraw may come first); new, as last left here - open from the
   // start on a wide screen, where the week's plan beside the card leaves
   // the room for them.
+  // A zone out of the season stays one line there too.
+  const compact = excludedNow && zoneReady(zone);
   const shownMore = card.querySelector(".zone-more");
   const open = shownMore ? shownMore.open
-    : zone.name in state.moreOpen ? !!state.moreOpen[zone.name] : window.matchMedia("(min-width: 960px)").matches;
+    : zone.name in state.moreOpen ? !!state.moreOpen[zone.name] : !compact && window.matchMedia("(min-width: 960px)").matches;
   card.dataset.more = open ? "open" : "closed";
-  const compact = excludedNow && zoneReady(zone);
   card.dataset.compact = compact ? "true" : "false";
   const name = `<h2 class="zone-name">${esc(zone.name)}${zone.sensor_simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${zone.sensor_manual ? ` <span class="sim">${esc(tr("home.manual"))}</span>` : ""}</h2>`;
   const inline = compact && zone.temperature_c != null
@@ -1210,12 +1211,10 @@ function renderOutdoor() {
   const high = today ? fmt(today.max) : "";
   // "min 19,4° · max 19,4°" says nothing the reading doesn't.
   if (today && low !== high) {
-    const at = key => (today[`${key}_at`] == null ? "" : ` <small>${esc(epochHhmm(today[`${key}_at`]))}</small>`);
     const said = today.min_at == null || today.max_at == null ? tr("home.outdoor_range", { min: low, max: high })
       : tr("home.outdoor_range_at", { min: low, max: high, min_at: epochHhmm(today.min_at), max_at: epochHhmm(today.max_at) });
-    // Short, and broken only between the two on a narrow phone.
-    range = `<span class="outdoor-range" aria-label="${esc(said)}">
-      <span>${esc(tr("home.outdoor_min", { value: low }))}${at("min")}</span> · <span>${esc(tr("home.outdoor_max", { value: high }))}${at("max")}</span></span>`;
+    // The zones' bar: lowest to highest, a ring where it is now.
+    range = rangeBarHtml(today, reading.temperature_c, said, "outdoor-range");
   }
   morph(chip, `${label}
     <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}`);
@@ -1836,11 +1835,16 @@ function todayRangeHtml(zone) {
   const today = todayRange(zone);
   // "min 25,8° max 25,8°" says nothing the reading doesn't.
   if (!today || fmt(today.min) === fmt(today.max)) return "";
-  const said = dayRangeText(tr("home.dr_today"), today);
-  const t = zone.temperature_c;
+  return rangeBarHtml(today, zone.temperature_c, dayRangeText(tr("home.dr_today"), today));
+}
+
+// A day's lowest and highest at the ends of a bar, a ring on it where `t`
+// is now - a zone's under its readings, outside's under its temperature;
+// `said` the whole of it, for a hover and a screen reader.
+function rangeBarHtml(today, t, said, extra = "") {
   const now = t == null ? ""
     : `<span class="tr-now" style="--at: ${(Math.min(1, Math.max(0, (t - today.min) / (today.max - today.min))) * 100).toFixed(1)}%"></span>`;
-  return `<div class="today-range" role="img" aria-label="${esc(said)}" title="${esc(said)}">
+  return `<div class="today-range${extra ? ` ${extra}` : ""}" role="img" aria-label="${esc(said)}" title="${esc(said)}">
       <span class="tr-end"><small>${esc(tr("home.dr_min"))}</small><b>${fmt(today.min)}°</b></span>
       <span class="tr-track">${now}</span>
       <span class="tr-end"><small>${esc(tr("home.dr_max"))}</small><b>${fmt(today.max)}°</b></span>
@@ -2337,7 +2341,7 @@ async function refreshAirHistory() {
 
 // ------------------------------------------------------ the energy --
 // A power meter: what it draws now, today's peak with when, and the
-// week (Monday on), the month or the year by month as bars - tap one for
+// last 7 days (today the last), the month or the year by month as bars - tap one for
 // its kWh and peak. Days worked out from the recorded power, before the
 // meter's own counter was kept, are drawn lighter and said to be estimates.
 
@@ -2375,10 +2379,14 @@ function energyBars(data, range) {
   }
   const span = data[range];
   const labels = tr("climate.days");
+  // The 7 days: each its weekday from the span's first, today "today".
+  const [y, m, d0] = span.from.split("-").map(Number);
+  const weekday = i => labels[(new Date(Date.UTC(y, m - 1, d0 + i)).getUTCDay() + 6) % 7];
   return span.days.map((d, i) => {
     const iso = d ? d.day : null;
     const n = i + 1;
-    const label = range === "week" ? labels[i] : (n === 1 || n % 5 === 0 ? String(n) : "");
+    const label = range === "week" ? (i === span.days.length - 1 ? tr("home.runs_today") : weekday(i))
+      : (n === 1 || n % 5 === 0 ? String(n) : "");
     if (!d || d.kwh == null) return { label, kwh: null };
     return {
       label, kwh: d.kwh, peak_w: d.peak_w, estimated: d.source === "power", current: iso === todayKey,

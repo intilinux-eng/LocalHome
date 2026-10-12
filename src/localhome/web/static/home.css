@@ -28,6 +28,11 @@
   --cool-soft: rgba(42, 124, 199, 0.12);
   --radius: 22px;
   --radius-s: 14px;
+  /* The spacing scale: inside a block, between blocks, between sections. */
+  --space-s: 8px;
+  --space-m: 12px;
+  --space-l: 16px;
+  --space-xl: 24px;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -85,6 +90,8 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 [hidden] { display: none !important; }
+/* Every fold's arrow the same thin chevron (home.js ICONS.chevron). */
+.chevron { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
 /* A phone app's feel: a tap shows on what's tapped (Safari gives :active
@@ -253,8 +260,8 @@ button:not(:disabled):active, a.chip:active { transform: scale(0.96); }
    where the digits would be. */
 .outdoor-value-none .dash { position: relative; top: -0.3em; letter-spacing: 0.04em; }
 .outdoor-label .sim { margin-left: 2px; }
-.outdoor-range { font-size: 0.84rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
-.outdoor-range span { white-space: nowrap; }
+.outdoor-range { color: var(--text-2); }
+.outdoor-range b { color: var(--text); }
 .outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
 .outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
 .hero-season {
@@ -415,7 +422,7 @@ body[data-running="true"] .hero-season::before {
 .zone-inline { margin-right: auto; font-size: 1.05rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .zone[data-compact="true"] { padding-bottom: 8px; }
 /* The rest of a zone (home.js fillZone): closed until asked for. */
-.zone-more { margin-top: 12px; border-top: 1px solid var(--line); }
+.zone-more { margin-top: var(--space-l); border-top: 1px solid var(--line); }
 .zone-more > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; font-size: 0.9rem; }
 .zone-more > summary::-webkit-details-marker { display: none; }
 .zone-more > summary .chevron { width: 20px; height: 20px; flex: none; margin-left: auto; color: var(--text-3); transition: transform 0.2s; }
@@ -458,14 +465,14 @@ body[data-running="true"] .hero-season::before {
 /* The readings and their extras: side by side on a card wide enough,
    the extras under the readings in two columns otherwise. */
 .zone-live { container-type: inline-size; }
-.zone-main { display: grid; gap: 14px; margin: 14px 0 12px; }
+.zone-main { display: grid; gap: var(--space-l); margin: var(--space-l) 0; }
 @container (min-width: 440px) {
-  .zone-main { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 20px; }
+  .zone-main { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-xl); }
 }
 
 .readings {
   display: grid;
-  gap: 12px;
+  gap: var(--space-m);
   padding: 14px 18px 12px;
   border-radius: 18px;
   background: var(--surface-2);
@@ -507,17 +514,24 @@ body[data-running="true"] .hero-season::before {
 .tr-now, .temp-now { position: absolute; width: 12px; height: 12px; border-radius: 50%;
   background: var(--surface); border: 2px solid var(--text); }
 .tr-now { top: 50%; left: var(--at); transform: translate(-50%, -50%); }
+/* Outside's the same, under its temperature - on a phone's narrow tile
+   the values alone at the bar's ends. */
+.outdoor .today-range { padding-top: 2px; border-top: 0; font-size: 0.84rem; gap: 8px; }
+.outdoor .tr-track { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, var(--surface)), var(--accent)); }
+@media (max-width: 819px) { .outdoor .tr-end small { display: none; } .outdoor .tr-track { min-width: 28px; } }
 
-.zone-facts { display: grid; gap: 9px; min-width: 0; }
+.zone-facts { display: grid; gap: var(--space-m); min-width: 0; }
 @container (max-width: 439px) {
-  .zone-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .zone-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-m); }
 }
 .fact { display: flex; align-items: flex-start; gap: 9px; font-size: 0.86rem; line-height: 1.3; color: var(--text-2); min-width: 0; }
 .fact-text { min-width: 0; padding-top: 3px; }
 .fact-icon { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); color: var(--text-3); }
 .fact-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .fact b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
-.fact-rule { color: var(--accent); font-weight: 600; }
+/* What the valve waits for: said, not a link - the season's colour only
+   on its icon (the colour is for what's tapped). */
+.fact-rule { color: var(--text); font-weight: 600; }
 .fact-rule .fact-icon { background: var(--accent-soft); color: var(--accent); }
 .trend { display: block; font-size: 0.8rem; color: var(--text-3); white-space: nowrap; }
 /* The target, its level and how far the room is: one line, across the
@@ -573,9 +587,9 @@ body[data-running="true"] .hero-season::before {
 .quick {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
+  gap: var(--space-m) 10px;
+  margin-top: var(--space-l);
+  padding-top: var(--space-l);
   border-top: 1px solid var(--line);
   flex-wrap: wrap;
 }
@@ -676,7 +690,10 @@ body[data-running="true"] .hero-season::before {
 .manual-banner span { flex: 1 1 12em; font-weight: 600; }
 .manual-banner .btn { min-height: 38px; padding: 6px 14px; font-size: 0.86rem; font-weight: 600; color: var(--text); }
 /* The controls say what they are. */
-.quick-title { flex-basis: 100%; display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 650; color: var(--text); }
+/* A section inside a card - the quick schedule, the hourly table - one
+   style for both: small capitals; the season's colour kept for "in use". */
+.quick-title { flex-basis: 100%; display: flex; align-items: center; gap: 8px; font-size: 0.76rem; font-weight: 650;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
 .quick-hint { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: var(--radius-s); background: var(--surface-2);
   font-size: 0.82rem; line-height: 1.4; color: var(--text-2); }
 /* The zone's mode - the hourly table, by hand, off by hand - one of
@@ -713,11 +730,11 @@ body[data-running="true"] .hero-season::before {
 .excluded-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
 .excluded-note svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Its sensor's batteries: to change soon (amber), or now (stronger). */
-.sensor-note { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-s);
+.sensor-note { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--space-l); padding: 10px 14px; border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
 .sensor-note[data-level="now"] { background: color-mix(in srgb, var(--warn) 22%, transparent); font-weight: 600; }
 /* Its valve not answering: the zone can't run - red, inside the card. */
-.valve-note { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-s);
+.valve-note { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--space-l); padding: 10px 14px; border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
 .valve-note svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--bad); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sensor-note svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -1147,7 +1164,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 14px; border: 1px solid var(--line);
     border-radius: var(--radius-s); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer;
   }
-  .plan-toggle-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .plan-toggle-label { font-size: 0.76rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
   .plan-toggle-hint { margin-left: auto; font-size: 0.86rem; color: var(--text-2); }
   .plan-toggle .chevron { width: 18px; height: 18px; fill: none; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round;
     stroke-linejoin: round; transition: transform 0.2s; }
@@ -1156,7 +1173,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   .zone-plan .plan-body { margin-top: 14px; }
   .zone-plan .sched-season-label { display: none; }   /* the button says it */
 }
-.sched-season-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 12px; }
+.sched-season-label { font-size: 0.76rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); margin: 2px 0 12px; }
 .sched-palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .sched-palette:has(.sched-tier) { align-items: flex-end; gap: 18px 10px; margin-top: 12px; margin-bottom: 8px; }
 .sched-swatch {

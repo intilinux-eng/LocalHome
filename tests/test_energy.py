@@ -72,8 +72,9 @@ def test_week_month_and_year_add_up_and_say_when_estimated(store):
     store.raise_day_peak("Casa", "2026-10-02", 3200, int(at("2026-10-02T19:40:00")))
     s = summary(store, "Casa", today=date(2026, 10, 2))
     assert s["today"]["kwh"] == 6.4 and s["today"]["peak_w"] == 3200 and s["yesterday"]["kwh"] == 5.7
-    assert s["week"]["from"] == "2026-09-28" and s["week"]["kwh"] == 23.1 and s["week"]["estimated"] is True
-    assert len(s["week"]["days"]) == 7 and s["week"]["days"][2] is None
+    # The last 7 days, today the last: 26 September to 2 October.
+    assert s["week"]["from"] == "2026-09-26" and s["week"]["kwh"] == 23.1 and s["week"]["estimated"] is True
+    assert len(s["week"]["days"]) == 7 and s["week"]["days"][4] is None and s["week"]["days"][6]["kwh"] == 6.4
     assert s["month"]["kwh"] == 12.1 and s["month"]["estimated"] is False and len(s["month"]["days"]) == 31
     assert s["year"]["kwh"] == 23.1
     assert [m["kwh"] for m in s["year"]["months"]][8:10] == [11.0, 12.1] and s["year"]["months"][0]["kwh"] is None
