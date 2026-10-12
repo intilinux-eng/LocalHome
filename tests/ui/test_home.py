@@ -946,6 +946,36 @@ def test_on_a_phone_the_week_waits_behind_its_button(open_page):
     assert not _card(desktop, ZONE_A).locator(".plan-toggle").is_visible()
 
 
+def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
+    """Seen using it: by hand was reached only through - and +, and said
+    nowhere until then. Its mode in sight - the week, by hand, off by
+    hand - each one tap away, the same choice as - and + behind them."""
+    opened = _open_home(open_page)
+    page = opened.page
+    card = _card(page, ZONE_A)
+    mode = lambda key: card.locator(f"button[data-action=mode-{key}]")
+    try:
+        assert card.locator(".mode-row button").all_inner_texts() == ["Programma", "Manuale", "Spenta"]
+        assert mode("schedule").get_attribute("aria-checked") == "true"
+        assert "Segue la programmazione" in card.locator(".mode-line").inner_text()
+        mode("off").click()
+        assert card.locator(".pending button[data-action=pending-off]").get_attribute("aria-pressed") == "true"
+        card.locator("button[data-action=apply]").click()
+        assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
+        assert eventually(page, lambda: mode("off").get_attribute("aria-checked") == "true")
+        assert card.locator(".mode-line").count() == 0, "by hand: the banner above says until when"
+        mode("manual").click()
+        assert card.locator(".pending button[data-action=pending-on]").get_attribute("aria-pressed") == "true"
+        card.locator("button[data-action=cancel-pending]").click()
+        mode("schedule").click()
+        assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
+        assert eventually(page, lambda: mode("schedule").get_attribute("aria-checked") == "true")
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+        assert opened.errors == []
+    finally:
+        api(f"/api/climate/zones/{urllib.parse.quote(ZONE_A, safe='')}/override/cancel", {})
+
+
 def test_a_zone_shows_what_matters_and_keeps_the_rest_in_its_details(open_page):
     """Seen on the production board: one zone took more than a phone's
     screen. In sight its readings, its target and the way to change it;
@@ -1299,10 +1329,6 @@ def test_the_page_opens_at_the_top(iphone):
 
 def test_a_refresh_rebuilds_nothing(iphone):
     page = iphone.page
-    # The page's first round in first (on a busy machine the history - the
-    # week's temperatures - may still be on its way): then a refresh.
-    page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
-    page.wait_for_timeout(500)
     page.evaluate(FRESH_JS)
     page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
     page.wait_for_timeout(500)

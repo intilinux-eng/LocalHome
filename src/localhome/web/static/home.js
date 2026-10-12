@@ -504,10 +504,6 @@ function fillZone(card, zone, climate) {
     const rule = valveRule(zone, climate);
     if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
-  if (change && !zone.override && !climate.away_until && !excluded) {
-    const next = tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) });
-    moreFacts.push(fact(ICONS.clock, esc(change.target == null ? next : `${next} · ${switchesOnText(change.target, mode)}`)));
-  }
   if (mode === "cool" && zone.humidity_pct != null && zone.dew_point_c != null) {
     moreFacts.push(fact(ICONS.drop, esc(tr("home.dew_point_long", { value: fmt(zone.dew_point_c) }))));
   }
@@ -572,7 +568,7 @@ function fillZone(card, zone, climate) {
       ${zoneReady(zone) && !excludedNow && !climate.away_until && !state.pending[zone.name]
         ? `<p class="quick-hint">${esc(tr("home.quick_hint"))}</p>` : ""}
       <div class="zone-foot">${foot.join(" · ")}</div>
-      ${runsHtml(zone)}
+      ${compact ? "" : runsHtml(zone)}
       ${tempsHtml(zone)}
     </details>`);
   wireRibbon(card, week, history, mode);
@@ -880,15 +876,32 @@ function quickHtml(zone, climate, change) {
         </div>
       </div>`;
   }
-  // Its controls say what they are: a title, and what a tap does.
+  // Its controls say what they are: a title, the mode it's in - the week,
+  // by hand, or off by hand - and the temperature's - and +.
   const shown = zone.target_c != null ? zone.target_c : null;
+  const held = zone.override;
+  const current = !held ? "schedule" : held.target == null ? "off" : "manual";
+  const modeButton = (key, label) => `<button type="button" role="radio" data-action="mode-${key}"
+    aria-checked="${current === key}">${esc(tr(label))}</button>`;
+  // Following the week: what it does next - by hand, the banner above says
+  // until when and the way back.
+  let follows = "";
+  if (!held) {
+    const next = change ? tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }) : "";
+    follows = [tr("home.mode_follows"), change && change.target != null ? `${next} · ${switchesOnText(change.target, mode)}` : next]
+      .filter(Boolean).join(". ");
+  }
   return `
     <div class="quick-title">${esc(tr(zone.override ? "home.quick_title_again" : "home.quick_title"))}</div>
+    <div class="mode-row" role="radiogroup" aria-label="${esc(tr("home.mode_label"))}">
+      ${modeButton("schedule", "home.mode_schedule")}${modeButton("manual", "home.mode_manual")}${modeButton("off", "home.mode_off")}
+    </div>
     <div class="stepper">
       <button type="button" data-action="start" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
       <span class="stepper-value">${shown == null ? esc(tr("home.st_off")) : fmtTarget(shown)}</span>
       <button type="button" data-action="start" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
-    </div>`;
+    </div>
+    ${follows ? `<p class="mode-line">${esc(follows)}</p>` : ""}`;
 }
 
 function lastTarget(zone) {
@@ -908,7 +921,7 @@ async function onZoneClick(event) {
   if (!button || !card) return;
   const zone = state.climate.zones.find(z => z.name === card.dataset.zone);
   if (!zone) return;
-  const action = button.dataset.action;
+  let action = button.dataset.action;
   if (action === "temps-pick") {
     const i = Number(button.dataset.pick);
     state.tempsPick[zone.name] = state.tempsPick[zone.name] === i ? undefined : i;
@@ -937,7 +950,18 @@ async function onZoneClick(event) {
   // Until the schedule's next change, as most thermostats do - or 4 hours
   // without one.
   const firstHours = () => nextChange((state.weeks[zone.name] || {})[state.climate.mode], boardNow()) ? "next" : 4;
-  if (action === "start") {
+  // The three modes: back to the schedule is "resume"; manual and off
+  // open the choice a - or + opens - the temperature, or off, and for how
+  // long - with that one picked.
+  if (action === "mode-schedule") {
+    if (!zone.override) return;
+    action = "resume";
+  }
+  if (action === "mode-manual") {
+    state.pending[zone.name] = { target: clampTarget(lastTarget(zone)), hours: firstHours() };
+  } else if (action === "mode-off") {
+    state.pending[zone.name] = { target: null, last: clampTarget(lastTarget(zone)), hours: firstHours() };
+  } else if (action === "start") {
     // Off: the first tap turns it on at its usual temperature, - or +.
     const step = zone.target_c == null ? 0 : Number(button.dataset.delta);
     state.pending[zone.name] = { target: clampTarget(lastTarget(zone) + step), hours: firstHours() };

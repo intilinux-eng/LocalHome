@@ -671,6 +671,15 @@ body[data-running="true"] .hero-season::before {
 /* The controls say what they are. */
 .quick-title { flex-basis: 100%; font-size: 0.86rem; font-weight: 650; color: var(--text); }
 .quick-hint { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--text-3); }
+/* The zone's mode - the week, by hand, off by hand - one of three, as a
+   phone's segmented control; what it does next beside the - and +. */
+.mode-row { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px;
+  border-radius: 999px; background: var(--surface-2); }
+.mode-row button { min-height: 40px; padding: 6px 8px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--text-2); font-size: 0.88rem; white-space: nowrap; transition: background 0.2s, color 0.2s; }
+.mode-row button[aria-checked="true"] { background: var(--surface); box-shadow: var(--shadow); color: var(--accent); font-weight: 650; }
+.mode-row button[data-action="mode-off"][aria-checked="true"] { color: var(--text); }
+.mode-line { flex: 1 1 12em; min-width: 0; margin: 0; font-size: 0.84rem; line-height: 1.35; color: var(--text-2); }
 .pending-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: -4px; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */
