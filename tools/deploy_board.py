@@ -6,6 +6,17 @@ network (<name>.local, SSH) or, with --usb, over the USB cable (adb).
     python tools/deploy_board.py antonio --check      # say what would happen, change nothing
     python tools/deploy_board.py antonio --rollback   # back to the commit before the last update
     python tools/deploy_board.py antonio --branch main --allow-older   # another branch, even an older one
+    python tools/deploy_board.py antonio --deb dist/localhome_<version>_arm64.deb   # the package instead
+    python tools/deploy_board.py antonio --deb latest  # the newest one in dist/
+
+A board runs LocalHome one of two ways. From git (a development board):
+everything below. From the .deb (tools/build_deb.py - the compiled
+program, no sources): --deb copies the package over and installs it,
+which is the same for a new installation and an update (the first time,
+a git installation's configuration and history move to
+/var/lib/localhome); the board keeps the last three packages, and
+--rollback reinstalls the one before. A board on the .deb refuses a git
+update, and the other way round needs doing by hand.
 
 What goes to the board is a commit of this repository: committed work
 only, never what's uncommitted here. By default the latest commit of the
@@ -51,6 +62,9 @@ BUNDLE = "~/.localhome-deploy.bundle"
 # Files whose change means the board's Python environment needs reinstalling.
 DEPENDENCY_FILES = ("pyproject.toml", "constraints.txt")
 ANSWER_TIMEOUT_SECONDS = 120
+# The packages installed with --deb, on the board: the last ones kept for --rollback.
+DEBS = "/var/cache/localhome/debs"
+KEEP_DEBS = 3
 
 
 # --------------------------------------------------------------- this PC --
@@ -114,6 +128,10 @@ class Board:
         if code or out.split()[:1] != [hashlib.sha256(data).hexdigest()]:
             raise SystemExit(f"the file didn't reach {self.name} intact: {err.strip() or out.strip()}")
 
+    def put_file(self, local: Path, remote: str) -> None:
+        """A file of this PC on the board - a package is tens of MB."""
+        self.put(local.read_bytes(), remote)
+
     def out(self, command: str) -> str:
         code, out, err = self.run(command)
         if code:
@@ -151,6 +169,13 @@ class SshBoard(Board):
         err = channel_err.read().decode("utf-8", "replace")
         return channel_out.channel.recv_exit_status(), out, err
 
+    def put_file(self, local, remote):
+        sftp = self.client.open_sftp()
+        try:
+            sftp.put(str(local), remote)
+        finally:
+            sftp.close()
+
     def close(self):
         self.client.close()
 
@@ -185,6 +210,11 @@ class AdbBoard(Board):
                                 text=True, encoding="utf-8", errors="replace", timeout=timeout)
         return result.returncode, result.stdout, result.stderr
 
+    def put_file(self, local, remote):
+        result = subprocess.run([self.adb, "-s", self.serial, "push", str(local), remote], capture_output=True, text=True)
+        if result.returncode:
+            raise SystemExit(f"adb push to {self.name} failed: {(result.stderr or result.stdout).strip()}")
+
 
 def find_adb() -> str:
     candidates = [os.path.join(os.environ.get("LOCALAPPDATA", ""), "Arduino15", "packages", "arduino", "tools", "adb", "*", "adb*"),
@@ -201,8 +231,8 @@ def find_adb() -> str:
         raise SystemExit("adb not found - it comes with the Arduino IDE / App Lab")
 
 
-def sudo(board: Board, password: str, command: str) -> tuple[int, str, str]:
-    return board.run(f"sudo -S -p '' {command}", stdin=password + "\n")
+def sudo(board: Board, password: str, command: str, timeout: float = 300) -> tuple[int, str, str]:
+    return board.run(f"sudo -S -p '' {command}", stdin=password + "\n", timeout=timeout)
 
 
 # ------------------------------------------------------------------ steps --
@@ -215,7 +245,9 @@ def main() -> int:
     parser.add_argument("--usb", action="store_true", help="over the USB cable (adb) instead of the network")
     parser.add_argument("--branch", help="deploy this branch's latest commit (default: the board's branch)")
     parser.add_argument("--allow-older", action="store_true", help="allow a commit that takes commits away")
-    parser.add_argument("--rollback", action="store_true", help="back to the commit before the last update")
+    parser.add_argument("--rollback", action="store_true",
+                        help="back to the commit before the last update (on a .deb board: the package before)")
+    parser.add_argument("--deb", help="install this .deb (or 'latest': the newest in dist/) instead of a git update")
     parser.add_argument("--check", action="store_true", help="say what would happen, change nothing")
     parser.add_argument("--service", default="localhome", help="the systemd service (default: localhome)")
     parser.add_argument("--port", type=int, default=5000, help="the web page's port (default: 5000)")
@@ -235,6 +267,12 @@ def deploy(board: Board, password: str, args) -> int:
         raise SystemExit(f"{args.board} answered as '{name}' - not touching it")
     if sudo(board, password, "true")[0]:
         raise SystemExit(f"{name}: sudo refused the password")
+    installed = packaged_version(board)
+    if args.deb or (installed and args.rollback):
+        return deploy_deb(board, password, args, installed)
+    if installed:
+        raise SystemExit(f"{name} runs LocalHome's package ({installed}), not a git checkout - "
+                         f"update it with --deb (tools/build_deb.py makes one)")
     repo = board.out(f"systemctl show {shlex.quote(args.service)} -p WorkingDirectory --value")
     if not repo:
         raise SystemExit(f"{name} has no '{args.service}' service")
@@ -319,6 +357,16 @@ def deploy(board: Board, password: str, args) -> int:
     if sudo(board, password, f"systemctl restart {shlex.quote(args.service)}")[0]:
         raise SystemExit(f"{name}: the restart was refused")
     print("restarting LocalHome...")
+    if not answers(board, args, since):
+        return 1
+    print(f"{name}: done - {target[:7]} ({git('log', '-1', '--format=%s', target)}), page answering")
+    return 0
+
+
+def answers(board: Board, args, since: str) -> bool:
+    """Waits for the page to answer after a restart, printing the warnings
+    logged since; False - with what to do - if it doesn't."""
+    name = args.board
     url = f"http://127.0.0.1:{args.port}/api/server-time"
     deadline = time.time() + ANSWER_TIMEOUT_SECONDS
     answering = False
@@ -335,8 +383,81 @@ def deploy(board: Board, password: str, args) -> int:
               f"look at: journalctl -u {args.service} -n 50\n"
               f"back to the previous version: python tools/deploy_board.py {name}"
               f"{' --usb' if args.usb else ''} --rollback")
+        return False
+    return True
+
+
+# ------------------------------------------------------------ the package --
+
+def packaged_version(board: Board) -> str | None:
+    """The localhome package's version if the board has it installed."""
+    code, out, _ = board.run("dpkg-query -W -f='${Status} ${Version}' localhome 2>/dev/null")
+    parts = out.split()
+    return parts[3] if code == 0 and parts[:3] == ["install", "ok", "installed"] and len(parts) == 4 else None
+
+
+def deb_version(path: str) -> str:
+    """localhome_<version>_arm64.deb -> <version>."""
+    stem = Path(path).name
+    if not (stem.startswith("localhome_") and stem.endswith("_arm64.deb")):
+        raise SystemExit(f"{stem}: not a LocalHome package (localhome_<version>_arm64.deb)")
+    return stem[len("localhome_"):-len("_arm64.deb")]
+
+
+def pick_deb(choice: str, dist: Path = ROOT / "dist") -> Path:
+    """The package to install: a path, or 'latest' - the newest built."""
+    if choice != "latest":
+        path = Path(choice)
+        if not path.is_file():
+            raise SystemExit(f"{choice}: no such file")
+        return path
+    built = sorted(dist.glob("localhome_*_arm64.deb"), key=lambda p: p.stat().st_mtime)
+    if not built:
+        raise SystemExit("no package in dist/ - make one: python tools/build_deb.py")
+    return built[-1]
+
+
+def previous_deb(kept: list[str], installed: str) -> str | None:
+    """Of the packages kept on the board, newest first, the newest that
+    isn't the installed version."""
+    for path in kept:
+        if deb_version(path) != installed:
+            return path
+    return None
+
+
+def deploy_deb(board: Board, password: str, args, installed: str | None) -> int:
+    name = args.board
+    if args.rollback:
+        kept = board.run(f"ls -1t {DEBS}/localhome_*_arm64.deb 2>/dev/null")[1].split()
+        remote = previous_deb(kept, installed or "")
+        if remote is None:
+            raise SystemExit(f"{name}: no earlier package kept in {DEBS} to go back to")
+        print(f"{name}: {installed} -> back to {deb_version(remote)}")
+    else:
+        local = pick_deb(args.deb)
+        print(f"{name}: {installed or 'LocalHome from git (moves to the package)'} -> {deb_version(local)}")
+        remote = f"{DEBS}/{local.name}"
+    if args.check:
+        print("--check: nothing was changed")
+        return 0
+    if not args.rollback:
+        staging = f"/tmp/{local.name}"
+        print(f"copying {local.name} ({local.stat().st_size / 1e6:.0f} MB)...")
+        board.put_file(local, staging)
+        if sudo(board, password, f"install -D -m 644 {staging} {remote}")[0]:
+            raise SystemExit(f"{name}: couldn't keep the package in {DEBS}")
+        board.run(f"rm -f {staging}")
+    since = board.out("date +%s")
+    print("installing (the board tunes itself and LocalHome restarts)...")
+    code, out, err = sudo(board, password, f"apt-get install -y --allow-downgrades {remote}", timeout=1800)
+    print(out[-3000:])
+    if code:
+        raise SystemExit(f"{name}: the installation failed:\n{err[-2000:]}")
+    sudo(board, password, f"sh -c 'ls -1t {DEBS}/localhome_*_arm64.deb | tail -n +{KEEP_DEBS + 1} | xargs -r rm --'")
+    if not answers(board, args, since):
         return 1
-    print(f"{name}: done - {target[:7]} ({git('log', '-1', '--format=%s', target)}), page answering")
+    print(f"{name}: done - LocalHome {packaged_version(board)}, page answering")
     return 0
 
 

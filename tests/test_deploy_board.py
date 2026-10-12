@@ -29,3 +29,71 @@ def test_a_rollback_goes_back_to_the_commit_before_the_update_that_brought_the_b
     assert deploy_board.last_update(history, "bbb") == ("aaa", "feature/redesign")
     assert deploy_board.last_update(history, "zzz") is None
     assert deploy_board.last_update("", "ccc") is None
+
+
+# ------------------------------------------------------------ the package --
+
+class FakeBoard(deploy_board.Board):
+    """A board that answers from a table of commands, and remembers them."""
+
+    def __init__(self, answers):
+        self.name = "prova"
+        self.answers = answers
+        self.ran = []
+
+    def run(self, command, stdin=None, timeout=300):
+        self.ran.append(command)
+        for start, answer in self.answers.items():
+            if start in command:
+                return answer
+        return 0, "", ""
+
+
+class Args:
+    board = "prova"
+    deb = None
+    rollback = False
+    check = False
+    usb = False
+    service = "localhome"
+    port = 5000
+    branch = None
+    allow_older = False
+
+
+def test_the_packages_version_from_its_name():
+    assert deploy_board.deb_version("dist/localhome_0.1.0+git202610121530.abc1234_arm64.deb") == \
+        "0.1.0+git202610121530.abc1234"
+    import pytest
+    with pytest.raises(SystemExit):
+        deploy_board.deb_version("other_1.0_amd64.deb")
+
+
+def test_the_installed_package_or_none():
+    installed = FakeBoard({"dpkg-query": (0, "install ok installed 0.1.0+git1.abc", "")})
+    assert deploy_board.packaged_version(installed) == "0.1.0+git1.abc"
+    assert deploy_board.packaged_version(FakeBoard({"dpkg-query": (1, "", "")})) is None
+
+
+def test_a_rollback_takes_the_newest_kept_package_that_isnt_running():
+    kept = ["/var/cache/localhome/debs/localhome_3_arm64.deb", "/var/cache/localhome/debs/localhome_2_arm64.deb"]
+    assert deploy_board.previous_deb(kept, "3").endswith("localhome_2_arm64.deb")
+    assert deploy_board.previous_deb(kept[:1], "3") is None
+
+
+def test_a_board_on_the_package_refuses_a_git_update():
+    import pytest
+    board = FakeBoard({"hostname": (0, "prova\n", ""), "dpkg-query": (0, "install ok installed 0.1.0+git1.abc", "")})
+    with pytest.raises(SystemExit, match="--deb"):
+        deploy_board.deploy(board, "pw", Args())
+    assert not any("git " in command for command in board.ran), "nothing done with git there"
+
+
+def test_check_on_a_package_says_what_and_changes_nothing(tmp_path):
+    deb = tmp_path / "localhome_0.1.0+git2.def_arm64.deb"
+    deb.write_bytes(b"!<arch>\n")
+    args = Args()
+    args.deb, args.check = str(deb), True
+    board = FakeBoard({"hostname": (0, "prova\n", ""), "dpkg-query": (0, "install ok installed 0.1.0+git1.abc", "")})
+    assert deploy_board.deploy(board, "pw", args) == 0
+    assert not any("apt-get" in command or "install -D" in command for command in board.ran)
