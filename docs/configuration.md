@@ -205,21 +205,21 @@ Clearing the history clears them as well.
 
 **Running hours** (`services/run_hours.py`): each zone valve's time
 open, and the plant's - any zone open, counted once (one recording cycle
-writes them all with one timestamp) - one row a day for good in
-`daily_runs`, filled from the samples while they still cover a whole
-day; a day they don't (before LocalHome ran, or pruned before it was
-counted) is unknown, not zero. The home page shows each zone's under
-"Running history" - the last 24 hours, the last 7 or 30 days as bars
-(`/api/climate/run-hours`); the admin panel's "Hours and consumption"
-the plant's and each zone's month by month (`/api/climate-admin/usage`).
+writes them all with one timestamp) - one row a day in `daily_runs`,
+filled from the samples while they still cover a whole day (the
+recorder does it once a day before pruning them, whether or not a page
+asked); a day they don't cover is unknown, not zero. Six years are kept
+- the current one and the five before. The home page shows each zone's
+under "Running history" - the last 24 hours, the last 7 or 30 days as
+bars (`/api/climate/run-hours`); the admin panel's "Hours and
+consumption" a year month by month (`/api/climate-admin/usage?year=`).
 They are hours the plant was asked to run, not energy: where the
 climate comes from a building's plant room, a heat meter counts that.
-Its readings - typed in the admin panel, `config/heat_meter.json`,
-cumulative kWh, heat and optionally cooling, as the meter's display
-shows them - make periods: the kWh between two readings, the plant's
-hours from the day after the first to the day of the second, kWh per
-hour and, with a price per kWh of heat, euros. A reading that would
-make the meter count down is refused.
+Its month-end values - typed a year at a time in the admin panel,
+`config/heat_meter.json`, the meter's cumulative kWh, heat and cooling,
+as its display keeps them - give each month's kWh (its value less the
+month before's) and kWh per hour where the month has all its hours. A
+month not over yet, or a value below the month before's, is refused.
 
 If set, `energy.sensor` must name a `power_meter` integration by its
 `name`. Whenever that sensor's `power_w` reading crosses

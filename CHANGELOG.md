@@ -57,13 +57,11 @@ date rather than by tag.
 - **How long each zone ran, and the plant - beside the heat meter.** Each
   zone's card has a "Running history": the last 24 hours on one line,
   and opened the last 7 or 30 days as bars, a tap naming the day's hours
-  and starts. The admin panel's "Hours and consumption" gives the
-  plant's hours - any zone open, counted once - and each zone's month by
-  month; type in the heat meter's readings (heat and cooling, as its
-  display keeps them at each month's end) and between two of them come
-  the kWh, the plant's hours, kWh per hour and, with a price per kWh of
-  heat, euros. The hours of each day are kept for good, past the 30 days
-  of the history.
+  and starts. The admin panel's "Hours and consumption" shows a year
+  month by month: the plant's hours - any zone open, counted once - and
+  each zone's, beside the heat meter's kWh and kWh per hour. The meter's
+  month-end values are typed a year at a time, as its display keeps
+  them; each month's kWh is worked out. Six years are kept.
 - **The VMC's card, redone, with five levels and a fine slider.** Minimum
   (10%) and High (75%) join Night, Day and Boost - set in the admin panel
   with the others, worked out from them for a device or a file with only
