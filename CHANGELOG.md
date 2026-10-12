@@ -63,7 +63,10 @@ date rather than by tag.
   saying what it holds. The meter's month-end readings are typed a year
   at a time, as its display keeps them, and under each the month's usage
   shows as it's typed - the reading less the month before's - so a
-  mistake shows before saving. Six years are kept.
+  mistake shows before saving. Each month sits beside the same month the
+  year before, with the outdoor sensor's mean and degree days and heat
+  kWh per degree day, to compare winters however cold; the current month
+  gets an estimate from its hours so far. Six years are kept.
 - **The VMC's card, redone, with five levels and a fine slider.** Minimum
   (10%) and High (75%) join Night, Day and Boost - set in the admin panel
   with the others, worked out from them for a device or a file with only

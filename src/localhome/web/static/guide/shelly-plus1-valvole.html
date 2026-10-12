@@ -371,13 +371,23 @@ quello in corso e i 5 prima.</p>
 <p>Le colonne della tabella dell'anno, in admin:</p>
 <table>
   <tr><th>Colonna</th><th>Cosa c'è</th></tr>
+  <tr><td>Mese</td><td>Sotto, la temperatura esterna media e i <strong>gradi giorno</strong> (GG): per ogni giorno, 20 °C
+      meno la sua media quando è sotto i 20 °C. Più GG, più freddo. Compaiono quando la sonda esterna ha registrato tutti i
+      giorni del mese.</td></tr>
   <tr><td>Acceso (ore)</td><td>Le ore con almeno una zona aperta, contate una volta sola; sotto, quelle di ogni zona.
       «–»: LocalHome non registrava ancora le valvole; «ore di N giorni su M»: mancano dei giorni.</td></tr>
   <tr><td>Consumato nel mese (kWh)</td><td>La lettura di fine mese meno quella del mese prima; gennaio usa dicembre dell'anno
-      prima. «–»: manca una delle due letture.</td></tr>
+      prima. «–»: manca una delle due letture. Sotto, lo stesso mese dell'anno prima e la differenza («2025: 690 kWh
+      (+10%)»); nel totale, gli stessi mesi dell'anno prima.</td></tr>
   <tr><td>kWh per ora</td><td>Il consumato nel mese diviso le ore di accensione, solo nei mesi con tutte le ore registrate.
-      Nel totale, la media su quei mesi.</td></tr>
+      Nel totale, la media su quei mesi. Sotto, i <strong>kWh per grado giorno</strong> (solo caldo).</td></tr>
 </table>
+<p>I kWh per grado giorno tolgono di mezzo quanto è stato freddo: un inverno più rigido consuma di più, ma se i kWh per GG
+restano uguali l'impianto ha lavorato come prima. Sono il numero giusto per confrontare un inverno con l'altro.</p>
+<p><strong>La stima del mese in corso</strong>: le ore fin qui per i kWh per ora medi degli ultimi mesi dello stesso tipo,
+caldo o freddo secondo la stagione dell'impianto (fino a 3, nell'ultimo anno), per esempio «≈ 120 kWh, stima — 70 h × 1,7
+kWh/ora, media di dic, gen, feb». Compare quando ci sono mesi con consumo e tutte le ore; a fine mese la sostituisce la
+lettura vera.</p>
 </div>
 <div class="keep">
 <p><strong>Inserire le letture</strong> (<em>Valori del contatore</em>, un anno alla volta, ogni tanto o una volta all'anno):
