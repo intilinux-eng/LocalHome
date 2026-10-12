@@ -505,6 +505,8 @@ body[data-running="true"] .hero-season::before {
 .lg-temp { fill: none; stroke: var(--text); stroke-width: 1.8; stroke-linejoin: round; }
 .lg-target { fill: none; stroke: var(--text-3); stroke-width: 1.3; stroke-dasharray: 3 2; }
 .lg-run { fill: var(--accent); }
+.lg-block { fill: var(--accent); opacity: 0.3; }
+.lg-now { stroke: var(--accent); stroke-width: 1.6; }
 .sim { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); border: 1px dashed var(--text-3); border-radius: 6px; padding: 1px 5px; vertical-align: middle; margin-left: 4px; }
 .rb-block { opacity: 0.35; }
 @media (prefers-color-scheme: dark) { .rb-block { opacity: 0.18; } }
@@ -517,6 +519,7 @@ body[data-running="true"] .hero-season::before {
 .lg-band { fill: var(--text); opacity: 0.18; }
 .rb-temp { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .rb-run { fill: var(--accent); rx: 2px; }
+/* Ahead of now: the plan, veiled. */
 .rb-future { fill: var(--surface); opacity: 0.55; }
 .rb-now { stroke: var(--accent); stroke-width: 1.5; }
 .rb-override { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; }

@@ -470,7 +470,8 @@ function fillZone(card, zone, climate) {
     if (rule) facts.push(fact(ICONS.flow, esc(rule), " fact-rule"));
   }
   if (change && !zone.override && !climate.away_until && !excluded) {
-    facts.push(fact(ICONS.clock, esc(tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }))));
+    const next = tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) });
+    facts.push(fact(ICONS.clock, esc(change.target == null ? next : `${next} · ${switchesOnText(change.target, mode)}`)));
   }
   if (mode === "cool" && zone.humidity_pct != null && zone.dew_point_c != null) {
     facts.push(fact(ICONS.drop, esc(tr("home.dew_point_long", { value: fmt(zone.dew_point_c) }))));
@@ -633,6 +634,8 @@ function ribbonSvg(zone, week, history, mode) {
       d += `${prev == null ? "M" : "L"}${x(h)},${scale.y(v)} L${x(h + 1)},${scale.y(v)} `;
     });
     if (d) parts.push(`<path class="rb-target" d="${d}" vector-effect="non-scaling-stroke"/>`);
+    // What's ahead of now is a plan, not what happened: veiled.
+    if (nowHour < 24) parts.push(`<rect class="rb-future" x="${x(nowHour)}" y="0" width="${x(24) - x(nowHour)}" height="${RB.bottom}"/>`);
     if (zone.override && zone.override.target != null) {
       const until = zone.override.until ? boardDate(zone.override.until) : null;
       const endHour = until ? Math.min(24, (until - new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 3600000) : 24;
@@ -666,11 +669,21 @@ function runSpans(runs, start) {
   return spans;
 }
 
+// The four things the eye sees, in plain words: the room's temperature,
+// the hours programmed (the dashed line their target), when it actually
+// ran, and now. The tolerance band is said in words where it matters -
+// "switches on above 25.5°" - not as one more thing to decode.
 function legendHtml() {
   return `<span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 6 L6 3 L11 5 L17 2" class="lg-temp"/></svg>${esc(tr("home.lg_temp"))}</span>
-    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4 H17" class="lg-target"/></svg>${esc(tr("home.lg_target"))}</span>
-    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="1" width="16" height="6" rx="1" class="lg-band"/></svg>${esc(tr("home.lg_band"))}</span>
-    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="16" height="4" rx="1" class="lg-run"/></svg>${esc(tr("home.lg_run"))}</span>`;
+    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="0.5" width="16" height="7" rx="1" class="lg-block"/><path d="M2 4 H16" class="lg-target"/></svg>${esc(tr("home.lg_planned"))}</span>
+    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="16" height="4" rx="1" class="lg-run"/></svg>${esc(tr("home.lg_run"))}</span>
+    <span class="lg"><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M9 0 V8" class="lg-now"/></svg>${esc(tr("home.lg_now"))}</span>`;
+}
+
+// When a target really switches it on: past the far edge of its
+// tolerance - above it in summer, below it in winter.
+function switchesOnText(target, mode) {
+  return tr(mode === "cool" ? "home.on_above" : "home.on_below", { edge: fmtTarget(bandEdge(target, mode)) });
 }
 
 // Touch or hover the strip: what happened (or is planned) at that time.
@@ -705,7 +718,11 @@ function wireRibbon(card, week, history, mode) {
       const run = history.runs.find(p => Math.abs(p.ts - ts) <= 180);
       if (run && run.value >= 0.5) bits.push(tr(mode === "cool" ? "home.was_cooling" : "home.was_heating"));
     }
-    if (today) bits.push(tr("home.planned", { target: fmtTarget(today[Math.floor(hour)]) }));
+    if (today) {
+      const planned = today[Math.floor(hour)];
+      bits.push(tr("home.planned", { target: fmtTarget(planned) }));
+      if (ts > nowTs && planned != null) bits.push(switchesOnText(planned, mode));
+    }
     readout.textContent = bits.join(" · ");
   };
   // A finger lifted leaves the strip at once (pointerleave follows
