@@ -66,6 +66,14 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **Each zone's lowest and highest, today and yesterday, and when.** Under
+  the readings: today's low and high with the time each came, yesterday's
+  beside them, and how today compares ("Against yesterday: high 0.6°
+  lower, low 0.3° higher"). Folded below, the last 7 days as bars from
+  each day's low to its high - a tap names the day, its low and high and
+  when. Today's comes live from the recorder's cycle, like the outdoor
+  temperature's; each zone's day is kept six years in `daily_temps`, now
+  with the times of its low and high.
 - **Pages that load lighter and open again without downloading.** Text
   goes gzipped to the browser - the home page and its scripts and styles
   from 322 KB to 93 KB, the admin panel from 407 KB to 109 KB - and the

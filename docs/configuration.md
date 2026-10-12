@@ -223,7 +223,8 @@ month before's) and kWh per hour where the month has all its hours. A
 month not over yet, or a value below the month before's, is refused.
 Beside each month: the same month the year before; the outdoor
 sensor's mean and its degree days (each day 20 °C less its mean, when
-below - kept six years in `daily_temps`, from days at least half
+below - kept six years in `daily_temps`, with each zone's sensor's
+days and the times of each day's low and high, from days at least half
 recorded) with heat kWh per degree day, which compares winters however
 cold; and for the current month an estimate - its hours so far at the
 kWh per hour of the last months of the same kind as the plant's season,
