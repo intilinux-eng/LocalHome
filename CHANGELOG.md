@@ -14,6 +14,13 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **A zone whose valve isn't answering says so in red.** It was an amber
+  word in the card's corner - seen on the production board with its valves
+  unplugged. The card turns red and says inside what it means and what to
+  check: "This zone can't cool: its valve isn't answering (last heard 3 h
+  ago). Check that its Shelly has power and is on the Wi-Fi." In the
+  board's first five minutes, before a valve could have answered, it's
+  "Waiting for the valve", amber.
 - **The admin panel's list of boots shows when this one really began.**
   A UNO Q has no clock battery: it starts from the time it was switched
   off, and the system notes the boot before NTP corrects the clock - a

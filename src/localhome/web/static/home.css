@@ -386,6 +386,7 @@ body[data-running="true"] .hero-season::before {
 .zone[data-tone="active"] { --tone: var(--accent); }
 .zone[data-tone="ok"] { --tone: var(--ok); }
 .zone[data-tone="warn"] { --tone: var(--warn); }
+.zone[data-tone="bad"] { --tone: var(--bad); }
 .zone:is([data-tone="active"], [data-tone="ok"], [data-tone="warn"]) {
   border-color: color-mix(in srgb, var(--tone) 40%, var(--line));
   background: radial-gradient(1100px 380px at 0 0, color-mix(in srgb, var(--tone) 12%, transparent), transparent 72%), var(--surface);
@@ -417,6 +418,7 @@ body[data-running="true"] .hero-season::before {
 .state[data-tone="active"] { background: var(--accent-soft); }
 .state[data-tone="ok"] { background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .state[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.state[data-tone="bad"] { background: color-mix(in srgb, var(--bad) 13%, transparent); font-weight: 600; }
 .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
 .state[data-tone="active"] { color: var(--accent); font-weight: 600; }
 .state[data-tone="active"]::before { background: var(--accent); animation: pulse 2.4s ease-in-out infinite; }
@@ -648,6 +650,10 @@ body[data-running="true"] .hero-season::before {
 .sensor-note { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
 .sensor-note[data-level="now"] { background: color-mix(in srgb, var(--warn) 22%, transparent); font-weight: 600; }
+/* Its valve not answering: the zone can't run - red, inside the card. */
+.valve-note { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--text); font-size: 0.9rem; line-height: 1.35; }
+.valve-note svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--bad); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sensor-note svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .zone-foot {

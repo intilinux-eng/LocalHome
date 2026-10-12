@@ -344,6 +344,13 @@ def test_this_boots_time_comes_from_the_uptime_not_the_clock_before_ntp():
     assert boots[1]["booted_at"] == round(time.mktime((2026, 10, 10, 11, 47, 12, 0, 0, -1))), "earlier ones as noted"
 
 
+def test_a_valve_waits_minutes_after_a_boot_a_battery_sensor_hours():
+    window = system_status.VALVE_FRESH_BOOT_SECONDS
+    assert system_status.waiting_since_boot(None, "no MQTT message received yet", 120, window=window)
+    assert not system_status.waiting_since_boot(None, "no MQTT message received yet", 600, window=window)
+    assert system_status.waiting_since_boot(None, "no MQTT message received yet", 600), "a battery sensor: hours"
+
+
 def test_boot_history_is_empty_without_last():
     def missing(*args, **kwargs):
         raise OSError("no last here")

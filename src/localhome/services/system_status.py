@@ -310,7 +310,8 @@ def board_uptime_seconds() -> float | None:
     return _uptime_seconds()
 
 
-def waiting_since_boot(age_seconds: float | None, error: str | None, uptime_seconds: float | None) -> bool:
+def waiting_since_boot(age_seconds: float | None, error: str | None, uptime_seconds: float | None,
+                       window: float | None = None) -> bool:
     """A device not heard from since the board came up, in its first
     hours: a battery sensor waiting for its next report - "not yet", not
     "offline". Its last value, kept across the power cut (drivers/mqtt/
@@ -318,7 +319,7 @@ def waiting_since_boot(age_seconds: float | None, error: str | None, uptime_seco
     Only MQTT's own silence: a device answering with an error (a light
     strip timing out at an address it no longer has) is offline, and
     says why."""
-    if uptime_seconds is None or uptime_seconds >= FRESH_BOOT_SECONDS:
+    if uptime_seconds is None or uptime_seconds >= (FRESH_BOOT_SECONDS if window is None else window):
         return False
     if error and "no MQTT message" not in error:
         return False
@@ -508,6 +509,10 @@ def network_status(run=_nmcli) -> dict:
 # How long after a boot a device that hasn't reported yet is still
 # "waiting" rather than "offline" - a Shelly H&T's own heartbeat ceiling.
 FRESH_BOOT_SECONDS = 2 * 3600
+# The same for a mains-powered Shelly - a zone's valve: it's back on the
+# broker within a minute or two of the board (the Wi-Fi watchdog's
+# reconnect two minutes in included); past this, it's offline.
+VALVE_FRESH_BOOT_SECONDS = 5 * 60
 
 WIFI_WEAK_PERCENT = 30
 

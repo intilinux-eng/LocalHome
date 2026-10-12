@@ -384,8 +384,12 @@ function zoneStatus(zone, climate) {
   if (mode === "cool" && !zone.cool_enabled) return { tone: "off", text: tr("home.st_excluded") };
   // Its Shelly not answering - unplugged, out of the Wi-Fi: whatever the
   // thermostat decides, the valve won't follow. Seen: a cooling target
-  // below the room's, the valve offline, and the card said "resting".
-  if (zone.valve_ok === false) return { tone: "warn", text: tr("home.st_valve_offline") };
+  // below the room's, the valve offline, and the card said "resting". Red:
+  // the zone can't be run - in the board's first minutes, only amber.
+  if (zone.valve_ok === false) {
+    return zone.valve_waiting ? { tone: "warn", text: tr("home.st_valve_waiting") }
+      : { tone: "bad", text: tr("home.st_valve_offline"), valveDown: true };
+  }
   if (zone.sensor_failsafe_active) return { tone: "warn", text: tr("home.st_failsafe") };
   if (zone.sensor_manual && !zone.sensor_ok) return { tone: "warn", text: tr("home.st_manual_waiting") };
   // The board just came up: the sensor hasn't reported since - not a fault.
@@ -509,6 +513,7 @@ function fillZone(card, zone, climate) {
       ${readings}
       ${facts.length ? `<div class="zone-facts">${facts.join("")}</div>` : ""}
     </div>
+    ${valveNoteHtml(zone, status, mode)}
     ${sensorNoteHtml(zone)}
     ${excludedNow ? "" : `<div class="ribbon">
       ${ribbonSvg(zone, week, history, mode)}
@@ -532,6 +537,17 @@ function sensorNoteHtml(zone) {
   const level = zone.battery_pct <= BATTERY_NOW_PCT ? "now" : "soon";
   const text = tr(level === "now" ? "home.battery_now" : "home.battery_soon", { pct: Math.round(zone.battery_pct) });
   return `<div class="sensor-note" data-level="${level}">${ICONS.battery}<span>${esc(text)}</span></div>`;
+}
+
+// Its valve not answering: what that means for the zone, and what to
+// check - said in red inside the card, not only in its corner.
+function valveNoteHtml(zone, status, mode) {
+  if (!status.valveDown) return "";
+  const age = fmtAge(zone.valve_seconds_since_update);
+  const text = tr("home.valve_down", {
+    action: tr(mode === "cool" ? "home.valve_down_cool" : "home.valve_down_heat"),
+    since: age ? tr("home.valve_down_since", { age }) : "" });
+  return `<div class="valve-note" role="alert">${ICONS.power}<span>${esc(text)}</span></div>`;
 }
 
 // A zone whose sensor is set to "manual" in the admin panel: the
@@ -988,7 +1004,9 @@ function zoneLine(zone, climate) {
   const temp = zone.temperature_c != null ? `${fmt(zone.temperature_c)}°` : "";
   if (!zoneReady(zone)) return tr(setupKey(zone, "home.line_setup"), { zone: zone.name });
   if (zoneExcluded(zone)) return tr("home.line_excluded", { zone: zone.name });
-  if (zone.valve_ok === false) return tr("home.line_valve_offline", { zone: zone.name });
+  if (zone.valve_ok === false) {
+    return tr(zone.valve_waiting ? "home.line_valve_waiting" : "home.line_valve_offline", { zone: zone.name });
+  }
   if (zone.sensor_waiting) return tr("home.line_first_report", { zone: zone.name });
   if (!zone.sensor_ok && zone.temperature_c == null) return tr("home.line_waiting", { zone: zone.name });
   if (zone.target_c == null) {

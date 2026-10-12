@@ -863,6 +863,7 @@ def _fake_zones(page, api, mode, zones):
             zone.update(_limits(mode, target))
             zone.update(temperature_c=room, target_c=target, valve_on=valve_on, valve_ok=valve_ok,
                         valve_error=None if valve_ok else "marked offline on its availability topic",
+                        valve_waiting=False, valve_seconds_since_update=None if valve_ok else 3 * 3600,
                         sensor_ok=True, sensor_failsafe_active=False, sensor_waiting=False,
                         override=None, valve_driver=None, cool_enabled=True)
     page.unroute("**/api/climate/zones")
@@ -941,8 +942,8 @@ def test_a_zone_out_of_the_season_has_no_empty_strip(open_page, api):
 
 
 def test_a_card_takes_its_states_colour(open_page, api):
-    """Running in the season's colour, at its target green, a problem
-    amber; the top of the page brighter while a zone runs."""
+    """Running in the season's colour, at its target green, its valve not
+    answering red; the top of the page brighter while a zone runs."""
     opened = _open_home(open_page, 1280)
     page = opened.page
     line = lambda name: _card(page, name).evaluate("el => getComputedStyle(el, '::before').backgroundColor")
@@ -951,7 +952,7 @@ def test_a_card_takes_its_states_colour(open_page, api):
     assert page.evaluate("document.body.dataset.running") == "true"
     assert line(ZONE_A) != line(ZONE_B)
     _fake_zones(page, api, "heat", {ZONE_A: (19.0, 21.0, False, False), ZONE_B: (20.8, 21.0, False, True)})
-    assert [_card(page, z).get_attribute("data-tone") for z in (ZONE_A, ZONE_B)] == ["warn", "rest"]
+    assert [_card(page, z).get_attribute("data-tone") for z in (ZONE_A, ZONE_B)] == ["bad", "rest"]
     assert page.evaluate("document.body.dataset.running") == "false"
     assert line(ZONE_B) in ("rgba(0, 0, 0, 0)", "none", ""), "resting inside its band: plain"
     assert opened.errors == []
@@ -978,6 +979,34 @@ def test_a_sensor_says_in_plain_words_whether_it_runs_on_battery_or_is_powered(o
     assert note.get_attribute("data-level") == "now" and "al più presto" in note.inner_text()
     page.evaluate(set_zone, [ZONE_A, {"battery_pct": 86}])
     assert card.locator(".sensor-note").count() == 0, "from USB-C to its batteries: only said under the card"
+    assert opened.errors == []
+
+
+def test_a_valve_not_answering_is_red_with_what_to_check_amber_just_after_a_boot(open_page, api):
+    """Seen on the production board, the valves unplugged: only an amber
+    word in the card's corner. The zone can't run - it says so in red."""
+    opened = _open_home(open_page)
+    page = opened.page
+    _fake_zones(page, api, "cool", {ZONE_A: (26.1, 23.0, False, False)})
+    card = _card(page, ZONE_A)
+    assert card.get_attribute("data-tone") == "bad" and card.locator(".state").get_attribute("data-tone") == "bad"
+    note = card.locator(".valve-note").inner_text()
+    assert "non può raffrescare" in note and "ultimo segnale 3,0 h fa" in note and "alimentato" in note
+    # The board's first minutes: the valve not heard from yet.
+    import json as _json
+    data = api("/api/climate/zones")
+    for zone in data["zones"]:
+        zone.update(valve_ok=False, valve_waiting=True, valve_error="no MQTT message received yet", cool_enabled=True)
+    page.unroute("**/api/climate/zones")
+    page.route("**/api/climate/zones", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=_json.dumps(data)))
+    page.reload()
+    page.wait_for_selector(".zone", timeout=20000)
+    card = _card(page, ZONE_A)
+    assert eventually(page, lambda: card.locator(".state").inner_text() == "In attesa della valvola")
+    assert card.get_attribute("data-tone") == "warn" and card.locator(".valve-note").count() == 0
+    assert f"{ZONE_A}: in attesa della valvola" in page.inner_text("#hero-detail")
+    assert page.evaluate(UNTRANSLATED_JS) == []
     assert opened.errors == []
 
 

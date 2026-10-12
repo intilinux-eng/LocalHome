@@ -1475,6 +1475,11 @@ def _register_routes(app: Flask) -> None:
                 "valve_ok": valve_reading.get("ok", False),
                 "valve_seconds_since_update": valve_reading.get("seconds_since_update"),
                 "valve_error": valve_reading.get("error"),
+                # Not heard from since the board came up, in its first
+                # minutes: "waiting for the valve", not yet "not answering".
+                "valve_waiting": not valve_reading.get("ok", False) and system_status.waiting_since_boot(
+                    valve_reading.get("seconds_since_update"), valve_reading.get("error"), uptime,
+                    window=system_status.VALVE_FRESH_BOOT_SECONDS),
                 # What the zone is heading for now: a temporary target
                 # set from the dashboard if there is one, else the schedule's.
                 "target_c": target_now,
