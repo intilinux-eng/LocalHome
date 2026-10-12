@@ -8,27 +8,32 @@ import pytest
 
 from localhome.errors import InputError
 from localhome.services import run_hours
-from localhome.services.history import PLANT_KEY, HistoryStore, first_run_day, run_days_of
+from localhome.services.history import PLANT_KEY, HistoryStore, first_run_day, run_days_of, temp_days_of
 from localhome.web.app import create_app
 
 STEP = 30                       # seconds between recordings, as on the board
 ZONES = [{"name": "Stanze", "valve": "Stanze Valve"}, {"name": "Bagni", "valve": "Bagni Valve"}]
 NOW = datetime(2026, 10, 12, 18, 0)
+OUTDOOR = "Outdoor Sensor"
 
 
 def at(day: date, hour: float) -> int:
     return int((datetime(day.year, day.month, day.day) + timedelta(hours=hour)).timestamp())
 
 
-def record(store, day, hours, stanze=(), bagni=()):
+def record(store, day, hours, stanze=(), bagni=(), outdoor=None):
     """Every 30 s over `hours` (from, to) of `day`: each valve open in its
-    own (from, to) stretches, closed otherwise."""
+    own (from, to) stretches, closed otherwise; and the outdoor sensor's
+    temperature, `outdoor(hour)`, while it gives one."""
     start, end = hours
     ts = at(day, start)
     while ts < at(day, end):
         hour = (ts - at(day, 0)) / 3600
         open_ = lambda spans: 1.0 if any(a <= hour < b for a, b in spans) else 0.0
-        store.record_many(ts, {"Stanze Valve": {"is_on": open_(stanze)}, "Bagni Valve": {"is_on": open_(bagni)}})
+        sample = {"Stanze Valve": {"is_on": open_(stanze)}, "Bagni Valve": {"is_on": open_(bagni)}}
+        if outdoor is not None and outdoor(hour) is not None:
+            sample[OUTDOOR] = {"temperature_c": outdoor(hour)}
+        store.record_many(ts, sample)
         ts += STEP
     store.flush()
 
@@ -93,7 +98,7 @@ def test_six_years_of_days_kept_and_before_the_samples_go(store):
                          (PLANT_KEY, day.isoformat()))
         conn.commit()
         conn.close()
-    assert store.prune_runs(date(NOW.year - 5, 1, 1)) == 1
+    assert store.prune_days(date(NOW.year - 5, 1, 1)) == 1
     assert first_run_day(store) == kept.isoformat()
     yesterday = NOW.date() - timedelta(days=1)
     record(store, yesterday, (0, 24), stanze=[(8, 9)])
@@ -107,6 +112,45 @@ def refused(call, code):
     with pytest.raises(InputError) as caught:
         call()
     assert caught.value.code == code
+
+
+def test_the_outdoor_days_mean_kept_once_the_samples_go(store):
+    two, one = NOW.date() - timedelta(days=2), NOW.date() - timedelta(days=1)
+    record(store, two, (0, 24), outdoor=lambda h: 10.0 if h < 12 else 20.0)
+    record(store, one, (0, 24), outdoor=lambda h: 8.0 if h < 6 else None)        # silent from 6 on
+    days = temp_days_of(store, OUTDOOR, "temperature_c", STEP, two, NOW)
+    assert days[two.isoformat()] == (15.0, 10.0, 20.0)
+    assert one.isoformat() not in days, "a quarter of the day: no mean worth comparing"
+    run_hours.keep_days(store, ZONES, STEP, 3, now=NOW, outdoor=OUTDOOR)
+    store.prune(at(NOW.date(), 0))
+    assert temp_days_of(store, OUTDOOR, "temperature_c", STEP, two, NOW)[two.isoformat()] == (15.0, 10.0, 20.0)
+    # Both days' hours - each valve's and the plant's - and the one mean.
+    assert store.prune_days(NOW.date()) == 2 * 3 + 1
+
+
+def test_degree_days_the_year_before_and_this_months_estimate(store, tmp_path):
+    for day in range(1, 31):                    # September: 6 h a day at 14 °C
+        record(store, date(2026, 9, day), (0, 24), stanze=[(6, 10)], bagni=[(8, 12)], outdoor=lambda h: 14.0)
+    for day in range(1, 12):                    # October so far: the same at 12 °C
+        record(store, date(2026, 10, day), (0, 24), stanze=[(6, 10)], bagni=[(8, 12)], outdoor=lambda h: 12.0)
+    record(store, NOW.date(), (0, 18), stanze=[(7, 8)], outdoor=lambda h: 12.0)
+    meter = meter_at(tmp_path)
+    meter.set_year(2025, {"08": {"heat_kwh": 1000, "cool_kwh": 500}, "09": {"heat_kwh": 1100, "cool_kwh": 500}})
+    meter.set_year(2026, {"08": {"heat_kwh": 1400, "cool_kwh": 600}, "09": {"heat_kwh": 1490, "cool_kwh": 600}})
+    report = run_hours.year_report(store, ZONES, STEP, meter.get(), 2026, now=NOW, mode="heat", outdoor=OUTDOOR)
+    september, october = report["months"][-2:]
+    # 30 days of 20 - 14 °C; 90 kWh over them.
+    assert (september["outdoor_c"], september["degree_days"], september["kwh_per_dd"]) == (14.0, 180, 0.5)
+    assert september["last_year"]["kwh"] == 100.0 and report["months"][0]["last_year"]["kwh"] is None
+    # 67 hours so far at September's 0.5 kWh an hour.
+    assert october["plant_hours"] == 67.0 and october["estimate"] == {
+        "kwh": 34, "per_hour": 0.5, "kind": "heat", "months": ["2026-09"]}
+    assert (october["outdoor_c"], october["degree_days"], october["kwh_per_dd"]) == (12.0, 96, None)
+    total = report["total"]
+    assert (total["degree_days"], total["kwh_per_dd"]) == (276, 0.5)
+    assert total["last_year"] == {"months": 1, "kwh": 90.0, "last_kwh": 100.0}, "the same months, the year before"
+    cooling = run_hours.year_report(store, ZONES, STEP, meter.get(), 2026, now=NOW, mode="cool", outdoor=OUTDOOR)
+    assert "estimate" not in cooling["months"][-1], "no month of cooling to go by"
 
 
 def meter_at(tmp_path, today=NOW.date()):

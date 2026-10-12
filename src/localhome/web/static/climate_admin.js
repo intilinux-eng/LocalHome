@@ -813,7 +813,7 @@ function renderUsage(data) {
   usageView.data = data;
   const body = document.getElementById("usage-body");
   const t = (key, params) => escapeHtml(tr(`climate_admin.${key}`, params));
-  const hours = h => (typeof h === "number" ? `${usageNumber(h, h < 10 ? 1 : 0)} h` : "–");
+  const hours = h => (typeof h === "number" ? `${usageNumber(h, h < 10 ? 1 : 0)} h` : "–");
   const zones = data.zones || [];
   setPill("usage-summary", data.this_month_hours
     ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(data.this_month_hours, 0) })) : "");
@@ -825,22 +825,53 @@ function renderUsage(data) {
     ? `<span class="usage-partial">${t("usage_days_known", { known: r.days_known, days: r.days })}</span>` : "");
   const zoneHours = r => (zones.length > 1 && r.plant_hours != null
     ? `<span class="usage-partial">${zones.map(z => escapeHtml(`${displayName(z)} ${hours(r.zones[z])}`)).join(" · ")}</span>` : "");
+  const small = text => `<span class="usage-partial">${text}</span>`;
+  // Against the year before: "+12%", "−8%", "=" - nothing beside a zero.
+  const diff = (now, before) => {
+    if (!before) return "";
+    const p = Math.round((now - before) / before * 100);
+    return ` (${p === 0 ? "=" : `${p > 0 ? "+" : "−"}${Math.abs(p)}%`})`;
+  };
+  const lastYear = (n, now, text = "usage_last_year", extra = {}) => small(t(text, {
+    year: data.year - 1, n: usageNumber(n, 0), diff: now == null ? "" : diff(now, n), ...extra }));
+  const shortMonth = key => new Date(`${key}-15T12:00:00`).toLocaleDateString(LOCALE, { month: "short" });
+  // Under the month: outside's mean and its degree days.
+  const outdoor = r => {
+    const parts = [];
+    if (r.outdoor_c != null) parts.push(tr("climate_admin.usage_outdoor", { c: usageNumber(r.outdoor_c, 1) }));
+    if (r.degree_days) parts.push(tr("climate_admin.usage_dd", { n: usageNumber(r.degree_days, 0) }));
+    return parts.length ? small(escapeHtml(parts.join(" · "))) : "";
+  };
   const kwh = r => {
-    if (r.open) return `<span class="usage-partial">${t("usage_month_end")}</span>`;
+    const before = r.last_year && r.last_year.kwh != null ? r.last_year.kwh : null;
+    if (r.open) {
+      const now = r.estimate
+        ? `<span class="usage-estimate">${t("usage_estimate", { n: usageNumber(r.estimate.kwh, 0) })}</span>${small(t("usage_estimate_how", {
+            hours: usageNumber(r.plant_hours, 0), rate: usageNumber(r.estimate.per_hour, 1),
+            months: r.estimate.months.map(shortMonth).join(", ") }))}`
+        : small(t("usage_month_end"));
+      return now + (before != null ? lastYear(before, null) : "");
+    }
     const lines = [];
     if (r.heat_kwh) lines.push(t("usage_heat_short", { n: usageNumber(r.heat_kwh, 0) }));
     if (r.cool_kwh) lines.push(t("usage_cool_short", { n: usageNumber(r.cool_kwh, 0) }));
-    return lines.length ? lines.join("<br>") : usageNumber(r.kwh, 0);
+    return (lines.length ? lines.join("<br>") : usageNumber(r.kwh, 0))
+      + (r.kwh != null && before != null ? lastYear(before, r.kwh) : "");
   };
-  const line = (r, head, cls, note = "") => `<tr class="${cls}"><th scope="row">${head}${partial(r)}</th>
-      <td><b>${hours(r.plant_hours)}</b>${zoneHours(r)}</td><td>${kwh(r)}</td>
-      <td><b>${r.open ? "" : usageNumber(r.kwh_per_hour, 1)}</b>${note}</td></tr>`;
+  const perDd = r => (r.kwh_per_dd != null ? small(t("usage_per_dd", { n: usageNumber(r.kwh_per_dd, 2) })) : "");
+  const line = (r, head, cls, kwhCell, note = "") => `<tr class="${cls}"><th scope="row">${head}${partial(r)}${outdoor(r)}</th>
+      <td><b>${hours(r.plant_hours)}</b>${zoneHours(r)}</td><td>${kwhCell}</td>
+      <td><b>${r.open ? "" : usageNumber(r.kwh_per_hour, 1)}</b>${note}${perDd(r)}</td></tr>`;
   const total = data.total;
+  const same = total.last_year;
+  const totalKwh = kwh({ ...total, last_year: null }) + (same
+    ? lastYear(same.last_kwh, same.kwh, same.months === 1 ? "usage_last_year_month" : "usage_last_year_months", { m: same.months })
+    : "");
   const table = `<table class="usage-table">
       <tr><th>${t("usage_col_month")}</th><th>${t("usage_col_on")}</th><th>${t("usage_col_kwh")}</th><th>${t("usage_col_kwh_h")}</th></tr>
-      ${data.months.map(m => line(m, escapeHtml(usageMonth(m.month, m.open)), m.open ? "usage-open" : "")).join("")}
-      ${line(total, t("usage_total"), "usage-total", total.months_paired
-        ? `<span class="usage-partial">${t(total.months_paired === 1 ? "usage_paired_one" : "usage_paired", { n: total.months_paired })}</span>` : "")}
+      ${data.months.map(m => line(m, escapeHtml(usageMonth(m.month, m.open)), m.open ? "usage-open" : "", kwh(m))).join("")}
+      ${line(total, t("usage_total"), "usage-total", totalKwh, total.months_paired
+        ? small(t(total.months_paired === 1 ? "usage_paired_one" : "usage_paired", { n: total.months_paired })) : "")}
     </table>`;
 
   // The meter's month-end values, the months over: all of the year at once.
@@ -851,6 +882,7 @@ function renderUsage(data) {
       placeholder="${t("usage_reading_on", { day: lastDay(m.month) })}" aria-label="${escapeHtml(`${usageMonth(m.month)} ${label}`)}"><span
       class="usage-calc"></span>`;
   const legend = `<dl class="usage-legend">
+      <dt>${t("usage_col_month")}</dt><dd>${t("usage_legend_month")}</dd>
       <dt>${t("usage_col_on")}</dt><dd>${t("usage_legend_on")}</dd>
       <dt>${t("usage_col_kwh")}</dt><dd>${t("usage_legend_kwh")}</dd>
       <dt>${t("usage_col_kwh_h")}</dt><dd>${t("usage_legend_kwh_h")}</dd>

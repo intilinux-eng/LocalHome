@@ -318,7 +318,8 @@ def create_app(config_path: str | None = None) -> Flask:
         }
         # The valves' hours of each day kept before their samples go.
         recorder.keep_runs = lambda: run_hours.keep_days(store, _valve_zones(thermostat), history_poll_interval,
-                                                         int(recorder.retention_days) + 2)
+                                                         int(recorder.retention_days) + 2,
+                                                         outdoor=OUTDOOR_SENSOR_NAME)
 
         interlocks = [
             Interlock(leader=link["leader"], follower=link["follower"], active_in_mode=link.get("active_in_mode"))
@@ -593,8 +594,10 @@ def _valve_zones(thermostat) -> list[dict]:
 
 def _usage_answer(app: Flask, year=None) -> dict:
     """The admin panel's hours and consumption: `year` (this one by
-    default) month by month beside the heat meter's values, the years
-    there's something for, and this month's hours."""
+    default) month by month beside the heat meter's values and the
+    outdoor temperature, this month's kWh estimated for the season the
+    plant is in, the years there's something for, and this month's
+    hours."""
     zones = _valve_zones(app.config["THERMOSTAT"])
     history = app.config["HISTORY"]
     interval = app.config["HISTORY_POLL_INTERVAL"]
@@ -602,7 +605,9 @@ def _usage_answer(app: Flask, year=None) -> dict:
     today = date.today()
     years = run_hours.years_of(history, meter, today)
     year = year if year in years else today.year
-    report = run_hours.year_report(history, zones, interval, meter, year)
+    thermostat = app.config["THERMOSTAT"]
+    mode = thermostat.schedule_store.get_mode() if thermostat is not None else None
+    report = run_hours.year_report(history, zones, interval, meter, year, mode=mode, outdoor=OUTDOOR_SENSOR_NAME)
     now = report if year == today.year else run_hours.year_report(history, zones, interval, meter, today.year)
     return {"zones": [z["name"] for z in zones], "years": years, **report,
             "this_month_hours": now["months"][-1]["plant_hours"]}

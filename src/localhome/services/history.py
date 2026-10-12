@@ -65,7 +65,7 @@ MIN_OFF_SECONDS = 300
 # daily_runs' key for the plant as a whole: any zone valve open, counted
 # once however many are - what a heat meter's kWh go with.
 PLANT_KEY = "*plant*"
-# daily_runs' years: this one and the five before.
+# daily_runs' and daily_temps' years: this one and the five before.
 RUN_YEARS = 6
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
@@ -261,6 +261,7 @@ class HistoryStore:
         try:
             conn.execute("DELETE FROM daily_energy")
             conn.execute("DELETE FROM daily_runs")
+            conn.execute("DELETE FROM daily_temps")
             removed = conn.execute("DELETE FROM readings").rowcount
             conn.commit()
             self._on_stats_cache.clear()
@@ -340,6 +341,21 @@ class HistoryStore:
                     seconds REAL NOT NULL,
                     starts INTEGER NOT NULL,
                     PRIMARY KEY (key, day)
+                )
+                """
+            )
+            # A sensor's day - mean, lowest, highest - kept six years, like
+            # daily_runs: the outdoor temperature beside the plant's hours
+            # (services/run_hours.py).
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_temps (
+                    sensor TEXT NOT NULL,
+                    day TEXT NOT NULL,
+                    mean_c REAL NOT NULL,
+                    min_c REAL NOT NULL,
+                    max_c REAL NOT NULL,
+                    PRIMARY KEY (sensor, day)
                 )
                 """
             )
@@ -444,12 +460,14 @@ class HistoryStore:
         finally:
             conn.close()
 
-    def prune_runs(self, before_day: date) -> int:
-        """The valves' days before `before_day` go: six years are kept."""
+    def prune_days(self, before_day: date) -> int:
+        """The valves' days and the temperatures' before `before_day` go:
+        six years are kept."""
         with self._lock:
             conn = self._connect()
             try:
-                removed = conn.execute("DELETE FROM daily_runs WHERE day < ?", (before_day.isoformat(),)).rowcount
+                removed = sum(conn.execute(f"DELETE FROM {table} WHERE day < ?", (before_day.isoformat(),)).rowcount
+                              for table in ("daily_runs", "daily_temps"))
                 conn.commit()
                 return removed
             finally:
@@ -616,6 +634,54 @@ def _on_in(conn, sensors: list[str], field: str, t0: int, t1: int, min_off: floa
     return out
 
 
+def temp_days_of(store: "HistoryStore", sensor: str, field: str, sample_interval_seconds: float,
+                 first_day: date, now: datetime | None = None) -> dict[str, tuple[float, float, float]]:
+    """{"YYYY-MM-DD": (mean, lowest, highest)} of `sensor`'s `field` from
+    `first_day` to today. Days before today come from daily_temps, filled
+    from the samples the first time they're asked while the samples cover
+    them and hold at least half the day's cycles (a sensor silent for most
+    of a day gives no mean worth comparing); today from the samples so far.
+    A day neither kept nor covered is missing."""
+    now = now or datetime.now()
+    today = now.date()
+    enough = 86400 / sample_interval_seconds / 2
+    out: dict[str, tuple[float, float, float]] = {}
+    stats = ("SELECT AVG(value), MIN(value), MAX(value), COUNT(*) FROM readings "
+             "WHERE sensor = ? AND field = ? AND ts >= ? AND ts < ?")
+    with store._lock:
+        conn = store._connect()
+        try:
+            for day, mean, low, high in conn.execute(
+                    "SELECT day, mean_c, min_c, max_c FROM daily_temps WHERE sensor = ? AND day >= ?",
+                    (sensor, first_day.isoformat())):
+                out[day] = (mean, low, high)
+            (oldest,) = conn.execute("SELECT MIN(ts) FROM readings").fetchone()
+            day = first_day
+            stored = False
+            while day < today:
+                iso = day.isoformat()
+                start = _day_start(day)
+                if iso not in out and oldest is not None and oldest <= start:
+                    mean, low, high, count = conn.execute(
+                        stats, (sensor, field, start, _day_start(day + timedelta(days=1)))).fetchone()
+                    if count >= enough:
+                        out[iso] = (round(mean, 2), low, high)
+                        conn.execute("INSERT OR REPLACE INTO daily_temps (sensor, day, mean_c, min_c, max_c) "
+                                     "VALUES (?, ?, ?, ?, ?)", (sensor, iso, round(mean, 2), low, high))
+                        stored = True
+                day += timedelta(days=1)
+            if stored:
+                conn.commit()
+            if first_day <= today:
+                mean, low, high, count = conn.execute(
+                    stats, (sensor, field, _day_start(today), int(now.timestamp()) + 1)).fetchone()
+                if count:
+                    out[today.isoformat()] = (round(mean, 2), low, high)
+        finally:
+            conn.close()
+    return out
+
+
 def first_run_day(store: "HistoryStore") -> str | None:
     """The oldest day daily_runs keeps, if any."""
     with store._lock:
@@ -752,8 +818,9 @@ class HistoryRecorder:
         # Each power meter's day - energy and peak - kept for good
         # (services/energy.py); set by create_app().
         self.energy = None
-        # Optional callable: the valves' last days into daily_runs before
-        # their samples go - set by create_app() (services/run_hours.py).
+        # Optional callable: the valves' and the outdoor temperature's last
+        # days into daily_runs and daily_temps before their samples go -
+        # set by create_app() (services/run_hours.py).
         self.keep_runs = None
         # When the last cycle's samples were written, on the monotonic
         # clock - see ThermostatController.last_tick_ok_ts for why.
@@ -906,7 +973,7 @@ class HistoryRecorder:
             removed = self.store.prune(now - int(self.retention_days * 86400))
             if removed:
                 logger.info("Pruned %d history rows older than %s days", removed, self.retention_days)
-            self.store.prune_runs(date(datetime.now().year - RUN_YEARS + 1, 1, 1))
+            self.store.prune_days(date(datetime.now().year - RUN_YEARS + 1, 1, 1))
         except Exception:
             logger.exception("Failed to prune old history rows")
 

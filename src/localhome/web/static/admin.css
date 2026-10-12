@@ -568,6 +568,9 @@
 .usage-edit td { padding-left: 4px; padding-right: 0; }
 .usage-edit th[scope="row"] { width: 1%; white-space: nowrap; overflow-wrap: normal; }
 .usage-edit th, .usage-edit td { vertical-align: middle; }
+.usage-estimate { font-style: italic; color: var(--text-2); }
+/* The ratios' column: its units whole, never split mid-word. */
+.usage-table td:last-child { overflow-wrap: normal; }
 .usage-calc { display: block; min-height: 1.2em; margin-top: 3px; font-size: 0.72rem; color: var(--text-3); text-align: right; }
 .usage-calc[data-state="bad"] { color: var(--bad); font-weight: 600; }
 /* What each column of the year holds. */

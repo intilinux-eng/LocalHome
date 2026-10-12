@@ -253,6 +253,28 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
         assert f"12/{last_year}" in page.inner_text("#usage-result")
         assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
         page.click("#usage button:has-text('Annulla')")
+        # A year with the outdoor sensor, the year before and this month's estimate.
+        last = {"kwh": 100, "plant_hours": None, "kwh_per_hour": None, "kwh_per_dd": None, "degree_days": None}
+        month = {"heat_meter": None, "cool_meter": None, "days_known": 30, "zones": {"Stanze": 120, "Bagni": 120}}
+        page.evaluate("data => renderUsage(data)", {
+            "ok": True, "zones": ["Stanze", "Bagni"], "years": [2026, 2025], "year": 2026, "this_month_hours": 67,
+            "before": {"heat_kwh": None, "cool_kwh": None},
+            "months": [
+                {**month, "month": "2026-09", "open": False, "heat_kwh": 90, "cool_kwh": 0, "kwh": 90, "days": 30,
+                 "plant_hours": 180, "outdoor_c": 14, "degree_days": 180, "kwh_per_hour": 0.5, "kwh_per_dd": 0.5,
+                 "last_year": last},
+                {**month, "month": "2026-10", "open": True, "heat_kwh": None, "cool_kwh": None, "kwh": None, "days": 12,
+                 "days_known": 12, "plant_hours": 67, "outdoor_c": 12, "degree_days": 96, "kwh_per_hour": None,
+                 "kwh_per_dd": None, "last_year": {**last, "kwh": 150},
+                 "estimate": {"kwh": 34, "per_hour": 0.5, "kind": "heat", "months": ["2026-09"]}}],
+            "total": {"heat_kwh": 90, "cool_kwh": 0, "kwh": 90, "plant_hours": 247, "zones": {"Stanze": 150, "Bagni": 140},
+                      "kwh_per_hour": 0.5, "months_paired": 1, "degree_days": 276, "kwh_per_dd": 0.5,
+                      "last_year": {"months": 1, "kwh": 90, "last_kwh": 100}}})
+        table = page.inner_text("#usage .usage-table").replace(" ", " ")
+        assert "esterno 14,0 °C · 180 GG" in table and "0,50 kWh/GG" in table and "276 GG" in table
+        assert "2025: 100 kWh (−10%)" in table and "2025, stesso mese: 100 kWh (−10%)" in table
+        assert "≈ 34 kWh, stima" in table and "67 h × 0,5 kWh/ora, media di set" in table and "2025: 150 kWh" in table
+        assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
         assert api(f"/api/climate-admin/usage?year={last_year}")["months"][11]["heat_meter"] == 1200
     finally:
         api("/api/climate-admin/heat-meter/year", {"year": last_year, "months": {}})
