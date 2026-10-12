@@ -84,7 +84,7 @@ def test_names_stay_text_on_the_home_page_and_in_the_plan(open_page):
 def test_a_zone_is_changed_for_a_while_and_back(open_page, api):
     page = _open_home(open_page).page
     card = _card(page, ZONE_A)
-    card.locator("button[data-action=start][data-delta='0.5']").click()
+    card.locator("button[data-action=mode-manual]").click()
     card.locator(".pending button[data-action=step][data-delta='0.5']").click()
     card.locator(".pending button[data-hours='4']").click()
     wanted = float(card.locator(".pending .stepper-value").inner_text().replace(",", ".").rstrip("°"))
@@ -103,14 +103,14 @@ def test_off_is_one_of_the_manual_changes_not_a_button_of_its_own(open_page, api
     page = opened.page
     card = _card(page, ZONE_A)
     assert card.locator(".quick button", has_text="Spegni").count() == 0
-    card.locator("button[data-action=start][data-delta='0.5']").click()
+    card.locator("button[data-action=mode-manual]").click()
     assert card.locator(".pending-title").inner_text() == "Programmazione manuale"
     shown = card.locator(".pending .stepper-value").inner_text()
-    card.locator(".pending button[data-action=pending-off]").click()
+    card.locator("button[data-action=mode-off]").click()
     assert card.locator(".pending .stepper").is_hidden()
-    card.locator(".pending button[data-action=pending-on]").click()
+    card.locator("button[data-action=mode-manual]").click()
     assert card.locator(".pending .stepper-value").inner_text() == shown, "the temperature it had"
-    card.locator(".pending button[data-action=pending-off]").click()
+    card.locator("button[data-action=mode-off]").click()
     card.locator(".pending button[data-hours='2']").click()
     card.locator("button[data-action=apply]").click()
     assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
@@ -141,10 +141,10 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     opened = _open_home(open_page)
     page = opened.page
     card = _card(page, ZONE_A)
-    assert card.locator(".quick-title").inner_text() == "Cambia la temperatura"
+    assert card.locator(".quick-title").inner_text() == "Programmazione semplice"
     _open_details(page, ZONE_A)
-    assert "Tocca − o +" in card.locator(".quick-hint").inner_text()
-    card.locator("button[data-action=start][data-delta='0.5']").click()
+    assert "Manuale: una temperatura" in card.locator(".quick-hint").inner_text()
+    card.locator("button[data-action=mode-manual]").click()
     durations = card.locator(".pending button[data-action=duration]").all_inner_texts()
     assert durations[:4] == ["2 h", "4 h", "8 h", "24 h"] and durations[-1] == "Finché non lo cambi"
     card.locator(".pending button[data-hours='manual']").click()
@@ -157,7 +157,7 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     scheduled = _zone(api, ZONE_A)["scheduled_target_c"]
     back = "spenta" if scheduled is None else f"{scheduled:g}".replace(".", ",") + "°"
     assert banner.locator("button[data-action=resume]").inner_text() == f"Torna alla programmazione ({back})"
-    assert card.locator(".quick-title").inner_text() == "Cambiala ancora"
+    assert card.locator("button[data-action=mode-manual]").get_attribute("aria-checked") == "true"
     assert "manuale finché non lo cambi" in page.locator("#hero-detail").inner_text()
     # The week says its edits wait for the way back.
     assert eventually(page, lambda: "Adesso vale la programmazione manuale" in card.locator(".plan-manual").text_content())
@@ -414,14 +414,14 @@ def test_away_turns_everything_off_and_nothing_changes_until_back(open_page, api
     assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
     assert api("/api/sensors/Dehumidifier")["is_on"] is False
     assert eventually(page, lambda: card.locator(".away-note").count() == 1)
-    assert card.locator(".stepper, .manual-banner, button[data-action=off]").count() == 0
+    assert card.locator(".mode-row, .stepper, .manual-banner, button[data-action=off]").count() == 0
     assert card.locator(".zone-plan").is_hidden(), "the week neither"
     assert "Spento anche: Deumidificatore" in page.inner_text("#hero-detail")
     device = page.locator("#season-devices .season-device", has_text="Deumidificatore")
     assert "sei fuori casa" in device.inner_text() and device.locator("button[data-switch]").count() == 0
     card.locator(".away-note button[data-action=back]").click()
     assert eventually(page, lambda: api("/api/climate/zones")["away_until"] is None)
-    assert eventually(page, lambda: card.locator(".stepper").count() == 1)
+    assert eventually(page, lambda: card.locator(".mode-row").count() == 1)
     assert card.locator(".manual-banner").count() == 0, "back to the schedule, not the old change"
     _open_details(page, ZONE_A)
     assert card.locator(".zone-plan").is_visible()
@@ -955,17 +955,19 @@ def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
     card = _card(page, ZONE_A)
     mode = lambda key: card.locator(f"button[data-action=mode-{key}]")
     try:
-        assert card.locator(".mode-row button").all_inner_texts() == ["Programma", "Manuale", "Spenta"]
+        assert card.locator(".quick-title").inner_text() == "Programmazione semplice"
+        assert card.locator(".mode-row button").all_inner_texts() == ["Oraria", "Manuale", "Spenta"]
+        assert card.locator(".quick .stepper").count() == 0, "a temperature through Manual"
         assert mode("schedule").get_attribute("aria-checked") == "true"
-        assert "Segue la programmazione" in card.locator(".mode-line").inner_text()
+        assert "Segue la programmazione oraria" in card.locator(".mode-line").inner_text()
         mode("off").click()
-        assert card.locator(".pending button[data-action=pending-off]").get_attribute("aria-pressed") == "true"
+        assert mode("off").get_attribute("aria-checked") == "true" and card.locator(".pending .stepper").is_hidden()
         card.locator("button[data-action=apply]").click()
         assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
         assert eventually(page, lambda: mode("off").get_attribute("aria-checked") == "true")
         assert card.locator(".mode-line").count() == 0, "by hand: the banner above says until when"
         mode("manual").click()
-        assert card.locator(".pending button[data-action=pending-on]").get_attribute("aria-pressed") == "true"
+        assert mode("manual").get_attribute("aria-checked") == "true" and card.locator(".pending .stepper").is_visible()
         card.locator("button[data-action=cancel-pending]").click()
         mode("schedule").click()
         assert eventually(page, lambda: _zone(api, ZONE_A)["override"] is None)
@@ -987,7 +989,7 @@ def test_a_zone_shows_what_matters_and_keeps_the_rest_in_its_details(open_page):
     card = _card(page, ZONE_A)
     card.locator(".zone-more").wait_for(state="attached", timeout=20000)
     assert card.locator(".zone-more").get_attribute("open") is None
-    assert card.locator(".readings").is_visible() and card.locator(".stepper").is_visible()
+    assert card.locator(".readings").is_visible() and card.locator(".mode-row").is_visible()
     for part in (".ribbon", ".zone-foot", ".zone-runs", ".zone-temps", ".zone-plan"):
         assert card.locator(part).is_hidden(), part
     _open_details(page, ZONE_A)
@@ -1345,7 +1347,7 @@ def test_a_tap_keeps_the_card_under_the_finger_and_its_nodes(iphone, api):
     page.evaluate("window.scrollBy(0, -250)")        # its controls mid-screen, the top above
     card.locator(".zone-head").evaluate("e => { e.__kept = true; }")
     before = quick.bounding_box()["y"]
-    card.locator("button[data-action=start][data-delta='0.5']").tap()
+    card.locator("button[data-action=mode-manual]").tap()
     page.wait_for_selector(f".zone[data-zone={_css_string(ZONE_A)}] .pending")
     assert abs(quick.bounding_box()["y"] - before) < 1
     apply = card.locator("button[data-action=apply]")
@@ -1396,7 +1398,7 @@ def test_an_action_the_board_never_answers_frees_its_button_and_says_so(iphone):
     page.clock.install()        # its 15 s time limit run forward, not waited
     page.route("**/override", lambda route: None)          # never answered
     card = _card(page, ZONE_A)
-    card.locator("button[data-action=start][data-delta='0.5']").tap()
+    card.locator("button[data-action=mode-manual]").tap()
     apply = card.locator("button[data-action=apply]")
     apply.tap()
     page.evaluate("refreshClimate()")

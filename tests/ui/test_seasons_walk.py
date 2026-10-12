@@ -103,11 +103,16 @@ class Home:
     def manual(self, name, steps=0, hours="2", off=False):
         """A manual change from the card, as a finger would."""
         card = self.card(name)
-        card.locator("button[data-action=start][data-delta='0.5']").click()
+        # Manual, then + once - as the old + beside the modes did (from off,
+        # its usual temperature).
+        was_off = self.zone(name)["target_c"] is None
+        card.locator("button[data-action=mode-manual]").click()
+        if not was_off:
+            card.locator(".pending button[data-action=step][data-delta='0.5']").click()
         for _ in range(steps):
             card.locator(".pending button[data-action=step][data-delta='0.5']").click()
         if off:
-            card.locator(".pending button[data-action=pending-off]").click()
+            card.locator("button[data-action=mode-off]").click()
         card.locator(f".pending button[data-action=duration][data-hours='{hours}']").click()
         card.locator(".pending button[data-action=apply]").click()
         eventually(self.page, lambda: self.zone(name)["override"] is not None)
@@ -133,11 +138,11 @@ def test_summer_the_week_and_every_manual_change(browser, house):
     assert eventually(page, lambda: home.on(f"{ROOMS} Valve") is True), "27° with the week's 24°: cooling"
     home.refresh()
     assert home.state(ROOMS) == t["st_cooling"] and t["hero_cooling"].format(zones=ROOMS) in home.title()
-    assert home.state(BATHS) == t["st_excluded"] and home.card(BATHS).locator(".stepper").count() == 0
+    assert home.state(BATHS) == t["st_excluded"] and home.card(BATHS).locator(".mode-row").count() == 0
     assert home.on(f"{BATHS} Valve") is False and home.on("Bathroom Bypass Valve") is True, "bypass closed in summer"
 
     # Annulla changes nothing
-    home.card(ROOMS).locator("button[data-action=start][data-delta='0.5']").click()
+    home.card(ROOMS).locator("button[data-action=mode-manual]").click()
     assert home.card(ROOMS).locator(".pending-title").inner_text() == t["pending_title"]
     home.card(ROOMS).locator(".pending button[data-action=cancel-pending]").click()
     assert home.zone(ROOMS)["override"] is None
@@ -173,8 +178,8 @@ def test_summer_the_week_and_every_manual_change(browser, house):
     override = home.zone(ROOMS)["override"]
     assert override["target"] is None and override["until"] and home.on(f"{ROOMS} Valve") is False
     assert home.title() == t["hero_off_now_cool"]
-    assert home.card(ROOMS).locator(".quick .stepper-value").inner_text().strip() == t["st_off"]
-    home.card(ROOMS).locator("button[data-action=start][data-delta='0.5']").click()
+    assert home.card(ROOMS).locator("button[data-action=mode-off]").get_attribute("aria-checked") == "true"
+    home.card(ROOMS).locator("button[data-action=mode-manual]").click()
     assert home.card(ROOMS).locator(".pending .stepper-value").inner_text() in ("24°", "26°"), "from off: its usual"
     home.card(ROOMS).locator(".pending button[data-action=cancel-pending]").click()
     home.back_to_the_week(ROOMS)
@@ -221,7 +226,7 @@ def test_summer_the_dehumidifier_and_away(browser, house):
     assert home.on("Bathroom Bypass Valve") is True, "the bypass keeps the season"
     assert home.zone(ROOMS)["override"] is None
     home.refresh()
-    assert home.card(ROOMS).locator(".stepper").count() == 0 and home.card(ROOMS).locator(".away-note").count() == 1
+    assert home.card(ROOMS).locator(".mode-row").count() == 0 and home.card(ROOMS).locator(".away-note").count() == 1
     assert t["away_device_off"] in page.locator("#season-devices").inner_text()
     for path, body, code in ((f"/api/climate/zones/{ROOMS}/override", {"target": 22, "hours": 1}, "override_while_away"),
                              ("/api/dehumidifier/on", {"hours": 1}, "dehumidifier_away"),
@@ -263,7 +268,7 @@ def test_winter_both_zones_heat_and_away_closes_them(browser, house):
     assert eventually(page, lambda: home.on(f"{ROOMS} Valve") is True and home.on(f"{BATHS} Valve") is True)
     home.refresh()
     assert home.state(ROOMS) == t["st_heating"] and home.state(BATHS) == t["st_heating"]
-    assert home.card(BATHS).locator(".stepper").count() == 1, "the bathrooms are the resident's again"
+    assert home.card(BATHS).locator(".mode-row").count() == 1, "the bathrooms are the resident's again"
     assert home.on("Bathroom Bypass Valve") is False, "bypass open in winter"
     assert page.locator("#season-devices .season-device").count() == 0
     assert home.call("/api/dehumidifier/on", {"hours": 1})["status"] == 409

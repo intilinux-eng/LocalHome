@@ -679,7 +679,7 @@ body[data-running="true"] .hero-season::before {
   color: var(--text-2); font-size: 0.88rem; white-space: nowrap; transition: background 0.2s, color 0.2s; }
 .mode-row button[aria-checked="true"] { background: var(--surface); box-shadow: var(--shadow); color: var(--accent); font-weight: 650; }
 .mode-row button[data-action="mode-off"][aria-checked="true"] { color: var(--text); }
-.mode-line { flex: 1 1 12em; min-width: 0; margin: 0; font-size: 0.84rem; line-height: 1.35; color: var(--text-2); }
+.mode-line { flex-basis: 100%; min-width: 0; margin: 0; font-size: 0.84rem; line-height: 1.35; color: var(--text-2); }
 .pending-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: -4px; }
 
 /* A zone left out of the season: said plainly, where the controls would be. */

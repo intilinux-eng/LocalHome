@@ -847,7 +847,19 @@ function quickHtml(zone, climate, change) {
     return `<div class="excluded-note away-note">${ICONS.suitcase}<span>${esc(tr("home.away_zone_note"))}</span>
       <button class="btn" type="button" data-action="back">${esc(tr("home.away_back"))}</button></div>`;
   }
+  // Its mode in sight under a title of its own, always in the same place -
+  // the week, by hand, or off by hand: what's being chosen, while a change
+  // is being chosen. The quick way, beside the hours of the week's plan.
   const pending = state.pending[zone.name];
+  const held = zone.override;
+  const current = pending ? (pending.target == null ? "off" : "manual")
+    : !held ? "schedule" : held.target == null ? "off" : "manual";
+  const modeButton = (key, label) => `<button type="button" role="radio" data-action="mode-${key}"
+    aria-checked="${current === key}">${esc(tr(label))}</button>`;
+  const modes = `<div class="quick-title">${esc(tr("home.quick_title"))}</div>
+    <div class="mode-row" role="radiogroup" aria-label="${esc(tr("home.mode_label"))}">
+      ${modeButton("schedule", "home.mode_schedule")}${modeButton("manual", "home.mode_manual")}${modeButton("off", "home.mode_off")}
+    </div>`;
   if (pending) {
     const options = DURATIONS.map(h => `<button type="button" data-action="duration" data-hours="${h}" aria-pressed="${pending.hours === h}">${esc(fmtDuration(h))}</button>`);
     if (change) {
@@ -856,13 +868,9 @@ function quickHtml(zone, climate, change) {
     options.push(`<button type="button" data-action="duration" data-hours="manual" aria-pressed="${pending.hours === "manual"}">${esc(tr("home.until_changed_button"))}</button>`);
     // A temperature, or off: both a manual change, for the time chosen.
     const off = pending.target == null;
-    return `
+    return `${modes}
       <div class="pending">
         <div class="pending-title">${esc(tr("home.pending_title"))}</div>
-        <div class="segmented" role="group" aria-label="${esc(tr("home.pending_title"))}">
-          <button type="button" data-action="pending-on" aria-pressed="${!off}">${esc(tr("home.pending_on"))}</button>
-          <button type="button" data-action="pending-off" aria-pressed="${off}">${esc(tr("home.pending_off"))}</button>
-        </div>
         <div class="stepper" ${off ? "hidden" : ""}>
           <button type="button" data-action="step" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
           <span class="stepper-value">${fmtTarget(pending.target)}</span>
@@ -876,32 +884,16 @@ function quickHtml(zone, climate, change) {
         </div>
       </div>`;
   }
-  // Its controls say what they are: a title, the mode it's in - the week,
-  // by hand, or off by hand - and the temperature's - and +.
-  const shown = zone.target_c != null ? zone.target_c : null;
-  const held = zone.override;
-  const current = !held ? "schedule" : held.target == null ? "off" : "manual";
-  const modeButton = (key, label) => `<button type="button" role="radio" data-action="mode-${key}"
-    aria-checked="${current === key}">${esc(tr(label))}</button>`;
   // Following the week: what it does next - by hand, the banner above says
-  // until when and the way back.
+  // until when and the way back. A temperature is changed with "Manual":
+  // its - and + are in the choice it opens.
   let follows = "";
   if (!held) {
     const next = change ? tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }) : "";
     follows = [tr("home.mode_follows"), change && change.target != null ? `${next} · ${switchesOnText(change.target, mode)}` : next]
       .filter(Boolean).join(". ");
   }
-  return `
-    <div class="quick-title">${esc(tr(zone.override ? "home.quick_title_again" : "home.quick_title"))}</div>
-    <div class="mode-row" role="radiogroup" aria-label="${esc(tr("home.mode_label"))}">
-      ${modeButton("schedule", "home.mode_schedule")}${modeButton("manual", "home.mode_manual")}${modeButton("off", "home.mode_off")}
-    </div>
-    <div class="stepper">
-      <button type="button" data-action="start" data-delta="-0.5" aria-label="${esc(tr("home.colder"))}">−</button>
-      <span class="stepper-value">${shown == null ? esc(tr("home.st_off")) : fmtTarget(shown)}</span>
-      <button type="button" data-action="start" data-delta="0.5" aria-label="${esc(tr("home.warmer"))}">+</button>
-    </div>
-    ${follows ? `<p class="mode-line">${esc(follows)}</p>` : ""}`;
+  return `${modes}${follows ? `<p class="mode-line">${esc(follows)}</p>` : ""}`;
 }
 
 function lastTarget(zone) {
@@ -953,14 +945,24 @@ async function onZoneClick(event) {
   // The three modes: back to the schedule is "resume"; manual and off
   // open the choice a - or + opens - the temperature, or off, and for how
   // long - with that one picked.
+  // While a change is being chosen they switch it between a temperature
+  // and off, and the week drops it.
   if (action === "mode-schedule") {
-    if (!zone.override) return;
-    action = "resume";
+    if (pending) delete state.pending[zone.name];
+    if (zone.override) action = "resume";
+    else if (!pending) return;
   }
   if (action === "mode-manual") {
-    state.pending[zone.name] = { target: clampTarget(lastTarget(zone)), hours: firstHours() };
+    if (!pending) state.pending[zone.name] = { target: clampTarget(lastTarget(zone)), hours: firstHours() };
+    else if (pending.target == null) pending.target = pending.last ?? clampTarget(lastTarget(zone));
   } else if (action === "mode-off") {
-    state.pending[zone.name] = { target: null, last: clampTarget(lastTarget(zone)), hours: firstHours() };
+    if (!pending) state.pending[zone.name] = { target: null, last: clampTarget(lastTarget(zone)), hours: firstHours() };
+    else if (pending.target != null) {
+      pending.last = pending.target;
+      pending.target = null;
+    }
+  } else if (action === "mode-schedule") {
+    // The change dropped, nothing held: just shown again.
   } else if (action === "start") {
     // Off: the first tap turns it on at its usual temperature, - or +.
     const step = zone.target_c == null ? 0 : Number(button.dataset.delta);
