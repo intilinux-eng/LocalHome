@@ -263,7 +263,8 @@ body[data-offline="true"] :is(.hero-main, .outdoor, .zones, .plant, .tiles) { op
   .hero-now .server-clock-date-short { display: block; font-weight: 550; }
   .outdoor-value-none { display: none; }
 }
-.outdoor-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+.outdoor > * { min-width: 0; max-width: 100%; }
+.outdoor-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
 .outdoor-label svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .outdoor-value { font-size: 2.2rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
 .outdoor-value small { font-size: 0.55em; color: var(--text-3); vertical-align: super; }
@@ -839,7 +840,9 @@ body[data-running="true"] .hero-season::before {
 /* The VMC: a card like a zone's, three big speeds with their icon and
    level, a fan that turns as fast as it runs (home.js vmcTile). */
 .vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }
-.vmc-live { display: grid; gap: 16px; }
+/* One column that may narrow below its content (a phone's larger text):
+   its rows shrink with the card instead of pushing past the screen. */
+.vmc-live { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .vmc svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .vmc-head { display: flex; align-items: center; gap: 12px; }
 .vmc-title { display: grid; gap: 1px; flex: 1; min-width: 0; }
@@ -887,6 +890,10 @@ body[data-running="true"] .hero-season::before {
 }
 .vmc-preset svg { width: 28px; height: 28px; margin-bottom: 2px; }
 .vmc-preset-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+/* Text made larger on the phone: a button narrows and a long name is cut
+   short, rather than the card going past the screen's edge. */
+.vmc-preset { min-width: 0; }
+.vmc-preset-name, .vmc-preset-value { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vmc-preset-value { font-size: 0.8rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .vmc-preset:hover { border-color: var(--line); }
 .vmc-preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
@@ -1335,8 +1342,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 
 @media (max-width: 380px) {
-  .now-value { font-size: 3rem; }
-  .reading-rh .now-value { font-size: 2.3rem; }
+  /* Narrow, and larger text on top: the big numbers follow the screen. */
+  .now-value { font-size: min(3rem, 14vw); }
+  .reading-rh .now-value { font-size: min(2.3rem, 11vw); }
   .readings { padding: 12px 14px 10px; }
   .readings-now { gap: 14px; }
   .reading-rh { padding-left: 14px; }

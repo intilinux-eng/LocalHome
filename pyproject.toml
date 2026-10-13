@@ -51,4 +51,7 @@ testpaths = ["tests"]
 # The browser tests need Playwright and a Chromium and take a minute or
 # two: left out of a plain `pytest`, run with `pytest -m ui`.
 addopts = "-m 'not ui'"
-markers = ["ui: drives a real browser against a real server (tests/ui)"]
+markers = [
+    "ui: drives a real browser against a real server (tests/ui)",
+    "enduser: the end-user suite - the home page used as a resident would (tests/ui/test_end_user.py)",
+]

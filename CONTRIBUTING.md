@@ -110,3 +110,24 @@ refresh, a 15 s time limit) runs the page's clock forward instead -
 CI runs them as their own job (`.github/workflows/tests.yml`). A change
 to a page - `templates/`, `static/`, the locale files - should keep them
 green, and a bug found by hand in a browser is worth one there.
+
+### The end-user suite
+
+`tests/ui/test_end_user.py` is the home page used as a resident would: the
+usual uses (a zone by hand for two hours, off until the next change, away
+and back, the VMC's speeds) and the clumsy ones (a double tap on Apply, the
+modes mashed then Cancel, a reload half-way, the board gone mid-change or
+slow to answer, two phones at once, a phone's text set larger), on a board
+with two zones named as a real home's.
+
+```bash
+pytest -m enduser -n 6     # about 20 s
+```
+
+Each step ends with `w.check("what should be true", condition)`, which
+also asks the page for no script error, nothing past the screen's edge, no
+untranslated text and no button left waiting - and the claims are checked
+against the board's API, not only what the page shows. A failed check
+saves a screenshot and says where. It's the base to grow: a use case found
+in real life - something a resident did that went wrong - becomes a test
+there, so it's tried every time from then on.

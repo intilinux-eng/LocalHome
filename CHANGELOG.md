@@ -401,6 +401,12 @@ date rather than by tag.
   seconds - and greys the values as the last received; the first answer
   takes it away and asks everything else again. While the page loads,
   the zones' shapes are drawn instead of an empty page.
+- **The end-user suite** (`tests/ui/test_end_user.py`, `pytest -m enduser`):
+  the home page used as a resident would, the clumsy ways included, each
+  step checked against the board's API and for script errors, overflow,
+  untranslated text and stuck buttons. Its first run found the page going
+  past the screen's edge with a phone's text set larger (the VMC card,
+  the outdoor tile, the readings on a 320 px phone) - fixed.
 - **Energy: the last 7 days, not the week from Monday.** A Monday no
   longer shows one bar and six empty days; today is always the last.
 - **The tests in parallel, and the slowest without real waits.**
