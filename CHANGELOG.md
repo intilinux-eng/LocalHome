@@ -1,10 +1,18 @@
 # Changelog
 
-Notable changes to LocalHome. Dates are when the change landed on `main`;
-this project doesn't cut versioned releases, so entries are grouped by
-date rather than by tag.
+Notable changes to LocalHome. From 1.0.0 it has a version - at the bottom
+of the home page and in the admin's System status - raised when it's worth
+telling whoever uses it: 1.0.1 for fixes, 1.1.0 for something new, 2.0.0
+for a change the installer has to act on; each release is tagged vX.Y.Z.
+Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
+
+## 1.0.0 - 2026-10-13
+
+The climate of a real home - Stanze and Bagni, the bypass, the
+dehumidifier, the outdoor sensor, the VMC - tried on the board with its
+real Shellys: everything since 16 September.
 
 ### Removed
 - **TP-Link Kasa/Tapo LED strip support.** The `tplink_led_strip`
@@ -123,6 +131,9 @@ date rather than by tag.
   them in the background, so they were missing from it entirely).
 
 ### Added
+- **A version, at the bottom of the home page** ("Versione 1.0.0") and in
+  the admin's System status beside the commit: which LocalHome this is,
+  for whoever asks whether it's the new one.
 - **Each zone's lowest and highest, today and over the week.** Inside the
   readings, one line: today's low and high at the ends of a bar, a ring
   on it where the room is now (when each came on hover). Folded below,

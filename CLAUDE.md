@@ -89,6 +89,9 @@ python -m ruff check --select F <files>        # undefined names, unused imports
   plain sentences - match the surrounding style.
 - Every user-visible text goes through the locale files, in both languages.
 - A user-visible change gets an entry under `## Unreleased` in CHANGELOG.md.
+  A release, when it's worth telling (fixes 1.0.x, something new 1.x.0):
+  `__version__` in `localhome/__init__.py` and pyproject.toml (a test keeps
+  them equal), Unreleased moved under `## X.Y.Z - date`, a tag `vX.Y.Z`.
 - A use case found in real use becomes a test in `test_end_user.py`.
 - Files use CRLF line endings on this machine; edit with tools that keep them.
 - Small, single-purpose commits.

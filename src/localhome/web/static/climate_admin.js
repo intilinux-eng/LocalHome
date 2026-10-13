@@ -1726,10 +1726,11 @@ function sinceText(epochSeconds, uptimeSeconds) {
   return tr("climate_admin.system_since", { when: formatWhen(epochSeconds), ago: formatDuration(uptimeSeconds) });
 }
 
+// "1.0.0 · 594cfc8 · 13 ott 2026": the version residents see, then the commit.
 function versionText(software) {
-  if (!software || !software.commit) return "--";
+  if (!software) return "--";
   const date = software.date ? new Date(software.date).toLocaleDateString(LOCALE, { day: "2-digit", month: "short", year: "numeric" }) : "";
-  return date ? `${software.commit} · ${date}` : software.commit;
+  return [software.version, software.commit, date].filter(Boolean).join(" · ") || "--";
 }
 
 function bootsHtml(boots) {
