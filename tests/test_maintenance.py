@@ -148,8 +148,8 @@ def test_factory_reset_removes_only_what_localhome_created(setup):
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     restarts = []
-    monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: restarts.append(True))
-    monkeypatch.setattr("localhome.web.app.is_supported", lambda: True)
+    monkeypatch.setattr("localhome.web.routes.system.schedule_restart", lambda: restarts.append(True))
+    monkeypatch.setattr("localhome.web.routes.system.is_supported", lambda: True)
     cfg = tmp_path / "config"
     cfg.mkdir()
     _write(cfg / "config.yaml", CONFIG)

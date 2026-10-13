@@ -1,5 +1,5 @@
 """Persists a debug/testing value for a zone whose sensor is in "manual"
-mode - see the climate admin panel (web/app.py's /climate-admin routes)
+mode - see the climate admin panel (web/routes/admin.py)
 and drivers/manual/climate.py's ManualOverrideDriver, which is the only
 reader. The point: verify services/thermostat.py's on/off decision at a
 chosen temperature without a real device event or a simulated drift.

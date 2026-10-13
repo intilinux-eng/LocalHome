@@ -96,7 +96,7 @@ A few things to notice:
   by `DeviceManager` before your factory sees them - see
   `core/manager.py`'s `_PATH_OPTION_KEYS` if you need a third path-like
   option name added there.
-- You never touch `core/registry.py`, `core/manager.py` or `web/app.py`.
+- You never touch `core/registry.py`, `core/manager.py` or `web/` (`app.py`, `routes/`).
   `register_driver` plus `load_builtin_drivers()`'s package walk is the
   entire integration point.
 
@@ -112,7 +112,7 @@ integrations:
 
 ## 5. Make it show up correctly on the dashboard
 
-The home page (`web/static/home.js`, `renderHouse()`) draws a card per
+The home page (`web/static/home/house.js`, `renderHouse()`) draws a card per
 `kind` from the fields it knows: a `switch` its on/off (and, with
 `power_w`, what it draws and its days - see services/energy.py), a
 `number` its slider, a `power_meter` its power, `voltage_v`,
@@ -125,7 +125,7 @@ the card is drawn.
 Adding a genuinely new *kind* (not cover/power_meter/climate/switch/number)
 - say, a binary door sensor - needs: a new value flowing through
 `DeviceManager.sensor_kinds`, a small render branch in `renderHouse()`
-in `home.js`, and probably a new interface in
+in `web/static/home/`, and probably a new interface in
 `core/interfaces.py` if the existing ones don't fit. That's a bigger
 change; open an issue to discuss the shape first if you're not sure.
 

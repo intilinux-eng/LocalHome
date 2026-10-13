@@ -1,6 +1,6 @@
 "use strict";
 
-// Same tiny translation helper as home.js, copied rather than shared -
+// Same tiny translation helper as the home page's (home/core.js), copied rather than shared -
 // this page is a separate, occasional-use bundle on purpose (see
 // docs/configuration.md's climate_admin section).
 function tr(path, vars) {
@@ -510,7 +510,7 @@ async function saveExtraSensor(button) {
   }
 }
 
-// Reuses the generic /api/sensors/<name> route (web/app.py) rather than
+// Reuses the generic /api/sensors/<name> route (web/routes/devices.py) rather than
 // anything zone-specific - this sensor isn't part of any zone. Adapts
 // its plain ok/error shape onto the same sensor_ok/sensor_error shape
 // sensorStatusHtml() already expects from /api/climate/zones, so the
@@ -1114,7 +1114,7 @@ async function refreshVmcStatus() {
 }
 
 // -------------------------------------------------------------- status ----
-// Reuses /api/climate/zones as-is (see web/app.py) - joined client-side
+// Reuses /api/climate/zones as-is (see web/routes/climate.py) - joined client-side
 // against the *saved* map by zone name, so a config edit not yet applied
 // (restart pending) never gets confused with the live-running mapping.
 
@@ -1633,7 +1633,7 @@ function escapeHtml(value) {
 
 // The fixed English names the panel gives its extra devices (see
 // services/climate_map_store.py), shown in the page's language - same
-// table as home.js's.
+// table as the home page's.
 const DISPLAY_NAMES = {
   "Outdoor Sensor": "climate.outdoor_name",
   "Bathroom Bypass Valve": "climate.bypass_name",

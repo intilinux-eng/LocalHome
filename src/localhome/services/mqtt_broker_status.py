@@ -4,7 +4,7 @@ so it still answers "is anything even listening" the way a real incident
 needed once: every device's MQTT settings could look perfectly correct
 while mosquitto itself simply wasn't running - see docs/integrations/mqtt.md's
 "Running mosquitto automatically" section. Used by the climate admin
-panel (web/app.py's /api/climate-admin/broker-status) so a device stuck
+panel (web/routes/admin.py's /api/climate-admin/broker-status) so a device stuck
 on "not reachable yet" doesn't get misdiagnosed as its own fault when
 the broker is the actual problem.
 """

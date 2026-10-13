@@ -1,4 +1,4 @@
-"""Flask-level tests for the climate admin panel's routes (web/app.py) -
+"""Flask-level tests for the climate admin panel's routes (web/routes/admin.py) -
 mirrors tests/test_mode_switch_api.py's exact create_app()+tmp_path
 pattern. Covers: the panel working alongside an existing config.yaml
 thermostat block, the from-scratch case (no thermostat: key at all,
@@ -540,8 +540,8 @@ def test_restart_route_schedules_a_restart_without_actually_restarting(tmp_path,
     # Never let the real thing run here - os.execv would replace the
     # pytest process itself (see services/self_restart.py).
     called = []
-    monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: called.append(True))
-    monkeypatch.setattr("localhome.web.app.is_supported", lambda: True)
+    monkeypatch.setattr("localhome.web.routes.system.schedule_restart", lambda: called.append(True))
+    monkeypatch.setattr("localhome.web.routes.system.is_supported", lambda: True)
     app = _app(tmp_path)
     client = app.test_client()
 
@@ -559,8 +559,8 @@ def test_restart_route_refuses_cleanly_when_the_platform_cant_restart_safely(tmp
     # instead of actually restarting. The route must refuse before
     # ever calling schedule_restart(), not attempt it and fail loudly.
     called = []
-    monkeypatch.setattr("localhome.web.app.schedule_restart", lambda: called.append(True))
-    monkeypatch.setattr("localhome.web.app.is_supported", lambda: False)
+    monkeypatch.setattr("localhome.web.routes.system.schedule_restart", lambda: called.append(True))
+    monkeypatch.setattr("localhome.web.routes.system.is_supported", lambda: False)
     app = _app(tmp_path)
     client = app.test_client()
 

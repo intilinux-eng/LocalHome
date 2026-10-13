@@ -18,7 +18,7 @@
 <!-- The home page, redesigned: glance, tweak, plan. What the house is
      doing reads in a sentence; each zone is one card with today's story
      (plan, temperature, when it ran) in one strip; changing it for a
-     while is a tap; the weekly plan waits behind a button. See home.js. -->
+     while is a tap; the weekly plan waits behind a button. See static/home/core.js. -->
 <body data-season="heat">
   <div class="page">
     <header class="top">
@@ -102,6 +102,12 @@
   <script src="{{ url_for('static', filename='server_clock.js') }}"></script>
   <script src="{{ url_for('static', filename='morph.js') }}"></script>
   <script src="{{ url_for('static', filename='schedule_grid.js') }}"></script>
-  <script src="{{ url_for('static', filename='home.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/core.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/zones.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/zone-details.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/hero.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/plant.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/house.js') }}"></script>
+  <script src="{{ url_for('static', filename='home/start.js') }}"></script>
 </body>
 </html>

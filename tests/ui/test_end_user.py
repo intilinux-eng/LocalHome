@@ -447,3 +447,72 @@ def test_back_to_the_tab_shows_a_change_made_elsewhere(walk, house):
     house.call(f"/api/climate/zones/{urllib.parse.quote(ROOMS)}/override", {"target": 26.0, "hours": 2})
     w.page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
     w.check("the change shows", w.wait(lambda: w.in_mode("manual")))
+
+
+# ------------------------------------- the admin panel, with a home page open --
+# Someone at the admin panel (here: its API) while a resident has the home
+# page open: what the home page shows must follow, and nothing it does may
+# undo the admin's change.
+
+def test_the_season_switched_by_the_admin_while_choosing_by_hand(walk, house):
+    w = walk()
+    try:
+        w.mode("manual").click()
+        house.call("/api/climate/mode", {"mode": "heat"})
+        w.page.evaluate("refreshClimate()")
+        w.check("the page follows to winter", w.wait(lambda: w.page.evaluate("document.body.dataset.season") == "heat"))
+        apply = w.card().locator("button[data-action=apply]")
+        if apply.count():
+            apply.click()
+            w.page.wait_for_timeout(1000)
+        w.check("whatever the choice became, the page says what the board holds",
+                w.wait(lambda: w.in_mode("manual") == (house.held() is not None and house.held()["target"] is not None)))
+    finally:
+        house.call("/api/climate/mode", {"mode": "cool"})
+
+
+def test_the_week_changed_by_the_admin_shows_on_an_open_home_page(walk, house):
+    w = walk()
+    w.card().locator("button[data-action=show-plan]").click()
+    w.page.wait_for_timeout(800)
+    changed = {d: list(h) for d, h in WEEK.items()}
+    for day in changed:
+        changed[day] = [25.0] * 24
+    house.call(f"/api/climate/zones/{urllib.parse.quote(ROOMS)}/schedule", {"week": changed, "mode": "cool"})
+    w.page.evaluate("refreshClimate()")
+    w.page.wait_for_timeout(1500)
+    line = w.card().locator(".mode-line").inner_text() if w.card().locator(".mode-line").count() else ""
+    w.check("the line no longer promises the old week's 24°", "24°" not in line)
+    w.check("the table holds the admin's 25°", w.wait(lambda: w.page.evaluate(f"scheduleWeeks[{json.dumps(ROOMS)}].mon[10]") == 25))
+
+
+def test_the_schedules_cleared_by_the_admin_leave_no_promise_on_the_home_page(walk, house):
+    w = walk()
+    assert "24°" in w.card().locator(".mode-line").inner_text()
+    house.call("/api/climate-admin/maintenance/clear-schedules", {"confirm": "RESET"})
+    w.page.evaluate("refreshClimate()")
+    w.page.wait_for_timeout(1500)
+    line = w.card().locator(".mode-line").inner_text() if w.card().locator(".mode-line").count() else ""
+    w.check("no next change promised once the week is gone", "Poi" not in line)
+
+
+def test_the_history_cleared_by_the_admin_breaks_nothing_open(walk, house):
+    w = walk()
+    w.card().locator(".zone-more > summary").click()
+    w.page.wait_for_timeout(400)
+    house.call("/api/climate-admin/maintenance/clear-history", {"confirm": "RESET"})
+    w.page.evaluate("Promise.all([refreshClimate(), refreshDevices(), refreshHistory()])")
+    w.page.wait_for_timeout(1500)
+    w.check("the open details after the history went")
+    w.mode("manual").click()
+    w.check("and the zone still changes by hand", w.card().locator(".pending").count() == 1)
+    w.card().locator("button[data-action=cancel-pending]").click()
+
+
+def test_a_restart_from_the_admin_panel_with_the_home_page_open(walk, house):
+    if not house.call("/api/climate-admin/maintenance").get("restart_supported"):
+        pytest.skip("this machine can't restart LocalHome by itself")
+    w = walk(network_errors_expected=True)
+    house.call("/api/climate-admin/restart", {})
+    w.check("the page waits it out and comes back", w.wait(lambda: w.page.locator("#offline").is_hidden()
+                                                             and w.card().locator(".mode-row").count() == 1, 40000))

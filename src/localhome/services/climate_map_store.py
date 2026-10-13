@@ -1,4 +1,4 @@
-"""Lets the climate admin panel (web/app.py's /climate-admin routes) map
+"""Lets the climate admin panel (web/routes/admin.py) map
 the fixed two-zone thermostat onto whichever physical devices this
 particular apartment has, instead of hand-editing config.yaml - the
 whole point being that redeploying this software to a different
@@ -435,7 +435,7 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
             "battery_pct": "battery.percent",
             "wifi_rssi_dbm": "rssi",
             # Powered over USB-C: its battery isn't what keeps it going, and
-            # isn't shown (web/app.py's zones).
+            # isn't shown (web/routes/climate.py's zones).
             "external_power": "external.present",
         },
         # The numbers only, as before: whether it's on USB isn't history.

@@ -388,6 +388,13 @@ date rather than by tag.
   a wide screen, remembered in the browser. A zone out of the season is
   one line, its readings beside its name; a valve not answering is said
   once in the card, the top only says "needs checking".
+- **The code by area.** The endpoints moved out of `web/app.py` (now
+  2,300 lines down to 630: building and starting the app) into
+  `web/routes/`, one module per area - pages, system, devices, plant,
+  climate, admin; the home page's script out of one 2,760-line file into
+  `static/home/`, seven parts loaded in order. Moved as they were, nothing
+  rewritten. `tools/screenshot_home.py` shows the home page in each state
+  without a script of its own; CLAUDE.md maps where things are.
 - **One look across the page.** One style for a section inside a card
   (the quick schedule, the hourly table, the VMC's program) and one thin
   arrow for every fold; what the valve waits for is said in the text's
@@ -407,6 +414,12 @@ date rather than by tag.
   untranslated text and stuck buttons. Its first run found the page going
   past the screen's edge with a phone's text set larger (the VMC card,
   the outdoor tile, the readings on a 320 px phone) - fixed.
+- **An open home page follows the week changed elsewhere.** Its weeks
+  were loaded once: the admin panel clearing or changing a zone's week
+  left an open page saying "then 24° tomorrow at 00:00" and showing the
+  old table until a reload. Now each refresh reads the week again - the
+  table redrawn too, unless it's being painted or holds hours not saved
+  yet. Found by the end-user suite's admin-panel cases.
 - **Energy: the last 7 days, not the week from Monday.** A Monday no
   longer shows one bar and six empty days; today is always the last.
 - **The tests in parallel, and the slowest without real waits.**

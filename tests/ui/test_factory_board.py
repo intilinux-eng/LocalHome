@@ -34,7 +34,7 @@ def test_the_home_says_what_isnt_connected_yet(browser, factory):
         assert page.locator("#hero-title").inner_text() == "Impianto non ancora collegato"
         assert page.locator(".zone .state").all_inner_texts() == ["Non ancora collegata"] * 2
         # Nothing to change by hand where nothing can act on it: where to set it up.
-        assert page.locator(".zone [data-action='start']").count() == 0
+        assert page.locator(".zone .mode-row, .zone [data-action^='mode-']").count() == 0
         notes = page.locator(".zone .setup-note")
         assert notes.count() == 2 and notes.first.locator("a").get_attribute("href") == "/climate-admin"
         assert "Sensore non ancora collegato" in page.locator("#outdoor-chip").inner_text()

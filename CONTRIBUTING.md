@@ -131,3 +131,11 @@ against the board's API, not only what the page shows. A failed check
 saves a screenshot and says where. It's the base to grow: a use case found
 in real life - something a resident did that went wrong - becomes a test
 there, so it's tried every time from then on.
+
+To look at the home page after a change - each state (as found, details
+open, manual, off, held by hand, away) at the widths you ask, in both
+schemes - without writing a script for it:
+
+```bash
+python tools/screenshot_home.py OUT_DIR --state all --width 390 --width 1280 --dark
+```

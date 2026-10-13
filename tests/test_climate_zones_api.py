@@ -1,5 +1,5 @@
 """GET /api/climate/zones forwards a handful of specific reading fields
-into each zone's JSON (see web/app.py) - this locks in that battery_pct
+into each zone's JSON (see web/routes/climate.py) - this locks in that battery_pct
 (added for a real Shelly H&T's DevicePower component - see
 docs/integrations/mqtt.md) is one of them and defaults to None rather
 than being silently dropped for a sensor that doesn't report it - and

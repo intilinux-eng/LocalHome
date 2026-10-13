@@ -426,7 +426,7 @@ class ScheduleStore:
         valves, the bathroom bypass, the dehumidifier) is then only
         ever moved by a direct manual command from /climate-admin's own
         "Diagnostic mode" section, which reuses the generic
-        /api/sensors/<name>/on|off routes (web/app.py's
+        /api/sensors/<name>/on|off routes (web/routes/devices.py's
         api_sensor_action() lets a mode-switch-owned switch through
         while this is on) - the flag itself is read/written through
         POST /api/climate/diagnostic-mode and read back from GET
@@ -672,13 +672,13 @@ class ThermostatController:
         agree with the newly-computed desired state, leaving the valve
         stuck in whatever the manual test left it at. Call this once,
         right before the first tick() after diagnostic mode turns off -
-        see web/app.py's api_climate_set_diagnostic_mode()."""
+        see web/routes/climate.py's api_climate_set_diagnostic_mode()."""
         self._valve_open.clear()
 
     def resync_after_diagnostic_mode(self) -> None:
         """The other half of leaving diagnostic mode, alongside
         forget_valve_state() (call both, then tick() - see
-        web/app.py's api_climate_set_diagnostic_mode()). forget_valve_state()
+        web/routes/climate.py's api_climate_set_diagnostic_mode()). forget_valve_state()
         alone isn't enough for a zone whose sensor is *currently*
         unreachable: tick()'s own per-zone loop skips such a zone
         entirely (`if not reading.get("ok")... continue`, a few lines

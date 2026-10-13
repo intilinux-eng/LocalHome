@@ -6,7 +6,7 @@ admin panel's defaults for one it manages. Set here, they take their
 place everywhere the speeds are used - the card's buttons and its fine
 slider (which starts at the minimum), the ready-made programs, the timed
 boost, the automatics, away - with no restart: they're laid over the
-device's presets each time the pages ask for them (web/app.py's
+device's presets each time the pages ask for them (web/routes/devices.py's
 /api/devices). Kept in config/vmc_speeds.json; nothing saved means the
 device's own.
 

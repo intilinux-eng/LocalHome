@@ -592,7 +592,7 @@ def test_leaving_diagnostic_mode_closes_a_zone_whose_sensor_is_unreachable(tmp_p
     # never revisit and close that valve again after diagnostic mode
     # ends, leaving it stuck open indefinitely with zero temperature
     # justification. resync_after_diagnostic_mode() (called by
-    # web/app.py right before the resuming tick()) must force it closed
+    # web/routes/climate.py right before the resuming tick()) must force it closed
     # instead of leaving tick() to skip it as usual.
     zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
     switch = FakeSwitch()
@@ -603,7 +603,7 @@ def test_leaving_diagnostic_mode_closes_a_zone_whose_sensor_is_unreachable(tmp_p
 
     # The installer's manual "open" through /climate-admin's diagnostic
     # section, while diagnostic mode is on - out from under the
-    # controller entirely, same as web/app.py's api_sensor_action().
+    # controller entirely, same as web/routes/devices.py's api_sensor_action().
     switch.turn_on()
     controller._valve_open["Rooms"] = True  # what _apply() would have recorded, had it been the one to open it
 

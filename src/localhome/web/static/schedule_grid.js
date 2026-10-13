@@ -1,6 +1,6 @@
 /* The weekly schedule grid: the palette, painting hours with a drag,
    copying Monday to the week or the whole week to another zone, and saving
-   only the hours that changed - on the home page's zone cards (home.js).
+   only the hours that changed - on the home page's zone cards (static/home/).
 
    It relies on what the page defines:
    tr(), notify(), confirmAction(), slug(), jsArg(), escapeHtml(),

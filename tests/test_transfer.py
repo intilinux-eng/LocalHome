@@ -25,7 +25,7 @@ def client(tmp_path_factory):
 
 def script_url(client):
     page = client.get("/").get_data(as_text=True)
-    return re.search(r'src="(/static/home\.js\?v=[^"]+)"', page).group(1)
+    return re.search(r'src="(/static/home/core\.js\?v=[^"]+)"', page).group(1)
 
 
 def test_a_versioned_static_file_is_kept_a_year_the_pages_never(client):
@@ -33,7 +33,7 @@ def test_a_versioned_static_file_is_kept_a_year_the_pages_never(client):
     url = script_url(c)
     assert url.endswith(f"v={version}")
     assert c.get(url).headers["Cache-Control"] == "public, max-age=31536000, immutable"
-    assert "immutable" not in (c.get("/static/home.js?v=old").headers.get("Cache-Control") or ""), "another version"
+    assert "immutable" not in (c.get("/static/home/core.js?v=old").headers.get("Cache-Control") or ""), "another version"
     assert "immutable" not in (c.get("/static/guide/shelly-plus1-valvole.html").headers.get("Cache-Control") or "")
     assert c.get("/").headers["Cache-Control"] == "no-cache"
     assert c.get("/climate-admin").headers["Cache-Control"] == "no-cache"
@@ -56,7 +56,7 @@ def test_a_compressed_static_file_still_answers_304(client):
     url = script_url(c)
     first = c.get(url, headers=GZIP)
     assert first.headers["Content-Encoding"] == "gzip"
-    assert gzip.decompress(first.data) == (ROOT / "src/localhome/web/static/home.js").read_bytes()
+    assert gzip.decompress(first.data) == (ROOT / "src/localhome/web/static/home/core.js").read_bytes()
     etag = first.headers["ETag"]
     assert etag.startswith('W/"'), "another representation of the same file"
     again = c.get(url, headers={**GZIP, "If-None-Match": etag})
@@ -71,4 +71,4 @@ def test_what_isnt_worth_compressing_goes_as_it_is(client):
     assert "Content-Encoding" not in c.head("/", headers=GZIP).headers
     image = next((ROOT / "src/localhome/web/static/guide").glob("*.jpg"))
     assert "Content-Encoding" not in c.get(f"/static/guide/{image.name}", headers=GZIP).headers
-    assert "Content-Encoding" not in c.get("/static/home.js", headers={"Accept-Encoding": "br"}).headers
+    assert "Content-Encoding" not in c.get("/static/home/core.js", headers={"Accept-Encoding": "br"}).headers

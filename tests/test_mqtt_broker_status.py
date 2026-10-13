@@ -1,7 +1,7 @@
 """Unit tests for services/mqtt_broker_status.py's raw TCP reachability
 probe - a real socket connect, not a fake, so these use real loopback
 sockets rather than tests/mqtt_fakes.py (which only fakes the MQTT
-protocol layer, not TCP itself). See web/app.py's
+protocol layer, not TCP itself). See web/routes/admin.py's
 /api/climate-admin/broker-status for how the climate admin panel uses
 this.
 """

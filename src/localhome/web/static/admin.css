@@ -250,7 +250,6 @@
 .admin-more .hint-text { margin: 6px 0 0; }
 
 .hint-text { font-size: 0.86rem; color: var(--text-2); margin: 4px 0 14px; line-height: 1.5; }
-.how-h { margin: 16px 0 4px; font-size: 0.95rem; }
 .admin-subheading { margin: 22px 0 6px; font-size: 0.98rem; }
 /* Maintenance inside "Diagnostics and maintenance": its actions delete
    data, so it's set apart and said in red, as its own section was. */
@@ -301,7 +300,7 @@
 .admin-page input:disabled, .admin-page select:disabled { opacity: 0.55; }
 .admin-field input.input-invalid { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
 
-.admin-checkbox, .admin-check {
+.admin-checkbox {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -310,7 +309,7 @@
   color: var(--text);
   cursor: pointer;
 }
-.admin-checkbox input, .admin-check input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+.admin-checkbox input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .toolbar[hidden] { display: none; }
@@ -474,12 +473,6 @@
 .device-why { padding: 8px 10px; border-radius: 10px; color: var(--text);
   background: color-mix(in srgb, var(--warn) 12%, transparent); border-left: 3px solid var(--warn); }
 .device-note { color: var(--text-2); }
-/* How it works: two ways of doing the same thing, side by side. */
-.how-table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 0.82rem; line-height: 1.4; table-layout: fixed; }
-.how-table th, .how-table td { padding: 7px 8px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.how-table tr:first-child th { border-top: 0; font-weight: 650; color: var(--text); }
-.how-table th[scope="row"] { width: 26%; font-weight: 600; color: var(--text-2); }
-.how-table td { color: var(--text); }
 
 .admin-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin-bottom: 14px; }
 .admin-stat-group { padding: 14px 16px; border-radius: var(--radius-s); background: var(--surface-2); gap: 0; }
@@ -605,11 +598,6 @@
 .setting-help em { font-style: normal; color: var(--text); }
 .setting-usage { display: block; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
 
-.vmc-periods { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin-top: 10px; }
-.vmc-period { padding: 14px; border-radius: var(--radius-s); background: var(--surface-2); }
-.vmc-period-name { margin-bottom: 8px; font-size: 0.9rem; font-weight: 650; }
-.vmc-period .admin-field { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin-bottom: 8px; }
-.vmc-period input { width: 8em !important; }
 
 .admin-diagnostic-toggle { margin: 4px 0 12px; font-weight: 600; }
 .admin-diagnostic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; margin: 8px 0 20px; }

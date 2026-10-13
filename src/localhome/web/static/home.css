@@ -1,4 +1,4 @@
-/* The redesigned home page (templates/home.html, static/home.js).
+/* The redesigned home page (templates/home.html, static/home/).
 
    Calm by default: paper-like light theme or a deep dark one, following
    the phone; one accent that follows the season - amber while heating,
@@ -66,7 +66,7 @@ body[data-running="true"] { --wash: 26%; }
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
-/* The page is held still by home.js (morph.js's steady()) the same way
+/* The page is held still by its scripts (morph.js's steady()) the same way
    in every browser. The browser's own anchoring picks its own element -
    often one above what was tapped, so the card moved under the finger
    on Android when rows came in above the button - and would fight it. */
@@ -90,12 +90,12 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 [hidden] { display: none !important; }
-/* Every fold's arrow the same thin chevron (home.js ICONS.chevron). */
+/* Every fold's arrow the same thin chevron (home/hero.js ICONS.chevron). */
 .chevron { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
 /* A phone app's feel: a tap shows on what's tapped (Safari gives :active
-   only with a touch listener on the page - home.js adds one), with no grey
+   only with a touch listener on the page - home/start.js adds one), with no grey
    flash over it; a quick second tap on "+" steps again instead of zooming
    the page; a long press doesn't select a button's text or pop up a menu. */
 html { -webkit-tap-highlight-color: transparent; }
@@ -348,7 +348,7 @@ body[data-running="true"] .hero-season::before {
 .tier-chip[data-tier="economy"] { background: color-mix(in srgb, var(--eco) 16%, transparent); color: var(--eco); }
 .tier-chip svg { width: 11px; height: 11px; }
 /* What Comfort and Economy do: behind the "i" at the palette's end, each
-   level's also on its box at a hover (home.js wireTierInfo). */
+   level's also on its box at a hover (home/zones.js wireTierInfo). */
 .sched-tier-note { margin: 2px 0 10px; padding: 8px 12px; border-radius: var(--radius-s); background: var(--surface-2);
   font-size: 0.82rem; line-height: 1.4; color: var(--text-2); }
 .tier-info { align-self: center; flex: none; width: 26px; height: 26px; padding: 0; border-radius: 50%;
@@ -443,7 +443,7 @@ body[data-running="true"] .hero-season::before {
 /* A zone out of the season: one line - its readings beside its name. */
 .zone-inline { margin-right: auto; font-size: 1.05rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .zone[data-compact="true"] { padding-bottom: 8px; }
-/* The rest of a zone (home.js fillZone): closed until asked for. */
+/* The rest of a zone (home/zones.js fillZone): closed until asked for. */
 .zone-more { margin-top: var(--space-l); border-top: 1px solid var(--line); }
 .zone-more > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; font-size: 0.9rem; }
 .zone-more > summary::-webkit-details-marker { display: none; }
@@ -523,7 +523,7 @@ body[data-running="true"] .hero-season::before {
 .reading-rh[data-rh="dry"] .reading-label { color: var(--warn); }
 .reading-rh[data-rh="humid"] .reading-label { color: var(--cool); }
 /* Today's lowest and highest under the readings, and where the room is
-   between them now (home.js todayRangeHtml): the fold's bars laid flat,
+   between them now (home/zone-details.js todayRangeHtml): the fold's bars laid flat,
    from the season's colour light to full. */
 .today-range { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line);
   font-size: 0.88rem; font-variant-numeric: tabular-nums; }
@@ -588,20 +588,17 @@ body[data-running="true"] .hero-season::before {
 .sim { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); border: 1px dashed var(--text-3); border-radius: 6px; padding: 1px 5px; vertical-align: middle; margin-left: 4px; }
 .rb-block { opacity: 0.35; }
 @media (prefers-color-scheme: dark) { .rb-block { opacity: 0.18; } }
-.rb-block-label { font-size: 9px; fill: var(--text-3); font-variant-numeric: tabular-nums; }
 .rb-target { fill: none; stroke: var(--text-3); stroke-width: 1.3; stroke-dasharray: 3 3; }
 /* Each hour's tolerance: from the target to where the valve opens again -
    the room is fine anywhere in it. */
 .rb-band { fill: var(--text); opacity: 0.1; }
 .rb-band[data-tier="economy"] { fill: var(--eco); opacity: 0.22; }
-.lg-band { fill: var(--text); opacity: 0.18; }
 .rb-temp { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .rb-run { fill: var(--accent); rx: 2px; }
 /* Ahead of now: the plan, veiled. */
 .rb-future { fill: var(--surface); opacity: 0.55; }
 .rb-now { stroke: var(--accent); stroke-width: 1.5; }
 .rb-override { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; }
-.rb-now-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .rb-cursor { stroke: var(--text-3); stroke-width: 1; }
 .rb-grid { stroke: var(--line); stroke-width: 1; }
 
@@ -645,9 +642,7 @@ body[data-running="true"] .hero-season::before {
   font-size: 0.92rem;
 }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.btn-quiet { background: transparent; border-color: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; padding-inline: 6px; }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.quick-spacer { flex: 1; }
 
 .pending {
   width: 100%;
@@ -664,7 +659,7 @@ body[data-running="true"] .hero-season::before {
 .plan-edit.is-locked { opacity: 0.45; filter: grayscale(0.4); }
 
 /* A zone in manual mode: the temperature it reads is written here
-   (home.js manualHtml). */
+   (home/zones.js manualHtml). */
 .manual-set { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border-radius: var(--radius-s); background: var(--accent-soft); }
 .manual-set label { font-weight: 600; font-size: 0.92rem; }
 .manual-row { display: flex; align-items: center; gap: 8px; }
@@ -737,7 +732,7 @@ body[data-running="true"] .hero-season::before {
 .pending .durations button:nth-child(5):last-child { grid-column: span 4; }
 .pending .segmented button[aria-pressed="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset; font-weight: 650; }
-/* The hourly table in use - its heading says so (home.js fillPlan). */
+/* The hourly table in use - its heading says so (home/zone-details.js fillPlan). */
 :is(.sched-season-label, .plan-toggle-label)[data-in-use]:not([data-in-use=""])::after {
   content: attr(data-in-use); margin-left: 8px; padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
   background: var(--accent-soft); color: var(--accent); font-size: 0.68rem; letter-spacing: 0.04em;
@@ -838,7 +833,7 @@ body[data-running="true"] .hero-season::before {
 .tile-off::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 
 /* The VMC: a card like a zone's, three big speeds with their icon and
-   level, a fan that turns as fast as it runs (home.js vmcTile). */
+   level, a fan that turns as fast as it runs (home/plant.js vmcTile). */
 .vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }
 /* One column that may narrow below its content (a phone's larger text):
    its rows shrink with the card instead of pushing past the screen. */
@@ -900,10 +895,6 @@ body[data-running="true"] .hero-season::before {
 .vmc-preset[aria-pressed="true"] .vmc-preset-name,
 .vmc-preset[aria-pressed="true"] .vmc-preset-value { color: var(--accent); }
 .vmc-preset:disabled { opacity: 0.6; }
-/* Off, chosen: plain, not the season's colour - nothing is running. */
-.vmc-off[aria-pressed="true"] { background: var(--surface-3); border-color: var(--text-3); color: var(--text); }
-.vmc-off[aria-pressed="true"] .vmc-preset-name,
-.vmc-off[aria-pressed="true"] .vmc-preset-value { color: var(--text); }
 
 
 /* The maximum for a while: three lengths, or what's running and Cancel. */
@@ -966,7 +957,7 @@ body[data-running="true"] .hero-season::before {
   .vmc-side { grid-area: side; }
 }
 
-/* The program: manual, or one of the ready-made ones (home.js vmcTile),
+/* The program: manual, or one of the ready-made ones (home/plant.js vmcTile),
    behind one line that opens. */
 .vmc-plan { padding-top: 12px; border-top: 1px solid var(--line); }
 .vmc-plan > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; }
@@ -1036,7 +1027,7 @@ body[data-running="true"] .hero-season::before {
 
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
-/* A power meter (home.js energyTile): now, today's peak, the week /
+/* A power meter (home/house.js energyTile): now, today's peak, the week /
    month / year as bars - the current one darker, estimates lighter. */
 @media (min-width: 600px) { .energy { grid-column: span 2; } }
 .energy [data-level="ok"] { --level: var(--text); }
@@ -1057,7 +1048,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .energy-labels { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; font-size: 0.68rem; color: var(--text-3); text-align: center; margin-top: -4px; }
 .energy-labels span { white-space: nowrap; overflow: visible; }
 .energy-total { font-size: 0.9rem; color: var(--text-2); }
-/* A zone's hours (home.js runsHtml): one line closed, the energy card's
+/* A zone's hours (home/zone-details.js runsHtml): one line closed, the energy card's
    bars open. */
 .zone-runs { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
 .zone-runs > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; font-size: 0.9rem; }
@@ -1073,7 +1064,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* The labels are words, not buttons: a tap goes to the bar under them. */
 .zone-runs .energy-labels { pointer-events: none; }
 .energy-total b { color: var(--text); font-weight: 600; }
-/* The last 7 days (home.js tempsHtml), each a bar from its lowest to its
+/* The last 7 days (home/zone-details.js tempsHtml), each a bar from its lowest to its
    highest as today's under the readings, over a line at each degree. */
 .zone-temps { margin-top: 0; padding-top: 6px; border-top: 1px solid var(--line); }
 .zone-temps > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; font-size: 0.9rem; }
@@ -1100,7 +1091,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .zone-temps .energy-labels .on { color: var(--text); font-weight: 600; }
 .temps-versus { display: block; margin-top: 2px; font-size: 0.84rem; }
 
-/* An air-quality sensor (home.js airTile): CO2 with its day, the rest as
+/* An air-quality sensor (home/house.js airTile): CO2 with its day, the rest as
    dots - green under the usual limit, amber worth airing, red poor. */
 .air { --level: var(--ok); }
 @media (min-width: 600px) { .air { grid-column: span 2; } }
@@ -1310,8 +1301,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; align-items: center; }
 
-.sheet-section { margin-top: 20px; }
-.sheet-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin: 0 0 8px; }
 
 /* ------------------------------------------------------------- footer -- */
 

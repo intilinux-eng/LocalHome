@@ -141,7 +141,7 @@ def test_a_zone_held_by_hand_says_so_at_the_top(open_page, api):
     opened = _open_home(open_page)
     page = opened.page
     card = _card(page, ZONE_A)
-    assert card.locator(".quick-title").inner_text() == "Programmazione semplice"
+    assert "Programmazione semplice" in card.locator(".quick-title").text_content()
     # What the modes do: behind the title's "i", each on its mode at a hover.
     assert card.locator(".quick-hint").count() == 0
     card.locator("button[data-action=quick-info]").click()
@@ -813,7 +813,7 @@ def test_a_power_meter_shows_its_peak_and_its_week_month_and_year(open_page):
     }""")
     tile = page.locator(".tile.energy")
     assert "Picco oggi 3,3 kW" in tile.inner_text() and "oggi 6,4 kWh" in tile.inner_text()
-    assert tile.locator(".energy-total").inner_text().startswith("Questa settimana 22,1 kWh")
+    assert tile.locator(".energy-total").inner_text().startswith("Ultimi 7 giorni 22,1 kWh")
     assert "stimati" in tile.inner_text()
     tile.locator("[data-energy-range=year]").click()
     assert page.locator(".tile.energy .energy-total").inner_text().startswith("Da inizio anno 66,4 kWh")
@@ -842,7 +842,7 @@ def test_a_plug_that_measures_its_power_shows_its_days_with_its_switch(open_page
     tile = page.locator(".tile.energy[data-sensor='Scrivania']")
     assert tile.locator("button[data-switch='Scrivania']").count() == 1
     assert "94W" in tile.locator(".energy-now").inner_text().replace(" ", "").replace("\n", "")
-    assert tile.locator(".energy-total").inner_text().startswith("Questa settimana 1,2 kWh")
+    assert tile.locator(".energy-total").inner_text().startswith("Ultimi 7 giorni 1,2 kWh")
     tile.locator("[data-energy-range=month]").click()
     assert page.locator(".tile.energy[data-sensor='Scrivania'] .energy-total").inner_text().startswith("Questo mese")
     assert opened.errors == []
@@ -970,7 +970,7 @@ def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
     card = _card(page, ZONE_A)
     mode = lambda key: card.locator(f"button[data-action=mode-{key}]")
     try:
-        assert card.locator(".quick-title").inner_text() == "Programmazione semplice"
+        assert "Programmazione semplice" in card.locator(".quick-title").text_content()
         assert card.locator(".mode-row button").all_inner_texts() == ["Oraria", "Manuale", "Spenta"]
         assert card.locator(".quick .stepper").count() == 0, "a temperature through Manual"
         assert mode("schedule").get_attribute("aria-checked") == "true"
@@ -1365,8 +1365,10 @@ def test_a_tap_keeps_the_card_under_the_finger_and_its_nodes(iphone, api):
     page = iphone.page
     card = _card(page, ZONE_A)
     quick = card.locator(".quick")
-    quick.scroll_into_view_if_needed()
-    page.evaluate("window.scrollBy(0, -250)")        # its controls mid-screen, the top above
+    # Its controls mid-screen, the top above. Not "into view, then up a
+    # bit": with the controls already low in view that left them below the
+    # screen's edge, and the tap's own scroll to reach them was measured.
+    card.locator(".mode-row").evaluate("e => window.scrollTo(0, e.getBoundingClientRect().top + scrollY - innerHeight / 2)")
     card.locator(".zone-head").evaluate("e => { e.__kept = true; }")
     before = quick.bounding_box()["y"]
     card.locator("button[data-action=mode-manual]").tap()

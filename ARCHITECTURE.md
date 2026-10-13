@@ -284,16 +284,20 @@ type later touches config.yaml only.
 
 ## Web layer
 
-[`web/app.py`](src/localhome/web/app.py) exposes a small, kind-generic
-REST API (`/api/covers/...`, `/api/sensors/...`) and never imports a
-specific driver. The frontend ([`web/static/app.js`](src/localhome/web/static/app.js))
-asks `/api/devices` what exists and renders one card per sensor based on
-its `kind` (`power_meter` / `climate` / `switch` / `number`) - so a
-second power meter from a different brand just shows up as another card,
-with zero frontend changes, as long as it reports fields the existing
-card renderer already understands (`power_w`, `voltage_v`, ...). A
-genuinely new *kind* of device needs a new card renderer in `app.js` -
-see [docs/adding-a-driver.md](docs/adding-a-driver.md).
+[`web/app.py`](src/localhome/web/app.py) builds the app (`create_app()`) and
+starts it (`main()`); the endpoints live in [`web/routes/`](src/localhome/web/routes),
+one module per area - pages, system, devices, plant (VMC, dehumidifier),
+climate, admin - each with its `register(app)`. They expose a small,
+kind-generic REST API (`/api/covers/...`, `/api/sensors/...`) and never
+import a specific driver. The home page's script ([`web/static/home/`](src/localhome/web/static/home),
+in parts loaded in order - see `core.js`) asks `/api/devices` what exists
+and renders one card per sensor based on its `kind` (`power_meter` /
+`climate` / `switch` / `number`) - so a second power meter from a
+different brand just shows up as another card, with zero frontend
+changes, as long as it reports fields the existing card renderer already
+understands (`power_w`, `voltage_v`, ...). A genuinely new *kind* of
+device needs a new card renderer in `home/house.js` - see
+[docs/adding-a-driver.md](docs/adding-a-driver.md).
 
 Authentication ([`web/auth.py`](src/localhome/web/auth.py)) is a single
 `before_request` hook wired in by `create_app()` only if `web.auth` is
