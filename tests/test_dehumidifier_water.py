@@ -16,6 +16,7 @@ from localhome.services.climate_map_store import (
     apply_to_config,
     build_extra_switch_integrations,
     dehumidifier_water_zone,
+    valve_integration_options,
 )
 from localhome.web.app import create_app
 
@@ -70,6 +71,26 @@ def test_the_panels_bypass_is_normally_open_unless_said_otherwise():
     assert bypass.options["normally_open"] is True
     (bypass,) = build_extra_switch_integrations({**wired, BYPASS_NORMALLY_OPEN_KEY: False}, "broker.json")
     assert "normally_open" not in bypass.options
+
+
+def test_with_the_board_gone_the_dehumidifier_stops_before_its_water(tmp_path):
+    """Each relay drops by itself once LocalHome stops renewing it - each on
+    its own clock. The dehumidifier must never run without its water: its
+    hold runs out, at the latest, before its water valve's can, at the
+    earliest - whenever the board stops between their renewals."""
+    from localhome.drivers.mqtt.switch import RENEWALS_PER_HOLD
+
+    wired = {"dehumidifier_device_id": "shellyplus1-aabbccddeeff"}
+    (dehumidifier,) = build_extra_switch_integrations(wired, "broker.json")
+    valve = valve_integration_options({"valve_device_id": "shellyplus1-112233445566"}, "Bagni Valve", "broker.json")
+    read_every = lambda options: options.get("poll_interval_seconds", 20.0)
+    # The valve renewed at most a third of its hold and a read ago: it
+    # drops no sooner than this after the board stops...
+    water_earliest = valve["hold_seconds"] - valve["hold_seconds"] / RENEWALS_PER_HOLD - read_every(valve)
+    # ...the dehumidifier, renewed a moment before it stopped, no later than this.
+    dehumidifier_latest = dehumidifier.options["hold_seconds"]
+    assert dehumidifier_latest < water_earliest, (dehumidifier_latest, water_earliest)
+    assert water_earliest - dehumidifier_latest >= 60, "a minute to spare at least"
 
 
 def test_the_panels_dehumidifier_holds_its_zones_valve_open_in_summer(tmp_path):

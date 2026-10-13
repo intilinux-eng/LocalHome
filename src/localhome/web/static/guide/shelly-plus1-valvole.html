@@ -280,7 +280,8 @@ dopo aver cambiato un'impostazione nell'app (a batteria la prende solo da svegli
 <h2 id="s6">6. Sicurezze</h2>
 <h3>Il comando a tempo</h3>
 <p>LocalHome non dice "accendi" ma <strong>"accendi per 15 minuti"</strong>, ripetuto ogni 5 minuti. Se la scheda si ferma, lo
-Shelly chiude la valvola da solo entro 15 minuti. Vale per valvole di zona e deumidificatore; <strong>il bypass bagni no</strong>
+Shelly chiude la valvola da solo entro 15 minuti. Il deumidificatore ha <strong>8 minuti</strong>, rinnovati ogni 2 e mezzo:
+così si spegne sempre prima della valvola che gli porta l'acqua, e non gira mai a secco. <strong>Il bypass bagni no</strong>
 (sezione 18).</p>
 <table>
   <tr><th>Cosa succede</th><th>Risultato</th></tr>
@@ -511,7 +512,7 @@ riaprirebbe ogni 15 minuti.</div>
   <tr><td>Tipo relè</td><td class="value">"Detached"</td></tr>
   <tr><td>Stato all'accensione</td><td class="value">"…per spegnersi quando è alimentato"</td></tr>
   <tr><td>Accensione automatica</td><td class="value">spenta</td></tr>
-  <tr><td>Spegnimento automatico</td><td class="value">attivo, 00:15:00</td></tr>
+  <tr><td>Spegnimento automatico</td><td class="value">attivo, 00:15:00 - il deumidificatore <strong>00:08:00</strong></td></tr>
   <tr><td>Pulsante o interruttore</td><td>indifferente (SW è libero)</td></tr>
 </table>
 
@@ -703,7 +704,7 @@ nell'app non arriva niente.</div>
   <tr><td>Sensore che smette di inviare a valvola aperta</td><td>La lascia aperta; dopo 4 ore <em>Non risponde</em>, dopo altre
       3 la chiude. Si abbassa in admin → Regolazioni impianto → <em>Chiusura di sicurezza</em> (minimo 1 ora).</td></tr>
   <tr><td>Shelly che non risponde</td><td>Nessun comando a vuoto; al ritorno lo rimette nello stato giusto.</td></tr>
-  <tr><td>Scheda ferma</td><td>Valvole e deumidificatore chiusi entro 15 minuti; bypass com'è.</td></tr>
+  <tr><td>Scheda ferma</td><td>Deumidificatore spento entro 8 minuti, sempre prima della sua acqua; valvole chiuse entro 15; bypass com'è.</td></tr>
   <tr><td>Scheda riavviata o black-out</td><td>Riparte da sola com'era (sezione 7).</td></tr>
   <tr><td>Nessuno Shelly risponde</td><td>È la rete: riavvia il router (sezione 8).</td></tr>
   <tr><td>Bypass</td><td>Estate chiuso, inverno aperto: sempre, anche fuori casa.</td></tr>

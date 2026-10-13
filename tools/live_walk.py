@@ -39,7 +39,7 @@ PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
 # Run only when named: they restart LocalHome, and with it the VMC's driver;
 # "reboot" waits for someone to reboot or unplug the board; "soak" takes
 # hours (--hours).
-EXTRA_PARTS = ("restart", "reboot", "soak", "thresholds", "schedule")
+EXTRA_PARTS = ("frozen", "restart", "reboot", "soak", "thresholds", "schedule")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -54,7 +54,9 @@ seasons     to summer with a zone changed by hand (the change dropped, the bypas
             changes in a row
 summer      the zone kept out of cooling: no controls, closed; a cooled zone as
             its week says, "Off" closes, a target above the room stays closed;
-            the dehumidifier on from the home opens the bathrooms' valve, off
+            the dehumidifier on from the home opens the bathrooms' valve with it
+            (its water), both kept on 16 minutes - past a whole "on,900" hold,
+            each renewed, the thermostat never closing the valve meanwhile - off
             closes it; away: everything off but the bypass, still closed
 away        away and home again and again, with the week asking for heat and with
             no week: from a card and from the sheet, for a day and until a time two
@@ -64,6 +66,12 @@ away        away and home again and again, with the week asking for heat and wit
             season and diagnostic mode changed while away; rapid toggles
 at the end  the season, the weeks, the dehumidifier's threshold and diagnostic mode
             as found
+frozen      only when named, and by hand: summer, the dehumidifier on with its water
+            valve - then LocalHome stopped ("sudo systemctl stop localhome" over
+            SSH, waited for): each relay off by itself at the end of its own hold
+            ("on,N"), counted from its last renewal, the dehumidifier never after
+            its water; LocalHome started again ("sudo systemctl start localhome"):
+            the dehumidifier never on with its water closed
 restart     only when named: LocalHome restarted from the admin while away - still
             away after it until the same time, the valves closed though the week asks
             for heat, nothing opened meanwhile; the settings, the plant, the weeks and
@@ -657,6 +665,33 @@ def seasons(board, home, dehumidifier):
     board.zones_as_their_week("summer and back at once")
 
 
+# Past one whole hold of the relays ("on,900"): a dehumidifier's water
+# valve must be renewed while it runs - the thermostat, which wants the
+# zone kept out of cooling closed, never closing it meanwhile.
+DEHUMIDIFIER_HELD_MINUTES = 16
+
+
+def hold_both(board, names, minutes, label):
+    """`names` kept on for `minutes`: no report and no command the other way,
+    each one's hold renewed never more than 7 minutes apart."""
+    say(f"  {label}: held for {minutes} minutes")
+    since = time.time()
+    dropped = {}
+    while time.time() < since + minutes * 60:
+        for name in names:
+            if board.relay_state.get(name) is False:
+                dropped.setdefault(name, time.strftime("%H:%M:%S"))
+        time.sleep(1)
+    for name in names:
+        offs = [text for at, n, text in board.commands if n == name and at >= since and text.startswith("off")]
+        board.check(f"{label}: {name} on all {minutes} minutes", name not in dropped and not offs,
+                    (f"reported off at {dropped[name]}" if name in dropped else "") + (f" told {offs[:2]}" if offs else ""))
+        renewals = [at for at, n, text in board.commands if n == name and at >= since and text.startswith("on")]
+        gaps = [b - a for a, b in zip([since] + renewals, renewals + [time.time()])]
+        board.check(f"{label}: {name}'s hold renewed, never more than 7 minutes apart", gaps and max(gaps) < 420,
+                    f"{len(renewals)} renewals, longest gap {max(gaps) / 60:.1f} min")
+
+
 def summer(board, home, dehumidifier):
     say("== SUMMER")
     if board.climate()["mode"] != "cool":
@@ -685,10 +720,19 @@ def summer(board, home, dehumidifier):
     kept_out = next((z["name"] for z in climate["zones"] if not z["cool_enabled"]), None)
     if board.has(DEHUMIDIFIER):
         if dehumidifier.allow() and home.dehumidifier(1):
+            asked = time.time()
             board.check("summer: the dehumidifier on from the home", board.becomes(DEHUMIDIFIER, True))
             if kept_out:
-                board.check(f"summer: its water through {kept_out}'s valve - open",
-                            board.becomes(f"{kept_out} Valve", True))
+                water = f"{kept_out} Valve"
+                board.check(f"summer: its water through {kept_out}'s valve - open", board.becomes(water, True))
+                first = lambda name: next((at for at, n, text in board.commands
+                                           if n == name and at >= asked and text.startswith("on")), None)
+                on_at, water_at = first(DEHUMIDIFIER), first(water)
+                board.check(f"summer: {kept_out}'s valve told to open with the dehumidifier",
+                            on_at is not None and water_at is not None and abs(water_at - on_at) <= 10,
+                            f"{water_at - on_at:+.1f} s" if on_at and water_at else "")
+                hold_both(board, [DEHUMIDIFIER, water], DEHUMIDIFIER_HELD_MINUTES,
+                          f"summer: the dehumidifier and {kept_out}'s valve")
             home.dehumidifier(None)
             board.check("summer: the dehumidifier off from the home", board.becomes(DEHUMIDIFIER, False))
             if kept_out:
@@ -895,6 +939,91 @@ def back_within(seconds, ready):
             pass
         time.sleep(2)
     return None
+
+
+def _wait_for_answer(board, answering, seconds):
+    """When LocalHome stops answering (answering=False) or answers again."""
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            board.get("/api/server-time")
+            up = True
+        except (OSError, ValueError):
+            up = False
+        if up is answering:
+            return time.time()
+        time.sleep(1)
+    return None
+
+
+def frozen(board, home, dehumidifier):
+    """The board gone with the dehumidifier on - see PLAN."""
+    say("== THE BOARD GONE WITH THE DEHUMIDIFIER ON")
+    kept_out = next((z["name"] for z in board.climate()["zones"] if not z["cool_enabled"]), None)
+    water = f"{kept_out} Valve" if kept_out else None
+    if not (board.has(DEHUMIDIFIER) and water and board.has(water)):
+        say("  needs the dehumidifier and the valve it draws its water through - skipped")
+        return
+    if board.climate()["mode"] != "cool":
+        board.season("cool")
+        home.open()
+    if not (dehumidifier.allow() and home.dehumidifier(1)):
+        board.check("frozen: the dehumidifier on from the home", False)
+        return
+    board.check("frozen: the dehumidifier on, its water open",
+                board.becomes(DEHUMIDIFIER, True) and board.becomes(water, True))
+    host = board.base.split("//")[1].split(":")[0]
+    say(f"  >>> now stop LocalHome on {host}: sudo systemctl stop localhome - waiting up to 5 minutes")
+    gone = _wait_for_answer(board, False, 300)
+    board.check("frozen: LocalHome stopped", gone is not None)
+    if gone is None:
+        return
+
+    def last_hold(name):
+        """When it was last told "on,N" before LocalHome stopped, and N."""
+        held = [(at, text) for at, n, text in board.commands if n == name and at <= gone and text.startswith("on")]
+        if not held:
+            return None, None
+        at, text = held[-1]
+        return at, int(text.split(",")[1]) if "," in text else None
+
+    off_at = {}
+    end = time.time() + 17 * 60
+    while time.time() < end and len(off_at) < 2:
+        for name in (DEHUMIDIFIER, water):
+            if name not in off_at and board.relay_state.get(name) is False:
+                off_at[name] = time.time()
+                say(f"   {name} off by itself, {(off_at[name] - gone) / 60:.1f} min after LocalHome stopped")
+        time.sleep(1)
+    for name in (DEHUMIDIFIER, water):
+        renewed, hold = last_hold(name)
+        late = off_at[name] - (renewed + hold) if name in off_at and renewed and hold else None
+        board.check(f"frozen: {name} off by itself at the end of its hold", late is not None and -5 <= late <= 30,
+                    f"'on,{hold}' {(gone - renewed) / 60:.1f} min before the stop, off {late:+.0f} s from its end"
+                    if late is not None else f"never seen off (hold {hold})")
+    board.check("frozen: the dehumidifier off no later than its water",
+                DEHUMIDIFIER in off_at and (water not in off_at or off_at[DEHUMIDIFIER] <= off_at[water] + 1),
+                f"the dehumidifier {(off_at.get(DEHUMIDIFIER, end) - gone) / 60:.1f} min, its water "
+                f"{(off_at.get(water, end) - gone) / 60:.1f} min after LocalHome stopped")
+    say(f"  >>> now start LocalHome on {host} again: sudo systemctl start localhome - waiting up to 5 minutes")
+    back = _wait_for_answer(board, True, 300)
+    board.check("frozen: LocalHome back", back is not None)
+    if back is None:
+        return
+    dry = []
+    end = time.time() + board.poll_seconds + 60
+    while time.time() < end:
+        if board.relay_state.get(DEHUMIDIFIER) and board.relay_state.get(water) is False:
+            dry.append(time.strftime("%H:%M:%S"))
+        time.sleep(1)
+    board.check("frozen: back, the dehumidifier never on with its water closed", len(dry) <= 5,
+                f"dehumidifier {board.relay_state.get(DEHUMIDIFIER)}, water {board.relay_state.get(water)}"
+                + (f"; on without water {len(dry)} s from {dry[0]}" if dry else ""))
+    home.open()
+    if board.relay_state.get(DEHUMIDIFIER):
+        home.dehumidifier(None)
+    board.check("frozen: the dehumidifier off at the end, its water with it",
+                board.becomes(DEHUMIDIFIER, False) and board.becomes(water, False))
 
 
 def restarted_while_away(board, home, how):
@@ -1430,6 +1559,8 @@ def main(argv=None):
                     away_and_home(board, home, browser)
                 elif part == "soak":
                     soak(board, home, browser, args.hours, args.clients)
+                elif part == "frozen":
+                    frozen(board, home, dehumidifier)
                 elif part == "thresholds":
                     thresholds(board, home)
                 elif part == "schedule":

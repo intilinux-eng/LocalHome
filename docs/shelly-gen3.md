@@ -288,7 +288,10 @@ Same wiring (L, N, SW, I, O), same app settings. Everything a zone valve
 relies on behaves as on the Plus 1; only "held off" needed the RPC.
 
 Hence both: `on,900` renewed by LocalHome, and Auto OFF at 900 s in the
-device for whatever LocalHome doesn't cover.
+device for whatever LocalHome doesn't cover. The dehumidifier: `on,480` and
+Auto OFF at 480 s - with the board gone it stops within 8 minutes, its water
+valve no sooner than 9:40 (renewed every 5 minutes, read every 20 s), so it
+never runs without its water.
 
 When the timer does run out, the relay's status says so - `"source":
 "timer"` instead of `"mqtt"` - and LocalHome shows it in System status

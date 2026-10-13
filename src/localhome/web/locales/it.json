@@ -422,7 +422,7 @@
     "setting_sensor_failsafe_hours": "Chiusura di sicurezza dopo (ore)",
     "setting_sensor_failsafe_hours_help": "Se il sensore di una zona smette di inviare, la valvola della zona si chiude. Si conta da quando il sensore risulta non raggiungibile: un H&T lo diventa dopo 4 ore senza invii (di solito invia almeno ogni 2 ore). Non è il timer di 15 minuti dello Shelly, che chiude la valvola se si ferma la scheda.",
     "setting_sensor_failsafe_example": "Con {hours}: la valvola si chiude circa {total} ore dopo l'ultimo invio dell'H&T.",
-    "settings_fixed": "Fissi, non si cambiano da qui: le valvole di zona e il deumidificatore ricevono «acceso per 15 minuti», rinnovato ogni 5 - se la scheda si ferma, lo Shelly li spegne da solo (vedi la guida in Dispositivi); ogni Shelly viene controllato ogni 5 minuti, e subito quando torna online; gli H&T inviano quando la temperatura cambia di 0,5 °C (impostazione dell'H&T) e comunque almeno ogni 2 ore.",
+    "settings_fixed": "Fissi, non si cambiano da qui: le valvole di zona ricevono «acceso per 15 minuti», rinnovato ogni 5, il deumidificatore «per 8» - se la scheda si ferma, lo Shelly li spegne da solo, il deumidificatore sempre prima della sua acqua (vedi la guida in Dispositivi); ogni Shelly viene controllato ogni 5 minuti, e subito quando torna online; gli H&T inviano quando la temperatura cambia di 0,5 °C (impostazione dell'H&T) e comunque almeno ogni 2 ore.",
     "setting_history_retention_days": "Storico conservato (giorni)",
     "setting_history_retention_days_help": "I dati più vecchi vengono cancellati ogni giorno.",
     "setting_history_max_db_mb": "Dimensione massima storico (MB)",

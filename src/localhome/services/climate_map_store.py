@@ -473,6 +473,12 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
 
 
 VALVE_HOLD_SECONDS = 900
+# The dehumidifier's relay, held shorter than the valve it draws its water
+# through: if the board stops, each relay drops on its own clock - the
+# valve between 9:40 and 15 minutes later (renewed every 5, read every
+# 20 s), the dehumidifier within 8. It never runs without its water; the
+# valve may stay open a few minutes after it, which costs nothing.
+DEHUMIDIFIER_HOLD_SECONDS = 480
 
 
 def valve_integration_options(zone: dict, valve_name: str, broker_file: str) -> dict:
@@ -595,6 +601,7 @@ def build_extra_switch_integrations(extra_switches: dict, broker_file: str) -> l
                 options["shelly_role"] = "bypass"
             else:
                 options["shelly_role"] = "dehumidifier"
+                options["hold_seconds"] = DEHUMIDIFIER_HOLD_SECONDS
             integrations.append(Integration("switch", "mqtt_json", options))
     return integrations
 

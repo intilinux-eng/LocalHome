@@ -422,7 +422,7 @@
     "setting_sensor_failsafe_hours": "Safety close after (hours)",
     "setting_sensor_failsafe_hours_help": "If a zone's sensor stops reporting, the zone's valve closes. Counted from when the sensor is unreachable: an H&T is after 4 hours without reports (it normally reports at least every 2 hours). Not the Shelly's 15-minute timer, which closes the valve if the board stops.",
     "setting_sensor_failsafe_example": "With {hours}: the valve closes about {total} hours after the H&T's last report.",
-    "settings_fixed": "Fixed, not changed from here: zone valves and the dehumidifier are sent 'on for 15 minutes', renewed every 5 - if the board stops, the Shelly switches them off by itself (see the guide under Devices); each Shelly is checked every 5 minutes, and at once when it's back online; the H&Ts report when the temperature changes by 0.5 °C (an H&T setting) and at least every 2 hours anyway.",
+    "settings_fixed": "Fixed, not changed from here: zone valves are sent 'on for 15 minutes', renewed every 5, the dehumidifier 'for 8' - if the board stops, the Shelly switches them off by itself, the dehumidifier always before its water (see the guide under Devices); each Shelly is checked every 5 minutes, and at once when it's back online; the H&Ts report when the temperature changes by 0.5 °C (an H&T setting) and at least every 2 hours anyway.",
     "setting_history_retention_days": "History kept (days)",
     "setting_history_retention_days_help": "Older data is deleted every day.",
     "setting_history_max_db_mb": "History size limit (MB)",

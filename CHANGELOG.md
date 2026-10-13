@@ -14,6 +14,14 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **With the board gone, the dehumidifier stops before its water.** Each
+  relay drops by itself once LocalHome stops renewing it, each on its own
+  clock: the dehumidifier and the bathrooms' valve it draws its chilled
+  water through could go in either order, up to five minutes apart - the
+  dehumidifier running dry meanwhile. It's now held for 8 minutes
+  ("on,480", renewed every 2:40) against the valve's 15: it always stops
+  first. Its Shelly's own Auto OFF follows (8 minutes - the admin panel's
+  check of the Shelly asks for it, the installer's guide says so).
 - **The night the clocks change, every time keeps its own hour on the home
   page.** It told every time with the board's offset of the moment: the
   day after the clocks went back (25 October), last night's 01:30 read
@@ -436,6 +444,16 @@ date rather than by tag.
   anything, each Shelly has to switch - timed from the hour, LocalHome's
   command and the Shelly's own report - and then hold until the next one,
   an open one's hold renewed every 5 minutes.
+- **The board gone with the dehumidifier on** (`tools/live_walk.py --parts
+  frozen`): LocalHome stopped over SSH with the dehumidifier and its water
+  valve on - each relay off by itself at the end of its own hold, the
+  dehumidifier never after its water; started again, never the dehumidifier
+  on with its water closed.
+- **The dehumidifier's water, held as long as it runs** (`tools/live_walk.py`,
+  its summer part): the bathrooms' valve - the dehumidifier's chilled
+  water - told to open with it, then both kept on for 16 minutes, past a
+  whole "on,900" hold of the relays: each hold renewed, the thermostat
+  (which wants the bathrooms closed in summer) never closing the valve.
 - **Comfort and economy against the real relays**
   (`tools/live_walk.py --parts thresholds`): each zone, from its room's
   real temperature read again before every step - inside the band (the
