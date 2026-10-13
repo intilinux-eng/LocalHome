@@ -77,8 +77,8 @@ power       only when named, and by hand: the relays' power cut by a switch and 
             second), about ten seconds, about two minutes; in summer with the
             dehumidifier on, about ten seconds. Each time: every relay back where
             it was by itself or by LocalHome, timed from their return (the bypass
-            by its own "restore last"), the dehumidifier never on with its water
-            closed, nothing switching for a minute after, the admin counting
+            by its own "restore last") - the dehumidifier off, its run ended, and
+            its water valve with it; never on with its water closed, nothing switching for a minute after, the admin counting
             the restarts, no problem left once they're back
 restart     only when named: LocalHome restarted from the admin while away - still
             away after it until the same time, the valves closed though the week asks
@@ -493,9 +493,15 @@ class Home:
         return True
 
 
+# The lowest thresholds the panel takes (services/dehumidifier.py's RANGES)
+# and how far apart they must be.
+DEHUMIDIFIER_STOP_MIN, DEHUMIDIFIER_START_MIN, DEHUMIDIFIER_GAP = 30, 32, 2
+
+
 class Dehumidifier:
-    """Its start threshold lowered for the test when the air is too dry for
-    it to start - and put back exactly as it was."""
+    """Its thresholds lowered for the test when the air is too dry for it to
+    start - the start a few points under the air, the stop under that, so it
+    runs as long as the test needs - and put back exactly as they were."""
 
     def __init__(self, board: Board):
         self.board, self.original = board, None
@@ -506,19 +512,22 @@ class Dehumidifier:
         humidity = status.get("humidity")
         if humidity is None or humidity >= settings["start_from"]:
             return humidity is not None
-        start = max(settings["stop_below"] + 2, int(humidity) - 1)
-        if start > humidity:
+        start = max(DEHUMIDIFIER_START_MIN, int(humidity) - 3)
+        stop = max(DEHUMIDIFIER_STOP_MIN, start - DEHUMIDIFIER_GAP)
+        if start > humidity or start - stop < DEHUMIDIFIER_GAP:
             say(f"  the air at {humidity}%: too dry to start it even at {start}% - skipped")
             return False
-        self.original = settings["start_from"]
-        self.board.post("/api/dehumidifier/settings", {"start_from": start})
-        say(f"  dehumidifier: start threshold {self.original}% -> {start}% for the test (the air at {humidity}%)")
+        if self.original is None:
+            self.original = {"start_from": settings["start_from"], "stop_below": settings["stop_below"]}
+        self.board.post("/api/dehumidifier/settings", {"start_from": start, "stop_below": stop})
+        say(f"  dehumidifier: on from {start}%, off under {stop}% for the test (the air at {humidity}%; it was "
+            f"{self.original['start_from']}% and {self.original['stop_below']}%)")
         return True
 
     def restore(self):
         if self.original is not None:
-            self.board.post("/api/dehumidifier/settings", {"start_from": self.original})
-            say(f"  dehumidifier: start threshold back to {self.original}%")
+            self.board.post("/api/dehumidifier/settings", self.original)
+            say(f"  dehumidifier: thresholds back to {self.original['start_from']}% and {self.original['stop_below']}%")
             self.original = None
 
 
@@ -739,10 +748,11 @@ def summer(board, home, dehumidifier):
         zone_week(board, home, name, "summer, back to the week")
     kept_out = next((z["name"] for z in climate["zones"] if not z["cool_enabled"]), None)
     if board.has(DEHUMIDIFIER):
+        asked = time.time()                    # before the tap: its commands go with it
         if dehumidifier.allow() and home.dehumidifier(1):
-            asked = time.time()
-            board.check("summer: the dehumidifier on from the home", board.becomes(DEHUMIDIFIER, True))
-            if kept_out:
+            running = board.becomes(DEHUMIDIFIER, True)
+            board.check("summer: the dehumidifier on from the home", running)
+            if kept_out and running:
                 water = f"{kept_out} Valve"
                 board.check(f"summer: its water through {kept_out}'s valve - open", board.becomes(water, True))
                 first = lambda name: next((at for at, n, text in board.commands
@@ -1095,6 +1105,12 @@ def power(board, home, dehumidifier):
             continue
         time.sleep(5)
         want = {name: board.relay_state.get(name) for name in board.relays.values()}
+        # Back after it: where they were - but the dehumidifier's run ends with
+        # a power cut (found off, as switched off some other way), its water
+        # valve with it: like any appliance after a black-out.
+        after = dict(want)
+        if mode == "cool":
+            after.update({DEHUMIDIFIER: False, water: False})
         counts_before, problems_before = _restart_counts(board), problems(board)
         say(f"  {label}: the relays now {want}")
         say(f"  >>> now cut the four Shellys' power on {host}'s plant: {how}, then give it back - "
@@ -1123,24 +1139,25 @@ def power(board, home, dehumidifier):
         dry, took = [], {}
         end = time.time() + board.poll_seconds + 90
         while time.time() < end:
-            for name, state in want.items():
+            for name, state in after.items():
                 boot, reports = since_boot(name)
                 if name not in took and reports and reports[-1][1] is state:
                     took[name] = reports[-1][0] - first
             if water and board.relay_state.get(DEHUMIDIFIER) and board.relay_state.get(water) is False:
                 dry.append(time.time())
-            restarted = [name for name in want if since_boot(name)[0] is not None]
+            restarted = [name for name in after if since_boot(name)[0] is not None]
             if restarted and all(name in took for name in restarted) and time.time() - first > 20:
                 break
             time.sleep(0.5)
-        for name, state in want.items():
+        for name, state in after.items():
             boot, reports = since_boot(name)
             if boot is None:
                 board.check(f"{label}: {name} {'on' if state else 'off'} - it didn't restart",
                             board.relay_state.get(name) is state, f"it says {board.relay_state.get(name)}")
                 continue
             dropped = any(out is not state for _, out in reports)
-            board.check(f"{label}: {name} back {'on' if state else 'off'}", name in took,
+            ended = " - its run ended with the cut" if state is not want[name] else ""
+            board.check(f"{label}: {name} back {'on' if state else 'off'}{ended}", name in took,
                         (f"{took[name]:.0f} s after they were back" + (", after restarting the other way" if dropped
                                                                        else ", as it restarted"))
                         if name in took else f"its reports since: {[out for _, out in reports]}")
@@ -1150,12 +1167,12 @@ def power(board, home, dehumidifier):
         # Nothing switching for a minute after: no report, no command the other way.
         since, moved = time.time(), {}
         while time.time() < since + 60:
-            for name, state in want.items():
+            for name, state in after.items():
                 if board.relay_state.get(name) is (not state):
                     moved.setdefault(name, time.strftime("%H:%M:%S"))
             time.sleep(1)
-        against = sorted({n for at, n, text in board.commands if at >= since and n in want
-                          and text.startswith("off" if want[n] else "on")})
+        against = sorted({n for at, n, text in board.commands if at >= since and n in after
+                          and text.startswith("off" if after[n] else "on")})
         board.check(f"{label}: nothing switching for a minute after", not moved and not against,
                     f"moved {moved} told {against}" if moved or against else "")
         restarted = {name for name in want if since_boot(name)[0] is not None}
