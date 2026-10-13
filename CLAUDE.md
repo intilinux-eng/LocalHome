@@ -30,6 +30,9 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
     read-only (the browser lets only GETs through), every endpoint, both
     pages, the log since the start. Driving a real board's devices is
     `tools/live_walk.py` - only when the user asks, Shellys powered;
+  - a full, year-old history → `tools/seed_year_history.py` on a copy of
+    a board's database (run on the board), then `check_board.py` and the
+    soak - never on a history someone needs;
   - a tool that stops matching the pages (a button renamed) is fixed in
     the same change, like a test;
   - a server with simulated devices → `tests/ui/conftest.py` (`_launch`,

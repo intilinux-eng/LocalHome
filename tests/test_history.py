@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 
@@ -219,6 +220,79 @@ def test_prune_removes_only_rows_older_than_the_cutoff(tmp_path):
     assert removed == 1
     points = store.query("sensor", "temperature_c", "7d")
     assert [p["value"] for p in points] == [20.0]
+
+
+def _old_rows(store, count, days_ago=40):
+    """`count` samples older than any retention, written in time order."""
+    start = int(time.time()) - days_ago * 86400
+    conn = store._connect()
+    conn.executemany("INSERT INTO readings (ts, sensor, field, value) VALUES (?, 'old', 'temperature_c', 20.0)",
+                     [(start + i,) for i in range(count)])
+    conn.commit()
+    conn.close()
+
+
+def _count(store, where="1"):
+    conn = store._connect()
+    try:
+        return conn.execute(f"SELECT COUNT(*) FROM readings WHERE {where}").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_clearing_the_history_gives_the_space_back_at_once(tmp_path):
+    """Found on the board: cleared, the history kept its 280 MB file - the
+    compacted database sat in the WAL until a checkpoint, which the store's
+    one open connection makes only every ~1000 pages."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    _old_rows(store, 30000)
+    conn = store._connect()
+    conn.execute("PRAGMA wal_checkpoint")  # in the file, as the hours of a board put them
+    conn.close()
+    full = os.path.getsize(store.db_path)
+    assert full > 500_000
+    store.clear()
+    assert os.path.getsize(store.db_path) < 100_000
+    assert _count(store) == 0
+
+
+def test_a_prune_in_pieces_stops_when_its_time_is_spent_and_finishes_later(tmp_path, monkeypatch):
+    """Measured on the board: three million rows in one DELETE held the
+    recorder 85 s - a breath from "stalled" and a restart that rolled it
+    back. In pieces, a budget at a time, each piece kept."""
+    from localhome.services import history
+    monkeypatch.setattr(history, "PRUNE_CHUNK_ROWS", 10)
+    store = HistoryStore(str(tmp_path / "history.db"))
+    _old_rows(store, 95)
+    store.record("sensor", int(time.time()), {"temperature_c": 21.0})
+    cutoff = int(time.time()) - 30 * 86400
+    removed, done = store.prune_some(cutoff, max_seconds=0)
+    assert (removed, done) == (10, False), "one piece, then its time was spent"
+    assert _count(store) == 86
+    removed, done = store.prune_some(cutoff)
+    assert (removed, done) == (85, True) and _count(store) == 1, "the rest, the recent sample kept"
+    assert store.prune(cutoff) == 0
+
+
+def test_the_recorder_prunes_a_little_each_cycle_and_records_meanwhile(tmp_path, monkeypatch):
+    from localhome.services import history
+    monkeypatch.setattr(history, "PRUNE_CHUNK_ROWS", 10)
+    monkeypatch.setattr(history, "PRUNE_SECONDS_PER_CYCLE", 0)
+    store = HistoryStore(str(tmp_path / "history.db"))
+    _old_rows(store, 35)
+    manager = FakeManager({"sensor": FakePoller(("temperature_c",), {"temperature_c": 21.0})})
+    recorder = HistoryRecorder(manager, store, poll_interval_seconds=0, retention_days=30)
+    kept = []
+    recorder.keep_runs = lambda: kept.append(True)
+    seen = []
+    for _ in range(5):
+        recorder.poll_once()
+        store.flush()
+        seen.append((_count(store, "sensor = 'old'"), recorder.last_write_ok_ts is not None))
+    assert [old for old, _ in seen] == [25, 15, 5, 0, 0], "ten rows a cycle until none is left"
+    assert all(ok for _, ok in seen), "every cycle recorded"
+    assert kept == [True], "the day's summaries kept once, before the prune began"
+    assert recorder._pruned is None, "done: the next prune waits for tomorrow"
 
 
 # ------------------------------------------------ eMMC-friendly writes -----

@@ -14,6 +14,18 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **Clearing the history gives the space back at once.** On the board a
+  cleared history kept its 280 MB file until SQLite's next checkpoint,
+  and the admin panel showed it that big; the file now shrinks with the
+  clearing (a factory reset too).
+- **A big history pruned in pieces, never holding the recorder.** Tried on
+  the board with a history grown to 60 days: the daily prune deleted three
+  million rows in one transaction and held the recorder 85 s - a breath
+  from the 90 after which its loop counts as stalled and systemd restarts
+  LocalHome, which would have rolled the deletion back to start it again
+  at every start (a ceiling raised above 300 MB, or the days kept cut short,
+  would have crossed it). Now 20,000 rows a transaction, at most 10 s a
+  recorder cycle, carried on cycle after cycle; the size ceiling too.
 - **A simulated device says so in the admin panel's device list.** Two
   valves left simulated, their Shellys connected and online, read "OK"
   like real devices answering - only a sensor's simulated stand-in was
@@ -392,6 +404,10 @@ date rather than by tag.
   a wide screen, remembered in the browser. A zone out of the season is
   one line, its readings beside its name; a valve not answering is said
   once in the card, the top only says "needs checking".
+- **A year-old history to try a board with** (`tools/seed_year_history.py`):
+  a copy of a board's history grown back in time - its own days of
+  samples copied to cover 60, a year of daily summaries before them, two
+  years of heat meter readings - generated on the board in half a minute.
 - **A read-only check of a board after a deploy** (`tools/check_board.py`):
   every endpoint, both pages in each width and scheme, the log since the
   start - the browser lets only reads through. `tools/live_walk.py`

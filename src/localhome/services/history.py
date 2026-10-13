@@ -67,6 +67,11 @@ MIN_OFF_SECONDS = 300
 PLANT_KEY = "*plant*"
 # daily_runs' and daily_temps' years: this one and the five before.
 RUN_YEARS = 6
+# Pruning in pieces (HistoryStore.prune_some): rows per transaction, and
+# the most a recorder's cycle spends on it before recording again - far
+# under the 90 s (three 30 s intervals) after which its loop is "stalled".
+PRUNE_CHUNK_ROWS = 20000
+PRUNE_SECONDS_PER_CYCLE = 10
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
@@ -210,14 +215,18 @@ class HistoryStore:
             conn.close()
         return (pages - free) * page_size
 
-    def prune_to_size(self, max_bytes: int, keep_seconds: int = 86400) -> int:
+    def prune_to_size(self, max_bytes: int, keep_seconds: int = 86400, max_seconds: float | None = None) -> int:
         """Removes the oldest day of samples at a time until the data fits
         in `max_bytes` - but never the last `keep_seconds`. Returns the
         rows removed. The file stops growing rather than shrinking: freed
-        pages are reused."""
+        pages are reused. With `max_seconds`, it stops once that's spent,
+        still over if it is - the recorder asks again (see prune_some())."""
         removed = 0
+        started = time.monotonic()
         started_over = self.used_bytes() > max_bytes
         while self.used_bytes() > max_bytes:
+            if max_seconds is not None and removed and time.monotonic() - started >= max_seconds:
+                break
             conn = self._connect()
             try:
                 oldest, newest = conn.execute("SELECT MIN(ts), MAX(ts) FROM readings").fetchone()
@@ -266,6 +275,11 @@ class HistoryStore:
             conn.commit()
             self._on_stats_cache.clear()
             conn.execute("VACUUM")
+            # VACUUM writes the compacted database to the WAL: the file
+            # only shrinks at a checkpoint, which the store's open
+            # connection makes every ~1000 pages - on the board a cleared
+            # history kept its 280 MB file. Folded back at once.
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             return removed
         finally:
             conn.close()
@@ -488,15 +502,36 @@ class HistoryStore:
         would otherwise grow for as long as the app stays up, not just
         for 7 days. Called periodically by HistoryRecorder, not on every
         poll (a DELETE scan has no reason to run every 30s)."""
-        conn = self._connect()
-        try:
-            cur = conn.execute("DELETE FROM readings WHERE ts < ?", (older_than_ts,))
-            conn.commit()
-            if cur.rowcount:
+        removed, _ = self.prune_some(older_than_ts)
+        return removed
+
+    def prune_some(self, older_than_ts: int, max_seconds: float | None = None) -> tuple[int, bool]:
+        """prune(), PRUNE_CHUNK_ROWS at a time, each in its own transaction -
+        with `max_seconds`, stopping once that's spent: (rows removed, all
+        done). Measured on the board: three million rows in one DELETE held
+        the recorder's thread 85 s, a breath from the 90 that make its loop
+        "stalled" and systemd restart LocalHome - which rolled the DELETE
+        back, to start it again at the next start. In chunks the recorder
+        goes on between them, and a restart keeps what was done."""
+        started = time.monotonic()
+        removed = 0
+        while True:
+            conn = self._connect()
+            try:
+                # Rows come in time order: the oldest are found first.
+                count = conn.execute("DELETE FROM readings WHERE rowid IN "
+                                     "(SELECT rowid FROM readings WHERE ts < ? LIMIT ?)",
+                                     (older_than_ts, PRUNE_CHUNK_ROWS)).rowcount
+                conn.commit()
+            finally:
+                conn.close()
+            removed += count
+            if count:
                 self._on_stats_cache.clear()
-            return cur.rowcount
-        finally:
-            conn.close()
+            if count < PRUNE_CHUNK_ROWS:
+                return removed, True
+            if max_seconds is not None and time.monotonic() - started >= max_seconds:
+                return removed, False
 
     def stats(self, now: int | None = None) -> dict:
         """Size and growth of the history, for the admin panel's system
@@ -827,6 +862,9 @@ class HistoryRecorder:
         self._alert_active = False
         self._last_alert_ts = 0.0
         self._last_prune_ts = 0.0
+        # Rows removed so far by a day's prune still under way - None when
+        # none is (see _maybe_prune()).
+        self._pruned: int | None = None
         self._started = False
         # Optional callable -> {sensor_name: {field: value}} for values that
         # don't come from any driver's own reading - the thermostat's
@@ -973,26 +1011,38 @@ class HistoryRecorder:
                 self._check_disk()
                 caps = [c for c in (self.max_db_bytes or None, self.disk_hold_bytes) if c is not None]
                 cap = min(caps) if caps else None
-                removed = self.store.prune_to_size(cap) if cap else 0
+                removed = self.store.prune_to_size(cap, max_seconds=PRUNE_SECONDS_PER_CYCLE) if cap else 0
                 if removed:
                     logger.warning("History over its %d MB cap - removed its %d oldest rows",
                                    cap // 1_000_000, removed)
+                    if self.store.used_bytes() > cap:
+                        self._last_size_check_ts = 0.0     # still over: on with it next cycle
             except Exception:
                 logger.exception("Failed to enforce the history size cap")
-        if now - self._last_prune_ts < 86400:  # once a day is plenty for a DELETE scan
+        # Once a day is plenty for a DELETE scan - in pieces, a few seconds a
+        # cycle, until the day's is done (HistoryStore.prune_some()).
+        if self._pruned is None and now - self._last_prune_ts < 86400:
             return
-        self._last_prune_ts = now
-        if self.keep_runs is not None:
-            try:
-                self.keep_runs()
-            except Exception:
-                logger.exception("Failed to keep the valves' hours")
+        if self._pruned is None:
+            self._last_prune_ts = now
+            self._pruned = 0
+            if self.keep_runs is not None:
+                try:
+                    self.keep_runs()
+                except Exception:
+                    logger.exception("Failed to keep the valves' hours")
         try:
-            removed = self.store.prune(now - int(self.retention_days * 86400))
-            if removed:
-                logger.info("Pruned %d history rows older than %s days", removed, self.retention_days)
+            removed, done = self.store.prune_some(now - int(self.retention_days * 86400),
+                                                  max_seconds=PRUNE_SECONDS_PER_CYCLE)
+            self._pruned += removed
+            if not done:
+                return
+            if self._pruned:
+                logger.info("Pruned %d history rows older than %s days", self._pruned, self.retention_days)
+            self._pruned = None
             self.store.prune_days(date(datetime.now().year - RUN_YEARS + 1, 1, 1))
         except Exception:
+            self._pruned = None
             logger.exception("Failed to prune old history rows")
 
     def _check_power_budget(self, power_w: float) -> None:
