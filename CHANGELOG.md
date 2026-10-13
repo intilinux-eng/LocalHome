@@ -388,6 +388,10 @@ date rather than by tag.
   a wide screen, remembered in the browser. A zone out of the season is
   one line, its readings beside its name; a valve not answering is said
   once in the card, the top only says "needs checking".
+- **A read-only check of a board after a deploy** (`tools/check_board.py`):
+  every endpoint, both pages in each width and scheme, the log since the
+  start - the browser lets only reads through. `tools/live_walk.py`
+  follows the zones' new modes.
 - **The code by area.** The endpoints moved out of `web/app.py` (now
   2,300 lines down to 630: building and starting the app) into
   `web/routes/`, one module per area - pages, system, devices, plant,

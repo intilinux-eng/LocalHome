@@ -21,6 +21,12 @@ pieces fit: [ARCHITECTURE.md](ARCHITECTURE.md); working on it:
   - a look at the page → `python tools/screenshot_home.py OUT --state all`
     (widths, `--dark`); one-off screenshot scripts only for a state it
     doesn't have - and then add the state to the tool;
+  - a board after a deploy → `python tools/check_board.py antonio --log`:
+    read-only (the browser lets only GETs through), every endpoint, both
+    pages, the log since the start. Driving a real board's devices is
+    `tools/live_walk.py` - only when the user asks, Shellys powered;
+  - a tool that stops matching the pages (a button renamed) is fixed in
+    the same change, like a test;
   - a server with simulated devices → `tests/ui/conftest.py` (`_launch`,
     `CONFIG`).
 - **Tests: only what's needed, when it's needed.** Run the tests the
@@ -61,6 +67,7 @@ pytest -n auto                                 # unit tests, ~15 s
 pytest -m ui -n 6                              # browser tests (Playwright), ~1 min
 pytest -m enduser -n 6                         # the end-user suite alone, ~20 s
 python tools/screenshot_home.py OUT --state all  # the home page in each state
+python tools/check_board.py antonio --log      # a running board, read-only
 python -m ruff check --select F <files>        # undefined names, unused imports
 ```
 

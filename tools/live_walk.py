@@ -279,12 +279,12 @@ class Home:
         "next" or "manual" (until changed)."""
         self.refresh()
         card = self.card(name)
-        card.locator("button[data-action=start][data-delta='0.5']").click()
         if off:
-            card.locator(".pending button[data-action=pending-off]").click()
+            card.locator("button[data-action=mode-off]").click()
         else:
-            # From the value the first tap shows - its target and a half, or
-            # off, its usual one - as someone looking at it would.
+            # "Manual", then from the value it opens on - the target held or
+            # its usual one - as someone looking at it would.
+            card.locator("button[data-action=mode-manual]").click()
             shown = card.locator(".pending .stepper-value").inner_text()
             steps = round((target - float(shown.replace("°", "").replace(",", ".").strip())) / 0.5)
             delta = "0.5" if steps >= 0 else "-0.5"
@@ -444,7 +444,7 @@ def away_walk(board, home, name, winter):
     for z in climate["zones"]:
         board.check(f"away: {z['name']}'s valve closed", board.becomes(f"{z['name']} Valve", False))
     board.check("away: no manual change left", all(z["override"] is None for z in climate["zones"]))
-    board.check("away: nothing to change on the cards", home.page.locator(".zone button[data-action=start]").count() == 0)
+    board.check("away: nothing to change on the cards", home.page.locator(".zone .mode-row").count() == 0)
     if board.has(DEHUMIDIFIER):
         board.check("away: the dehumidifier off", board.becomes(DEHUMIDIFIER, False))
     if board.has(BYPASS):
@@ -564,7 +564,7 @@ def summer(board, home, dehumidifier):
         name = z["name"]
         if not z["cool_enabled"]:
             board.check(f"summer: {name} kept out - no controls on its card",
-                        home.card(name).locator("button[data-action=start]").count() == 0, f"card: {home.state(name)!r}")
+                        home.card(name).locator(".mode-row").count() == 0, f"card: {home.state(name)!r}")
             board.check(f"summer: {name}'s valve closed", board.becomes(f"{name} Valve", False))
             continue
         if z["temperature_c"] is None:
@@ -659,8 +659,8 @@ def away_and_home(board, home, browser):
                 board.becomes(f"{warm} Valve", False, board.poll_seconds + 15))
     # The stale phone still shows the cards: its tap is refused, and said.
     card = stale.locator(f".zone[data-zone='{warm}']")
-    if card.locator("button[data-action=start][data-delta='0.5']").count():
-        card.locator("button[data-action=start][data-delta='0.5']").click()
+    if card.locator("button[data-action=mode-manual]").count():
+        card.locator("button[data-action=mode-manual]").click()
         card.locator(".pending button[data-action=duration][data-hours='2']").click()
         card.locator(".pending button[data-action=apply]").click()
         stale.wait_for_timeout(2500)

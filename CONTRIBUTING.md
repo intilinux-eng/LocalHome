@@ -139,3 +139,14 @@ schemes - without writing a script for it:
 ```bash
 python tools/screenshot_home.py OUT_DIR --state all --width 390 --width 1280 --dark
 ```
+
+After a deploy, a read-only look at the board itself - every GET endpoint
+(each device's and zone's), the static files versioned and gzipped, both
+pages at a phone's and a desk's width in both schemes, what a resident
+opens on the home page, and with `--log` the errors in its log since
+LocalHome started. The browser lets nothing but GETs through, so nothing
+in the house changes:
+
+```bash
+python tools/check_board.py antonio --log
+```
