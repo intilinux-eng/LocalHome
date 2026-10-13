@@ -72,12 +72,14 @@ restart     only when named: LocalHome restarted from the admin while away - sti
 reboot      only when named, and by hand: the same with the whole board rebooted - it
             waits for "sudo reboot" over SSH, or the board unplugged and plugged back
             in (a power cut while nobody's home); its clock synchronized again
-soak        only when named, for --hours (1 if not given): stress first - ten
-            phones asking at once for a minute, thirty changes in thirty seconds,
-            two phones fighting over a zone, forty week saves in a row, six pages
-            open together - then the long run: a zone held open by hand the whole
-            time (its relay must never drop: the "on,900" renewed every 5 minutes),
-            the other zone changed and phones asking every 10 minutes; every
+soak        only when named, for --hours (1 if not given): stress first - the
+            clients of a real home asking at once for a minute (--clients, 2: at
+            most a PC and a phone are open together), thirty changes in thirty
+            seconds, two phones fighting over a zone, forty week saves in a row,
+            the clients' pages open together - then the long run: a zone held open
+            by hand the whole time (its relay must never drop: the "on,900"
+            renewed every 5 minutes), the other zone changed and the clients
+            asking every 10 minutes; every
             minute the process's memory and threads, the database, the loops,
             the answers' time and any new problem - summed up at the end"""
 
@@ -891,7 +893,7 @@ def restarted_while_away(board, home, how):
     board.check(f"back home: {bare} closed (no week)", board.stays(f"{bare} Valve", False, 3))
 
 
-def soak(board, home, browser, hours):
+def soak(board, home, browser, hours, clients=2):
     """Stress, then a long run - see PLAN. The zones are changed through the
     API (a phone's requests, without its pacing), the pages are real."""
     from concurrent.futures import ThreadPoolExecutor
@@ -953,8 +955,8 @@ def soak(board, home, browser, hours):
     say(f"soak: {first} (and {other}), {mode}, for {hours} h of long run after the stress")
 
     # ------------------------------------------------------------ stress --
-    failed = phones(10, 60)
-    board.check("stress: ten phones asking at once for a minute - every answer came", failed == 0, f"{failed} failed")
+    failed = phones(clients, 60)
+    board.check(f"stress: {clients} clients asking at once for a minute - every answer came", failed == 0, f"{failed} failed")
 
     since, refused = time.time(), 0
     for i in range(30):
@@ -997,9 +999,10 @@ def soak(board, home, browser, hours):
                 refused == 0 and board.week(first, mode) == weeks[1], f"{refused} refused")
     board.restore_weeks()
 
+    # The clients' pages: a PC's, then phones'.
     pages, errors = [], []
-    for _ in range(6):
-        page = browser.new_page(viewport={"width": 390, "height": 900})
+    for i in range(clients):
+        page = browser.new_page(viewport={"width": 1280, "height": 900} if i == 0 else {"width": 390, "height": 900})
         page.on("pageerror", lambda e: errors.append(str(e)))
         keep_vmc(page)
         page.goto(board.base)
@@ -1008,7 +1011,7 @@ def soak(board, home, browser, hours):
     while time.time() < end:
         timed("/api/climate/zones")
         time.sleep(5)
-    board.check("stress: six pages open together for two minutes - no script error", not errors, "; ".join(errors[:2]))
+    board.check(f"stress: {clients} pages open together for two minutes - no script error", not errors, "; ".join(errors[:2]))
     for page in pages:
         page.close()
 
@@ -1037,7 +1040,7 @@ def soak(board, home, browser, hours):
                 override(other, opens, hours=1)
                 board.becomes(f"{other} Valve", True, 90)
                 cancel(other)
-            phones(5, 20)
+            phones(clients, 20)
             s = samples[-1]
             say(f"  {round((time.time() - held_since) / 60)} min: {s['rss'] / 1e6:.0f} MB, {s['threads']} threads, "
                 f"database {s['db'] / 1e6:.1f} MB")
@@ -1086,6 +1089,8 @@ def main(argv=None):
                         help=f"some of: {', '.join(PARTS + EXTRA_PARTS)} ({', '.join(EXTRA_PARTS)} only when named)")
     parser.add_argument("--yes", action="store_true", help="run it - it drives the real relays")
     parser.add_argument("--hours", type=float, default=1.0, help="the soak's long run (only with --parts soak)")
+    parser.add_argument("--clients", type=int, default=2,
+                        help="the soak's clients at once - a real home has at most two (a PC, a phone)")
     args = parser.parse_args(argv)
     parts = [p for p in args.parts.split(",") if p]
     unknown = set(parts) - set(PARTS) - set(EXTRA_PARTS)
@@ -1131,7 +1136,7 @@ def main(argv=None):
                 elif part == "away":
                     away_and_home(board, home, browser)
                 elif part == "soak":
-                    soak(board, home, browser, args.hours)
+                    soak(board, home, browser, args.hours, args.clients)
                 elif part in EXTRA_PARTS:
                     restarted_while_away(board, home, part)
             board.check("no script error on the pages", errors == [], str(errors))

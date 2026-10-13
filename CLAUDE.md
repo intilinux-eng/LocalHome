@@ -8,6 +8,11 @@ home page for the residents and an admin panel for the installer. How the
 pieces fit: [ARCHITECTURE.md](ARCHITECTURE.md); working on it:
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Sizing: at most two clients at once in real use (a PC and a phone) - load
+tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
+(antonio) of RAM, LocalHome capped at 512 MB by its service
+(`deploy/tune-board.sh`); the history capped at 300 MB by default.
+
 ## Spend context on the change, not on finding it
 
 - **Find, then read.** Search for the function, the route or the text key
