@@ -282,6 +282,44 @@ def test_a_mains_shelly_that_restarted_is_counted(tmp_path):
     assert by_id(watcher, DIMMER)["booted_at"] == clock.t - 120
 
 
+def test_two_power_cuts_two_minutes_apart_are_two_restarts(tmp_path):
+    """Found cutting the relays' power twice, two minutes apart: the second
+    went uncounted - a start within 5 minutes of the one before was taken
+    for the same one. The time it has been up, against the time gone by,
+    tells a restart however soon after the last."""
+    rpc = Rpc(DIMMER_STATUS)
+    watcher, broker, clock, store = health(tmp_path, dimmer_integrations(), rpc=rpc)
+    watcher.poll_once()
+    clock.t += 300
+    rpc.status["sys"].update(uptime=20, reset_reason=1)   # the first cut
+    watcher.poll_once()
+    clock.t += 130
+    rpc.status["sys"].update(uptime=15, reset_reason=1)   # the second, two minutes on
+    watcher.poll_once()
+    clock.t += 300
+    rpc.status["sys"]["uptime"] = 315                      # up since
+    watcher.poll_once()
+    stats = by_id(watcher, DIMMER)["stats"]
+    assert (stats["restarts_7d"], stats["restarts_power_7d"]) == (2, 2)
+    assert by_id(watcher, DIMMER)["booted_at"] == clock.t - 315
+
+
+def test_the_boards_clock_put_right_is_no_restart(tmp_path):
+    """Right after a power-on the board runs on the time it stopped at until
+    internet corrects it: its clock jumping on isn't the Shelly restarting."""
+    rpc = Rpc(DIMMER_STATUS)
+    wall, steady = Clock(), Clock(1000.0)
+    watcher = ShellyHealth(shelly_devices(dimmer_integrations()), HistoryStore(str(tmp_path / "history.db")),
+                           subscribe=Broker().subscribe, rpc_for=lambda device_id: rpc, clock=wall, monotonic=steady)
+    watcher.poll_once()
+    wall.t += 6 * 3600                                     # put right: six hours on
+    steady.t += 60
+    rpc.status["sys"]["uptime"] += 60
+    watcher.poll_once()
+    assert by_id(watcher, DIMMER)["stats"]["restarts_7d"] == 0
+    assert by_id(watcher, DIMMER)["booted_at"] == wall.t - rpc.status["sys"]["uptime"], "its start, on the right clock"
+
+
 def test_a_hot_shelly_is_a_problem(tmp_path):
     rpc = Rpc(DIMMER_STATUS)
     rpc.status["light:0"]["temperature"]["tC"] = 83.4

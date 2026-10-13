@@ -14,6 +14,14 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **Two restarts of a Shelly minutes apart are two.** Found cutting the
+  relays' power twice, two minutes apart: the admin counted one - a start
+  within 5 minutes of the one before was taken for the same. A restart is
+  now told by its uptime going back against the time gone by on a steady
+  clock: however soon after the last, and never the board's own clock put
+  right. The installer's guide also says what the dehumidifier does after a
+  black-out: it stays off, its water valve closed, until it's switched on
+  again - like any appliance (by itself only with its automatic start).
 - **With the board gone, the dehumidifier stops before its water.** Each
   relay drops by itself once LocalHome stops renewing it, each on its own
   clock: the dehumidifier and the bathrooms' valve it draws its chilled
@@ -455,7 +463,12 @@ date rather than by tag.
   drawing says isn't said again, the last two sections are one table of
   what you see and what to do, the screenshots smaller and side by side -
   three that only repeated a table's values gone. 16 printed pages
-  instead of 24, the images 330 KB instead of 870.
+  instead of 24, the images 330 KB instead of 870. Plainer too: "In breve"
+  at the top - what it does, the two pages, the safety in one line, where
+  to start - the words that come back explained once (Shelly, relay,
+  target, hysteresis, timed command, MQTT broker, prefix, watchdog...),
+  the home's own words (Oraria, Manuale, Spenta), the app's English
+  settings said in Italian beside them.
 - **The Shellys' power cut and given back** (`tools/live_walk.py --parts
   power`), by a switch on their supply: a flick, ten seconds, two minutes in
   winter with a zone open, ten seconds in summer with the dehumidifier

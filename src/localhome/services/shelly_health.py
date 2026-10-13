@@ -95,8 +95,14 @@ MISSED_PER_DAY = 3
 # (a Gen3's switch:0.counts); a Plus 1 doesn't count.
 SWITCH_ONS_24H_MAX = 48
 # A device's start time, worked out from its uptime and our clock, moves
-# by a second or two between polls; a restart moves it by far more.
+# by a second or two between polls; a restart moves it by far more. What's
+# recorded from before this start is compared that way, with room for the
+# board's clock put right since.
 RESTART_SLACK_SECONDS = 300
+# From one reading to the next its uptime grows as our steady clock does,
+# give or take this: a restart sets it back, however soon after the last -
+# two power cuts two minutes apart are two (seen on the production board).
+UPTIME_SLACK_SECONDS = 30
 # Why it last started (sys.reset_reason, the ESP32's own code), and what
 # that means for whoever looks after it. Seen on the production board: a
 # dimmer whose power was cut three times in a test, and a firmware update,
@@ -404,9 +410,12 @@ def _number(value: Any) -> float | None:
 class ShellyHealth:
     def __init__(self, devices: list[dict], store=None, subscribe: Callable | None = None,
                  rpc_for: Callable[[str], Any] | None = None, clock: Callable[[], float] = time.time,
-                 reading_of: Callable[[str], dict] | None = None):
+                 reading_of: Callable[[str], dict] | None = None, monotonic: Callable[[], float] | None = None):
         self.store = store
         self.clock = clock
+        # Time gone by between two readings - the board's clock can be put
+        # right in between (a test's own clock is both).
+        self.monotonic = monotonic or (time.monotonic if clock is time.time else clock)
         # The sensor's own last reading (DeviceManager.sensor_reading): what
         # a battery sensor said before this start, until it wakes again.
         self._reading_of = reading_of
@@ -430,7 +439,7 @@ class ShellyHealth:
                 "online": None, "error": None, "polled_at": None,
                 "wifi_rssi_dbm": None, "wifi_at": None, "ssid": None, "wakeup_period": None,
                 "device_temp_c": None, "voltage_v": None, "errors": [],
-                "booted_at": None, "update": None, "restart_required": False,
+                "booted_at": None, "uptime_seen": None, "update": None, "restart_required": False,
                 "model": None, "firmware": None,
                 "expect": dict(device.get("expect") or {}), "settings_wrong": [], "settings_read": False,
                 "cfg_rev": None,
@@ -636,9 +645,15 @@ class ShellyHealth:
         if uptime is None or state["battery"]:
             return          # a sleeping sensor's uptime says nothing about power cuts
         booted = self.clock() - uptime
-        known = state["booted_at"]
-        if known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
-            if known is not None and booted > known:
+        known, seen = state["booted_at"], state["uptime_seen"]
+        now = self.monotonic()
+        state["uptime_seen"] = (uptime, now)
+        if seen is not None:
+            restarted = uptime < seen[0] + (now - seen[1]) - UPTIME_SLACK_SECONDS
+        else:
+            restarted = known is not None and booted > known + RESTART_SLACK_SECONDS
+        if restarted or known is None or abs(booted - known) > RESTART_SLACK_SECONDS:
+            if restarted:
                 # Recorded by kind: only the unexpected ones are a sign of
                 # trouble (rows from before reasons were read, plain
                 # "restart", are left out of both counts).
