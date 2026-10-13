@@ -33,6 +33,9 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
   - a full, year-old history → `tools/seed_year_history.py` on a copy of
     a board's database (run on the board), then `check_board.py` and the
     soak - never on a history someone needs;
+  - months of running (memory, files, history, a day's cost) →
+    `tools/accelerated_months.py` - in the suite as
+    `tests/test_long_run_months.py`; on a board `--no-trace`, in /tmp;
   - a tool that stops matching the pages (a button renamed) is fixed in
     the same change, like a test;
   - a server with simulated devices → `tests/ui/conftest.py` (`_launch`,

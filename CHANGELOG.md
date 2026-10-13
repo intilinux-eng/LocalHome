@@ -429,6 +429,30 @@ date rather than by tag.
   a wide screen, remembered in the browser. A zone out of the season is
   one line, its readings beside its name; a valve not answering is said
   once in the card, the top only says "needs checking".
+- **The week alone switching the real relays, timed**
+  (`tools/live_walk.py --parts schedule --hours N`): each zone's week
+  painted for the hours ahead, 2.5° past its room's real temperature on
+  one side then the other; at each change of the hour, nobody touching
+  anything, each Shelly has to switch - timed from the hour, LocalHome's
+  command and the Shelly's own report - and then hold until the next one,
+  an open one's hold renewed every 5 minutes.
+- **Comfort and economy against the real relays**
+  (`tools/live_walk.py --parts thresholds`): each zone, from its room's
+  real temperature read again before every step - inside the band (the
+  hysteresis, plus the economy tolerance) a closed valve stays closed and
+  an open one open, past it it opens, at the target it stops - and the
+  thresholds the board states. A level the room can't reach in a season
+  is said with the temperature it would need.
+- **Months of a board in minutes** (`tools/accelerated_months.py`): the
+  factory climate, every device simulated, its clock run fast - each
+  loop's cycle in turn, two pages asking as a PC and a phone do, a
+  resident's days (22° for two hours, a zone by hand, the week edited,
+  a weekend away, the VMC boosted, a few summer days). After the months:
+  nothing grown in memory, threads, files or history, a day and an answer
+  costing what they did, every day summed up, nothing logged as an error.
+  Two weeks of it across New Year are in the unit suite
+  (`tests/test_long_run_months.py`, with a leak put in on purpose to show
+  it's found); on a board, `--days 90 --no-trace` in /tmp.
 - **A year-old history to try a board with** (`tools/seed_year_history.py`):
   a copy of a board's history grown back in time - its own days of
   samples copied to cover 60, a year of daily summaries before them, two

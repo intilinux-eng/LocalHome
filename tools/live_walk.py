@@ -39,7 +39,7 @@ PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
 # Run only when named: they restart LocalHome, and with it the VMC's driver;
 # "reboot" waits for someone to reboot or unplug the board; "soak" takes
 # hours (--hours).
-EXTRA_PARTS = ("restart", "reboot", "soak")
+EXTRA_PARTS = ("restart", "reboot", "soak", "thresholds", "schedule")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -81,7 +81,26 @@ soak        only when named, for --hours (1 if not given): stress first - the
             renewed every 5 minutes), the other zone changed and the clients
             asking every 10 minutes; every
             minute the process's memory and threads, the database, the loops,
-            the answers' time and any new problem - summed up at the end"""
+            the answers' time and any new problem - summed up at the end
+thresholds  only when named: comfort and economy, each zone, in both seasons (the
+            zone kept out of cooling: winter only). Its room stood in for at a
+            temperature each level's targets can be tried at (22/18 degrees in
+            winter, 24/28 in summer): its H&T's message sent every second in its
+            place, marked and not kept by the broker - a real report meanwhile has
+            the step done again; at the end its real temperature back. A target on
+            the room's side closes; one inside the band (the hysteresis, plus the
+            economy tolerance for an economy target) stays closed - where a comfort
+            one as far would open; past the band opens; inside it again stays open;
+            at the target it stops - the thresholds the board states checked too.
+            A zone without an H&T on the broker: its real room, where it reaches
+schedule    only when named, for --hours changes of the hour (1 if not given): each
+            zone with a temperature has its week painted for the hours ahead, a
+            target 2.5 degrees past its room's own on one side then the other - one
+            zone opening as the other closes. At each change of the hour, nobody
+            touching anything: each relay as the week says, timed from the hour -
+            LocalHome's command and the Shelly's own report - then kept so until
+            the next change, an open one's hold renewed every 5 minutes; the
+            weeks put back"""
 
 BYPASS, DEHUMIDIFIER = "Bathroom Bypass Valve", "Dehumidifier"
 
@@ -102,6 +121,12 @@ class Board:
         maps = self.get("/api/climate-admin/map")["zones"]
         switches = self.get("/api/climate-admin/extra-switches")
         self.relays = {z["valve_device_id"]: f"{z['name']} Valve" for z in maps if z.get("valve_device_id")}
+        # Each zone's H&T on the broker - what the thresholds part stands in for.
+        self.sensors = {z["name"]: z["sensor_device_id"] for z in maps
+                        if z.get("sensor_mode", "shelly") == "shelly" and z.get("sensor_device_id")}
+        self.real_reports: list[tuple[float, str, float]] = []
+        self.standing_in: dict[str, float] = {}
+        self.real_before: dict[str, float] = {}
         for key, name in (("bypass_valve_device_id", BYPASS), ("dehumidifier_device_id", DEHUMIDIFIER)):
             if switches.get(key):
                 self.relays[switches[key]] = name
@@ -112,7 +137,8 @@ class Board:
         # The broker may be the board's own: back within seconds of a reboot.
         self.client.reconnect_delay_set(1, 4)
         self.client.on_connect = lambda c, u, f, r, p=None: [
-            c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0")]
+            c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0")] + [
+            c.subscribe(f"{d}/status/temperature:0") for d in self.sensors.values()]
         self.client.connect(host, 1883, 60)
         self.client.loop_start()
         time.sleep(2)
@@ -185,6 +211,16 @@ class Board:
     # ------------------------------------------------------------ relays --
     def _on_message(self, client, userdata, msg):
         device, rest = msg.topic.split("/", 1)
+        if device not in self.relays:
+            # A sensor: its own report, not one of ours standing in for it.
+            zone = next((z for z, d in self.sensors.items() if d == device), None)
+            try:
+                payload = json.loads(msg.payload)
+            except ValueError:
+                return
+            if zone and isinstance(payload, dict) and not payload.get("stand_in") and not msg.retain:
+                self.real_reports.append((time.time(), zone, payload.get("tC")))
+            return
         name = self.relays[device]
         text = msg.payload.decode("utf-8", "replace")
         if rest == "status/switch:0":
@@ -217,6 +253,59 @@ class Board:
                 return False
             time.sleep(0.5)
         return True
+
+    # ---------------------------------------------- a sensor stood in for --
+    def stand_in(self, zone, temperature):
+        """`zone`'s room at `temperature`: its H&T's message, sent every second
+        in its place (marked, not kept by the broker) until stand_down()."""
+        import threading
+
+        if zone not in self.real_before:
+            self.real_before[zone] = self.zone(zone)["temperature_c"]
+        self.standing_in[zone] = temperature
+        if not getattr(self, "_standing", None):
+            self._standing = threading.Event()
+            threading.Thread(target=self._stand, args=(self._standing,), daemon=True).start()
+
+    def _stand(self, stop):
+        while not stop.is_set():
+            for zone, value in list(self.standing_in.items()):
+                self._publish_temperature(zone, value, stand_in=True)
+            time.sleep(1)
+
+    def _publish_temperature(self, zone, value, stand_in):
+        body = {"id": 0, "tC": value, "tF": round(value * 9 / 5 + 32, 1)}
+        if stand_in:
+            body["stand_in"] = True
+        self.client.publish(f"{self.sensors[zone]}/status/temperature:0", json.dumps(body), qos=1, retain=False)
+
+    def stand_down(self, zones=None):
+        """These zones stood in for (all: None) back at their real
+        temperature - their own last report, or the reading found before -
+        until they speak again: {zone: temperature}."""
+        zones = list(self.real_before) if zones is None else [z for z in zones if z in self.real_before]
+        for zone in zones:
+            self.standing_in.pop(zone, None)
+        if not self.standing_in and getattr(self, "_standing", None):
+            self._standing.set()
+            self._standing = None
+        time.sleep(1.5)                      # the last message in its place out first
+        back = {}
+        for zone in zones:
+            before = self.real_before.pop(zone)
+            last = next((value for at, z, value in reversed(self.real_reports) if z == zone and value is not None), None)
+            back[zone] = last if last is not None else before
+            self._publish_temperature(zone, back[zone], stand_in=False)
+        return back
+
+    def reads(self, zone, temperature, seconds=30):
+        """The board reading `zone`'s room at `temperature`."""
+        end = time.time() + seconds
+        while time.time() < end:
+            if abs((self.zone(zone)["temperature_c"] or -99) - temperature) < 0.05:
+                return True
+            time.sleep(1)
+        return False
 
     def check(self, label, ok, extra=""):
         self.results.append((label, bool(ok)))
@@ -284,6 +373,11 @@ class Home:
 
     def state(self, name):
         return self.card(name).locator(".zone-head .state").inner_text().strip()
+
+    def state_now(self, name):
+        """The card as it is now: the page asked again first, not left to its next refresh."""
+        self.refresh()
+        return self.state(name)
 
     def manual(self, name, target=None, hours="2", off=False):
         """A manual change from the card: a target or off, for 2 hours,
@@ -408,7 +502,7 @@ def zone_week(board, home, name, label):
         say(f"  {name}: inside its band - the valve may keep its state")
         return
     board.check(f"{label}: {name} as its week says ({'open' if want else 'closed'})",
-                board.becomes(f"{name} Valve", want), f"card: {home.state(name)!r}")
+                board.becomes(f"{name} Valve", want), f"card: {home.state_now(name)!r}")
 
 
 def winter(board, home):
@@ -428,11 +522,11 @@ def winter(board, home):
         same = round(room * 2) / 2
         home.manual(name, same)
         board.check(f"{name} at {same}° with the room at {room}°: stays closed", board.stays(valve, False),
-                    f"card: {home.state(name)!r}")
+                    f"card: {home.state_now(name)!r}")
         home.manual(name, same + 1.5)
-        board.check(f"{name} at {same + 1.5}°: opens", board.becomes(valve, True), f"card: {home.state(name)!r}")
+        board.check(f"{name} at {same + 1.5}°: opens", board.becomes(valve, True), f"card: {home.state_now(name)!r}")
         home.manual(name, off=True)
-        board.check(f"{name} off for 2 h: closes", board.becomes(valve, False), f"card: {home.state(name)!r}")
+        board.check(f"{name} off for 2 h: closes", board.becomes(valve, False), f"card: {home.state_now(name)!r}")
         home.manual(name, same + 1.5, hours="manual")
         o = board.zone(name)["override"]
         board.check(f"{name} at {same + 1.5}° until changed: opens, no end",
@@ -575,7 +669,7 @@ def summer(board, home, dehumidifier):
         name = z["name"]
         if not z["cool_enabled"]:
             board.check(f"summer: {name} kept out - no controls on its card",
-                        home.card(name).locator(".mode-row").count() == 0, f"card: {home.state(name)!r}")
+                        home.card(name).locator(".mode-row").count() == 0, f"card: {home.state_now(name)!r}")
             board.check(f"summer: {name}'s valve closed", board.becomes(f"{name} Valve", False))
             continue
         if z["temperature_c"] is None:
@@ -585,7 +679,7 @@ def summer(board, home, dehumidifier):
         board.check(f"summer: {name} off for 2 h: closes", board.becomes(f"{name} Valve", False))
         home.manual(name, round(z["temperature_c"] * 2) / 2 + 0.5, hours="manual")
         board.check(f"summer: {name} at a target above the room: stays closed", board.stays(f"{name} Valve", False),
-                    f"card: {home.state(name)!r}")
+                    f"card: {home.state_now(name)!r}")
         home.back_to_the_week(name)
         zone_week(board, home, name, "summer, back to the week")
     kept_out = next((z["name"] for z in climate["zones"] if not z["cool_enabled"]), None)
@@ -1082,13 +1176,212 @@ def soak(board, home, browser, hours, clients=2):
 DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
+# services/thermostat.py's two levels: economy heating below 20, cooling from 26.
+ECONOMY_HEAT_BELOW_C, ECONOMY_COOL_FROM_C = 20.0, 26.0
+
+
+def _tier(target, mode):
+    return ("economy" if target < ECONOMY_HEAT_BELOW_C else "comfort") if mode == "heat"         else ("economy" if target >= ECONOMY_COOL_FROM_C else "comfort")
+
+
+def _threshold_steps(room, mode, spread):
+    """(what, target, open?, becomes or stays) - from the room's temperature,
+    for a level whose band is `spread` wide."""
+    side = 1 if mode == "heat" else -1
+    return [("on the room's side: closes", room - side * 0.5, False, "becomes"),
+            (f"{spread - 0.25:.2f} degrees in, inside the band: stays closed", room + side * (spread - 0.25), False, "stays"),
+            (f"{spread + 0.25:.2f} degrees in, past the band: opens", room + side * (spread + 0.25), True, "becomes"),
+            ("inside the band again: stays open", room + side * (spread - 0.25), True, "stays"),
+            ("at the target: stops", room - side * 0.25, False, "becomes")]
+
+
+def _reachable(room, mode, tier, spread):
+    return all(_tier(target, mode) == tier for _, target, _, _ in _threshold_steps(room, mode, spread)[1:])
+
+
+# The room's temperature the thresholds part gives a zone, for each level -
+# one its every target can be tried at (_threshold_steps()).
+INJECTED_ROOM = {("heat", "comfort"): 22.0, ("heat", "economy"): 18.0,
+                 ("cool", "comfort"): 24.0, ("cool", "economy"): 28.0}
+
+
+def thresholds(board, home):
+    """Comfort and economy against the real relays - see PLAN."""
+    from datetime import timedelta
+
+    say("== THRESHOLDS")
+    climate = board.climate()
+    hysteresis, tolerance = climate["hysteresis_c"], climate["economy_tolerance_c"]
+    spreads = {"comfort": hysteresis, "economy": hysteresis + tolerance}
+    found = climate["mode"]
+    say(f"  hysteresis {hysteresis}°, economy tolerance {tolerance}°")
+
+    def zones_in(mode):
+        return [z for z in board.climate()["zones"] if (z["cool_enabled"] or mode == "heat")
+                and board.has(f"{z['name']} Valve") and (z["name"] in board.sensors or z["temperature_c"] is not None)]
+
+    def paint(name, mode, target):
+        """This hour and the next at `target` - a step that crosses the hour keeps it."""
+        now = board.now()
+        week = board.week(name, mode)
+        for at in (now, now + timedelta(hours=1)):
+            week[DAYS_OF_WEEK[at.weekday()]][at.hour] = target
+        board.set_week(name, mode, week)
+
+    def plan_of(mode):
+        """(zone, level, room): a zone with its sensor on the broker at the
+        level's own room; one without, at its room's real one if it reaches."""
+        plan = []
+        for z in zones_in(mode):
+            for tier in spreads:
+                if z["name"] in board.sensors:
+                    plan.append((z["name"], tier, INJECTED_ROOM[(mode, tier)]))
+                elif _reachable(z["temperature_c"], mode, tier, spreads[tier]):
+                    plan.append((z["name"], tier, None))
+                else:
+                    say(f"  {z['name']} {tier} in {'winter' if mode == 'heat' else 'summer'}: its room at "
+                        f"{z['temperature_c']}° doesn't reach its targets, and its sensor isn't one to stand in for")
+        return plan
+
+    try:
+        for mode in (found, "cool" if found == "heat" else "heat"):
+            plan = plan_of(mode)
+            if not plan:
+                continue
+            if board.climate()["mode"] != mode:
+                board.season(mode)
+                time.sleep(5)
+            for name, tier, injected in plan:
+                valve = f"{name} Valve"
+                season = "winter" if mode == "heat" else "summer"
+                if injected is not None:
+                    board.stand_in(name, injected)
+                    board.check(f"{season} {tier}: {name}'s room stood in for at {injected}°",
+                                board.reads(name, injected), f"the board reads {board.zone(name)['temperature_c']}°")
+                for what, _, want, how in _threshold_steps(0.0, mode, spreads[tier]):
+                    for attempt in (1, 2):
+                        room = injected if injected is not None else board.zone(name)["temperature_c"]
+                        step = next(s for s in _threshold_steps(room, mode, spreads[tier]) if s[0] == what)
+                        target = round(step[1], 2)
+                        since = time.time()
+                        paint(name, mode, target)
+                        z = board.zone(name)
+                        opens = round(target - spreads[tier] if mode == "heat" else target + spreads[tier], 2)
+                        stated = (z["valve_opens_at"], z["valve_stops_at"]) == (opens, target)
+                        ok = (board.becomes(valve, want, seconds=board.poll_seconds + 30) if how == "becomes"
+                              else board.stays(valve, want, seconds=board.poll_seconds + 15))
+                        # The real sensor speaking meanwhile, or the real room moving: the step again.
+                        spoke = injected is not None and any(at >= since and n == name for at, n, _ in board.real_reports)
+                        moved = injected is None and abs(board.zone(name)["temperature_c"] - room) > 0.2
+                        if not (spoke or moved) or attempt == 2:
+                            break
+                        say(f"   {'its real sensor reported meanwhile' if spoke else 'the room moved'}: again")
+                    board.check(f"{season} {tier}: {name} at {target}° with the room at {room}°, {what}",
+                                ok and stated and _tier(target, mode) == tier,
+                                f"the board: opens at {z['valve_opens_at']}, stops at {z['valve_stops_at']} "
+                                f"({'as expected' if stated else f'expected {opens}, {target}'}); "
+                                f"card: {home.state_now(name)!r}")
+                if injected is not None and all(n != name for n, _, _ in plan[plan.index((name, tier, injected)) + 1:]):
+                    for zone, real in board.stand_down([name]).items():
+                        board.check(f"{season}: {zone}'s real temperature back ({real}°)", board.reads(zone, real))
+    finally:
+        for name, real in board.stand_down().items():
+            board.check(f"thresholds: {name}'s real temperature back ({real}°)", board.reads(name, real))
+        if board.climate()["mode"] != found:
+            board.season(found)
+
+
+def schedule(board, home, changes):
+    """The week alone opening and closing the relays at the hour - see PLAN."""
+    from datetime import timedelta
+
+    say("== SCHEDULE")
+    climate = board.climate()
+    cool = climate["mode"] == "cool"
+    zones = [z for z in climate["zones"] if z["temperature_c"] is not None and (z["cool_enabled"] or not cool)
+             and board.has(f"{z['name']} Valve")]
+    if not zones:
+        board.check("schedule: a zone with a temperature and a relay to watch", False)
+        return
+    half = lambda v: round(v * 2) / 2
+    now = board.now()
+    if now.minute >= 55:                           # the first change too close to see the start settle
+        say("  the hour is about to change: waiting for it")
+        time.sleep((60 - now.minute) * 60 - now.second + 5)
+    hour0 = board.now().replace(minute=0, second=0, microsecond=0)
+    hours = [hour0 + timedelta(hours=k) for k in range(changes + 1)]
+
+    def opens(i, k):
+        return (i + k) % 2 == 1                    # the first zone closed now, the second open
+
+    for i, z in enumerate(zones):
+        room = z["temperature_c"]
+        warm, cold = half(room + 2.5), half(room - 2.5)
+        want_open, want_closed = (cold, warm) if cool else (warm, cold)
+        mode = climate["mode"]
+        week = board.week(z["name"], mode)
+        for k, at in enumerate(hours):
+            week[DAYS_OF_WEEK[at.weekday()]][at.hour] = want_open if opens(i, k) else want_closed
+        board.set_week(z["name"], mode, week)
+        say(f"  {z['name']}: room {room}°, {want_open}° (open) and {want_closed}° (closed) from "
+            f"{hours[0]:%H:00} to {hours[-1]:%H:00}")
+    for i, z in enumerate(zones):
+        board.check(f"schedule {hours[0]:%H}:00: {z['name']} as painted ({'open' if opens(i, 0) else 'closed'})",
+                    board.becomes(f"{z['name']} Valve", opens(i, 0), seconds=board.poll_seconds + 30))
+    worst = 0.0
+    for k in range(1, changes + 1):
+        # Asleep until a little before the hour, by the board's clock.
+        wait = (hours[k] - board.now()).total_seconds()
+        if wait > 5:
+            time.sleep(wait - 3)
+        hour_at = time.time() + (hours[k] - board.now()).total_seconds()
+        say(f"  -- {hours[k]:%H}:00")
+        for i, z in enumerate(zones):
+            name = f"{z['name']} Valve"
+            want = opens(i, k)
+            ok = board.becomes(name, want, seconds=max(0.0, hour_at - time.time()) + board.poll_seconds + 60)
+            reported = time.time() - hour_at
+            sent = next((at - hour_at for at, n, text in board.commands
+                         if n == name and at >= hour_at - 2 and text.startswith("on" if want else "off")), None)
+            worst = max(worst, reported) if ok else worst
+            timing = (f"LocalHome's command {sent:.0f} s after the hour, the Shelly's report {reported:.0f} s"
+                      if sent is not None else f"the Shelly's report {reported:.0f} s after the hour")
+            board.check(f"schedule {hours[k]:%H}:00: {z['name']} {'opens' if want else 'closes'} by itself, "
+                        f"not before the hour", ok and -2 <= reported <= board.poll_seconds + 30,
+                        f"{timing}; card: {home.state_now(z['name'])!r}")
+        # Kept so until the next change: no report, no command the other way.
+        since = time.time()
+        until = since + ((hours[k + 1] - board.now()).total_seconds() - 10 if k < changes else 15 * 60)
+        moved = {}
+        while time.time() < until:
+            for i, z in enumerate(zones):
+                name, want = f"{z['name']} Valve", opens(i, k)
+                if board.relay_state.get(name) is (not want):
+                    moved.setdefault(name, f"reported {'on' if not want else 'off'} at {time.strftime('%H:%M:%S')}")
+            time.sleep(1)
+        for i, z in enumerate(zones):
+            name, want = f"{z['name']} Valve", opens(i, k)
+            against = [text for at, n, text in board.commands
+                       if n == name and at >= since and text.startswith("off" if want else "on")]
+            board.check(f"schedule {hours[k]:%H}:00-{(until - since) / 60:.0f} min: {z['name']} stays "
+                        f"{'open' if want else 'closed'}", name not in moved and not against,
+                        moved.get(name, "") + (f" commands {against[:3]}" if against else ""))
+            if want:
+                renewals = [at for at, n, text in board.commands if n == name and at >= since and text.startswith("on")]
+                gaps = [b - a for a, b in zip([since] + renewals, renewals + [time.time()])]
+                board.check(f"schedule {hours[k]:%H}:00: {z['name']}'s hold renewed, never more than 7 minutes apart",
+                            gaps and max(gaps) < 420, f"{len(renewals)} renewals, longest gap {max(gaps) / 60:.1f} min")
+    say(f"  the slowest relay: {worst:.0f} s after its hour (the thermostat looks every {board.poll_seconds} s)")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--board", default="antonio.local")
     parser.add_argument("--parts", default=",".join(PARTS),
                         help=f"some of: {', '.join(PARTS + EXTRA_PARTS)} ({', '.join(EXTRA_PARTS)} only when named)")
     parser.add_argument("--yes", action="store_true", help="run it - it drives the real relays")
-    parser.add_argument("--hours", type=float, default=1.0, help="the soak's long run (only with --parts soak)")
+    parser.add_argument("--hours", type=float, default=1.0,
+                        help="the soak's long run, or the schedule's changes of the hour (with --parts soak/schedule)")
     parser.add_argument("--clients", type=int, default=2,
                         help="the soak's clients at once - a real home has at most two (a PC, a phone)")
     args = parser.parse_args(argv)
@@ -1137,6 +1430,10 @@ def main(argv=None):
                     away_and_home(board, home, browser)
                 elif part == "soak":
                     soak(board, home, browser, args.hours, args.clients)
+                elif part == "thresholds":
+                    thresholds(board, home)
+                elif part == "schedule":
+                    schedule(board, home, max(1, round(args.hours)))
                 elif part in EXTRA_PARTS:
                     restarted_while_away(board, home, part)
             board.check("no script error on the pages", errors == [], str(errors))
