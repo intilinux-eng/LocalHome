@@ -37,8 +37,9 @@ import paho.mqtt.client as mqtt
 
 PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
 # Run only when named: they restart LocalHome, and with it the VMC's driver;
-# "reboot" waits for someone to reboot or unplug the board.
-EXTRA_PARTS = ("restart", "reboot")
+# "reboot" waits for someone to reboot or unplug the board; "soak" takes
+# hours (--hours).
+EXTRA_PARTS = ("restart", "reboot", "soak")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -70,7 +71,15 @@ restart     only when named: LocalHome restarted from the admin while away - sti
             home, the week
 reboot      only when named, and by hand: the same with the whole board rebooted - it
             waits for "sudo reboot" over SSH, or the board unplugged and plugged back
-            in (a power cut while nobody's home); its clock synchronized again"""
+            in (a power cut while nobody's home); its clock synchronized again
+soak        only when named, for --hours (1 if not given): stress first - ten
+            phones asking at once for a minute, thirty changes in thirty seconds,
+            two phones fighting over a zone, forty week saves in a row, six pages
+            open together - then the long run: a zone held open by hand the whole
+            time (its relay must never drop: the "on,900" renewed every 5 minutes),
+            the other zone changed and phones asking every 10 minutes; every
+            minute the process's memory and threads, the database, the loops,
+            the answers' time and any new problem - summed up at the end"""
 
 BYPASS, DEHUMIDIFIER = "Bathroom Bypass Valve", "Dehumidifier"
 
@@ -882,12 +891,201 @@ def restarted_while_away(board, home, how):
     board.check(f"back home: {bare} closed (no week)", board.stays(f"{bare} Valve", False, 3))
 
 
+def soak(board, home, browser, hours):
+    """Stress, then a long run - see PLAN. The zones are changed through the
+    API (a phone's requests, without its pacing), the pages are real."""
+    from concurrent.futures import ThreadPoolExecutor
+    quote = urllib.parse.quote
+    climate = board.climate()
+    mode = climate["mode"]
+    cool = mode == "cool"
+    zones = [z["name"] for z in climate["zones"]
+             if not (cool and not z["cool_enabled"]) and board.has(f"{z['name']} Valve")]
+    if not zones:
+        say("soak: no zone with a relay to run")
+        return
+    first, other = zones[0], (zones[1] if len(zones) > 1 else None)
+    valve = f"{first} Valve"
+    opens, closes = (16.0, 30.0) if cool else (30.0, 16.0)
+
+    def override(name, target, **when):
+        return board.post(f"/api/climate/zones/{quote(name)}/override", {"target": target, **when})
+
+    def cancel(name):
+        board.post(f"/api/climate/zones/{quote(name)}/override/cancel", {})
+
+    timings: dict[str, list[float]] = {}
+
+    def timed(path):
+        t0 = time.time()
+        board.get(path)
+        timings.setdefault(path, []).append(time.time() - t0)
+
+    samples = []
+
+    def sample():
+        s = board.get("/api/system-status")
+        samples.append({"at": time.time(), "rss": s["process"]["rss_bytes"], "threads": s["process"]["threads"],
+                        "db": s["database"]["file_bytes"],
+                        "late": max(lp["last_ok_seconds_ago"] / lp["interval_seconds"] for lp in s["loops"]),
+                        "stalled": any(lp["stalled"] for lp in s["loops"]),
+                        "safety": {f"{e.get('when')} {e.get('values')}" for e in s.get("watchdog_history") or []
+                                   if e.get("code") == "safety_timer"}})
+
+    def problems():
+        return {f"{p['code']}:{p.get('subject', '')}" for p in board.get("/api/problems")["problems"]}
+
+    def phones(count, seconds):
+        def phone(_):
+            failed, end = 0, time.time() + seconds
+            while time.time() < end:
+                for path in ("/api/climate/zones", "/api/readings", "/api/devices"):
+                    try:
+                        timed(path)
+                    except Exception:   # noqa: BLE001 - counted: a phone left without an answer
+                        failed += 1
+            return failed
+        with ThreadPoolExecutor(count) as pool:
+            return sum(pool.map(phone, range(count)))
+
+    before = problems()
+    sample()
+    say(f"soak: {first} (and {other}), {mode}, for {hours} h of long run after the stress")
+
+    # ------------------------------------------------------------ stress --
+    failed = phones(10, 60)
+    board.check("stress: ten phones asking at once for a minute - every answer came", failed == 0, f"{failed} failed")
+
+    since, refused = time.time(), 0
+    for i in range(30):
+        try:
+            override(first, opens if i % 2 == 0 else closes, hours=1)
+        except Exception:   # noqa: BLE001
+            refused += 1
+        time.sleep(1)
+    board.check("stress: thirty changes in thirty seconds - all taken", refused == 0, f"{refused} refused")
+    board.check(f"stress: {first} ends as the last change says (closed)", board.becomes(valve, False, 90))
+    sent = [c for c in board.commands if c[0] >= since and c[1] == valve]
+    board.check("stress: no more commands to the relay than changes", len(sent) <= 31, f"{len(sent)} commands")
+
+    def writer(target, gap, seconds=30):
+        done, end = 0, time.time() + seconds
+        while time.time() < end:
+            try:
+                override(first, target, hours=1)
+                done += 1
+            except Exception:   # noqa: BLE001
+                pass
+            time.sleep(gap)
+        return done
+    with ThreadPoolExecutor(2) as pool:
+        done = list(pool.map(lambda args: writer(*args), [(opens, 0.5), (closes, 0.7)]))
+    override(first, opens, hours=1)
+    board.check(f"stress: two phones fighting over {first} ({sum(done)} changes), then one last change - "
+                f"the relay follows it", board.becomes(valve, True, 90))
+    board.check("stress: and the board says what the relay says", board.zone(first)["valve_on"] is True)
+    cancel(first)
+
+    weeks = ({d: [20.0] * 24 for d in DAYS_OF_WEEK}, {d: [None] * 24 for d in DAYS_OF_WEEK})
+    refused = 0
+    for i in range(40):
+        try:
+            board.set_week(first, mode, weeks[i % 2])
+        except Exception:   # noqa: BLE001
+            refused += 1
+    board.check("stress: forty week saves in a row - all taken, the last one kept",
+                refused == 0 and board.week(first, mode) == weeks[1], f"{refused} refused")
+    board.restore_weeks()
+
+    pages, errors = [], []
+    for _ in range(6):
+        page = browser.new_page(viewport={"width": 390, "height": 900})
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        keep_vmc(page)
+        page.goto(board.base)
+        pages.append(page)
+    end = time.time() + 120
+    while time.time() < end:
+        timed("/api/climate/zones")
+        time.sleep(5)
+    board.check("stress: six pages open together for two minutes - no script error", not errors, "; ".join(errors[:2]))
+    for page in pages:
+        page.close()
+
+    # ---------------------------------------------------------- long run --
+    sample()
+    start_rss, start_threads = samples[-1]["rss"], samples[-1]["threads"]
+    override(first, opens, until="manual")
+    board.check(f"long run: {first} held open by hand", board.becomes(valve, True, 90))
+    held_since = time.time()
+    drops, end = [], held_since + hours * 3600
+    next_burst = held_since + 600
+    while time.time() < end:
+        time.sleep(60)
+        try:
+            sample()
+            timed("/api/climate/zones")
+            timed("/api/readings")
+        except Exception as e:   # noqa: BLE001 - a board that didn't answer once is said, not fatal
+            say(f"  no answer: {e!r}")
+        if board.relay_state.get(valve) is not True:
+            drops.append(time.strftime("%H:%M:%S"))
+            say(f"  {valve} is not on!")
+        if time.time() >= next_burst:
+            next_burst += 600
+            if other:
+                override(other, opens, hours=1)
+                board.becomes(f"{other} Valve", True, 90)
+                cancel(other)
+            phones(5, 20)
+            s = samples[-1]
+            say(f"  {round((time.time() - held_since) / 60)} min: {s['rss'] / 1e6:.0f} MB, {s['threads']} threads, "
+                f"database {s['db'] / 1e6:.1f} MB")
+    held = time.time() - held_since
+    renewals = [at for at, n, text in board.commands if n == valve and at >= held_since and text.startswith("on")]
+    gaps = [b - a for a, b in zip([held_since] + renewals, renewals + [time.time()])]
+    cancel(first)
+
+    # ---------------------------------------------------------- summed up --
+    rss = [s["rss"] for s in samples]
+    threads = [s["threads"] for s in samples]
+    growth = (samples[-1]["rss"] - start_rss) / 1e6
+    board.check(f"long run: {first}'s relay held for {held / 3600:.1f} h - never dropped", not drops, str(drops[:5]))
+    board.check(f"long run: the hold renewed {len(renewals)} times, never more than 7 minutes apart",
+                gaps and max(gaps) < 420, f"longest gap {max(gaps) / 60:.1f} min" if gaps else "")
+    acted = set().union(*(s["safety"] for s in samples)) - samples[0]["safety"]
+    board.check("long run: no relay's safety timer acted", not acted, ", ".join(sorted(acted)))
+    board.check(f"long run: memory steady ({start_rss / 1e6:.0f} -> {samples[-1]['rss'] / 1e6:.0f} MB, "
+                f"at most {max(rss) / 1e6:.0f})", growth < 40, f"{growth / max(held / 3600, 0.1):.1f} MB/h")
+    board.check(f"long run: threads steady ({start_threads} -> {threads[-1]}, at most {max(threads)})",
+                threads[-1] <= start_threads + 5)
+    board.check("long run: the loops never stalled", not any(s["stalled"] for s in samples),
+                f"latest at most {max(s['late'] for s in samples):.1f} intervals behind")
+    for path, times in sorted(timings.items()):
+        times = sorted(times)
+        p95 = times[int(len(times) * 0.95) - 1] if len(times) > 1 else times[0]
+        board.check(f"answers: {path} - 95% within 2 s", p95 < 2.0,
+                    f"{len(times)} asked, median {times[len(times) // 2]:.2f} s, 95% {p95:.2f} s, slowest {times[-1]:.2f} s")
+    new = problems() - before
+    # The stress itself switched the relay dozens of times: the board saying
+    # it's short-cycling is its own alarm working (gone 24 h later), not news.
+    caused = {f"relay_short_cycling:{valve}"} & new
+    if caused:
+        say(f"  the board noticed the stress's switching ({', '.join(caused)}) - its alarm works; gone in 24 h")
+    board.check("no new problem on the board but the stress's own", not new - caused, ", ".join(sorted(new - caused)))
+    say(f"database {samples[0]['db'] / 1e6:.1f} -> {samples[-1]['db'] / 1e6:.1f} MB")
+
+
+DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--board", default="antonio.local")
     parser.add_argument("--parts", default=",".join(PARTS),
                         help=f"some of: {', '.join(PARTS + EXTRA_PARTS)} ({', '.join(EXTRA_PARTS)} only when named)")
     parser.add_argument("--yes", action="store_true", help="run it - it drives the real relays")
+    parser.add_argument("--hours", type=float, default=1.0, help="the soak's long run (only with --parts soak)")
     args = parser.parse_args(argv)
     parts = [p for p in args.parts.split(",") if p]
     unknown = set(parts) - set(PARTS) - set(EXTRA_PARTS)
@@ -932,6 +1130,8 @@ def main(argv=None):
                     summer(board, home, dehumidifier)
                 elif part == "away":
                     away_and_home(board, home, browser)
+                elif part == "soak":
+                    soak(board, home, browser, args.hours)
                 elif part in EXTRA_PARTS:
                     restarted_while_away(board, home, part)
             board.check("no script error on the pages", errors == [], str(errors))

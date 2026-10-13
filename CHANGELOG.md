@@ -14,6 +14,10 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **A simulated device says so in the admin panel's device list.** Two
+  valves left simulated, their Shellys connected and online, read "OK"
+  like real devices answering - only a sensor's simulated stand-in was
+  labelled. Every simulated device now carries the "simulated" label there.
 - **A zone whose valve isn't answering says so in red.** It was an amber
   word in the card's corner - seen on the production board with its valves
   unplugged. The card turns red and says inside what it means and what to

@@ -45,6 +45,14 @@ def test_manager_keeps_the_reason_an_integration_failed(tmp_path):
     assert "No driver registered" in failure["error"]
 
 
+def test_a_simulated_device_says_so_in_the_device_list(tmp_path):
+    """Seen on the production board: two valves left simulated, their
+    Shellys connected, listed as devices answering like real ones."""
+    manager = DeviceManager(load_config(_write(tmp_path, BROKEN_CONFIG)))
+    devices = {d["name"]: d for d in system_status.device_health(manager)}
+    assert devices["Rooms Sensor"]["simulated"] is True
+
+
 def test_unknown_driver_error_names_the_install_command_for_a_skipped_module(monkeypatch):
     monkeypatch.setitem(registry._SKIPPED, "localhome.drivers.custom.special", "custompkg")
     monkeypatch.setitem(registry._EXTRA_FOR_PACKAGE, "custompkg", "custom")

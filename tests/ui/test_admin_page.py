@@ -356,6 +356,9 @@ def test_every_device_is_in_one_list_a_shelly_opens_to_its_details(open_page, ap
     items = page.locator("#device-list > li").all_inner_texts()
     assert items[0].strip().lower() == f"zona {ZONE_A}".lower()
     assert f"Sensore {ZONE_A}" in items[1] and f"Valvola {ZONE_A}" in items[2]
+    # Seen on the production board: two valves left simulated, their
+    # Shellys connected, read "OK" like real ones. A stand-in says so.
+    assert "SIMULATO" in items[2].upper(), items[2]
     assert items[3].strip().lower() == f"zona {ZONE_B}".lower()
     assert "altri dispositivi" in [i.strip().lower() for i in items]
     # Right after the server starts a device may not have answered yet.

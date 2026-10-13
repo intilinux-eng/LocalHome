@@ -3301,7 +3301,10 @@ function deviceRowHtml(row) {
     ? `<span class="admin-pill">${tr(!s.battery ? "climate_admin.shelly_mains"
       : s.external_power ? "climate_admin.shelly_usb" : "climate_admin.shelly_battery")}</span>`
       + (s.simulated ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "")
-    : `<span class="admin-pill">${escapeHtml(row.devices[0].kind)}</span>`;
+    : `<span class="admin-pill">${escapeHtml(row.devices[0].kind)}</span>`
+      // A stand-in says so, as a simulated H&T's row does: "OK" alone
+      // passed for a real device answering.
+      + (row.devices.some(d => d.simulated) ? `<span class="admin-pill simulated">${tr("climate_admin.simulated_pill")}</span>` : "");
   const meta = s ? [s.wifi_rssi_dbm != null ? `${Math.round(s.wifi_rssi_dbm)} dBm` : "",
     s.battery && s.battery_pct != null && !s.external_power ? `${Math.round(s.battery_pct)}%` : ""].filter(Boolean).join(" · ") : "";
   const ages = row.devices.map(d => d.seconds_since_update).filter(age => age != null);

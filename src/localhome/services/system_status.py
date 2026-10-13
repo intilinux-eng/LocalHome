@@ -665,8 +665,12 @@ def disk_stats(path: str) -> dict:
 
 def device_health(manager) -> list[dict]:
     """Every polled device's latest reading reduced to what a diagnosis
-    needs: reachable or not, why not, and how old its data is."""
+    needs: reachable or not, why not, how old its data is - and whether
+    it's a simulated stand-in: one left simulated looked like a real
+    device answering in the panel's list (seen: two valves, their Shellys
+    connected, still simulated)."""
     devices = []
+    driver_types = getattr(manager, "driver_types", {}) or {}
     for name, poller in manager.pollers.items():
         reading = poller.get()
         devices.append(
@@ -676,6 +680,7 @@ def device_health(manager) -> list[dict]:
                 "ok": bool(reading.get("ok")),
                 "error": None if reading.get("ok") else reading.get("error"),
                 "seconds_since_update": reading.get("seconds_since_update"),
+                "simulated": driver_types.get(name) == "simulated",
             }
         )
     return devices
