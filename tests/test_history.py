@@ -35,28 +35,6 @@ def test_query_is_scoped_to_sensor_and_field(tmp_path):
     assert [p["value"] for p in points] == [100.0]
 
 
-def test_query_peak_today_returns_the_highest_value_and_its_timestamp(tmp_path):
-    store = HistoryStore(str(tmp_path / "history.db"))
-    # All three today, whenever the test runs - a minute after midnight,
-    # "a minute ago" was yesterday.
-    start_of_today = int(time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)))
-    now = max(int(time.time()), start_of_today + 120)
-
-    store.record("meter", now - 60, {"power_w": 500.0})
-    store.record("meter", now - 30, {"power_w": 1200.0})
-    store.record("meter", now, {"power_w": 800.0})
-
-    peak = store.query_peak_today("meter", "power_w")
-
-    assert peak["value"] == 1200.0
-    assert peak["ts"] == now - 30
-
-
-def test_query_peak_today_with_no_data_returns_zero(tmp_path):
-    store = HistoryStore(str(tmp_path / "history.db"))
-    assert store.query_peak_today("meter", "power_w") == {"value": 0.0, "ts": None}
-
-
 def test_power_budget_zones_scale_off_contract_limit():
     budget = PowerBudget(contract_limit_w=3000)
     assert budget.available_power_w == pytest.approx(3300.0)
@@ -698,3 +676,88 @@ def test_the_wal_file_is_kept_from_staying_large(tmp_path):
     finally:
         conn.close()
         store.close()
+
+
+# ------------------------------------------------- reads as the years pass --
+# What a page asks at every refresh has to cost the same with a year of
+# samples as with a day: a query that reads the whole table is invisible
+# on a new board and the slowest thing on an old one (measured on the board
+# with 60 days: 1-2 s an answer). SQLite says how it runs each one.
+
+def _readings_plans(store, ask):
+    """SQLite's plan for each query on the samples that `ask()` makes."""
+    seen = []
+    conn = store._connect()
+    try:
+        conn.set_trace_callback(seen.append)
+        ask()
+        conn.set_trace_callback(None)
+        return {sql: [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + sql)]
+                for sql in seen if "readings" in sql and sql.lstrip().upper().startswith(("SELECT", "WITH"))}
+    finally:
+        conn.close()
+
+
+def _reads_it_all(plan_line):
+    """A step that goes through every sample: a SCAN - or a SEARCH with
+    nothing to search by (SQLite's words for MIN(ts) over the index), as
+    slow. A read that's fine finds its sensor first: "(sensor=? AND ...".
+    Measured with 3 million rows: 150 ms one, 3 ms the other, on a PC."""
+    return plan_line.startswith(("SCAN readings", "SEARCH readings")) and "(sensor=" not in plan_line
+
+
+def _a_week_of_samples(store, now):
+    start = int(now.timestamp()) - 7 * 86400
+    conn = store._connect()
+    conn.executemany("INSERT INTO readings (ts, sensor, field, value) VALUES (?, ?, ?, ?)",
+                     [(ts, sensor, field, value) for ts in range(start, int(now.timestamp()), 300)
+                      for sensor, field, value in (("room", "temperature_c", 21.0), ("valve", "is_on", 1.0),
+                                                   ("meter", "power_w", 80.0))])
+    conn.commit()
+    conn.close()
+
+
+def test_what_a_page_asks_at_every_refresh_never_reads_the_whole_history(tmp_path):
+    from datetime import timedelta
+
+    from localhome.services.history import run_days_of, run_window_of, temp_days_of
+
+    store = HistoryStore(str(tmp_path / "history.db"))
+    now = datetime.now().replace(microsecond=0)
+    _a_week_of_samples(store, now)
+    first = (now - timedelta(days=6)).date()
+
+    def a_refresh():
+        store.query("room", "temperature_c", "24h")
+        store.query("meter", "power_w", "7d")
+        store.values_since("room", "temperature_c", int(now.timestamp()) - 3600)
+        store.on_stats("valve", "is_on", 300, now=now)
+        temp_days_of(store, "room", "temperature_c", 300, first, now)
+        run_days_of(store, ["valve"], "is_on", 300, first, now)
+        run_window_of(store, ["valve"], "is_on", 300, 86400, now)
+
+    a_refresh()    # the first: the days before today counted once and kept
+    plans = _readings_plans(store, a_refresh)
+    assert len(plans) >= 6, plans
+    scans = {sql: plan for sql, plan in plans.items() if any(_reads_it_all(line) for line in plan)}
+    assert not scans, scans
+    store.close()
+
+
+def test_the_oldest_sample_is_read_once_until_rows_are_deleted(tmp_path):
+    """MIN(ts) reads the whole table - no index on the time alone."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    assert store.oldest_ts() is None
+    _old_rows(store, 30, days_ago=10)
+    oldest = store.oldest_ts()
+    assert oldest is not None, "an empty history asks again"
+    conn = store._connect()
+    plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN SELECT MIN(ts) FROM readings")]
+    conn.close()
+    assert _reads_it_all(plan[0]), plan
+    assert _readings_plans(store, store.oldest_ts) == {}, "remembered"
+    store.prune(oldest + 10)
+    assert store.oldest_ts() == oldest + 10
+    store.clear()
+    assert store.oldest_ts() is None
+    store.close()

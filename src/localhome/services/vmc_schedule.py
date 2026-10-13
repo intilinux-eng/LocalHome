@@ -46,6 +46,7 @@ from typing import Callable
 
 from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
+from localhome.services.system_clock import instant, local_after, wall_exists, with_offset
 from localhome.services.vmc_auto import Adjustment, VmcAuto
 from localhome.util.jsonfile import load_json, save_json_atomic
 
@@ -232,17 +233,20 @@ def stretch_start(week: dict, now: datetime) -> datetime | None:
 
 
 def next_change(week: dict, now: datetime) -> tuple[datetime, int] | None:
-    """When the program next changes speed, and to what - None if never."""
+    """When the program next changes speed, and to what - None if never.
+    An hour the clock skips is no change: the one after it is."""
     value, hour = speed_at(week, now), _hour_start(now)
     for _ in range(WEEK_HOURS):
         hour += timedelta(hours=1)
-        if speed_at(week, hour) != value:
+        if speed_at(week, hour) != value and wall_exists(hour):
             return hour, speed_at(week, hour)
     return None
 
 
 def override_active(override: dict | None, now: datetime) -> bool:
-    return bool(override) and now < datetime.fromisoformat(override["until"])
+    """A boost still on: its end compared as moments - the night the
+    clocks go back, 02:30 comes twice (services/system_clock.py)."""
+    return bool(override) and now.timestamp() < instant(override["until"])
 
 
 class VmcScheduleController:
@@ -466,7 +470,7 @@ class VmcScheduleController:
             # A boost on top of a boost keeps what was there before the first.
             restore = current["restore"] if override_active(current, now) else self._reading(device)
             self.store.update({"override": {"device": device, "value": value, "restore": restore,
-                                            "until": (now + timedelta(minutes=minutes)).isoformat(timespec="seconds")}})
+                                            "until": with_offset(local_after(now, minutes * 60))}})
             self.tick(now)
         return self.status(now)
 
@@ -548,8 +552,9 @@ class VmcScheduleController:
             status["away"] = {"mode": away["mode"], "device": away["device"],
                               "value": 0 if away["mode"] == "off" else level}
         elif override_active(override, now):
+            until = datetime.fromtimestamp(instant(override["until"])).isoformat(timespec="seconds")
             status["override"] = {"device": override["device"], "value": override["value"],
-                                  "until": override["until"], "until_hhmm": override["until"][11:16]}
+                                  "until": until, "until_hhmm": until[11:16]}
         elif self._adjusted is not None and self.auto is not None:
             status["auto"] = {"reason": self._adjusted.reason, "value": self._adjusted.value,
                               **self.auto.describe(self._adjusted.reason)}

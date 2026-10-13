@@ -333,8 +333,20 @@ async function onManualSubmit(event) {
 const RB = { w: 1000, top: 6, bottom: 66, runY: 74, runH: 8 };
 
 function dayStartEpoch() {
+  return wallToEpoch(todayWall()) / 1000;
+}
+
+function todayWall() {
   const now = boardNow();
-  return wallToEpoch(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 1000;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+// Where a moment falls on the strip: its hour on the wall clock, as the
+// table's 24 hours are. The night October's clocks go back, the hour from
+// 2 to 3 is drawn twice over the same place; March's skipped one has nothing.
+function dayHourOf() {
+  const midnight = todayWall().getTime();
+  return ts => (wall(ts * 1000).getTime() - midnight) / 3600000;
 }
 
 // Where the valve opens again for this target - the far edge of its
@@ -364,6 +376,7 @@ function ribbonSvg(zone, week, history, mode) {
   const scale = ribbonScale(zone, week, history, mode);
   const x = hour => (hour / 24) * RB.w;
   const start = dayStartEpoch();
+  const hourOf = dayHourOf();
   const now = boardNow();
   const nowHour = now.getUTCHours() + now.getUTCMinutes() / 60;
   const parts = [];
@@ -397,11 +410,22 @@ function ribbonSvg(zone, week, history, mode) {
       if (endHour > nowHour) band(nowHour, endHour, zone.override.target);
       parts.push(`<path class="rb-override" d="M${x(nowHour)},${y} L${x(endHour)},${y}" vector-effect="non-scaling-stroke"/>`);
     }
-    const points = history.temps.filter(p => p.ts >= start).map(p => `${x((p.ts - start) / 3600).toFixed(1)},${scale.y(p.value).toFixed(1)}`);
-    if (zone.temperature_c != null && points.length) points.push(`${x(nowHour).toFixed(1)},${scale.y(zone.temperature_c).toFixed(1)}`);
-    if (points.length > 1) parts.push(`<polyline class="rb-temp" points="${points.join(" ")}" vector-effect="non-scaling-stroke"/>`);
+    // A line again from 2 o'clock when the clock went back to it.
+    const lines = [[]];
+    history.temps.filter(p => p.ts >= start).forEach(p => {
+      const h = hourOf(p.ts);
+      const line = lines[lines.length - 1];
+      if (line.length && h < line[line.length - 1][0]) lines.push([]);
+      lines[lines.length - 1].push([h, p.value]);
+    });
+    const last = lines[lines.length - 1];
+    if (zone.temperature_c != null && last.length) last.push([nowHour, zone.temperature_c]);
+    lines.filter(line => line.length > 1).forEach(line => {
+      const points = line.map(([h, v]) => `${x(h).toFixed(1)},${scale.y(v).toFixed(1)}`);
+      parts.push(`<polyline class="rb-temp" points="${points.join(" ")}" vector-effect="non-scaling-stroke"/>`);
+    });
   }
-  runSpans(history.runs, start).forEach(([from, to]) => {
+  runSpans(history.runs, start, hourOf).forEach(([from, to]) => {
     parts.push(`<rect class="rb-run" x="${x(from)}" y="${RB.runY}" width="${Math.max(2, x(to) - x(from))}" height="${RB.runH}"/>`);
   });
   parts.push(`<line class="rb-now" x1="${x(nowHour)}" x2="${x(nowHour)}" y1="0" y2="${RB.runY + RB.runH}" vector-effect="non-scaling-stroke"/>`);
@@ -410,14 +434,15 @@ function ribbonSvg(zone, week, history, mode) {
   return `<svg viewBox="0 0 ${RB.w} ${RB.runY + RB.runH}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">${parts.join("")}</svg>`;
 }
 
-// The stretches the system ran today, as [from, to] hours: 5-minute
-// samples joined into runs, a gap of one sample bridged.
-function runSpans(runs, start) {
+// The stretches the system ran today, as [from, to] hours on the strip
+// (dayHourOf()): 5-minute samples joined into runs, a gap of one sample
+// bridged - a stretch again from 2 when October's clock went back to it.
+function runSpans(runs, start, hourOf) {
   const spans = [];
   runs.filter(p => p.ts >= start && p.value >= 0.5).forEach(p => {
-    const h = (p.ts - start) / 3600;
+    const h = hourOf(p.ts);
     const last = spans[spans.length - 1];
-    if (last && h - last[1] <= 0.17) last[1] = h + 5 / 60;
+    if (last && h >= last[1] - 5 / 60 && h - last[1] <= 0.17) last[1] = Math.max(last[1], h + 5 / 60);
     else spans.push([h, h + 5 / 60]);
   });
   return spans;
@@ -454,7 +479,6 @@ function wireRibbon(card, week, history, mode) {
     const { week, history, mode } = card.ribbonDay;
     const readout = card.querySelector(".ribbon-readout");
     const cursor = svg.querySelector(".rb-cursor");
-    const start = dayStartEpoch();
     const today = week ? week[DAYS[dayIndex(boardNow())]] : null;
     const box = svg.getBoundingClientRect();
     const k = Math.max(0, Math.min(0.9999, (event.clientX - box.left) / box.width));
@@ -462,7 +486,7 @@ function wireRibbon(card, week, history, mode) {
     cursor.setAttribute("x1", k * RB.w);
     cursor.setAttribute("x2", k * RB.w);
     cursor.setAttribute("visibility", "visible");
-    const ts = start + hour * 3600;
+    const ts = wallToEpoch(new Date(todayWall().getTime() + hour * 3600000)) / 1000;
     const time = hhmm(wall(ts * 1000));
     const bits = [time];
     const nowTs = wallToEpoch(boardNow()) / 1000;

@@ -112,6 +112,10 @@ class HistoryStore:
         # on_stats()'s counts before today, per (sensor, field) - dropped
         # whenever rows are deleted. Read and written under _lock.
         self._on_stats_cache: dict[tuple[str, str], tuple] = {}
+        # oldest_ts(), once known - forgotten whenever rows are deleted.
+        # Under _lock.
+        self._oldest: int | None = None
+        self._oldest_known = False
         self._init_schema()
         _open_stores.add(self)
 
@@ -235,7 +239,7 @@ class HistoryStore:
                 cutoff = min(oldest + 86400, newest - keep_seconds)
                 removed += conn.execute("DELETE FROM readings WHERE ts < ?", (cutoff,)).rowcount
                 conn.commit()
-                self._on_stats_cache.clear()
+                self._forget_counts()
             finally:
                 conn.close()
         if started_over and removed:
@@ -273,7 +277,7 @@ class HistoryStore:
             conn.execute("DELETE FROM daily_temps")
             removed = conn.execute("DELETE FROM readings").rowcount
             conn.commit()
-            self._on_stats_cache.clear()
+            self._forget_counts()
             conn.execute("VACUUM")
             # VACUUM writes the compacted database to the WAL: the file
             # only shrinks at a checkpoint, which the store's open
@@ -527,11 +531,32 @@ class HistoryStore:
                 conn.close()
             removed += count
             if count:
-                self._on_stats_cache.clear()
+                self._forget_counts()
             if count < PRUNE_CHUNK_ROWS:
                 return removed, True
             if max_seconds is not None and time.monotonic() - started >= max_seconds:
                 return removed, False
+
+    def _forget_counts(self) -> None:
+        """Rows were deleted: what's remembered about them is counted again."""
+        self._on_stats_cache.clear()
+        self._oldest_known = False
+
+    def oldest_ts(self) -> int | None:
+        """When the oldest sample was taken - whether the samples still
+        cover a day. Remembered: MIN(ts) reads the whole table (there's no
+        index on the time alone), and the 7 days' tables asked it at every
+        page refresh - with a year's history, most of their time on the
+        board. Only a deletion can change it: new samples are newer."""
+        with self._lock:
+            if not self._oldest_known or self._oldest is None:   # none yet: until the first
+                conn = self._connect()
+                try:
+                    self._oldest = conn.execute("SELECT MIN(ts) FROM readings").fetchone()[0]
+                finally:
+                    conn.close()
+                self._oldest_known = True
+            return self._oldest
 
     def stats(self, now: int | None = None) -> dict:
         """Size and growth of the history, for the admin panel's system
@@ -565,23 +590,6 @@ class HistoryStore:
                 "oldest_ts": oldest_ts, "newest_ts": newest_ts, "sensors": sensors, "by_field": by_field,
                 "size_prune_ts": int(meta["size_prune_ts"]) if meta.get("size_prune_ts") else None,
                 "size_prune_rows": int(meta["size_prune_rows"]) if meta.get("size_prune_rows") else None}
-
-    def query_peak_today(self, sensor: str, field: str) -> dict:
-        now = time.localtime()
-        start_of_today = time.struct_time((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, now.tm_isdst))
-        since = int(time.mktime(start_of_today))
-        conn = self._connect()
-        try:
-            row = conn.execute(
-                "SELECT value, ts FROM readings WHERE sensor = ? AND field = ? AND ts >= ? "
-                "ORDER BY value DESC LIMIT 1",
-                (sensor, field, since),
-            ).fetchone()
-        finally:
-            conn.close()
-        if row is None:
-            return {"value": 0.0, "ts": None}
-        return {"value": row[0], "ts": row[1]}
 
     def on_stats(self, sensor: str, field: str, sample_interval_seconds: float, now: datetime | None = None) -> dict:
         """For "today" (since local midnight), "week" (since Monday) and
@@ -710,7 +718,7 @@ def temp_days_of(store: "HistoryStore", sensor: str, field: str, sample_interval
                     "SELECT day, mean_c, min_c, max_c, min_at, max_at FROM daily_temps WHERE sensor = ? AND day >= ?",
                     (sensor, first_day.isoformat())):
                 out[day] = (mean, low, high, low_at, high_at)
-            (oldest,) = conn.execute("SELECT MIN(ts) FROM readings").fetchone()
+            oldest = store.oldest_ts()
             day = first_day
             stored = False
             while day < today:
@@ -766,7 +774,7 @@ def run_days_of(store: "HistoryStore", sensors: list[str], field: str, sample_in
                     f"SELECT key, day, seconds, starts FROM daily_runs WHERE key IN ({marks}) AND day >= ?",
                     (*keys, first_day.isoformat())):
                 out[key][day] = (seconds, starts)
-            (oldest,) = conn.execute("SELECT MIN(ts) FROM readings").fetchone()
+            oldest = store.oldest_ts()
             day = first_day
             stored = False
             while day < today:

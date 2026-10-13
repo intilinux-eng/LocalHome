@@ -37,6 +37,37 @@ def system_timezone_name() -> str | None:
         return None
 
 
+# ------------------------------------------------- the clocks changing --
+# A weekly table follows the clock on the wall, as people read it: on the
+# last Sunday of October the hour from 2 to 3 comes twice and keeps its
+# value both times; on the last Sunday of March it never comes. A length
+# of time - "22° for 2 hours", a 30-minute boost - is real time instead:
+# the same length that night too. The thermostat and the VMC both.
+
+def local_after(now: datetime, seconds: float) -> datetime:
+    """The wall clock `seconds` really after `now` (both naive, local).
+    Adding to the wall clock would make "2 hours" three in October and
+    one in March, around 2 at night."""
+    return datetime.fromtimestamp(now.timestamp() + seconds)
+
+
+def wall_exists(wall: datetime) -> bool:
+    """False for a wall time the clock skips - 2:xx on the last Sunday of March."""
+    return datetime.fromtimestamp(wall.timestamp()) == wall
+
+
+def with_offset(until: datetime) -> str:
+    """An end time as written down: with its offset, so one in the hour
+    that comes twice says which of the two it is."""
+    return until.astimezone().isoformat(timespec="seconds")
+
+
+def instant(written: str) -> float:
+    """An end time written down - with its offset, or a wall time written
+    before they had one - as a moment."""
+    return datetime.fromisoformat(written).timestamp()
+
+
 def server_time(now: datetime | None = None) -> dict:
     # An aware `now` keeps its own zone (lets a test pin one exactly);
     # otherwise it's the system's local time, the one the thermostat uses.

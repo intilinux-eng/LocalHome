@@ -1451,3 +1451,76 @@ def test_a_week_that_didnt_load_comes_by_itself_once_the_board_answers(browser, 
     assert eventually(page, lambda: _card(page, ZONE_A).locator(".sched-cell").count() == 168)
     assert [e for e in opened.errors if "net::" not in e] == []
     context.close()
+
+
+# --------------------------------------------- the night the clocks change --
+# The board's clock, Europe/Rome: on 25 October the hour from 2 to 3 comes
+# twice (00:30 UTC is 02:30 the first time, 01:30 UTC 02:30 again), on 29
+# March it never comes. A time is told with the offset it had - last
+# night's lowest the day after, a day in last week's table - and the strip
+# places a reading at its hour on the wall clock. The phone here is in
+# Tokyo: the board's zone counts, not the phone's.
+
+def _board_at(browser, server, epoch_ms, offset, zone):
+    from .helpers import Opened
+    context = browser.new_context(viewport={"width": 390, "height": 844}, timezone_id="Asia/Tokyo")
+    page = context.new_page()
+
+    def server_time(route):
+        response = route.fetch()
+        data = response.json()
+        data.update(epoch_ms=epoch_ms, utc_offset_minutes=offset, tz_name=zone,
+                    tz_abbrev="CET" if offset == 60 else "CEST")
+        route.fulfill(response=response, json=data)
+
+    page.route("**/api/server-time", server_time)
+    opened = Opened(page)
+    page.goto(server + "/")
+    page.wait_for_selector(".zone", timeout=20000)
+    assert eventually(page, lambda: page.evaluate("window.ServerClock.offsetMinutes()") == offset)
+    return context, opened
+
+
+OCT_25_NOON = 1792926000000           # 2026-10-25 12:00 winter time (11:00 UTC)
+OCT_0130_SUMMER = 1792884600          # 01:30 that night, summer time (23:30 UTC the day before)
+OCT_0230_FIRST, OCT_0230_AGAIN = 1792888200, 1792891800
+
+
+def test_the_day_the_clocks_go_back_every_time_keeps_its_own_hour(browser, server):
+    context, opened = _board_at(browser, server, OCT_25_NOON, 60, "Europe/Rome")
+    page = opened.page
+    told = page.evaluate("""([early, first, again]) => ({
+        early: epochHhmm(early), first: epochHhmm(first), again: epochHhmm(again),
+        now: hhmm(boardNow()), dayStart: dayStartEpoch(),
+        hours: [early, first, again, 1792918800].map(dayHourOf()),
+        runs: runSpans(Array.from({ length: 36 }, (_, i) => ({ ts: early + i * 300, value: 1 })), dayStartEpoch(), dayHourOf()),
+    })""", [OCT_0130_SUMMER, OCT_0230_FIRST, OCT_0230_AGAIN])
+    assert (told["early"], told["first"], told["again"]) == ("01:30", "02:30", "02:30"), \
+        "a time from before the change keeps its summer hour - it read 00:30"
+    assert told["now"] == "12:00"
+    assert told["dayStart"] == 1792879200, "midnight summer time - an hour later, it lost the night's first"
+    assert told["hours"] == [1.5, 2.5, 2.5, 10], "on the strip at its hour on the wall clock"
+    assert [[round(a, 2), round(b, 2)] for a, b in told["runs"]] == [[1.5, 3.0], [2.0, 3.5]], \
+        "three hours on: until 3, then again from the second 2 o'clock"
+    assert opened.errors == []
+    context.close()
+
+
+def test_the_day_the_clocks_go_forward_until_the_next_change_skips_2_oclock(browser, server):
+    context, opened = _board_at(browser, server, 1774782000000, 120, "Europe/Rome")    # 29 March, 13:00
+    page = opened.page
+    at = page.evaluate("""() => {
+        const week = Object.fromEntries(DAYS.map(d => [d, Array(24).fill(16)]));
+        for (let h = 2; h < 7; h++) week.sun[h] = 22;
+        const change = nextChange(week, new Date(Date.UTC(2026, 2, 29, 1, 30)));
+        return [change.at.toISOString(), nextChange(week, new Date(Date.UTC(2026, 2, 22, 1, 30))).at.toISOString()];
+    }""")
+    assert at == ["2026-03-29T03:00:00.000Z", "2026-03-22T02:00:00.000Z"], "02:00 never comes that night"
+    assert opened.errors == []
+    context.close()
+
+
+def test_a_zone_the_browser_doesnt_know_keeps_the_boards_offset_of_now(browser, server):
+    context, opened = _board_at(browser, server, OCT_25_NOON, 60, "Not/A_Zone")
+    assert opened.page.evaluate("epochHhmm(%d)" % OCT_0130_SUMMER) == "00:30", "as before: one offset for all"
+    context.close()

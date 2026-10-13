@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 
 from localhome.errors import InputError
 from localhome.services.log_throttle import FailureLog
+from localhome.services.system_clock import instant, wall_exists, with_offset
 from localhome.util.jsonfile import load_json, save_json_atomic
 
 logger = logging.getLogger(__name__)
@@ -347,11 +348,11 @@ class ScheduleStore:
                 active[zone] = {"target": entry.get("target"), "until": None}
                 continue
             try:
-                until = datetime.fromisoformat(entry["until"])
+                until = instant(entry["until"])
             except (TypeError, ValueError):
                 continue
-            if now < until:
-                active[zone] = {"target": entry.get("target"), "until": until}
+            if now.timestamp() < until:
+                active[zone] = {"target": entry.get("target"), "until": datetime.fromtimestamp(until)}
         return active
 
     def set_override(self, zone_name: str, target: float | None, until: datetime | None) -> None:
@@ -359,7 +360,7 @@ class ScheduleStore:
         with self._lock:
             data = self._load()
             data.setdefault("overrides", {})[zone_name] = {"target": target,
-                                                           "until": until.isoformat() if until else None}
+                                                           "until": with_offset(until) if until else None}
             self._save(data)
 
     def clear_override(self, zone_name: str) -> None:
@@ -376,20 +377,21 @@ class ScheduleStore:
             data = self._load()
             overrides = data.get("overrides") or {}
             keep = {zone: entry for zone, entry in overrides.items()
-                    if entry.get("until") is None or datetime.fromisoformat(entry["until"]) > now}
+                    if entry.get("until") is None or instant(entry["until"]) > now.timestamp()}
             if len(keep) != len(overrides):
                 data["overrides"] = keep
                 self._save(data)
 
     def next_change(self, zone_name: str, now: datetime, mode: str | None = None) -> datetime | None:
         """When this zone's scheduled target next differs from this hour's,
-        within a week - "until the next change" of a temporary target."""
+        within a week - "until the next change" of a temporary target. An
+        hour the clock skips is no change: the one after it is."""
         week = self.get_week(zone_name, mode)
         current = week[DAYS[now.weekday()]][now.hour]
         start = now.replace(minute=0, second=0, microsecond=0)
         for step in range(1, 7 * HOURS_PER_DAY):
             at = start + timedelta(hours=step)
-            if week[DAYS[at.weekday()]][at.hour] != current:
+            if week[DAYS[at.weekday()]][at.hour] != current and wall_exists(at):
                 return at
         return None
 

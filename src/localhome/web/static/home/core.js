@@ -242,12 +242,20 @@ function boardOffsetMin() {
   return offset == null ? -new Date().getTimezoneOffset() : offset;
 }
 
+// The offset the board had at a moment: the clocks change twice a year,
+// and a time from before the change keeps the offset it had (this
+// device's own rules before the first sync).
+function boardOffsetAt(epochMs) {
+  const offset = window.ServerClock && window.ServerClock.offsetAt && window.ServerClock.offsetAt(epochMs);
+  return offset == null ? -new Date(epochMs).getTimezoneOffset() : offset;
+}
+
 function boardNow() {
   return (window.ServerClock && window.ServerClock.now()) || new Date(Date.now() + boardOffsetMin() * 60000);
 }
 
 function wall(epochMs) {
-  return new Date(epochMs + boardOffsetMin() * 60000);
+  return new Date(epochMs + boardOffsetAt(epochMs) * 60000);
 }
 
 // "2026-09-30T21:30:00" from the server is the board's own local time.
@@ -255,8 +263,18 @@ function boardDate(iso) {
   return /[zZ]|[+-]\d\d:\d\d$/.test(iso) ? wall(Date.parse(iso)) : new Date(Date.parse(iso + "Z"));
 }
 
+// A wall time back to its moment: the offset there, found from today's -
+// in the hour October repeats, the one of the offset in force now.
 function wallToEpoch(wallDate) {
-  return wallDate.getTime() - boardOffsetMin() * 60000;
+  const ms = wallDate.getTime();
+  let epoch = ms - boardOffsetMin() * 60000;
+  for (let i = 0; i < 2; i++) epoch = ms - boardOffsetAt(epoch) * 60000;
+  return epoch;
+}
+
+// False for a wall time the clock skips: 2:xx on the last Sunday of March.
+function wallExists(wallDate) {
+  return wall(wallToEpoch(wallDate)).getTime() === wallDate.getTime();
 }
 
 function hhmm(date) {
@@ -336,7 +354,7 @@ function nextChange(week, now) {
   for (let step = 1; step <= 7 * 24; step++) {
     const at = new Date(start.getTime() + step * 3600000);
     const value = week[DAYS[dayIndex(at)]][at.getUTCHours()];
-    if (value !== current) return { at, target: value };
+    if (value !== current && wallExists(at)) return { at, target: value };   // services/thermostat.py's next_change()
   }
   return null;
 }

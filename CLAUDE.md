@@ -59,6 +59,7 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 | Caching / gzip of pages | `web/transfer.py` |
 | Texts, both languages | `web/locales/it.json`, `en.json` - same keys in both, always |
 | Thermostat, schedules, overrides | `services/thermostat.py` |
+| The clocks changing (25 Oct / 29 Mar) | the table on the wall clock, durations in real time (`system_clock.local_after`, thermostat and VMC); pages tell a time with its own offset (`server_clock.js` `offsetAt`) - `tests/test_daylight_saving.py` |
 | History, daily summaries | `services/history.py`, `services/run_hours.py`, `services/day_range.py` |
 | Energy meters | `services/energy.py` |
 | VMC | `services/vmc_*.py` |

@@ -17,6 +17,8 @@
 //              (read it with getUTCHours()/getUTCDay() only), or null
 //              before the first sync
 //   offsetMinutes() -> the server's offset from UTC, or null before then
+//   offsetAt(epochMs) -> the offset the server's clock had at that moment
+//              (the clocks change twice a year), or null before then
 // and fires a "serverclock:minute" event on document whenever the
 // displayed minute changes, so a page can re-highlight "now" on time.
 (function () {
@@ -73,9 +75,41 @@
     return abbrev && abbrev.length <= 6 && !/\s/.test(abbrev) ? abbrev : formatOffset(state.offsetMin);
   }
 
+  // The board's offset at any moment, by its time zone's own rules where
+  // this browser knows the zone: the clocks change twice a year, and a
+  // time from before the change - last night's lowest, a day in last
+  // week's table - is told with the offset it had then, not today's. The
+  // last sync's offset where the browser doesn't know the zone, or its
+  // rules disagree with what the board says (a name not to trust).
+  let zoneFormat = null;  // { zone, format }
+
+  function zoneOffsetAt(epochMs) {
+    if (!state || !state.tzName) return null;
+    try {
+      if (!zoneFormat || zoneFormat.zone !== state.tzName) {
+        zoneFormat = { zone: state.tzName, format: new Intl.DateTimeFormat("en-US", {
+          timeZone: state.tzName, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric",
+          hour: "numeric", minute: "numeric", second: "numeric" }) };
+      }
+      const p = {};
+      zoneFormat.format.formatToParts(new Date(epochMs)).forEach(({ type, value }) => { p[type] = Number(value); });
+      const wallMs = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second);
+      return Math.round((wallMs - Math.floor(epochMs / 1000) * 1000) / 60000);
+    } catch (e) {
+      return null;        // a zone this browser doesn't know
+    }
+  }
+
+  function offsetAt(epochMs) {
+    if (!state) return null;
+    const zoned = state.zoneAgrees ? zoneOffsetAt(epochMs) : null;
+    return zoned == null ? state.offsetMin : zoned;
+  }
+
   function serverWallClock() {
     if (!state) return null;
-    return new Date(Date.now() + state.skewMs + state.offsetMin * 60000);
+    const now = Date.now() + state.skewMs;
+    return new Date(now + offsetAt(now) * 60000);
   }
 
   function setText(id, text) {
@@ -180,6 +214,7 @@
         tzAbbrev: data.tz_abbrev,
         clockSynced: data.clock_synced,
       };
+      state.zoneAgrees = zoneOffsetAt(data.epoch_ms) === data.utc_offset_minutes;
       boot = { bootedAt: data.booted_at, startedAt: data.started_at };
       render();
       renderWarning();
@@ -207,7 +242,7 @@
     };
   }
 
-  window.ServerClock = { now: serverWallClock, upFor, offsetMinutes: () => (state ? state.offsetMin : null) };
+  window.ServerClock = { now: serverWallClock, upFor, offsetAt, offsetMinutes: () => (state ? state.offsetMin : null) };
 
   sync();
   setInterval(sync, RESYNC_MS);

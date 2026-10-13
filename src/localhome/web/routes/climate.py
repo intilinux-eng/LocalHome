@@ -15,6 +15,7 @@ from localhome.services.dewpoint import dew_point_c
 from localhome.services.history import HistoryStore
 from localhome.services.interlock import InterlockController
 from localhome.services import system_status
+from localhome.services.system_clock import local_after
 from localhome.services.thermostat import MODES, ThermostatController, target_tier
 from localhome.services import run_hours
 from localhome.services.vmc_schedule import AWAY_CHOICES, VmcScheduleController
@@ -235,6 +236,8 @@ def register(app: Flask) -> None:
             # absence the dashboard offers comes anywhere near it.
             if not isinstance(hours, (int, float)) or isinstance(hours, bool) or not 0 < hours <= AWAY_MAX_HOURS:
                 return _fail("away_hours_invalid", f"hours must be a number between 0 and {AWAY_MAX_HOURS}", max=AWAY_MAX_HOURS)
+            # Days on the wall clock: "a day" ends at the same time
+            # tomorrow, the clocks changing in between or not.
             until = now + timedelta(hours=hours)
         thermostat.schedule_store.set_away_until(until)
         _away_changed(thermostat)
@@ -277,7 +280,7 @@ def register(app: Flask) -> None:
             if isinstance(hours, bool) or not isinstance(hours, (int, float)) or not 0 < hours <= OVERRIDE_MAX_HOURS:
                 return _fail("override_hours_invalid", f"hours must be above 0 and at most {OVERRIDE_MAX_HOURS}",
                              max=OVERRIDE_MAX_HOURS)
-            until = now + timedelta(hours=hours)
+            until = local_after(now, hours * 3600)   # real hours, the night the clocks change too
         thermostat.schedule_store.set_override(name, float(target) if target is not None else None, until)
         thermostat.tick()
         return jsonify(ok=True, override={"target": target, "until": until.isoformat() if until else None})

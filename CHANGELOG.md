@@ -14,6 +14,31 @@ date rather than by tag.
   one permissive.
 
 ### Fixed
+- **The night the clocks change, every time keeps its own hour on the home
+  page.** It told every time with the board's offset of the moment: the
+  day after the clocks went back (25 October), last night's 01:30 read
+  00:30 - today's lowest and highest, the peaks, a week of days in the
+  details' table for a week after - and today's strip drew the night an
+  hour early and lost its first hour. Each time now takes the offset it
+  had, from the board's time zone (Europe/Rome); the strip draws the hour
+  from 2 to 3 twice, as the clock on the wall shows it. The clock at the
+  top changes on the second, not at the next sync.
+- **"22° for 2 hours" lasts two hours the night the clocks change** - it
+  was three in October, one in March, around 2 at night - and ends at the
+  right one of October's two 2:30s. "Until the next change" skips March's
+  2 o'clock, which never comes. The weekly table itself follows the clock
+  on the wall, as before: October's hour from 2 to 3 keeps its target
+  both times, March's never comes. Away for days still ends at the same
+  time of day.
+- **A VMC boost lasts its time the night the clocks change too** - an
+  hour's boost started at 2:30 on 25 October ran two, one started at 1:30
+  on 29 March stopped after thirty minutes - and the program's "until"
+  skips March's 2 o'clock, which never comes. The program itself keeps
+  following the clock on the wall.
+- **The 7 days' tables don't read the whole history at every refresh.**
+  Where the samples begin was asked of the whole table each time - 150 ms
+  with three million rows on a PC, several times that on the board -
+  and is now remembered until rows are deleted.
 - **Clearing the history gives the space back at once.** On the board a
   cleared history kept its 280 MB file until SQLite's next checkpoint,
   and the admin panel showed it that big; the file now shrinks with the
