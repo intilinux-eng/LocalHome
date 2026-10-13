@@ -39,7 +39,7 @@ PARTS = ("winter", "diagnostic", "seasons", "summer", "away")
 # Run only when named: they restart LocalHome, and with it the VMC's driver;
 # "reboot" waits for someone to reboot or unplug the board; "soak" takes
 # hours (--hours).
-EXTRA_PARTS = ("frozen", "restart", "reboot", "soak", "thresholds", "schedule")
+EXTRA_PARTS = ("frozen", "power", "restart", "reboot", "soak", "thresholds", "schedule")
 PLAN = """\
 winter      each zone with a temperature: a target at the room's own temperature
             stays closed (hysteresis); 1.5 degrees above opens; "Off" for 2 hours
@@ -72,6 +72,14 @@ frozen      only when named, and by hand: summer, the dehumidifier on with its w
             ("on,N"), counted from its last renewal, the dehumidifier never after
             its water; LocalHome started again ("sudo systemctl start localhome"):
             the dehumidifier never on with its water closed
+power       only when named, and by hand: the relays' power cut by a switch and given
+            back, four times - in winter with a zone open by hand: a flick (under a
+            second), about ten seconds, about two minutes; in summer with the
+            dehumidifier on, about ten seconds. Each time: every relay back where
+            it was by itself or by LocalHome, timed from their return (the bypass
+            by its own "restore last"), the dehumidifier never on with its water
+            closed, nothing switching for a minute after, the admin counting
+            the restarts, no problem left once they're back
 restart     only when named: LocalHome restarted from the admin while away - still
             away after it until the same time, the valves closed though the week asks
             for heat, nothing opened meanwhile; the settings, the plant, the weeks and
@@ -144,8 +152,10 @@ class Board:
         self.client.on_message = self._on_message
         # The broker may be the board's own: back within seconds of a reboot.
         self.client.reconnect_delay_set(1, 4)
+        self.boots: list[tuple[float, str, str]] = []      # (when, relay, "online"/"offline"/"init")
+        self.statuses: list[tuple[float, str, bool]] = []  # (when, relay, its output) - each live report
         self.client.on_connect = lambda c, u, f, r, p=None: [
-            c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0")] + [
+            c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0", "online")] + [
             c.subscribe(f"{d}/status/temperature:0") for d in self.sensors.values()]
         self.client.connect(host, 1883, 60)
         self.client.loop_start()
@@ -231,11 +241,21 @@ class Board:
             return
         name = self.relays[device]
         text = msg.payload.decode("utf-8", "replace")
+        if rest == "online":
+            if not msg.retain:
+                self.boots.append((time.time(), name, "online" if text.strip() == "true" else "offline"))
+                say(f"   {name}: {'back online' if text.strip() == 'true' else 'offline'}")
+            return
         if rest == "status/switch:0":
             try:
-                output = json.loads(text).get("output")
+                status = json.loads(text)
+                output = status.get("output")
             except ValueError:
                 return
+            if not msg.retain:
+                self.statuses.append((time.time(), name, output))
+                if status.get("source") == "init":
+                    self.boots.append((time.time(), name, "init"))
             if self.relay_state.get(name) != output and not msg.retain:
                 say(f"   relay {name}: {'ON' if output else 'off'}")
             self.relay_state[name] = output
@@ -1026,6 +1046,138 @@ def frozen(board, home, dehumidifier):
                 board.becomes(DEHUMIDIFIER, False) and board.becomes(water, False))
 
 
+# The cuts the power part asks for, in order: (season, how long, a long one?).
+POWER_CUTS = (("heat", "a flick - off and on again, under a second", False),
+              ("heat", "about ten seconds", False),
+              ("cool", "about ten seconds, the dehumidifier running", False),
+              ("heat", "about two minutes", True))
+
+
+def _restart_counts(board):
+    """Each relay's restarts in the last 7 days, by cause, as the admin counts them."""
+    devices = board.get("/api/climate-admin/shelly-health").get("devices") or []
+    out = {}
+    for d in devices:
+        name = next((n for n in board.relays.values() if n in (d.get("names") or [])), None)
+        if name:
+            stats = d.get("stats") or {}
+            out[name] = {k: stats.get(k) or 0 for k in ("restarts_power_7d", "restarts_brownout_7d",
+                                                        "restarts_unknown_7d", "restarts_crash_7d")}
+    return out
+
+
+def power(board, home, dehumidifier):
+    """The relays' power cut and given back, by hand - see PLAN."""
+    say("== THE SHELLYS' POWER CUT")
+    zones = [z for z in board.climate()["zones"] if z["temperature_c"] is not None and board.has(f"{z['name']} Valve")]
+    kept_out = next((z["name"] for z in board.climate()["zones"] if not z["cool_enabled"]), None)
+    water = f"{kept_out} Valve" if kept_out else None
+    if not zones:
+        say("  needs a zone with a temperature and its relay - skipped")
+        return
+    host = board.base.split("//")[1].split(":")[0]
+    for mode, how, long in POWER_CUTS:
+        season = "winter" if mode == "heat" else "summer"
+        label = f"power, {season}, {how.split(',')[0]}"
+        if board.climate()["mode"] != mode:
+            board.season(mode)
+            home.open()
+        held = None
+        if mode == "heat":
+            held = zones[0]["name"]
+            home.manual(held, round(board.zone(held)["temperature_c"] * 2) / 2 + 1.5, hours="manual")
+            board.becomes(f"{held} Valve", True)
+        elif board.has(DEHUMIDIFIER) and water and dehumidifier.allow() and home.dehumidifier(1):
+            board.becomes(DEHUMIDIFIER, True)
+            board.becomes(water, True)
+        else:
+            say(f"  {label}: the dehumidifier can't run - skipped")
+            continue
+        time.sleep(5)
+        want = {name: board.relay_state.get(name) for name in board.relays.values()}
+        counts_before, problems_before = _restart_counts(board), problems(board)
+        say(f"  {label}: the relays now {want}")
+        say(f"  >>> now cut the four Shellys' power on {host}'s plant: {how}, then give it back - "
+            "waiting up to 10 minutes")
+        asked = time.time()
+        first = None
+        end = asked + 600
+        while time.time() < end and first is None:
+            first = next((at for at, _, what in board.boots if at >= asked and what in ("online", "init")), None)
+            time.sleep(0.5)
+        if first is None and "flick" in how:
+            say(f"  {label}: no relay restarted - too short for them to notice; nothing to check")
+        else:
+            board.check(f"{label}: the relays seen restarting", first is not None)
+        if first is None:
+            if held:
+                home.back_to_the_week(held)
+            continue
+        # Back where they were, each: its last report since it restarted the
+        # state it had - timed from the first one back.
+        def since_boot(name):
+            boot = next((at for at, n, what in board.boots if at >= first - 1 and n == name), None)
+            reports = [(at, out) for at, n, out in board.statuses if n == name and boot is not None and at >= boot]
+            return boot, reports
+
+        dry, took = [], {}
+        end = time.time() + board.poll_seconds + 90
+        while time.time() < end:
+            for name, state in want.items():
+                boot, reports = since_boot(name)
+                if name not in took and reports and reports[-1][1] is state:
+                    took[name] = reports[-1][0] - first
+            if water and board.relay_state.get(DEHUMIDIFIER) and board.relay_state.get(water) is False:
+                dry.append(time.time())
+            restarted = [name for name in want if since_boot(name)[0] is not None]
+            if restarted and all(name in took for name in restarted) and time.time() - first > 20:
+                break
+            time.sleep(0.5)
+        for name, state in want.items():
+            boot, reports = since_boot(name)
+            if boot is None:
+                board.check(f"{label}: {name} {'on' if state else 'off'} - it didn't restart",
+                            board.relay_state.get(name) is state, f"it says {board.relay_state.get(name)}")
+                continue
+            dropped = any(out is not state for _, out in reports)
+            board.check(f"{label}: {name} back {'on' if state else 'off'}", name in took,
+                        (f"{took[name]:.0f} s after they were back" + (", after restarting the other way" if dropped
+                                                                       else ", as it restarted"))
+                        if name in took else f"its reports since: {[out for _, out in reports]}")
+        if mode == "cool":
+            board.check(f"{label}: the dehumidifier never on with its water closed", len(dry) <= 4,
+                        f"{len(dry) / 2:.0f} s on without its water" if dry else "")
+        # Nothing switching for a minute after: no report, no command the other way.
+        since, moved = time.time(), {}
+        while time.time() < since + 60:
+            for name, state in want.items():
+                if board.relay_state.get(name) is (not state):
+                    moved.setdefault(name, time.strftime("%H:%M:%S"))
+            time.sleep(1)
+        against = sorted({n for at, n, text in board.commands if at >= since and n in want
+                          and text.startswith("off" if want[n] else "on")})
+        board.check(f"{label}: nothing switching for a minute after", not moved and not against,
+                    f"moved {moved} told {against}" if moved or against else "")
+        restarted = {name for name in want if since_boot(name)[0] is not None}
+        back_within(360 if long else 150, lambda: _restart_counts(board) != counts_before)
+        counts_after = _restart_counts(board)
+        noticed = {n: {k.replace("restarts_", "").replace("_7d", ""): counts_after[n][k] - counts_before.get(n, {}).get(k, 0)
+                       for k in counts_after[n] if counts_after[n][k] != counts_before.get(n, {}).get(k, 0)}
+                   for n in counts_after}
+        say(f"  {label}: the admin counted {noticed}")
+        board.check(f"{label}: the admin counted each restart", all(noticed.get(n) for n in restarted),
+                    f"restarted {sorted(restarted)}, counted {noticed}")
+        settled = back_within(300, lambda: problems(board) <= problems_before)
+        board.check(f"{label}: no problem left once they're back", settled is not None,
+                    str(sorted(problems(board) - problems_before)))
+        if held:
+            home.back_to_the_week(held)
+        if mode == "cool" and board.relay_state.get(DEHUMIDIFIER):
+            home.dehumidifier(None)
+            board.becomes(DEHUMIDIFIER, False)
+        say(f"  {label}: done in {(time.time() - asked) / 60:.1f} min")
+
+
 def restarted_while_away(board, home, how):
     """Away with the week asking for heat, and then LocalHome restarted
     from the admin ("restart") or the whole board rebooted or unplugged by
@@ -1561,6 +1713,8 @@ def main(argv=None):
                     soak(board, home, browser, args.hours, args.clients)
                 elif part == "frozen":
                     frozen(board, home, dehumidifier)
+                elif part == "power":
+                    power(board, home, dehumidifier)
                 elif part == "thresholds":
                     thresholds(board, home)
                 elif part == "schedule":

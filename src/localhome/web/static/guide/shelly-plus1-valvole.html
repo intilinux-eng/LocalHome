@@ -55,9 +55,9 @@
   .print { float: right; margin: 0 0 8px 12px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
            background: #fff; color: var(--text); font: inherit; font-size: 0.9rem; cursor: pointer; }
   /* A screen of the Shelly app or of LocalHome, the right choice marked on it. */
-  .shot { position: relative; max-width: 360px; margin: 12px auto; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  .shot { position: relative; max-width: 280px; margin: 12px auto; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
           container-type: inline-size; }
-  .shot.wide { max-width: 560px; }
+  .shot.wide { max-width: 440px; }
   /* The value to set, written over the one the screenshot was taken with. */
   .fix { position: absolute; display: flex; align-items: center; font-family: system-ui, sans-serif; white-space: nowrap; }
   .shot img { display: block; width: 100%; height: auto; }
@@ -69,21 +69,38 @@
   /* Two screens side by side, each its own height: the marks on one are
      placed on its picture, not on a box stretched to the other's. */
   .pair { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-start; }
-  .pair .shot { flex: 1 1 280px; margin: 8px 0; }
+  .pair .shot { flex: 1 1 220px; max-width: 280px; margin: 8px 0; }
+  .shot figcaption { margin: 4px 0; padding: 0 6px; }
   figcaption { font-size: 0.85rem; color: var(--text-2); text-align: center; margin: -4px 0 12px; }
   footer { margin-top: 32px; color: var(--text-2); font-size: 0.85rem; }
+  /* Where a valve opens and where it stops: winter and summer side by
+     side on a wide screen, one under the other on a phone. */
+  .bands { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; }
+  .band { flex: 1 1 300px; max-width: 360px; margin: 4px 0; }
+  .band figcaption { margin: 0 0 2px; font-size: 0.95rem; color: var(--text); }
+  .band svg, .timeline svg { width: 100%; height: auto; display: block; }
+  .timeline { margin: 12px 0; }
+  .timeline .note, .note { font-size: 0.9rem; color: var(--text-2); }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line);
+            vertical-align: -2px; margin-right: 4px; }
+  table th[colspan] { background: var(--soft); color: var(--text); font-size: 0.85rem; letter-spacing: 0.02em; }
   @media print {
-    body { font-size: 10.5pt; }
+    body { font-size: 10pt; line-height: 1.4; }
+    h2 { margin: 16px 0 6px; padding-top: 6px; }
+    h3 { margin: 10px 0 4px; }
+    th, td { padding: 3px 5px; }
+    .box { padding: 6px 10px; margin: 8px 0; }
     main { max-width: none; padding: 0; }
     .print { display: none; }
     .part { break-after: avoid; }
     h2, h3 { break-after: avoid; }
-    .box, table, .diagram, .device, figure, tr, .toc { break-inside: avoid; }
+    .box, table, .diagram, .device, figure, tr, .toc, .timeline, .bands { break-inside: avoid; }
+    .swatch, table th[colspan] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .box.warn { background: #fff8c5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .shot { max-width: 300px; }
-    .shot.wide { max-width: 440px; }
+    .shot { max-width: 220px; }
+    .shot.wide { max-width: 340px; }
     .pair, .keep { break-inside: avoid; }
-    .pair .shot { flex: 0 1 230px; max-width: 230px; }
+    .pair .shot { flex: 0 1 200px; max-width: 200px; }
   }
   @page { size: A4; margin: 15mm 14mm; }
 </style>
@@ -110,7 +127,7 @@ software lo forniamo noi.</p>
     <a href="#s18">18. Deumidificatore e bypass: impostazioni</a><a href="#s19">19. Dimmer Gen3 (VMC)</a>
     <a href="#s20">20. Regolazioni nell'admin</a><a href="#s21">21. Rinominare uno Shelly</a></div>
   <div><strong>Quando qualcosa non va</strong>
-    <a href="#s22">22. Quando manca qualcosa</a><a href="#s23">23. Quanto ci mette ad accorgersene</a></div>
+    <a href="#s22">22. Cosa vedi, cosa fare</a></div>
 </nav>
 
 <!-- ================================================== how it works -->
@@ -139,69 +156,131 @@ cloud. Internet serve solo per l'ora esatta (sezione 7).</p>
 <ul>
   <li><strong>Stagione</strong>: una per tutto l'impianto, inverno scalda ed estate raffresca. Si cambia in admin →
       <em>Stagione</em>, scrivendo il nome della nuova.</li>
-  <li><strong>Programmazione</strong>: ogni zona ha un obiettivo per ogni ora della settimana, uno per stagione. Si
-      disegna dalla home (<em>Modifica</em>). Un'ora senza obiettivo (✕) tiene la valvola chiusa.</li>
-  <li><strong>Valvola</strong>: aperta finché la stanza non arriva all'obiettivo, poi ferma (il soffitto radiante continua a
-      lavorare). Riparte quando la stanza se ne allontana dell'isteresi, 0,5 °C: sotto d'inverno, sopra d'estate.</li>
-  <li><strong>Comfort ed Economy</strong>: un obiettivo Economy (inverno sotto 20°, estate da 26°) riparte ancora 0,5 °C più
-      in là. Pause più lunghe, meno consumo. Esempi nella sezione 20.</li>
-  <li><strong>Senza temperatura la valvola resta chiusa</strong>: sensore mai sentito, non ancora collegato o fermo (sezione
-      6).</li>
-  <li><strong>Dalla home</strong>: una temperatura o "spenta" per 2, 4, 8 o 24 ore, fino al prossimo cambio della settimana
-      o finché non la si cambia. Poi torna la programmazione.</li>
-  <li><strong>Fuori casa</strong> (1 giorno, 3 giorni, 1 settimana o fino a un giorno e un'ora): zone e deumidificatore
-      spenti, la VMC a Notte o spenta (si sceglie nel foglio, sezione 4), e niente si cambia fino a <em>Sono rientrato</em>.
-      La settimana resta com'è e riparte da sola al rientro.</li>
-  <li>Il termostato ricontrolla le zone ogni 60 secondi e legge lo stato vero dei relè: una valvola aperta o chiusa da
-      altri (per esempio dall'app Shelly) viene rimessa a posto al ciclo dopo. Una modifica dalla home vale subito.</li>
+  <li><strong>Programmazione</strong>: un obiettivo per ogni ora della settimana, per zona e stagione, disegnato dalla home
+      (<em>Modifica</em>). Un'ora senza obiettivo (✕), o una zona senza temperatura, tiene la valvola chiusa.</li>
+  <li><strong>Dalla home</strong>: una temperatura o "spenta" per 2, 4, 8 o 24 ore, fino al prossimo cambio o finché non la
+      si cambia; poi torna la programmazione.</li>
+  <li><strong>Fuori casa</strong> (1 giorno, 3, una settimana o fino a una data): tutto spento tranne il bypass, la VMC a
+      Minimo, Notte o spenta; niente cambia fino a <em>Sono rientrato</em>, poi riparte la settimana.</li>
+  <li>Ogni 60 secondi il termostato ricontrolla le zone e lo stato vero dei relè; una modifica dalla home vale subito.</li>
+  <li><strong>Cambio dell'ora</strong>: la settimana segue l'orologio (a fine ottobre l'ora delle 2 viene due volte, a fine
+      marzo mai); "per 2 ore" sono due ore vere.</li>
 </ul>
 
+<div class="keep">
+<h3>Quando la valvola si apre e quando si chiude</h3>
+<p>All'obiettivo (linea nera) la valvola si ferma; si riapre solo oltre la fascia gialla, dove resta
+com'era: così non apre e chiude per un decimo di grado. Economy ha la fascia larga il doppio: pause più lunghe, meno consumo.
+Valori di serie, regolabili (sezione 20).</p>
+<div class="bands">
+<figure class="band" role="img" aria-label="Inverno: con obiettivo comfort 21 gradi la valvola si apre a 20,5 e si chiude a 21; con obiettivo economy 19 si apre a 18 e si chiude a 19">
+<figcaption><strong>Inverno</strong> - scalda</figcaption>
+<svg viewBox="0 0 330 240" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" fill="#1f2328">
+  <text x="105" y="22" text-anchor="middle" font-size="15" font-weight="700">Comfort</text>
+  <text x="105" y="40" text-anchor="middle" font-size="14" fill="#4b5260">obiettivo 21°</text>
+  <rect x="60" y="50" width="90" height="90" fill="#e5e7eb"/>
+  <text x="105" y="100.0" text-anchor="middle" font-size="14" fill="#4b5260">chiusa</text>
+  <rect x="60" y="140" width="90" height="30" fill="#fff3bf"/>
+  <text x="105" y="160.0" text-anchor="middle" font-size="14" fill="#1f2328">come prima</text>
+  <rect x="60" y="170" width="90" height="60" fill="#f6b26b"/>
+  <text x="105" y="205.0" text-anchor="middle" font-size="14" fill="#1f2328">aperta</text>
+  <rect x="60" y="50" width="90" height="180" fill="none" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="56" y1="140" x2="154" y2="140" stroke="#1f2328" stroke-width="3"/>
+  <text x="53" y="145" text-anchor="end" font-size="14">21°</text>
+  <text x="53" y="175" text-anchor="end" font-size="14">20,5°</text>
+  <text x="265" y="22" text-anchor="middle" font-size="15" font-weight="700">Economy</text>
+  <text x="265" y="40" text-anchor="middle" font-size="14" fill="#4b5260">obiettivo 19°</text>
+  <rect x="220" y="50" width="90" height="90" fill="#e5e7eb"/>
+  <text x="265" y="100.0" text-anchor="middle" font-size="14" fill="#4b5260">chiusa</text>
+  <rect x="220" y="140" width="90" height="60" fill="#fff3bf"/>
+  <text x="265" y="175.0" text-anchor="middle" font-size="14" fill="#1f2328">come prima</text>
+  <rect x="220" y="200" width="90" height="30" fill="#f6b26b"/>
+  <text x="265" y="220.0" text-anchor="middle" font-size="14" fill="#1f2328">aperta</text>
+  <rect x="220" y="50" width="90" height="180" fill="none" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="216" y1="140" x2="314" y2="140" stroke="#1f2328" stroke-width="3"/>
+  <text x="213" y="145" text-anchor="end" font-size="14">19°</text>
+  <text x="213" y="205" text-anchor="end" font-size="14">18°</text>
+</svg>
+</figure>
+<figure class="band" role="img" aria-label="Estate: con obiettivo comfort 25 gradi la valvola si apre a 25,5 e si chiude a 25; con obiettivo economy 27 si apre a 28 e si chiude a 27">
+<figcaption><strong>Estate</strong> - raffresca</figcaption>
+<svg viewBox="0 0 330 240" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" fill="#1f2328">
+  <text x="105" y="22" text-anchor="middle" font-size="15" font-weight="700">Comfort</text>
+  <text x="105" y="40" text-anchor="middle" font-size="14" fill="#4b5260">obiettivo 25°</text>
+  <rect x="60" y="50" width="90" height="60" fill="#8ec5ea"/>
+  <text x="105" y="85.0" text-anchor="middle" font-size="14" fill="#1f2328">aperta</text>
+  <rect x="60" y="110" width="90" height="30" fill="#fff3bf"/>
+  <text x="105" y="130.0" text-anchor="middle" font-size="14" fill="#1f2328">come prima</text>
+  <rect x="60" y="140" width="90" height="90" fill="#e5e7eb"/>
+  <text x="105" y="190.0" text-anchor="middle" font-size="14" fill="#4b5260">chiusa</text>
+  <rect x="60" y="50" width="90" height="180" fill="none" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="56" y1="140" x2="154" y2="140" stroke="#1f2328" stroke-width="3"/>
+  <text x="53" y="115" text-anchor="end" font-size="14">25,5°</text>
+  <text x="53" y="145" text-anchor="end" font-size="14">25°</text>
+  <text x="265" y="22" text-anchor="middle" font-size="15" font-weight="700">Economy</text>
+  <text x="265" y="40" text-anchor="middle" font-size="14" fill="#4b5260">obiettivo 27°</text>
+  <rect x="220" y="50" width="90" height="30" fill="#8ec5ea"/>
+  <text x="265" y="70.0" text-anchor="middle" font-size="14" fill="#1f2328">aperta</text>
+  <rect x="220" y="80" width="90" height="60" fill="#fff3bf"/>
+  <text x="265" y="115.0" text-anchor="middle" font-size="14" fill="#1f2328">come prima</text>
+  <rect x="220" y="140" width="90" height="90" fill="#e5e7eb"/>
+  <text x="265" y="190.0" text-anchor="middle" font-size="14" fill="#4b5260">chiusa</text>
+  <rect x="220" y="50" width="90" height="180" fill="none" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="216" y1="140" x2="314" y2="140" stroke="#1f2328" stroke-width="3"/>
+  <text x="213" y="85" text-anchor="end" font-size="14">28°</text>
+  <text x="213" y="145" text-anchor="end" font-size="14">27°</text>
+</svg>
+</figure>
+</div>
+<p class="note"><span class="swatch" style="background:#f6b26b"></span><span class="swatch" style="background:#8ec5ea"></span>
+aperta: Shelly acceso, passa l'acqua · <span class="swatch" style="background:#fff3bf"></span>come prima: continua quello che
+faceva · <span class="swatch" style="background:#e5e7eb"></span>chiusa: Shelly spento</p>
+</div>
+
 <h2 id="s3">3. Bagni, bypass e deumidificatore</h2>
+<h3>Gli Shelly, stagione per stagione</h3>
 <table class="three">
-  <tr><th></th><th>Inverno</th><th>Estate</th></tr>
-  <tr><td>Valvola Stanze</td><td>per temperatura</td><td>per temperatura</td></tr>
-  <tr><td>Valvola Bagni</td><td>per temperatura</td><td>aperta solo col deumidificatore acceso: i pannelli del bagno
-      farebbero condensa</td></tr>
+  <tr><th>Shelly</th><th>Inverno</th><th>Estate</th></tr>
+  <tr><td>Valvola Stanze</td><td>si apre per scaldare, secondo la temperatura (sezione 2)</td><td>si apre per raffrescare,
+      secondo la temperatura</td></tr>
+  <tr><td>Valvola Bagni</td><td>si apre per scaldare, secondo la temperatura</td><td>chiusa: i pannelli del bagno farebbero
+      condensa. Si apre <strong>solo col deumidificatore acceso</strong>, per dargli l'acqua fredda</td></tr>
   <tr><td>Bypass bagni (normalmente aperto)</td><td>aperto: Shelly spento</td><td>chiuso: Shelly acceso, tutta la stagione,
       anche fuori casa</td></tr>
-  <tr><td>Deumidificatore</td><td>spento</td><td>dalla home, a tempo; in automatico se attivato</td></tr>
+  <tr><td>Deumidificatore</td><td>sempre spento</td><td>dalla home a tempo, o da solo se attivato; sempre insieme alla
+      valvola Bagni</td></tr>
+  <tr><td>VMC (Dimmer)</td><td colspan="2">il suo programma e le sue velocità (sezione 4), uguali nelle due stagioni</td></tr>
 </table>
-<ul>
-  <li>Al cambio di stagione tutto questo vale subito, e viene ricontrollato a ogni ciclo. Se qualcuno cambia il bypass o
-      accende il deumidificatore dall'app, entro un minuto torna com'era.</li>
-  <li>Il bypass è normalmente aperto: home e admin lo dicono <em>aperto</em> o <em>chiuso</em>, non acceso o spento.</li>
-  <li>Il deumidificatore usa l'acqua fredda della valvola Bagni. Si spegne sotto il 50% di umidità (di Stanze), si può
-      accendere dal 55%, al massimo 8 ore. Fuori casa si spegne. Soglie in admin → <em>Stagione</em> → <em>Deumidificatore</em>
-      (sezione 20).</li>
-  <li>Da quale zona prende l'acqua, e se il bypass è normalmente aperto: admin → <em>Dispositivi</em> → <em>Interruttori
-      extra</em>. Impostazioni degli Shelly: sezione 18.</li>
-</ul>
+<p><strong>Fuori casa</strong>, in tutte e due le stagioni: valvole chiuse, deumidificatore spento, bypass come vuole la
+stagione, VMC a Minimo, Notte o spenta.</p>
+<h3>Se la scheda si ferma, se manca la corrente</h3>
+<table class="three">
+  <tr><th>Shelly</th><th>La scheda si ferma</th><th>Torna la corrente (Shelly riacceso)</th></tr>
+  <tr><td>Valvole Stanze e Bagni</td><td>si chiudono da sole entro 15 minuti</td><td>ripartono chiuse; poi decide
+      LocalHome</td></tr>
+  <tr><td>Deumidificatore</td><td>si spegne da solo entro 8 minuti, <strong>sempre prima della sua acqua</strong></td>
+      <td>riparte spento; poi decide LocalHome</td></tr>
+  <tr><td>Bypass bagni</td><td>resta com'è (nessun timer): d'estate resta chiuso</td><td>torna com'era prima</td></tr>
+  <tr><td>VMC (Dimmer)</td><td>resta alla velocità che aveva (nessun timer)</td><td>come dice la sua app (stato
+      all'accensione)</td></tr>
+</table>
+<p>Il bypass è normalmente aperto: home e admin lo dicono <em>aperto</em> o <em>chiuso</em>. Il deumidificatore si spegne
+sotto il 50% di umidità di Stanze e si accende dal 55%, al massimo 8 ore (sezione 20). Da quale zona prende l'acqua e se il bypass
+è normalmente aperto: admin → <em>Dispositivi</em> → <em>Interruttori extra</em>; impostazioni degli Shelly: sezione 18. Perché e
+come: sezione 6.</p>
 
 <h2 id="s4">4. VMC</h2>
 <ul>
-  <li><strong>Dalla home</strong>: cinque livelli - Minimo, Notte, Giorno, Alto, Massimo - e una barra per la regolazione fine,
-      dal Minimo al 100%. Si accende e si spegne con il suo interruttore; un livello o la barra la riaccendono. Sotto il nome la
-      scheda dice sempre perché va a quella velocità: dal programma, scelta a mano fino alla prossima fascia, a tempo,
-      automatico, fuori casa.</li>
-  <li><strong>Per un po'</strong>: Massimo per 30 minuti, 1 o 2 ore (doccia, cucina), oppure <em>Ospiti</em>: Alto per 3 ore.
-      Poi torna com'era.</li>
-  <li><strong>Programma</strong> (sulla scheda della VMC, nella home, in una riga che si apre): Manuale, Giorno e notte (giorno 7–22), Fuori per
-      lavoro, Mattina e sera intense, Personalizzato. Un programma cambia velocità solo quando inizia la sua fascia
-      successiva: una velocità scelta a mano resta fino ad allora.</li>
-  <li><strong>Percentuali</strong> dei cinque livelli (di serie 10, 25, 50, 75 e 100%): admin → <em>Regolazioni
-      impianto</em> (sezione 20). Valgono subito; la barra parte dal Minimo. La AERA 320 gira anche al 5%, a 0% si spegne.</li>
-  <li><strong>Filtri</strong>: la scheda avvisa 14 giorni prima della pulizia e quando è ora, con <em>Puliti oggi</em>.
-      Intervallo e ultima pulizia in admin (sezione 20). Senza una pulizia segnata, nessun avviso.</li>
-  <li><strong>Fuori casa</strong>: nel foglio si sceglie <em>Minimo</em>, <em>Notte</em> (di serie, ricorda l'ultima scelta) o <em>Spenta</em>.
-      Vince su tutto il resto: programma, automatismi, "Massimo per"; dalla home non si cambia, e se qualcuno la cambia
-      dall'app Shelly torna com'era entro un minuto. Al rientro torna al suo programma, o com'era prima. Minimo e Notte
-      ricambiano ancora l'aria della casa chiusa; Spenta risparmia di più, ma l'aria ristagna.</li>
-  <li><strong>Automatismi</strong> (spenti di serie, sezione 20): doccia, aria fuori più umida, raffrescamento notturno e
-      aria troppo secca d'inverno.
-      Cambiano velocità sopra al programma, non accendono mai la VMC spenta, e una velocità scelta a mano li ferma finché
-      il motivo non passa. La scheda della VMC dice quale è in corso e perché.</li>
-  <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva. Se non risponde, LocalHome la interroga sempre
-      meno spesso finché non torna.</li>
+  <li><strong>Dalla home</strong>: cinque livelli - Minimo, Notte, Giorno, Alto, Massimo - e una barra per la regolazione fine.
+      Sotto il nome la scheda dice sempre perché va a quella velocità.</li>
+  <li><strong>Per un po'</strong>: Massimo per 30 minuti, 1 o 2 ore, o <em>Ospiti</em> (Alto per 3 ore); poi torna com'era.</li>
+  <li><strong>Programma</strong> (sulla scheda della VMC): Manuale, Giorno e notte (giorno 7–22), Fuori per lavoro, Mattina e
+      sera intense, Personalizzato. Cambia velocità solo all'inizio della fascia dopo: una scelta a mano resta fino ad allora.</li>
+  <li><strong>Percentuali</strong> dei livelli (di serie 10, 25, 50, 75, 100%), <strong>automatismi</strong> (spenti di serie) e
+      <strong>filtri</strong> (avviso 14 giorni prima): sezione 20. La AERA 320 gira anche al 5%, a 0% si spegne.</li>
+  <li><strong>Fuori casa</strong>: Minimo, Notte (di serie) o Spenta, scelta nel foglio. Vince su tutto, dall'app Shelly torna
+      com'era entro un minuto, al rientro riprende il suo programma. Spenta risparmia, ma l'aria ristagna.</li>
+  <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva.</li>
 </ul>
 <div class="keep">
 <h3>La VMC: Maico AERA 320</h3>
@@ -224,27 +303,6 @@ aperto e l'aria fresca entra davvero. Sotto, passerebbe dallo scambiatore e si s
 <h2 id="s5">5. Sensori: Shelly H&amp;T Gen3</h2>
 <p>Stesso sensore per Stanze, Bagni ed esterno: temperatura e umidità, display e-paper, 4 pile AA (circa un anno) o USB-C,
 70 × 70 mm. <a href="https://kb.shelly.cloud/knowledge-base/shelly-h-t-gen3">Scheda e foto Shelly</a>.</p>
-<div class="device" role="img" aria-label="Disegno dello Shelly H&amp;T Gen3: quadrato di 70 millimetri con display che mostra temperatura e umidità">
-<svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
-  <rect x="40" y="20" width="200" height="200" rx="26" fill="#fafafa" stroke="#1f2328" stroke-width="2.5"/>
-  <rect x="62" y="44" width="156" height="128" rx="8" fill="#e9eae6" stroke="#9ea3a8" stroke-width="1.5"/>
-  <text x="140" y="104" text-anchor="middle" font-size="40" font-weight="600" fill="#2b2d2f">21.3°</text>
-  <text x="140" y="146" text-anchor="middle" font-size="24" fill="#2b2d2f">54 %</text>
-  <text x="140" y="200" text-anchor="middle" font-size="15" font-weight="700" fill="#4b5260" letter-spacing="2">SHELLY</text>
-  <line x1="40" y1="236" x2="240" y2="236" stroke="#4b5260" stroke-width="1.5"/>
-  <line x1="40" y1="230" x2="40" y2="242" stroke="#4b5260" stroke-width="1.5"/>
-  <line x1="240" y1="230" x2="240" y2="242" stroke="#4b5260" stroke-width="1.5"/>
-  <text x="140" y="256" text-anchor="middle" font-size="14" fill="#4b5260">70 mm</text>
-  <g font-size="14" fill="#1f2328">
-    <line x1="218" y1="108" x2="262" y2="108" stroke="#4b5260" stroke-width="1.2"/>
-    <text x="268" y="104">display:</text><text x="268" y="121">temperatura e umidità</text>
-    <line x1="240" y1="60" x2="262" y2="60" stroke="#4b5260" stroke-width="1.2"/>
-    <text x="268" y="56">pulsante dietro</text><text x="268" y="73">il coperchio</text>
-    <line x1="240" y1="190" x2="262" y2="190" stroke="#4b5260" stroke-width="1.2"/>
-    <text x="268" y="186">4 pile AA,</text><text x="268" y="203">oppure USB-C</text>
-  </g>
-</svg>
-</div>
 <p>Dorme quasi sempre. A batteria invia <strong>subito</strong> quando temperatura o umidità cambiano oltre le soglie, e
 <strong>ogni 2 ore</strong> comunque (misurato: puntuale al minuto). Ogni invio porta il valore esatto, al decimo: le soglie
 decidono solo quando parla. In casa stabile parla quasi solo ogni 2 ore: "aggiornato 1 h 50 min fa" è normale.
@@ -282,22 +340,83 @@ dopo aver cambiato un'impostazione nell'app (a batteria la prende solo da svegli
 <p>LocalHome non dice "accendi" ma <strong>"accendi per 15 minuti"</strong>, ripetuto ogni 5 minuti. Se la scheda si ferma, lo
 Shelly chiude la valvola da solo entro 15 minuti. Il deumidificatore ha <strong>8 minuti</strong>, rinnovati ogni 2 e mezzo:
 così si spegne sempre prima della valvola che gli porta l'acqua, e non gira mai a secco. <strong>Il bypass bagni no</strong>
-(sezione 18).</p>
-<table>
-  <tr><th>Cosa succede</th><th>Risultato</th></tr>
-  <tr><td>Scheda o LocalHome fermi meno di 15 min</td><td>Niente: al riavvio il comando viene rinnovato.</td></tr>
-  <tr><td>Scheda ferma più di 15 min</td><td>Lo Shelly chiude; al ritorno LocalHome riapre se serve. Avviso in
-      <em>Successo nelle ultime 72 ore</em>.</td></tr>
-  <tr><td>Shelly senza corrente</td><td>Valvola chiusa; al ritorno LocalHome riapre se serve. Un <em>riavvio inatteso</em> in
-      Dispositivi.</td></tr>
-  <tr><td>Blackout di tutta la casa</td><td>Lo Shelly riparte spento, poi decide LocalHome.</td></tr>
-  <tr><td>Sensore che smette di inviare</td><td>Dopo 4 ore il suo dato non vale più: la valvola resta com'è. Dopo altre 3 ore
-      (<em>Chiusura di sicurezza</em>) si chiude. Al primo invio si riparte da soli.</td></tr>
-  <tr><td>Un dispositivo che manca</td><td>Non blocca mai il resto: segnalato in admin e nella home, nessun comando a
-      vuoto.</td></tr>
-</table>
+(sezione 18): deve restare com'è.</p>
+<div class="timeline" role="img" aria-label="Esempio: la scheda si ferma al minuto 12. La valvola, rinnovata l'ultima volta al minuto 10, si spegne al minuto 25. Il deumidificatore, rinnovato l'ultima volta al minuto 10 e 40, si spegne al minuto 18 e 40, prima della valvola.">
+<svg viewBox="0 0 600 245" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" fill="#1f2328">
+  <text x="0" y="56" font-size="18" font-weight="700">Valvola</text>
+  <text x="0" y="76" font-size="15" fill="#4b5260">15 min, ogni 5</text>
+  <rect x="120.0" y="44" width="410.79999999999995" height="26" rx="4" fill="#8ec5ea"/>
+  <g><path d="M120.0 44 l-6 -10 h12 z"/><path d="M202.2 44 l-6 -10 h12 z"/><path d="M284.3 44 l-6 -10 h12 z"/></g>
+  <text x="536.8" y="63" font-size="16">spenta</text>
+  <path d="M284.3 80 v6 h246.49999999999994 v-6" fill="none" stroke="#4b5260" stroke-width="1.5"/>
+  <text x="437.54999999999995" y="106" text-anchor="middle" font-size="15" fill="#4b5260">15 min</text>
+
+  <text x="0" y="148" font-size="18" font-weight="700">Deumidif.</text>
+  <text x="0" y="168" font-size="15" fill="#4b5260">8 min, ogni 2:40</text>
+  <rect x="120.0" y="136" width="306.7" height="26" rx="4" fill="#f6b26b"/>
+  <g><path d="M120.0 136 l-6 -10 h12 z"/><path d="M163.8 136 l-6 -10 h12 z"/><path d="M207.6 136 l-6 -10 h12 z"/><path d="M251.4 136 l-6 -10 h12 z"/><path d="M295.3 136 l-6 -10 h12 z"/></g>
+  <text x="432.7" y="155" font-size="16">spento</text>
+  <path d="M295.3 172 v6 h131.39999999999998 v-6" fill="none" stroke="#4b5260" stroke-width="1.5"/>
+  <text x="383.0" y="198" text-anchor="middle" font-size="15" fill="#4b5260">8 min</text>
+
+  <line x1="317.2" y1="18" x2="317.2" y2="204" stroke="#cf222e" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <text x="323.2" y="22" font-size="16" fill="#cf222e" font-weight="700">la scheda si ferma</text>
+  <line x1="120.0" y1="214" x2="580" y2="214" stroke="#4b5260" stroke-width="1.2"/>
+  <g font-size="15" fill="#4b5260" text-anchor="middle">
+    <text x="120.0" y="234">0</text><text x="202.2" y="234">5</text><text x="284.3" y="234">10</text>
+    <text x="366.4" y="234">15</text><text x="448.6" y="234">20</text><text x="530.8" y="234">25 min</text>
+  </g>
+</svg>
+<p class="note">▼ = LocalHome rinnova il comando; le parentesi vanno dall'ultimo rinnovo allo spegnimento. In questo esempio
+la scheda si ferma al minuto 12: il deumidificatore si spegne al 18:40, la valvola al 25. In qualunque momento si fermi, il
+deumidificatore si spegne entro 8 minuti, la valvola non prima di 9 minuti e 40: <strong>il deumidificatore non gira mai
+senza la sua acqua</strong>.</p>
+</div>
 <p>Per aprire comunque una valvola col sensore fermo (per esempio mentre si cambiano le pile): modalità diagnosi (sezione 10).
-Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10).</p>
+Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10); soglie, cambi d'ora della settimana e deumidificatore
+con la sua acqua sui relè veri (13/10).</p>
+<h3>Tutte le sicurezze</h3>
+<table class="three">
+  <tr><th>Sicurezza</th><th>Cosa fa</th><th>Contro cosa</th></tr>
+  <tr><th colspan="3">Negli Shelly - funzionano anche a scheda spenta</th></tr>
+  <tr><td>Comando a tempo</td><td>Valvole "accese per 15 minuti", deumidificatore per 8, rinnovati finché LocalHome
+      c'è</td><td>Scheda ferma, rete o Wi-Fi giù</td></tr>
+  <tr><td>Spegnimento automatico</td><td>Lo stesso tempo impostato nell'app (sezione 14): 15 minuti, il deumidificatore
+      8</td><td>Uno Shelly acceso da altri, o riavviato</td></tr>
+  <tr><td>Stato all'accensione</td><td>Valvole e deumidificatore ripartono spenti; il bypass com'era</td><td>Black-out</td></tr>
+  <tr><th colspan="3">In LocalHome - a ogni ciclo, ogni 60 secondi</th></tr>
+  <tr><td>Stato vero dei relè</td><td>Rilegge cosa fa davvero ogni Shelly: cambiato dall'app, torna com'era entro un
+      minuto</td><td>Comandi da altri, comandi persi</td></tr>
+  <tr><td>Sensore</td><td>Senza temperatura valida la valvola resta chiusa; valori impossibili scartati; muto da 4 ore resta
+      com'è, dopo altre 3 (<em>Chiusura di sicurezza</em>) si chiude</td><td>Pile scariche, sensore guasto o
+      lontano</td></tr>
+  <tr><td>Bagni d'estate</td><td>Mai raffrescati: aperti solo per l'acqua del deumidificatore</td><td>Condensa nei
+      bagni</td></tr>
+  <tr><td>Bypass</td><td>Sempre come vuole la stagione, anche fuori casa</td><td>Cambi a mano dimenticati</td></tr>
+  <tr><td>Deumidificatore</td><td>Solo d'estate, sempre con la sua valvola; si spegne sotto il 50% di umidità, al più tardi
+      dopo 8 ore, fuori casa</td><td>Funzionamento a secco o inutile</td></tr>
+  <tr><td>Fuori casa</td><td>Tutto spento tranne il bypass; niente cambia fino al rientro</td><td>Consumi a casa
+      vuota</td></tr>
+  <tr><td>Troppi scatti</td><td>Oltre 48 accensioni di un relè in un giorno: segnalato</td><td>Usura di relè e
+      valvole</td></tr>
+  <tr><td>Shelly che non risponde</td><td>Nessun comando a vuoto; al ritorno rimesso nello stato giusto</td><td>Shelly
+      spento o lontano</td></tr>
+  <tr><td>Cambio dell'ora</td><td>La settimana segue l'orologio (a fine ottobre le 2 vengono due volte, a fine marzo
+      mai); le durate ("per 2 ore") sono tempo vero</td><td>Due notti l'anno</td></tr>
+  <tr><th colspan="3">Nella scheda</th></tr>
+  <tr><td>Watchdog di LocalHome</td><td>Bloccato, o oltre 512 MB di memoria: riavviato entro 2 minuti. Gli Shelly non se ne
+      accorgono</td><td>Blocchi del programma</td></tr>
+  <tr><td>Watchdog della scheda</td><td>Sistema bloccato: la scheda si riavvia da sola entro 30 secondi</td><td>Blocchi del
+      sistema</td></tr>
+  <tr><td>Watchdog Wi-Fi</td><td>Ricollega il Wi-Fi, riavvia la rete, alla fine la scheda (sezione 8)</td><td>Router e
+      Wi-Fi</td></tr>
+  <tr><td>Orologio</td><td>Finché l'ora non è corretta da internet lo storico è in pausa e la home avvisa (sezione
+      7)</td><td>Ora sbagliata dopo un black-out</td></tr>
+  <tr><td>Storico</td><td>Limiti di giorni e di spazio, pulizia a piccoli passi (sezione 9)</td><td>Disco pieno</td></tr>
+</table>
+<div class="box warn"><strong>Modalità diagnosi</strong> (sezione 10): ferma il termostato e le sicurezze di LocalHome, ogni
+relè si muove solo col suo pulsante. Restano quelle degli Shelly. Solo per le prove: un avviso resta in cima all'admin.</div>
+
 
 <h2 id="s7">7. Riavvio e black-out</h2>
 <table>
@@ -309,27 +428,21 @@ Provato sulla scheda di produzione con Plus 1 (4/10) e 1 Gen3 (5/10).</p>
       ogni sensore con la sua età vera, usato finché ha meno di 4 ore</td></tr>
   <tr><td>Durante il riavvio</td><td>nessuna valvola si apre; la VMC resta com'era</td></tr>
 </table>
-<ul>
-  <li><strong>L'ora</strong>: la scheda non ha una batteria per l'orologio. Riparte dall'ora in cui si è spenta e si corregge da
-      internet. Finché non è corretta lo storico è in pausa e la home avvisa. Dopo un black-out lungo, senza internet, la
-      programmazione segue un'ora sbagliata fino al ritorno di internet.</li>
-  <li>In admin → <em>Stato sistema</em> → <em>Ultimi avvii della scheda</em>: "spenta regolarmente" o "interrotto" (corrente
-      mancata o blocco).</li>
-</ul>
+<p><strong>L'ora</strong>: la scheda non ha batteria per l'orologio. Riparte dall'ora in cui si è spenta e si corregge da
+internet; finché non è corretta lo storico è in pausa e la home avvisa (dopo un black-out lungo senza internet, la
+programmazione segue un'ora sbagliata). In admin → <em>Stato sistema</em> → <em>Ultimi avvii della scheda</em>: "spenta
+regolarmente" o "interrotto".</p>
 
 <h2 id="s8">8. Wi-Fi e router</h2>
 <ul>
-  <li>La scheda resta sempre sul Wi-Fi (risparmio energetico spento). Un controllo ogni minuto verifica che il router
-      risponda; se no, ricollega il Wi-Fi (dopo 3 minuti), riavvia la rete (10), riprova (20) e alla fine riavvia la
-      scheda (30, al massimo ogni 6 ore). Tutto finisce nello <em>Storico watchdog</em>, in Stato sistema.</li>
-  <li>Pagine e Shelly usano il nome della scheda (<code>nome.local</code>), non l'indirizzo: se il router cambia gli indirizzi
-      non cambia niente.</li>
-  <li><strong>Successo sulla scheda di casa</strong>: il router rispondeva alla scheda ma non le passava più le connessioni
-      degli Shelly. La home dice "I dispositivi non raggiungono la scheda" (<code>RT</code> sulla matrice LED): riavviare il
-      router.</li>
-  <li>Per evitarlo: 5 GHz su un canale fisso tra 36 e 48 (i canali 52–144 il router li può cambiare da solo), scheda e
-      Shelly sulla rete principale e mai su quella ospiti, se possibile un indirizzo fisso per la scheda.</li>
-  <li>La pagina non si apre ma la matrice LED disegna: la scheda sta bene, è la rete.</li>
+  <li>La scheda resta sempre sul Wi-Fi. Ogni minuto verifica che il router risponda; se no ricollega il Wi-Fi (dopo 3 minuti),
+      riavvia la rete (10), riprova (20) e alla fine riavvia la scheda (30, al massimo ogni 6 ore): <em>Storico watchdog</em>,
+      in Stato sistema.</li>
+  <li><strong>"I dispositivi non raggiungono la scheda"</strong> (<code>RT</code> sulla matrice LED), o la pagina non si apre
+      mentre la matrice disegna: la scheda sta bene, è la rete. Riavvia il router (successo sulla scheda di casa).</li>
+  <li>Per evitarlo: 5 GHz su un canale fisso tra 36 e 48, scheda e Shelly sulla rete principale (mai quella ospiti), un
+      indirizzo fisso per la scheda. Pagine e Shelly usano <code>nome.local</code>: se il router cambia gli indirizzi non cambia
+      niente.</li>
 </ul>
 
 <h2 id="s9">9. Dati, storico e manutenzione</h2>
@@ -384,28 +497,13 @@ quello in corso e i 5 prima. <em>Cancella storico</em> le toglie insieme alle le
   <tr><td>kWh per ora</td><td>Il consumato nel mese diviso le ore di accensione, solo nei mesi con tutte le ore registrate.
       Nel totale, la media su quei mesi. Sotto, i <strong>kWh per grado giorno</strong> (solo caldo).</td></tr>
 </table>
-<p>I kWh per grado giorno tolgono di mezzo quanto è stato freddo: un inverno più rigido consuma di più, ma se i kWh per GG
-restano uguali l'impianto ha lavorato come prima. Sono il numero giusto per confrontare un inverno con l'altro.</p>
-<p><strong>La stima del mese in corso</strong>: le ore fin qui per i kWh per ora medi degli ultimi mesi dello stesso tipo,
-caldo o freddo secondo la stagione dell'impianto (fino a 3, nell'ultimo anno), per esempio «≈ 120 kWh, stima — 70 h × 1,7
-kWh/ora, media di dic, gen, feb». Compare quando ci sono mesi con consumo e tutte le ore; a fine mese la sostituisce la
-lettura vera.</p>
-</div>
-<div class="keep">
-<p><strong>Inserire le letture</strong> (<em>Valori del contatore</em>, un anno alla volta, ogni tanto o una volta all'anno):
-per ogni mese la lettura del display a fine mese, il totale che cresce sempre (un QUNDIS Q heat 5.5 conserva gli ultimi 15
-mesi, caldo e freddo separati). Se il display mostra MWh, moltiplica per 1000. Sotto ogni casella compare subito il consumo
-del mese, così un errore si vede prima di salvare:</p>
-<table>
-  <tr><th>Mese</th><th>Lettura caldo (display)</th><th>Consumato nel mese</th></tr>
-  <tr><td>novembre 2025</td><td>56.370</td><td>– (primo mese inserito)</td></tr>
-  <tr><td>dicembre 2025</td><td>56.827</td><td>56.827 − 56.370 = 457 kWh</td></tr>
-  <tr><td>gennaio 2026</td><td>57.583</td><td>57.583 − 56.827 = 756 kWh</td></tr>
-  <tr><td>febbraio 2026</td><td>(vuoto)</td><td>–</td></tr>
-  <tr><td>marzo 2026</td><td>58.380</td><td>– (manca febbraio)</td></tr>
-</table>
-<p>Un mese non ancora finito non si scrive; una lettura più bassa del mese prima viene rifiutata. Il prezzo lo applichi tu
-dal consuntivo condominiale.</p>
+<p>I kWh per grado giorno tolgono di mezzo quanto è stato freddo: il numero giusto per confrontare un inverno con l'altro.
+<strong>La stima del mese in corso</strong> moltiplica le ore fin qui per i kWh per ora degli ultimi mesi dello stesso tipo
+(«≈ 120 kWh, stima — 70 h × 1,7 kWh/ora»); a fine mese la sostituisce la lettura vera.</p>
+<p><strong>Le letture</strong> (<em>Valori del contatore</em>, anche una volta all'anno): per ogni mese finito il totale del
+display, che cresce sempre (un QUNDIS Q heat 5.5 conserva 15 mesi; MWh × 1000). Il consumo del mese compare subito sotto la
+casella: dicembre 56.827, gennaio 57.583 → gennaio 756 kWh. Un mese senza lettura lascia «–» a sé e al dopo; una lettura più
+bassa della precedente viene rifiutata. Il prezzo lo applichi tu dal consuntivo condominiale.</p>
 </div>
 
 <h2 id="s10">10. Diagnosi e sensori di prova</h2>
@@ -420,8 +518,6 @@ Spegnendola tutto riprende subito, senza riavvio, e ogni valvola torna dove deve
 come un H&amp;T vero; la stanza si scalda o si raffresca con la sua valvola) o <em>Manuale</em> (vale la temperatura scritta
 nella home o in admin, la valvola reagisce subito). Per provare l'impianto senza sensori. Si torna a Shelly dall'admin, con un
 riavvio.</p>
-<p><strong>Prova completa</strong>, prima di collegare le valvole: lo script <code>tools/live_walk.py</code> usa la home come chi
-abita (stagioni, modifiche, fuori casa, diagnosi, riavvii) e controlla cosa fanno davvero i relè. Rimette tutto com'era.</p>
 
 <!-- ================================================== installing -->
 <p class="part">Installazione</p>
@@ -520,8 +616,6 @@ riaprirebbe ogni 15 minuti.</div>
 <p>Su una scheda nuova (o dopo <em>Reset di fabbrica</em>) ci sono già Stanze, Bagni e tutti gli Shelly,
 <span class="pill todo">Da configurare</span>. Non è un guasto: non vengono comandati e una zona senza sensore tiene la valvola
 chiusa.</p>
-<figure class="shot wide"><img src="admin-da-configurare.png" alt="Admin, Dispositivi su una scheda nuova: otto Shelly da configurare, raggruppati per zona, con il modello"></figure>
-<figcaption>Admin → Dispositivi su una scheda nuova.</figcaption>
 <ol class="steps">
   <li>Admin → <strong>Zone</strong> (bypass, deumidificatore, sonda esterna, VMC: <strong>Dispositivi → Da collegare
       qui</strong>): incolla l'ID o il prefisso. Uno alla volta va bene.</li>
@@ -530,9 +624,12 @@ chiusa.</p>
   <li>Correggi nell'app e premi <em>Riprova</em> fino a <em>Impostazioni a posto ✓</em>.</li>
   <li><strong>Salva</strong> e riavvia LocalHome dal pulsante in alto.</li>
 </ol>
-<figure class="shot">
-  <img src="admin-controllo-id.jpg" alt="LocalHome, Zone: sotto l'ID, le impostazioni dello Shelly da correggere">
-</figure>
+<div class="pair">
+<figure class="shot"><img src="admin-da-configurare.png" alt="Admin, Dispositivi su una scheda nuova: otto Shelly da configurare, raggruppati per zona, con il modello">
+  <figcaption>Una scheda nuova: tutto da configurare.</figcaption></figure>
+<figure class="shot"><img src="admin-controllo-id.jpg" alt="LocalHome, Zone: sotto l'ID, le impostazioni dello Shelly da correggere">
+  <figcaption>Sotto l'ID, cosa correggere nell'app.</figcaption></figure>
+</div>
 <p>Il controllo continua. Quando cambi un'impostazione nell'app, lo Shelly lo annuncia e LocalHome la rilegge
 <strong>in pochi secondi</strong>: la riga in Dispositivi si aggiorna da sola. Se un'impostazione cambia per altro
 (aggiornamento, reset), la riga diventa <span class="pill check">Impostazioni da correggere</span> e dice cosa correggere.</p>
@@ -564,7 +661,6 @@ un'impostazione nell'app.</p>
   <tr><td>Riavvii, 7 giorni</td><td>divisi per causa. Solo un blocco (firmware) o un calo di tensione; senza corrente e voluti sono solo informazioni</td></tr>
   <tr><td>Accensioni del relè 24 ore (Gen3)</td><td>oltre 48: aperture troppo brevi, relè che si consuma. Sono le ultime 24 ore:
       l'avviso sparisce da solo quando le accensioni di troppo hanno più di un giorno</td></tr>
-  <tr><td>Relè acceso oggi (Gen3)</td><td>-</td></tr>
   <tr><td>Firmware</td><td>se chiede un riavvio</td></tr>
   <tr><td>Impostazioni</td><td>sempre: com'è e cosa mettere</td></tr>
 </table>
@@ -577,18 +673,12 @@ un'impostazione nell'app.</p>
   <tr><td>Ultimo invio</td><td>oltre 4 ore a batteria, oltre 30 minuti alimentato</td></tr>
   <tr><td>Batteria</td><td>quasi scarica (non mostrata su USB-C)</td></tr>
   <tr><td>Invii ultime 24 ore</td><td>3 o più persi (avviso in Stato sistema)</td></tr>
-  <tr><td>Prossimo invio, invii persi 7 giorni</td><td>-</td></tr>
 </table>
 <p>Come funzionano: sezione 5.</p>
 </div>
 
-<h3>Stato sistema e problemi</h3>
-<ul>
-  <li><strong>Problemi</strong>: spariscono da soli quando la causa sparisce. La home li mostra nel badge in alto.</li>
-  <li>"<strong>I dispositivi non raggiungono la scheda</strong>" (<code>RT</code> sulla matrice LED): nessuno Shelly risponde,
-      è la rete (sezione 8).</li>
-  <li><strong>Successo nelle ultime 72 ore</strong>: es. è scattato il timer di sicurezza di uno Shelly.</li>
-</ul>
+<p><strong>Problemi</strong> (badge in alto nella home, Stato sistema nell'admin): spariscono da soli quando la causa sparisce.
+Cosa vuol dire ognuno: sezione 22.</p>
 
 <h2 id="s17">17. Prova</h2>
 <ol class="steps">
@@ -598,8 +688,9 @@ un'impostazione nell'app.</p>
 </ol>
 
 <h2 id="s18">18. Deumidificatore e bypass: impostazioni</h2>
-<p><strong>Deumidificatore</strong>: come una valvola di zona, impostazioni della sezione 14 comprese (fase del
-deumidificatore su <code>O</code>, fino a 16 A). Come lavora: sezione 3.</p>
+<p><strong>Deumidificatore</strong>: come una valvola di zona, impostazioni della sezione 14 comprese, ma
+<strong>spegnimento automatico a 8 minuti</strong> (00:08:00): si spegne sempre prima della valvola che gli porta l'acqua
+(sezione 6). Fase del deumidificatore su <code>O</code>, fino a 16 A. Come lavora: sezione 3.</p>
 
 <div class="keep">
 <h3>Bypass bagni: impostazioni diverse</h3>
@@ -612,9 +703,8 @@ scheda o lo Shelly si fermano. Collegamento e MQTT come le valvole (sezioni 11 e
   <tr><td>Accensione automatica</td><td class="value">spenta</td></tr>
   <tr><td>Spegnimento automatico</td><td class="value">spento (non 15 minuti)</td></tr>
 </table>
-<div class="box"><strong>Perché.</strong> Con lo spegnimento automatico a 15 minuti delle valvole, d'estate il bypass si
-riaprirebbe ogni 15 minuti finché LocalHome non lo richiude: un centinaio di scatti del relè al giorno per niente. Con
-"spegnersi all'accensione", dopo un black-out resterebbe aperto finché LocalHome non lo richiude.</div>
+<div class="box"><strong>Perché.</strong> Col timer delle valvole d'estate si riaprirebbe ogni 15 minuti finché
+LocalHome non lo richiude; con "spegnersi all'accensione" resterebbe aperto dopo un black-out.</div>
 <p>In LocalHome: <strong>Dispositivi → Da collegare qui → Interruttori extra</strong>, campo <em>ID dispositivo valvola bypass
 bagni</em>, e <em>Valvola normalmente aperta</em> spuntata (lo Shelly acceso la chiude). Il controllo delle impostazioni è lo
 stesso della sezione 15, con queste come giuste.</p>
@@ -627,29 +717,20 @@ trimmer <strong>MIN al minimo e MAX al massimo</strong>, così tutta la scala se
 Massimo (sezione 20) sono quelle vere.</p>
 
 <h2 id="s20">20. Regolazioni nell'admin</h2>
-<p>Quelle che vale la pena conoscere. Le altre vanno bene di serie.</p>
+<p>Quelle che vale la pena conoscere; le altre vanno bene di serie.</p>
 <div class="keep">
 <h3>Termostato: admin → Regolazioni impianto</h3>
 <table>
   <tr><th>Impostazione</th><th>Di serie e cosa fa</th></tr>
-  <tr><td>Isteresi</td><td>0,5 °C. La valvola si ferma all'obiettivo e riparte quando la stanza se ne allontana di tanto
-      (sotto d'inverno, sopra d'estate). 0,5 è il passo degli H&amp;T: meno non serve.</td></tr>
-  <tr><td>Tolleranza Economy</td><td>0,5 °C. Per gli obiettivi Economy (inverno sotto 20°, estate da 26°) riparte ancora più
-      in là: risparmio. 0 = come il Comfort.</td></tr>
-  <tr><td>Chiusura di sicurezza</td><td>3 ore, dopo le 4 senza invii: la valvola del sensore muto si chiude (sezione 6).</td></tr>
+  <tr><td>Isteresi</td><td>0,5 °C: la fascia gialla della sezione 2. È il passo degli H&amp;T: meno non serve.</td></tr>
+  <tr><td>Tolleranza Economy</td><td>0,5 °C in più di fascia per gli obiettivi Economy; 0 = come il Comfort.</td></tr>
+  <tr><td>Chiusura di sicurezza</td><td>3 ore, dopo le 4 senza invii: la valvola del sensore muto si chiude (minimo 1 ora).</td></tr>
   <tr><td>Controllo termostato</td><td>60 s. Le modifiche dalla home valgono comunque subito.</td></tr>
 </table>
-<p>Esempio con i valori di serie: d'inverno a 20,5° (Comfort) riparte a 20,0°, a 19,5° (Economy) a 18,5°. Si salvano con
-<em>Salva impostazioni</em> e valgono dopo il riavvio.</p>
-<figure class="shot wide"><img src="admin-termostato.jpg" alt="Admin, Regolazioni impianto: isteresi, tolleranza Economy, controllo termostato, chiusura di sicurezza"></figure>
+<p>Si salvano con <em>Salva impostazioni</em> e valgono dopo il riavvio.</p>
 </div>
-<div class="keep">
-<h3>VMC: admin → Regolazioni impianto → Velocità VMC</h3>
-<p>I cinque livelli in percentuale, ognuno più alto del precedente: i pulsanti della home e la sua barra (che parte dal Minimo),
-i programmi, "Massimo per", "Ospiti", gli automatismi, il fuori casa. Valgono subito. Il programma si sceglie dalla home,
-sulla scheda della VMC.</p>
-<figure class="shot wide"><img src="admin-vmc-velocita.jpg" alt="Admin, Velocità VMC: minimo 10%, notte 25%, giorno 50%, alto 75%, massimo 100%"></figure>
-</div>
+<p><strong>Velocità VMC</strong> (admin → Regolazioni impianto): i cinque livelli in percentuale, ognuno più alto del
+precedente; valgono subito per pulsanti, barra, programmi, "Massimo per", "Ospiti", automatismi e fuori casa.</p>
 <div class="keep">
 <h3>Automatismi VMC: admin → Regolazioni impianto → Automatismi VMC</h3>
 <p>Tutti spenti di serie: si attivano uno per uno, i valori consigliati sono già pronti. Valgono subito.</p>
@@ -664,17 +745,12 @@ sulla scheda della VMC.</p>
   <tr><td>Aria troppo secca (inverno)</td><td>Stanze sotto il 35% di umidità; finisce risalita di 3 punti</td><td>Notte, mai
       spenta</td></tr>
 </table>
-<p>Conta la salita dell'umidità, non un valore fisso: d'estate il bagno è umido anche senza doccia. I 16 °C sono quelli del bypass
-estivo della VMC (sezione 4): sotto, l'aria passa dallo scambiatore e non raffresca. Le due estive vogliono la sonda
-esterna. I valori della doccia sono pensati per la soglia umidità dell'H&amp;T all'1% (sezione 5): un invio a ogni punto, la salita
-si vede entro un paio di minuti.</p>
+<p>Conta la salita dell'umidità, non un valore fisso (d'estate il bagno è umido anche senza doccia): con la soglia dell'H&amp;T
+all'1% (sezione 5) si vede entro un paio di minuti. Le due estive vogliono la sonda esterna; i 16 °C sono quelli del bypass
+estivo della VMC (sezione 4).</p>
 </div>
-<div class="keep">
-<h3>Filtri VMC: admin → Regolazioni impianto → Filtri VMC</h3>
-<p>Ogni quanti giorni pulire i filtri (di serie 90, come chiede il manuale) e quando è stato fatto l'ultima volta; <em>Filtri puliti
-oggi</em> fa ripartire il conto. La home avvisa 14 giorni prima e quando è ora; da lì si può segnare <em>Puliti oggi</em>. Finché
-non si segna una pulizia, nessun avviso.</p>
-</div>
+<p><strong>Filtri VMC</strong>: ogni quanti giorni pulirli (di serie 90) e l'ultima pulizia; la home avvisa 14 giorni prima e
+quando è ora. Finché non si segna una pulizia, nessun avviso.</p>
 <div class="keep">
 <h3>Deumidificatore: admin → Stagione → Deumidificatore</h3>
 <table>
@@ -685,7 +761,6 @@ non si segna una pulizia, nessun avviso.</p>
   <tr><td>Accensione automatica</td><td>spenta: consuma molto</td></tr>
 </table>
 <p>Valgono subito.</p>
-<figure class="shot wide"><img src="admin-deumidificatore.jpg" alt="Admin, Deumidificatore: spegnimento sotto il 50%, accensione dal 55%, durate, accensione automatica spenta"></figure>
 </div>
 
 <h2 id="s21">21. Rinominare uno Shelly</h2>
@@ -697,33 +772,26 @@ nell'app non arriva niente.</div>
 <!-- ======================================== when something's wrong -->
 <p class="part">Quando qualcosa non va</p>
 
-<h2 id="s22">22. Quando manca qualcosa</h2>
-<table>
-  <tr><th>Situazione</th><th>Cosa fa LocalHome</th></tr>
-  <tr><td>Sensore mai sentito (nuovo o rinominato)</td><td>Valvola chiusa. Premi il pulsante del sensore.</td></tr>
-  <tr><td>Sensore che smette di inviare a valvola aperta</td><td>La lascia aperta; dopo 4 ore <em>Non risponde</em>, dopo altre
-      3 la chiude. Si abbassa in admin → Regolazioni impianto → <em>Chiusura di sicurezza</em> (minimo 1 ora).</td></tr>
-  <tr><td>Shelly che non risponde</td><td>Nessun comando a vuoto; al ritorno lo rimette nello stato giusto.</td></tr>
-  <tr><td>Scheda ferma</td><td>Deumidificatore spento entro 8 minuti, sempre prima della sua acqua; valvole chiuse entro 15; bypass com'è.</td></tr>
-  <tr><td>Scheda riavviata o black-out</td><td>Riparte da sola com'era (sezione 7).</td></tr>
-  <tr><td>Nessuno Shelly risponde</td><td>È la rete: riavvia il router (sezione 8).</td></tr>
-  <tr><td>Bypass</td><td>Estate chiuso, inverno aperto: sempre, anche fuori casa.</td></tr>
-  <tr><td>Deumidificatore</td><td>Solo d'estate, acceso dalla home a tempo. Acceso da altri: spento entro un minuto.</td></tr>
-  <tr><td>Fuori casa</td><td>Zone e deumidificatore spenti, VMC a Notte o spenta; niente si cambia fino a <em>Sono
-      rientrato</em>.</td></tr>
+<h2 id="s22">22. Cosa vedi, cosa fare</h2>
+<table class="three">
+  <tr><th>Cosa vedi</th><th>Cosa fare</th><th>Si vede dopo</th></tr>
+  <tr><td>Un sensore mai sentito (nuovo o rinominato): valvola chiusa</td><td>Premi il pulsante del sensore; controlla il
+      prefisso (sezione 21)</td><td>al suo invio</td></tr>
+  <tr><td>Un sensore <span class="pill bad">Non risponde</span></td><td>Pile o Wi-Fi. La valvola resta com'è, dopo altre 3 ore
+      si chiude (<em>Chiusura di sicurezza</em>)</td><td>4 ore a batteria, 30 minuti su USB-C</td></tr>
+  <tr><td>Uno Shelly <span class="pill bad">Non risponde</span></td><td>Corrente, Wi-Fi, MQTT o prefisso. Al ritorno torna da
+      solo nello stato giusto</td><td>1–2 minuti</td></tr>
+  <tr><td>"I dispositivi non raggiungono la scheda" (<code>RT</code>)</td><td>È la rete: riavvia il router (sezione 8)</td>
+      <td>1–2 minuti</td></tr>
+  <tr><td><span class="pill check">Impostazioni da correggere</span></td><td>Nell'app, come dice la riga (sezioni 14 e
+      18)</td><td>pochi secondi</td></tr>
+  <tr><td><span class="pill check">Batteria scarica</span></td><td>Cambia le pile: niente da azzerare</td><td>al 10%</td></tr>
+  <tr><td>"Timer di sicurezza" in <em>Successo nelle ultime 72 ore</em></td><td>La scheda è stata ferma o irraggiungibile
+      oltre il comando a tempo (sezione 6): guarda corrente e rete</td><td>al ritorno</td></tr>
 </table>
+<p>La home al più tardi un minuto dopo l'admin. Misurato sulla scheda di produzione, 8–13 ottobre 2026.</p>
 
-<h2 id="s23">23. Quanto ci mette ad accorgersene</h2>
-<table>
-  <tr><th>Cosa succede</th><th>In admin dopo</th></tr>
-  <tr><td>Shelly a corrente collegato</td><td>pochi secondi</td></tr>
-  <tr><td>Shelly a corrente staccato</td><td>1–2 minuti</td></tr>
-  <tr><td>Impostazione cambiata nell'app</td><td>pochi secondi</td></tr>
-  <tr><td>H&amp;T che smette di inviare</td><td>4 ore</td></tr>
-</table>
-<p>La home al più tardi un minuto dopo. Misurato sulla scheda di produzione, 8–9 ottobre 2026.</p>
-
-<footer>LocalHome - 9 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.
+<footer>LocalHome - 13 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.
 Dati dell'H&amp;T Gen3 dalla <a href="https://kb.shelly.cloud/knowledge-base/shelly-h-t-gen3">scheda Shelly</a>.</footer>
 </main>
 </body>

@@ -444,6 +444,24 @@ date rather than by tag.
   anything, each Shelly has to switch - timed from the hour, LocalHome's
   command and the Shelly's own report - and then hold until the next one,
   an open one's hold renewed every 5 minutes.
+- **The installer's guide says what every Shelly does, season by season,
+  and every safety.** Where a valve opens and where it stops, winter and
+  summer, comfort and economy, drawn with the default thresholds; each
+  Shelly in winter, in summer, away, with the board stopped and when the
+  power comes back; the timed command drawn over time - the board stopping
+  at minute 12, the dehumidifier off before its water; all the safeties in
+  one table - on the Shellys, in LocalHome at every cycle, on the board -
+  and what diagnostic mode suspends. And shorter: what a table or a
+  drawing says isn't said again, the last two sections are one table of
+  what you see and what to do, the screenshots smaller and side by side -
+  three that only repeated a table's values gone. 16 printed pages
+  instead of 24, the images 330 KB instead of 870.
+- **The Shellys' power cut and given back** (`tools/live_walk.py --parts
+  power`), by a switch on their supply: a flick, ten seconds, two minutes in
+  winter with a zone open, ten seconds in summer with the dehumidifier
+  running - every relay back where it was, timed from their return, the
+  dehumidifier never on with its water closed, nothing switching after,
+  the admin counting each restart by its cause, no problem left.
 - **The board gone with the dehumidifier on** (`tools/live_walk.py --parts
   frozen`): LocalHome stopped over SSH with the dehumidifier and its water
   valve on - each relay off by itself at the end of its own hold, the

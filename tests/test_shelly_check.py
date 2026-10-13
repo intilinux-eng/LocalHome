@@ -137,8 +137,8 @@ def test_the_administrators_guide_is_served_and_linked_from_the_admin(tmp_path):
         assert topic in html
     # The table of contents: every entry lands on its section.
     anchors = re.findall(r'<a href="#(s\d+)">', html)
-    assert len(anchors) == 23 and all(f'id="{a}"' in html for a in anchors)
+    assert len(anchors) == 22 and all(f'id="{a}"' in html for a in anchors)
     images = re.findall(r'<img src="([^"]+)"', html)
-    assert len(images) == 9
+    assert len(images) == 6
     for image in images:
         assert client.get(f"/static/guide/{image}").status_code == 200, image
