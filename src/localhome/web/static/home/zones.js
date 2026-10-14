@@ -205,7 +205,7 @@ function fillZone(card, zone, climate) {
   if (zone.external_power) sensorBits.push(tr("home.powered"));
   else if (zone.battery_pct != null) sensorBits.push(tr("home.on_battery", { pct: Math.round(zone.battery_pct) }));
   if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
-  const hoursToday = excludedNow ? 0 : (state.onHours[zone.name] || {}).today;
+  const hoursToday = excludedNow ? 0 : ((state.onHours[zone.name] || {}).today || 0) + liveRunHours(zone);
   if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
   // At a glance: the readings, the target and the way to change it, and
@@ -425,13 +425,40 @@ function ribbonSvg(zone, week, history, mode) {
       parts.push(`<polyline class="rb-temp" points="${points.join(" ")}" vector-effect="non-scaling-stroke"/>`);
     });
   }
-  runSpans(history.runs, start, hourOf).forEach(([from, to]) => {
+  const spans = runSpans(history.runs, start, hourOf);
+  const live = liveRun(zone);
+  if (live && live[1] / 1000 > start) {
+    const from = hourOf(Math.max(live[0] / 1000, start));
+    const to = Math.min(hourOf(live[1] / 1000), nowHour);
+    const last = spans[spans.length - 1];
+    if (last && from - last[1] <= 0.17) last[1] = Math.max(last[1], to);
+    else spans.push([from, to]);
+  }
+  spans.forEach(([from, to]) => {
     parts.push(`<rect class="rb-run" x="${x(from)}" y="${RB.runY}" width="${Math.max(2, x(to) - x(from))}" height="${RB.runH}"/>`);
   });
   parts.push(`<line class="rb-now" x1="${x(nowHour)}" x2="${x(nowHour)}" y1="0" y2="${RB.runY + RB.runH}" vector-effect="non-scaling-stroke"/>`);
   parts.push(`<line class="rb-cursor" x1="0" x2="0" y1="0" y2="${RB.runY + RB.runH}" vector-effect="non-scaling-stroke" visibility="hidden"/>`);
   const label = tr("home.ribbon_label", { name: zone.name });
   return `<svg viewBox="0 0 ${RB.w} ${RB.runY + RB.runH}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">${parts.join("")}</svg>`;
+}
+
+// What the history doesn't have yet: the valve open since it was last read
+// - [from, to] on the board's clock (ms), `to` now while it's open. Out of
+// the season it opens only for the dehumidifier's water: nothing.
+function liveRun(zone) {
+  const climate = state.climate || {};
+  if (!state.historyAt || (climate.mode === "cool" && !zone.cool_enabled)) return null;
+  const seen = state.liveRuns[zone.name];
+  const now = boardEpochMs();
+  const from = Math.max(state.historyAt, seen ? seen[0] : state.historyAt);
+  const to = seen && seen[1] != null ? seen[1] : zone.valve_on ? now : null;
+  return to != null && to > from ? [from, to] : null;
+}
+
+function liveRunHours(zone) {
+  const run = liveRun(zone);
+  return run ? (run[1] - run[0]) / 3600000 : 0;
 }
 
 // The stretches the system ran today, as [from, to] hours on the strip

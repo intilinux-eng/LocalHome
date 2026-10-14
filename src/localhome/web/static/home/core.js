@@ -31,7 +31,13 @@ const LOCALE = (window.I18N && window.I18N.locale) || undefined;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const REFRESH_MS = 20000;
 const OFFLINE_RETRY_MS = 5000;   // the board not answering: asked again this often
+// The history read every 5 minutes, as often as the board writes it: each
+// read makes it write what's waiting, and its flash wears by the writes.
+// A valve opening or closing has it read again sooner - once the board has
+// a sample of it (one every 30 s) - and meanwhile the page counts an open
+// valve's minutes itself (zones.js's liveRun()).
 const HISTORY_MS = 5 * 60000;
+const HISTORY_AFTER_CHANGE_MS = 45000;
 const PROBLEMS_MS = 60000;
 const DEFAULT_TARGET = { heat: 21, cool: 25 };
 const TARGET_RANGE = { min: 5, max: 35 };
@@ -71,6 +77,12 @@ const state = {
   energyRange: {},        // meter or plug -> the period its bars show
   energyPick: {},         // meter or plug -> the bar tapped, to read its numbers
   onHours: {},
+  // When the history was last read (the board's epoch, ms), and each
+  // valve's opening and closing seen since: [from, to], `to` null while
+  // it's open (start.js's noteValveChanges()).
+  historyAt: 0,
+  liveRuns: {},
+  historyTimer: null,     // the read after a valve's change
   // Each zone's valve hours - the last 24 hours, the last 30 days - and
   // the plant's (services/run_hours.py); which zones show theirs open,
   // over how many days, and the bar picked.
@@ -252,6 +264,11 @@ function boardOffsetAt(epochMs) {
 
 function boardNow() {
   return (window.ServerClock && window.ServerClock.now()) || new Date(Date.now() + boardOffsetMin() * 60000);
+}
+
+// Now on the board's clock, as an instant (ms) - what the history's times are.
+function boardEpochMs() {
+  return wallToEpoch(boardNow());
 }
 
 function wall(epochMs) {

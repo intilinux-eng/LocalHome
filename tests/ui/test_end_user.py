@@ -69,11 +69,16 @@ def house(start_server):
 class Walk:
     """One phone (a fresh browser context: its own storage) on the home page."""
 
-    def __init__(self, browser, house, shots, width=390, scheme="light", touch=False, network_errors_expected=False):
+    def __init__(self, browser, house, shots, width=390, scheme="light", touch=False, network_errors_expected=False,
+                 clock=False):
         self.house = house
         self.shots = shots
         self.context = browser.new_context(viewport={"width": width, "height": 860}, has_touch=touch, is_mobile=touch)
         self.page = self.context.new_page()
+        if clock:
+            # The page's own clock is Playwright's: time flows as usual, and
+            # a step can run it forward (page.clock.run_for) instead of waiting.
+            self.page.clock.install()
         self.page.emulate_media(color_scheme=scheme)
         self.errors = []
         self.network_errors_expected = network_errors_expected
@@ -187,6 +192,34 @@ def test_manual_a_degree_and_a_half_warmer_for_two_hours_then_back(walk, house):
     w.check("the top says manual", "manuale" in w.page.inner_text("#hero-detail").lower())
     w.mode("schedule").click()
     w.check("Hourly takes it back", w.wait(lambda: house.held() is None) and w.wait(lambda: w.in_mode("schedule")))
+
+
+def test_a_zone_cooling_counts_its_minutes_without_a_reload(walk, house):
+    """Found on the board: cooling for a while, the zone's minutes today
+    stayed put until the page was reloaded - the history is read every 5
+    minutes, as often as the board writes it to its flash. An open valve's
+    minutes are counted on the page meanwhile, and its opening has the
+    history read again once the board has a sample of it. The page's clock
+    runs forward under a minute: past it, the page sets itself by the
+    board's clock again."""
+    house.call(f"/api/climate/zones/{ROOMS}/override", {"target": None, "hours": 2})
+    w = walk(clock=True)
+    w.check("the rooms' valve closed to start with", house.zone()["valve_on"] is False)
+    w.mode("manual").click()
+    for _ in range(16):
+        w.card().locator(".pending button[data-action=step][data-delta='-0.5']").click()
+    w.card().locator(".pending button[data-action=duration][data-hours='2']").click()
+    w.card().locator("button[data-action=apply]").click()
+    w.check("well under the room, the valve opens", w.wait(lambda: house.zone()["valve_on"] is True))
+    w.check("the card says it's cooling", w.wait(lambda: "sta raffrescando" in w.card().inner_text().lower()))
+    w.card().locator(".zone-more > summary").click()
+    w.page.clock.run_for(35000)
+    counted = w.page.evaluate("name => liveRunHours(state.climate.zones.find(z => z.name === name)) * 3600", ROOMS)
+    w.check(f"35 s on, the page has counted them itself ({counted:.0f} s)", 25 <= counted <= 44)
+    w.check("and says so in the details", w.wait(lambda: "oggi ha raffrescato" in w.card().inner_text()))
+    with w.page.expect_request(lambda r: f"/zones/{ROOMS}/on-hours" in urllib.parse.unquote(r.url), timeout=5000):
+        w.page.clock.run_for(12000)
+    w.check("45 s after it opened the history is read again, not at its 5-minute round")
 
 
 def test_off_until_the_next_change_and_back_from_the_banner(walk, house):

@@ -73,7 +73,10 @@ function runsHtml(zone) {
   if (!data) return "";
   const range = state.runsRange[zone.name] || 7;
   const days = state.runHours.days.slice(-range);
-  const hours = data.hours.slice(-range), starts = data.starts.slice(-range);
+  // Today's bar and the last 24 hours with the minutes the history hasn't yet.
+  const live = liveRunHours(zone);
+  const hours = data.hours.slice(-range).map((h, i, all) => (i === all.length - 1 && live ? (h || 0) + live : h));
+  const starts = data.starts.slice(-range);
   const known = hours.filter(h => h != null);
   const total = known.reduce((a, b) => a + b, 0);
   const top = Math.max(0.5, ...known);
@@ -94,7 +97,7 @@ function runsHtml(zone) {
     : tr("home.runs_none");
   return `<details class="zone-runs" data-zone-runs="${esc(zone.name)}"${state.runsOpen[zone.name] ? " open" : ""}>
     <summary><span class="runs-title">${esc(tr("home.runs_title"))}</span>
-      <span class="runs-24h">${esc(tr("home.runs_24h", { time: fmtDuration(data.last_24h) }))}</span>${ICONS.chevron}</summary>
+      <span class="runs-24h">${esc(tr("home.runs_24h", { time: fmtDuration((data.last_24h || 0) + live) }))}</span>${ICONS.chevron}</summary>
     <div class="segmented energy-ranges" role="group" aria-label="${esc(tr("home.runs_title"))}">
       ${[7, 30].map(n => `<button type="button" data-action="runs-range" data-range="${n}" aria-pressed="${n === range}">${esc(tr("home.runs_days", { n }))}</button>`).join("")}
     </div>

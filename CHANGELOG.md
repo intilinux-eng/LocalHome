@@ -18,6 +18,12 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   one.
 
 ### Fixed
+- **A zone's minutes on count up without reloading the page.** Found
+  cooling for a while: the minutes today, the day's strip and the last 24
+  hours stayed put until a reload - the history is read every 5 minutes,
+  as often as the board writes it to its flash. The page now counts an open
+  valve's minutes itself in between, and reads the history again 45
+  seconds after a valve opens or closes.
 - **A Shelly valve's hours on are recorded.** Found cooling for a
   while on the board with the zone's hours on still at 0: the Shelly
   switch driver recorded only its extra fields, and a valve has none - its

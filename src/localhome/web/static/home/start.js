@@ -17,6 +17,7 @@ async function refreshClimate(anchor) {
   try {
     const climate = await api("/api/climate/zones");
     if (ticket !== asked.climate) return;
+    noteValveChanges(state.climate, climate);
     state.climate = climate;
     climateZones = state.climate.zones || [];
     if (state.climate.mode && state.climate.mode !== climateMode) {
@@ -107,9 +108,28 @@ async function loadWeeks(names) {
   }));
 }
 
+// A valve opened or closed since the last answer: when, for the minutes the
+// page counts itself (zones.js's liveRun()), and the history read again
+// once the board has a sample of it, not at its next 5-minute round.
+function noteValveChanges(before, after) {
+  if (!before) return;
+  const was = Object.fromEntries((before.zones || []).map(z => [z.name, z.valve_on]));
+  const now = boardEpochMs();
+  let changed = false;
+  (after.zones || []).forEach(zone => {
+    if (!(zone.name in was) || !was[zone.name] === !zone.valve_on) return;
+    changed = true;
+    const open = state.liveRuns[zone.name];
+    state.liveRuns[zone.name] = zone.valve_on ? [now, null] : [open ? open[0] : state.historyAt, now];
+  });
+  if (!changed) return;
+  clearTimeout(state.historyTimer);
+  state.historyTimer = setTimeout(refreshHistory, HISTORY_AFTER_CHANGE_MS);
+}
+
 async function refreshHistory() {
   if (!state.climate) return;
-  historyAt = Date.now();
+  state.historyAt = boardEpochMs();
   await Promise.all([...state.climate.zones.map(async zone => {
     try {
       const [temps, runs, hours] = await Promise.all([
@@ -226,14 +246,12 @@ document.addEventListener("touchstart", () => {}, { passive: true });
 // Back to the page - from another app, the phone woken up: what it shows
 // is brought up to date at once and in place, not after the next round,
 // and without a reload that would scroll it back to the top.
-let historyAt = 0;
-
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || !state.climate) return;
   refreshClimate();
   refreshDevices();
   refreshProblems();
-  if (Date.now() - historyAt > HISTORY_MS) refreshHistory();
+  if (boardEpochMs() - state.historyAt > HISTORY_MS) refreshHistory();
 });
 
 (async function start() {
