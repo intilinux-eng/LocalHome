@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from meross_iot.controller.mixins.consumption import ConsumptionMixin, ConsumptionXMixin
 from meross_iot.controller.mixins.electricity import ElectricityMixin
 from meross_iot.http_api import MerossHttpClient
 from meross_iot.manager import MerossManager
@@ -105,6 +106,21 @@ class MerossPlugDriver(SwitchDriver):
             return reading
 
         return await asyncio.wait_for(_read(), timeout=READ_TIMEOUT_SECONDS)
+
+    def past_days_kwh(self) -> dict[str, float]:
+        """{"YYYY-MM-DD": kWh} of each day the plug keeps by itself - the
+        Meross app's last month or so, its own counter: what LocalHome
+        hadn't recorded, or lost to "Cancella storico", comes back from it
+        (HistoryRecorder.import_device_energy()). Empty for a plug that
+        doesn't count."""
+        if self._plug is None or self._loop is None:
+            raise RuntimeError("Meross plug not ready yet")
+        if not isinstance(self._plug, (ConsumptionXMixin, ConsumptionMixin)):
+            return {}
+        future = asyncio.run_coroutine_threadsafe(
+            asyncio.wait_for(self._plug.async_get_daily_power_consumption(), timeout=READ_TIMEOUT_SECONDS), self._loop)
+        rows = future.result(timeout=READ_TIMEOUT_SECONDS + 5)
+        return {row["date"].strftime("%Y-%m-%d"): row["total_consumption_kwh"] for row in rows}
 
     def turn_on(self) -> None:
         self._submit(self._plug.async_turn_on())

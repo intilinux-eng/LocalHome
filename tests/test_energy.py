@@ -122,6 +122,62 @@ def test_a_plug_that_measures_its_power_gets_its_days_too(store):
     assert store.energy_days("Lampada") == {}, "nothing measured, nothing kept"
 
 
+def test_a_devices_own_past_days_come_back_after_the_history_is_cleared(store):
+    """Asked after losing the desk's consumption to "Cancella storico": a
+    Meross plug keeps about a month of daily kWh by itself. Its past days
+    are taken as its own counter's - over a day worked out from the power,
+    which a gap leaves low - today left to the samples; read again, nothing
+    is written twice; cleared, they come back."""
+    ledger = EnergyLedger(store)
+    t = at("2026-10-02T10:00:00")
+    for i in range(3):
+        ledger.sample("Scrivania", {"power_w": 90}, t + i * 30)
+    assert store.energy_days("Scrivania")["2026-10-02"]["source"] == "power"
+    device = {"2026-10-01": 0.84, "2026-10-02": 1.2, "2026-10-03": 0.5}
+    assert ledger.import_device_days("Scrivania", device, today="2026-10-03") == 2
+    days = store.energy_days("Scrivania")
+    assert (days["2026-10-01"]["kwh"], days["2026-10-01"]["source"]) == (0.84, "meter")
+    assert (days["2026-10-02"]["kwh"], days["2026-10-02"]["source"]) == (1.2, "meter"), "the device's count wins"
+    assert "2026-10-03" not in days, "today is the samples'"
+    assert ledger.import_device_days("Scrivania", device, today="2026-10-03") == 0, "nothing new"
+    store.clear()
+    assert ledger.import_device_days("Scrivania", device, today="2026-10-03") == 2, "back after a clear"
+
+
+def test_the_recorder_reads_the_devices_days_when_its_plug_answers(store):
+    """Read beside the recording cycle, once a day - until the plug's cloud
+    connection is up, tried again (right after a start it isn't)."""
+    import threading
+    from types import SimpleNamespace
+
+    from localhome.services.history import DEVICE_DAYS_RETRY_SECONDS, HistoryRecorder
+
+    ready = threading.Event()
+    calls = []
+
+    def past_days_kwh():
+        calls.append(1)
+        if not ready.is_set():
+            raise RuntimeError("Meross plug not ready yet")
+        return {"2026-10-01": 0.84}
+
+    plug = SimpleNamespace(driver=SimpleNamespace(history_fields=("power_w",), past_days_kwh=past_days_kwh))
+    recorder = HistoryRecorder(SimpleNamespace(pollers={"Scrivania": plug}), store, poll_interval_seconds=0)
+    recorder.energy = EnergyLedger(store)
+    with pytest.raises(RuntimeError):
+        recorder.import_device_energy()
+    recorder._maybe_import_device_energy()
+    for _ in range(50):
+        if calls:
+            break
+        time.sleep(0.02)
+    time.sleep(0.05)
+    assert store.energy_days("Scrivania") == {} and recorder._device_days_due > time.monotonic() + 0.8 * DEVICE_DAYS_RETRY_SECONDS
+    ready.set()
+    assert recorder.import_device_energy() == {"Scrivania": 1}
+    assert store.energy_days("Scrivania")["2026-10-01"]["kwh"] == 0.84
+
+
 def test_the_route_answers_for_a_plug_that_measures_its_power(tmp_path):
     from types import SimpleNamespace
     (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
@@ -132,5 +188,7 @@ def test_the_route_answers_for_a_plug_that_measures_its_power(tmp_path):
         client = app.test_client()
         assert client.get("/api/energy/Scrivania").get_json()["ok"] is True
         assert client.get("/api/energy/Lampada").status_code == 404
+        # Nothing that keeps its own days: nothing imported, and said so.
+        assert client.post("/api/energy/import", json={}).get_json() == {"ok": True, "imported": {}}
     finally:
         app.config["HISTORY"].close()

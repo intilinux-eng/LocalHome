@@ -86,3 +86,31 @@ def test_async_setup_does_not_close_the_connection_on_success(monkeypatch):
     assert driver._plug is plug
     manager.close.assert_not_called()
     http_client.async_logout.assert_not_awaited()
+
+
+def test_the_plugs_own_past_days_are_read_by_day():
+    """A Meross plug keeps about a month of daily kWh (what its app shows):
+    read from the poller's own loop, by day; a plug that doesn't count
+    them gives none, and one not connected yet says so."""
+    import threading
+    from datetime import datetime
+
+    from meross_iot.controller.mixins.consumption import ConsumptionXMixin
+    from meross_iot.controller.mixins.electricity import ElectricityMixin
+
+    driver = _make_driver()
+    with pytest.raises(RuntimeError, match="not ready"):
+        driver.past_days_kwh()
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    try:
+        plug = MagicMock(spec=ConsumptionXMixin)
+        plug.async_get_daily_power_consumption = AsyncMock(return_value=[
+            {"date": datetime(2026, 10, 1), "total_consumption_kwh": 0.84},
+            {"date": datetime(2026, 10, 2), "total_consumption_kwh": 1.2}])
+        driver._plug, driver._loop = plug, loop
+        assert driver.past_days_kwh() == {"2026-10-01": 0.84, "2026-10-02": 1.2}
+        driver._plug = MagicMock(spec=ElectricityMixin)
+        assert driver.past_days_kwh() == {}
+    finally:
+        loop.call_soon_threadsafe(loop.stop)

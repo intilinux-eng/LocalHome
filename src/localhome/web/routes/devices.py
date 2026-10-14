@@ -245,6 +245,17 @@ def register(app: Flask) -> None:
             return jsonify(ok=False, error="invalid range"), 400
         return jsonify(ok=True, series={field: store.query(name, field, range_key) for field in fields})
 
+    @app.route("/api/energy/import", methods=["POST"])
+    def api_energy_import():
+        """The meters' own past days read now - a Meross plug keeps a month:
+        what "Cancella storico" took comes back without waiting for the
+        daily read (tools/import_meter_history.py). {"imported": {meter: days}}."""
+        recorder = app.config["RECORDER"]
+        try:
+            return jsonify(ok=True, imported=recorder.import_device_energy())
+        except Exception as exc:  # noqa: BLE001 - a cloud not answering, said as such
+            return _fail("energy_import_failed", str(exc)[:200], 502)
+
     @app.route("/api/energy/<name>")
     def api_energy(name):
         """Today, yesterday, this week, this month and this year by month -

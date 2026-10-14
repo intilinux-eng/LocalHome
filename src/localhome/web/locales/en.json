@@ -956,6 +956,7 @@
     "vmc_auto_zone_unknown": "No zone is called “{zone}”.",
     "dehumidifier_zone_invalid": "The zone the dehumidifier draws its water from doesn't exist: {zone}.",
     "not_a_power_meter": "{name} isn't a power meter.",
+    "energy_import_failed": "The device's history didn't come from its cloud: try again in a few minutes.",
     "away_until_invalid": "Pick a day and time ahead, within a year.",
     "override_while_away": "You're away: the zones stay off. Tap “I'm back” to change them.",
     "switch_away": "You're away: “{name}” stays off. Tap “I'm back” to switch it on.",

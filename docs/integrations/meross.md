@@ -74,3 +74,26 @@ and shown on its dashboard card; plugs without metering just show on/off.
   immediately rather than waiting for the next poll.
 - The dashboard confirms before turning a plug off, since it's easy to
   forget what a "smart plug" is actually powering.
+- Polling faster than every 20 seconds buys little: each read is two
+  messages through Meross's cloud, which limits accounts that ask too
+  often, and the home page shows the devices every 20 seconds anyway.
+
+## Past days from the plug itself
+
+A plug that counts its consumption (an MSS310: `ConsumptionXMixin`)
+keeps about a month of daily kWh by itself - what the Meross app shows.
+LocalHome reads them once a day (the first time as soon as the plug is
+connected after a start) and writes each past day as the plug counted it,
+over a day it had worked out from the power or missing: the days lost to
+*Cancella storico*, or from before LocalHome followed the plug, come back
+by themselves. Today stays LocalHome's own, from its samples.
+
+Not to wait for the daily read after clearing the history by hand:
+
+```bash
+python tools/import_meter_history.py antonio      # or host:port
+```
+
+It asks the board (`POST /api/energy/import`), which reads with its own
+credentials - nothing of them on the PC - and prints each meter's days
+written and its week and month.

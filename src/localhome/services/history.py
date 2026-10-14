@@ -72,6 +72,11 @@ RUN_YEARS = 6
 # under the 90 s (three 30 s intervals) after which its loop is "stalled".
 PRUNE_CHUNK_ROWS = 20000
 PRUNE_SECONDS_PER_CYCLE = 10
+# A meter's own past days (a Meross plug keeps a month): read once a day,
+# and again every 10 minutes until it has worked - right after a start the
+# plug's cloud connection isn't up yet.
+DEVICE_DAYS_EVERY_SECONDS = 86400
+DEVICE_DAYS_RETRY_SECONDS = 600
 
 # Boundaries for the "on-hours" stats (see HistoryStore.on_stats) -
 # a callable rather than a plain timestamp so it's evaluated at call time.
@@ -906,6 +911,8 @@ class HistoryRecorder:
         self.day_range = None
         self.disk_hold_bytes: int | None = None
         self.disk_hold_since: float | None = None
+        # When the meters' own past days are read next (import_device_energy()).
+        self._device_days_due = 0.0
 
     def start(self) -> None:
         if self._started:
@@ -924,6 +931,41 @@ class HistoryRecorder:
                     self.energy.backfill(name)
                 except Exception:
                     logger.exception("Energy: couldn't work out %s's past days", name)
+
+    def import_device_energy(self) -> dict[str, int]:
+        """Each meter that keeps its own past days - a Meross plug's month,
+        its driver's past_days_kwh() - into the ledger: once a day, from
+        the first cycle the plug answers, and when asked (POST
+        /api/energy/import, tools/import_meter_history.py - after the
+        history was cleared by hand). {meter: days written}; a plug not
+        connected yet raises."""
+        done = {}
+        for name, poller in self.manager.pollers.items():
+            fetch = getattr(poller.driver, "past_days_kwh", None)
+            if self.energy is not None and callable(fetch):
+                done[name] = self.energy.import_device_days(name, fetch())
+        return done
+
+    def _maybe_import_device_energy(self) -> None:
+        """import_device_energy() when it's due, beside the cycle: a cloud's
+        answer takes seconds the samples mustn't wait. Until it has worked,
+        tried again every DEVICE_DAYS_RETRY_SECONDS."""
+        if self.energy is None or time.monotonic() < self._device_days_due:
+            return
+        if not any(callable(getattr(p.driver, "past_days_kwh", None)) for p in self.manager.pollers.values()):
+            self._device_days_due = time.monotonic() + DEVICE_DAYS_EVERY_SECONDS
+            return
+        self._device_days_due = time.monotonic() + DEVICE_DAYS_RETRY_SECONDS
+
+        def run():
+            try:
+                self.import_device_energy()
+                self._device_days_due = time.monotonic() + DEVICE_DAYS_EVERY_SECONDS
+            except Exception as exc:  # noqa: BLE001 - a plug not connected yet: next time
+                logger.info("Energy: a device's past days not read yet (%s) - again in %d min",
+                            exc, DEVICE_DAYS_RETRY_SECONDS // 60)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _loop(self) -> None:
         # Each sample stands for one interval - the hours on are the "on"
@@ -968,6 +1010,7 @@ class HistoryRecorder:
                 batch[name] = values
             if name == self.power_sensor and "power_w" in values:
                 self._check_power_budget(values["power_w"])
+        self._maybe_import_device_energy()
         if self.extra_samples is not None:
             try:
                 for name, values in self.extra_samples().items():

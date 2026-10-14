@@ -9,6 +9,12 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **A Meross plug's past days come back from the plug itself.** It keeps
+  about a month of daily kWh (what the Meross app shows): LocalHome reads
+  them once a day and writes each past day as the plug counted it - the
+  days "Cancella storico" took, or from before LocalHome followed it,
+  come back. `tools/import_meter_history.py <board>` does it at once
+  (`POST /api/energy/import`). Read from the desk's MSS310: 30 days.
 - **"Ore e consumi" exported as CSV.** Every month of every year shown
   - the plant's and each zone's hours, the meter's readings, the kWh they
   make, kWh per hour, the outdoor mean and degree days - for a

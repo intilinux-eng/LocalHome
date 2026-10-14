@@ -89,6 +89,27 @@ class EnergyLedger:
             logger.info("Energy: %s - %d day(s) worked out from the recorded power", meter, filled)
         return filled
 
+    def import_device_days(self, meter: str, days: dict[str, float], today: str | None = None) -> int:
+        """Past days as the device itself counted them (a Meross plug keeps
+        about a month): written as its own counter's - over a day worked
+        out from the power (a gap leaves it low) or missing, so the days
+        "Cancella storico" took come back. Today is the samples'. Returns
+        the days written."""
+        today = today or local_day(time.time())
+        known = self.store.energy_days(meter)
+        written = 0
+        for day, kwh in sorted(days.items()):
+            kwh = _number(kwh)
+            if day >= today or kwh is None or kwh < 0:
+                continue
+            if (known.get(day) or {}).get("source") == "meter" and known[day]["kwh"] == round(kwh, 3):
+                continue
+            self.store.set_day(meter, day, kwh=kwh, source="meter")
+            written += 1
+        if written:
+            logger.info("Energy: %s - %d past day(s) from the device's own counter", meter, written)
+        return written
+
 
 def summary(store, meter: str, today: date | None = None) -> dict:
     """Today, yesterday, the last 7 days (today the last - never a week
