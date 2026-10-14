@@ -15,10 +15,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   spreadsheet, in the panel's language (Italian: ";" and decimal comma).
 
 ### Changed
-- **"Ore e consumi" starts from the year LocalHome began recording in.**
-  A board going into service shows its own year, none before - the year
-  before was always shown, empty - and each year shown opens to its meter
-  readings; up to six are kept. The card says how it works: a report
+- **"Ore e consumi" starts the year before LocalHome began recording.**
+  A board going into service in 2026 shows 2025 and 2026 - 2025's
+  December is what January 2026's usage is worked out from - none older;
+  each year shown opens to its meter readings, up to six kept. The card says how it works: a report
   only, where the hours come from, what's typed, what's kept; and "ore di
   1 giorno", no longer "1 giorni".
 - **"Aria troppo secca" looks at the outdoor air too.** With the outdoor

@@ -262,15 +262,18 @@ def year_report(history: HistoryStore, zones: list[dict], interval: float, meter
 
 
 def years_of(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
-    """The years shown, newest first: from the first LocalHome recorded in
-    (or had a meter value typed for) to this one - a board going into
-    service starts with its own year, none before - and at most the six
-    kept, this one and the five before. Each one opens to its meter values."""
+    """The years shown, newest first: from the year before the first one
+    LocalHome recorded in - its December is what the first January's usage
+    is worked out from - or the oldest a meter value was typed for, to this
+    one; at most the six kept, this one and the five before. A board going
+    into service in 2026: 2025 and 2026, none before. Each one opens to its
+    meter values."""
     first_day = first_run_day(history)
     oldest_ts = history.oldest_ts()
-    firsts = [int(k[:4]) for k in meter] + ([int(first_day[:4])] if first_day else []) \
-        + ([datetime.fromtimestamp(oldest_ts).year] if oldest_ts is not None else [])
-    oldest = max(first_year(today), min([today.year, *firsts]))
+    recorded = [int(first_day[:4])] if first_day else []
+    if oldest_ts is not None:
+        recorded.append(datetime.fromtimestamp(oldest_ts).year)
+    oldest = max(first_year(today), min([min(recorded, default=today.year) - 1, *(int(k[:4]) for k in meter)]))
     return list(range(today.year, oldest - 1, -1))
 
 

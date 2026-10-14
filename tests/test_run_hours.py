@@ -228,14 +228,16 @@ def test_a_year_month_by_month_the_kwh_beside_the_plants_hours(store, tmp_path):
     assert {r["month"]: r for r in kept}["2025-12"]["heat_meter"] == 1000.0
 
 
-def test_the_years_start_from_the_one_localhome_began_recording_in(store, tmp_path):
-    """Asked going into service in October 2026: no 2021 to 2025 to scroll
-    through - its own year, then one more each year, six at most."""
+def test_the_years_start_the_year_before_localhome_began_recording(store, tmp_path):
+    """Asked going into service in October 2026: no 2021 to 2024 to scroll
+    through - its own year and the one before, whose December January's
+    usage is worked out from; then one more each year, six at most."""
     meter = meter_at(tmp_path)
-    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026], "a new board: this year alone"
+    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026, 2025], "a new board"
     record(store, NOW.date(), (8, 9), stanze=[(8, 9)])
-    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026]
-    assert run_hours.years_of(store, meter.get(), date(2028, 2, 1)) == [2028, 2027, 2026], "a year more each year"
+    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026, 2025]
+    assert run_hours.years_of(store, meter.get(), date(2028, 2, 1)) == [2028, 2027, 2026, 2025], \
+        "a year more each year, the one before the first kept"
     assert run_hours.years_of(store, meter.get(), date(2033, 2, 1)) == [2033, 2032, 2031, 2030, 2029, 2028], \
         "six at most, as kept"
 
@@ -264,7 +266,7 @@ def test_the_routes(tmp_path):
         usage = c.get("/api/climate-admin/usage").get_json()
         this_year = date.today().year
         assert usage["zones"] == ["Stanze", "Bagni"] and usage["year"] == this_year
-        assert usage["years"] == [this_year], "a new board: its own year, none before"
+        assert usage["years"] == [this_year, this_year - 1], "a new board: its own year and the one before, none older"
         assert len(usage["months"]) == date.today().month and usage["this_month_hours"] is not None
         post = lambda body: c.post("/api/climate-admin/heat-meter/year", json=body)
         refusal = post({"year": this_year - 1, "months": {"12": {"heat_kwh": "x"}}})

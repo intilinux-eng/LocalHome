@@ -218,12 +218,11 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
     """A year's months beside the plant's hours; the meter's month-end
     values typed for the whole year at once, each month's kWh worked out;
     a value below the month before's refused; this month still running.
-    The years from the first with something: last year's January typed
-    already, so it's there - none before."""
+    The years from the one before LocalHome began recording - its
+    December for January's usage - none older."""
     from datetime import date
     this_year = date.today().year
     last_year = this_year - 1
-    api("/api/climate-admin/heat-meter/year", {"year": last_year, "months": {"01": {"heat_kwh": 500}}})
     opened = open_page("/climate-admin", 390)
     page = opened.page
     try:

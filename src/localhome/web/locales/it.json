@@ -403,7 +403,7 @@
     "usage_how_title": "Come funziona",
     "usage_how_hours": "Le ore le conta LocalHome: ogni 30 secondi registra se ogni valvola è aperta. L'impianto è acceso quando almeno una zona lo è, contato una volta sola; sotto, le ore di ogni zona. D'estate la valvola dei bagni si apre anche solo per l'acqua del deumidificatore: quelle ore contano, perché anche quell'acqua passa dal contatore.",
     "usage_how_meter": "I kWh li scrivi tu, con «Valori del contatore»: per ogni mese finito, il totale che il display mostra a fine mese (caldo e, d'estate, freddo). Il display conserva gli ultimi 15 mesi: non serve leggerlo proprio l'ultimo giorno. Il consumo del mese è la sua lettura meno quella del mese prima.",
-    "usage_how_years": "Gli anni partono da quello in cui LocalHome ha cominciato a registrare: ognuno si apre e si modifica. Se ne tengono fino a 6, quello in corso e i 5 prima; dopo, il 1° gennaio il più vecchio si cancella.",
+    "usage_how_years": "Gli anni partono da quello prima che LocalHome cominciasse a registrare: la sua lettura di dicembre serve per il consumo del primo gennaio. Ognuno si apre e si modifica. Se ne tengono fino a 6, quello in corso e i 5 prima; dopo, il 1° gennaio il più vecchio si cancella.",
     "usage_how_csv": "«Esporta CSV» scarica tutti i mesi di tutti gli anni - ore, letture, consumi, kWh per ora, temperatura esterna - da aprire in un foglio di calcolo.",
     "usage_days_known_one": "ore di 1 giorno su {days}",
     "usage_export": "Esporta CSV (tutti gli anni)",
