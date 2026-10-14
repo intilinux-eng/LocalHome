@@ -40,7 +40,9 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   hours stayed put until a reload - the history is read every 5 minutes,
   as often as the board writes it to its flash. The page now counts an open
   valve's minutes itself in between, and reads the history again 45
-  seconds after a valve opens or closes.
+  seconds after a valve opens or closes. The minutes are said once, in the
+  zone's "Storico accensioni": "oggi ha raffrescato" is no longer repeated
+  on the sensor's line, where it didn't belong.
 - **A Shelly valve's hours on are recorded.** Found cooling for a
   while on the board with the zone's hours on still at 0: the Shelly
   switch driver recorded only its extra fields, and a valve has none - its

@@ -76,7 +76,6 @@ const state = {
   energy: {},             // meter or plug -> its days, week, month, year (/api/energy)
   energyRange: {},        // meter or plug -> the period its bars show
   energyPick: {},         // meter or plug -> the bar tapped, to read its numbers
-  onHours: {},
   // When the history was last read (the board's epoch, ms), and each
   // valve's opening and closing seen since: [from, to], `to` null while
   // it's open (start.js's noteValveChanges()).

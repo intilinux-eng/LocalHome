@@ -1136,8 +1136,6 @@
     "battery_soon": "Batterie del sensore al {pct}%: cambiale a breve.",
     "battery_now": "Batterie del sensore quasi scariche ({pct}%): cambiale al più presto, o smetterà di misurare.",
     "sensor_foot": "Sensore: {what}",
-    "ran_today": "oggi ha scaldato {time}",
-    "ran_today_cool": "oggi ha raffrescato {time}",
     "details": "Dettagli",
     "runs_title": "Storico accensioni",
     "runs_24h": "ultime 24 ore: {time}",

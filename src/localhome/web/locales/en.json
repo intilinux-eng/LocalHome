@@ -1136,8 +1136,6 @@
     "battery_soon": "The sensor's batteries are at {pct}%: change them soon.",
     "battery_now": "The sensor's batteries are almost flat ({pct}%): change them now, or it will stop measuring.",
     "sensor_foot": "Sensor: {what}",
-    "ran_today": "heated {time} today",
-    "ran_today_cool": "cooled {time} today",
     "details": "Details",
     "runs_title": "Running history",
     "runs_24h": "last 24 hours: {time}",

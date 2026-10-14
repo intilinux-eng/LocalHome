@@ -196,17 +196,16 @@ function fillZone(card, zone, climate) {
   const foot = [];
   // A typed value isn't a reading: no "updated a moment ago" under it.
   const age = zone.sensor_manual ? "" : fmtAge(zone.sensor_seconds_since_update ?? zone.sensor_last_value_age_seconds);
-  // The sensor's, said as such - the hours run today after it are the
-  // valve's. A value it hasn't confirmed since: the last one saved, and
-  // how old. Its power in plain words: on battery (how full), or powered
-  // (an H&T on USB-C - the server leaves its battery out).
+  // The sensor's, said as such - how long the valve ran is said once, in
+  // the zone's run history right under. A value it hasn't confirmed since:
+  // the last one saved, and how old. Its power in plain words: on battery
+  // (how full), or powered (an H&T on USB-C - the server leaves its
+  // battery out).
   const sensorBits = [];
   if (age) sensorBits.push(tr(zone.sensor_ok ? "home.updated" : "home.last_saved", { age }));
   if (zone.external_power) sensorBits.push(tr("home.powered"));
   else if (zone.battery_pct != null) sensorBits.push(tr("home.on_battery", { pct: Math.round(zone.battery_pct) }));
   if (sensorBits.length) foot.push(esc(tr("home.sensor_foot", { what: sensorBits.join(", ") })));
-  const hoursToday = excludedNow ? 0 : ((state.onHours[zone.name] || {}).today || 0) + liveRunHours(zone);
-  if (hoursToday) foot.push(esc(tr(mode === "cool" ? "home.ran_today_cool" : "home.ran_today", { time: fmtDuration(hoursToday) })));
 
   // At a glance: the readings, the target and the way to change it, and
   // what needs doing. The rest - the day's strip, the sensor, the hours,

@@ -195,13 +195,13 @@ def test_manual_a_degree_and_a_half_warmer_for_two_hours_then_back(walk, house):
 
 
 def test_a_zone_cooling_counts_its_minutes_without_a_reload(walk, house):
-    """Found on the board: cooling for a while, the zone's minutes today
-    stayed put until the page was reloaded - the history is read every 5
-    minutes, as often as the board writes it to its flash. An open valve's
-    minutes are counted on the page meanwhile, and its opening has the
-    history read again once the board has a sample of it. The page's clock
-    runs forward under a minute: past it, the page sets itself by the
-    board's clock again."""
+    """Found on the board: cooling for a while, the zone's minutes stayed
+    put until the page was reloaded - the history is read every 5 minutes,
+    as often as the board writes it to its flash. An open valve's minutes
+    are counted on the page meanwhile, said once, in the zone's run history
+    (not on the sensor's line too), and its opening has the history read
+    again once the board has a sample of it. The page's clock runs forward
+    under a minute: past it, the page sets itself by the board's again."""
     house.call(f"/api/climate/zones/{ROOMS}/override", {"target": None, "hours": 2})
     w = walk(clock=True)
     w.check("the rooms' valve closed to start with", house.zone()["valve_on"] is False)
@@ -216,8 +216,10 @@ def test_a_zone_cooling_counts_its_minutes_without_a_reload(walk, house):
     w.page.clock.run_for(35000)
     counted = w.page.evaluate("name => liveRunHours(state.climate.zones.find(z => z.name === name)) * 3600", ROOMS)
     w.check(f"35 s on, the page has counted them itself ({counted:.0f} s)", 25 <= counted <= 44)
-    w.check("and says so in the details", w.wait(lambda: "oggi ha raffrescato" in w.card().inner_text()))
-    with w.page.expect_request(lambda r: f"/zones/{ROOMS}/on-hours" in urllib.parse.unquote(r.url), timeout=5000):
+    runs = w.card().locator(".zone-runs summary")
+    w.check("said in the zone's run history", w.wait(lambda: "ultime 24 ore:" in runs.inner_text()))
+    w.check("and not again on the sensor's line", "raffrescato" not in w.card().locator(".zone-foot").inner_text())
+    with w.page.expect_request(lambda r: "/api/climate/run-hours" in r.url, timeout=5000):
         w.page.clock.run_for(12000)
     w.check("45 s after it opened the history is read again, not at its 5-minute round")
 

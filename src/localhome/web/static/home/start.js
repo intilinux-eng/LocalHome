@@ -132,13 +132,11 @@ async function refreshHistory() {
   state.historyAt = boardEpochMs();
   await Promise.all([...state.climate.zones.map(async zone => {
     try {
-      const [temps, runs, hours] = await Promise.all([
+      const [temps, runs] = await Promise.all([
         api(`/api/sensors/${encodeURIComponent(zone.sensor)}/history?field=temperature_c&range=24h`),
         api(`/api/sensors/${encodeURIComponent(zone.valve)}/history?field=is_on&range=24h`),
-        api(`/api/climate/zones/${encodeURIComponent(zone.name)}/on-hours`),
       ]);
       state.history[zone.name] = { temps: temps.series.temperature_c || [], runs: runs.series.is_on || [] };
-      state.onHours[zone.name] = hours;
     } catch (e) { /* keep what we had */ }
   }), api("/api/climate/run-hours").then(runs => { state.runHours = runs; }).catch(() => {}),
   api("/api/climate/temps").then(temps => { state.temps = temps; }).catch(() => {})]);
