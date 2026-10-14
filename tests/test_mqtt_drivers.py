@@ -409,6 +409,35 @@ def test_a_shelly_valve_built_by_the_panel_has_its_on_off_recorded(fake_connecti
     assert [point["value"] for point in store.query("Stanze Valve", "is_on", "24h")] == [1]
 
 
+def test_every_role_built_for_real_shellys_records_what_the_pages_read(tmp_path):
+    """The same gap anywhere else: the house's real configuration - each
+    zone's H&T and valve, the outdoor H&T, bypass, dehumidifier, the VMC's
+    dimmer - built as the panel builds it, each driver's history against
+    what's read from it: a room's and the outdoor temperature (the day's
+    strip, lows and highs, degree days), a valve's on/off (hours on), the
+    VMC's speed. Tests run on simulated devices: this is the real ones'."""
+    from localhome.core import registry
+    from localhome.services import climate_map_store as panel
+
+    broker = tmp_path / "mqtt_broker.json"
+    broker.write_text(json.dumps(BROKER), encoding="utf-8")
+    zones = [{"name": name, "sensor_mode": "shelly", "sensor_device_id": f"shellyhtg3-{name}", "valve_mode": "shelly",
+              "valve_device_id": f"shelly1g3-{name}", "cool_enabled": name == "Stanze"} for name in ("Stanze", "Bagni")]
+    integrations = [
+        *panel.build_climate_integrations(zones, str(broker), str(tmp_path / "manual.json")),
+        *panel.build_extra_sensor_integrations({"outdoor_sensor_device_id": "shellyhtg3-out"}, str(broker), "shelly"),
+        *panel.build_extra_switch_integrations({"dehumidifier_device_id": "shelly1g3-d",
+                                                "bypass_valve_device_id": "shelly1g3-bp"}, str(broker)),
+        *panel.build_extra_dimmer_integrations({"vmc_device_id": "shelly0110dimg3-x"}, str(broker), "shelly"),
+    ]
+    recorded = {driver.name: set(driver.history_fields)
+                for i in integrations for driver in registry.create(i.kind, i.type, i.options)}
+    wanted = {"Stanze Sensor": "temperature_c", "Bagni Sensor": "temperature_c", "Outdoor Sensor": "temperature_c",
+              "Stanze Valve": "is_on", "Bagni Valve": "is_on", "Bathroom Bypass Valve": "is_on",
+              "Dehumidifier": "is_on", "VMC Speed": "value"}
+    assert {name: field for name, field in wanted.items() if field not in recorded.get(name, set())} == {}
+
+
 # ------------------------------------------------------------ availability ----
 # availability_topic (see drivers/mqtt/base.py's Availability) overrides
 # even a still-fresh regular reading - a definitive "the broker says this
