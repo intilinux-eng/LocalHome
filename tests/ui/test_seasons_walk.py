@@ -239,7 +239,9 @@ def test_summer_the_dehumidifier_and_away(browser, house):
     page.fill("#away-day", back.isoformat())
     page.fill("#away-time", "07:30")
     page.locator("#sheet button[data-away='day']").click()
-    assert eventually(page, lambda: f"{back.day} " in home.title() and str(back.year) in home.title())
+    # The whole date - its year only when it isn't this one.
+    assert eventually(page, lambda: f"{back.day} " in home.title()
+                      and (str(back.year) in home.title()) == (back.year != date.today().year))
     page.click("#away-chip")
     assert page.input_value("#away-day") == back.isoformat() and page.input_value("#away-time") == "07:30"
     page.click("#sheet-close")

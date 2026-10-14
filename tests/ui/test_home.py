@@ -447,7 +447,9 @@ def test_away_until_a_day_picked_in_the_calendar(open_page, api):
     weekday = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")[back.weekday()]
     month = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre",
              "ottobre", "novembre", "dicembre")[back.month - 1]
-    whole = f"Fuori casa fino a {weekday} {back.day} {month} {back.year} alle 07:30"
+    # The year only when it isn't this one (17 days on from mid-December).
+    year = f" {back.year}" if back.year != date.today().year else ""
+    whole = f"Fuori casa fino a {weekday} {back.day} {month}{year} alle 07:30"
     assert eventually(page, lambda: page.inner_text("#hero-title") == whole)
     page.click("#away-chip")
     assert page.input_value("#away-day") == back.isoformat() and page.input_value("#away-time") == "07:30"
@@ -725,7 +727,7 @@ def test_away_asks_what_the_vmc_does_and_its_card_says_so(open_page, api):
         assert sheet.locator("[data-away-vmc='off']").get_attribute("aria-checked") == "true"
         sheet.locator("button[data-away='24']").click()
         assert eventually(page, lambda: held() == "off")
-        assert eventually(page, lambda: "spenta fino al rientro" in page.inner_text("#vmc-card"))
+        assert eventually(page, lambda: "Spenta fino al rientro" in page.inner_text("#vmc-card"))
         assert page.locator("#vmc-card button").count() == 0, "nothing to press while away"
         assert "Ventilazione" in page.inner_text("#hero-detail")
         assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
@@ -975,7 +977,11 @@ def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
         assert card.locator(".mode-row button").all_inner_texts() == ["Oraria", "Manuale", "Spenta"]
         assert card.locator(".quick .stepper").count() == 0, "a temperature through Manual"
         assert mode("schedule").get_attribute("aria-checked") == "true"
-        assert "In uso la programmazione oraria" in card.locator(".mode-line").inner_text()
+        line = card.locator(".mode-line").inner_text()
+        assert "In uso la programmazione oraria" in line
+        # The next stretch's edge said as the next one's - "· si accende
+        # solo sopra 24,5°" read as now's, beside "Riparte a 23,5°".
+        assert "Poi " not in line or ", e da lì si accende solo" in line, line
         # Hourly is the table: its heading says it's the one in use, and the
         # line leads to it - on a phone, out of the card's details.
         label = card.locator(".plan-toggle-label")

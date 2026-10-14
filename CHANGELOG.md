@@ -15,6 +15,12 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   spreadsheet, in the panel's language (Italian: ";" and decimal comma).
 
 ### Changed
+- **The home page says things once and plainly** (read over as a resident
+  would): the next stretch's switch-on edge is said as the next stretch's -
+  "Poi 24° domani alle 00:00, e da lì si accende solo sopra 24,5°"; after
+  a "·" it read as now's, beside "Riparte a 23,5°". Away, the VMC's banner
+  no longer repeats "Fuori casa" under its head ("Notte (25%) fino al
+  rientro"), and a date this year leaves its year out.
 - **"Ore e consumi" starts the year before LocalHome began recording.**
   A board going into service in 2026 shows 2025 and 2026 - 2025's
   December is what January 2026's usage is worked out from - none older;

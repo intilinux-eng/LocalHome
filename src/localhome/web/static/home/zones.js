@@ -627,10 +627,13 @@ function quickHtml(zone, climate, change) {
   // Following the week: what it does next - by hand, the banner above says
   // until when and the way back. A temperature is changed with "Manual":
   // its - and + are in the choice it opens.
+  // The next stretch's edge said as the next stretch's: "· switches on only
+  // above 24.5°" read as now's, beside "back on at 23.5°" above.
   let follows = "";
   if (!held) {
     const next = change ? tr("home.next_change", { when: whenText(change.at), target: fmtTarget(change.target) }) : "";
-    follows = [tr("home.mode_follows"), change && change.target != null ? `${next} · ${switchesOnText(change.target, mode)}` : next]
+    follows = [tr("home.mode_follows"), change && change.target != null
+      ? tr("home.next_change_edge", { next, edge: switchesOnText(change.target, mode) }) : next]
       .filter(Boolean).join(". ");
   }
   // By hand: what it holds, until when, and the way back - in the place

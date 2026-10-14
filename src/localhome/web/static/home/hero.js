@@ -156,10 +156,13 @@ const ICONS = {
 // What the top's two chips mean, in plain words - the admin page, with
 // its technical details, one link away.
 
+// The year only when it isn't this one: "Thursday 15 October at 14:29".
 function dateText(date) {
   const months = tr("home.months_long");
-  return tr("home.date_at", { day: tr(`home.day_long.${DAYS[dayIndex(date)]}`), date: date.getUTCDate(),
-    month: Array.isArray(months) ? months[date.getUTCMonth()] : "", year: date.getUTCFullYear(), time: hhmm(date) });
+  const thisYear = date.getUTCFullYear() === boardNow().getUTCFullYear();
+  return tr(thisYear ? "home.date_at_this_year" : "home.date_at", { day: tr(`home.day_long.${DAYS[dayIndex(date)]}`),
+    date: date.getUTCDate(), month: Array.isArray(months) ? months[date.getUTCMonth()] : "", year: date.getUTCFullYear(),
+    time: hhmm(date) });
 }
 
 // Away can last weeks: "until Thursday" doesn't say which. Today, the
