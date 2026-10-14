@@ -1138,7 +1138,7 @@
     "sensor_foot": "Sensore: {what}",
     "details": "Dettagli",
     "runs_title": "Storico accensioni",
-    "runs_24h": "ultime 24 ore: {time}",
+    "runs_today_total": "oggi: {time}",
     "runs_days": "{n} giorni",
     "runs_total": "Ultimi {days} giorni: {time} · in media {avg} al giorno",
     "runs_none": "Nessun giorno registrato ancora.",

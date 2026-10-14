@@ -743,15 +743,16 @@ def test_away_asks_what_the_vmc_does_and_its_card_says_so(open_page, api):
     assert opened.errors == []
 
 
-def test_a_zones_running_history_last_24_hours_closed_days_as_bars_open(open_page):
-    """Closed, one line: the last 24 hours. Open: the last 7 days as bars -
-    or 30 - a day not recorded yet has none; a tap names the day."""
+def test_a_zones_running_history_today_closed_days_as_bars_open(open_page):
+    """Closed, one line: today - by the day, like the strip and the bars.
+    Open: the last 7 days as bars - or 30 - a day not recorded yet has
+    none; a tap names the day."""
     opened = _open_home(open_page)
     page = opened.page
     runs = _card(page, ZONE_A).locator(".zone-runs")
     page.wait_for_function("() => document.querySelector('.zone-runs') !== null", timeout=20000)
     _open_details(page, ZONE_A)
-    assert "ultime 24 ore" in runs.locator("summary").inner_text()
+    assert "oggi:" in runs.locator("summary").inner_text()
     runs.locator("summary").click()
     bars = runs.locator(".energy-bar")
     assert bars.count() == 7 and runs.locator(".energy-labels span").last.inner_text() == "oggi"

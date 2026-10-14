@@ -217,7 +217,7 @@ def test_a_zone_cooling_counts_its_minutes_without_a_reload(walk, house):
     counted = w.page.evaluate("name => liveRunHours(state.climate.zones.find(z => z.name === name)) * 3600", ROOMS)
     w.check(f"35 s on, the page has counted them itself ({counted:.0f} s)", 25 <= counted <= 44)
     runs = w.card().locator(".zone-runs summary")
-    w.check("said in the zone's run history", w.wait(lambda: "ultime 24 ore:" in runs.inner_text()))
+    w.check("said in the zone's run history", w.wait(lambda: "oggi:" in runs.inner_text()))
     w.check("and not again on the sensor's line", "raffrescato" not in w.card().locator(".zone-foot").inner_text())
     with w.page.expect_request(lambda r: "/api/climate/run-hours" in r.url, timeout=5000):
         w.page.clock.run_for(12000)

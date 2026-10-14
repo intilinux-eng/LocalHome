@@ -1138,7 +1138,7 @@
     "sensor_foot": "Sensor: {what}",
     "details": "Details",
     "runs_title": "Running history",
-    "runs_24h": "last 24 hours: {time}",
+    "runs_today_total": "today: {time}",
     "runs_days": "{n} days",
     "runs_total": "Last {days} days: {time} · {avg} a day on average",
     "runs_none": "No day recorded yet.",
