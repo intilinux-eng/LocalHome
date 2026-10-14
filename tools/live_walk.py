@@ -703,8 +703,13 @@ DEHUMIDIFIER_HELD_MINUTES = 16
 
 def hold_both(board, names, minutes, label):
     """`names` kept on for `minutes`: no report and no command the other way,
-    each one's hold renewed never more than 7 minutes apart."""
+    each one's hold renewed never more than 7 minutes apart - and a zone's
+    valve among them has the minutes in its hours on (found cooling with
+    them at 0: a Shelly valve's on/off never reached the history)."""
     say(f"  {label}: held for {minutes} minutes")
+    zones = [name.removesuffix(" Valve") for name in names if name.endswith(" Valve")]
+    hours = lambda zone: board.get(f"/api/climate/zones/{zone}/on-hours")["week"]
+    hours_before = {zone: hours(zone) for zone in zones}
     since = time.time()
     dropped = {}
     while time.time() < since + minutes * 60:
@@ -720,6 +725,11 @@ def hold_both(board, names, minutes, label):
         gaps = [b - a for a, b in zip([since] + renewals, renewals + [time.time()])]
         board.check(f"{label}: {name}'s hold renewed, never more than 7 minutes apart", gaps and max(gaps) < 420,
                     f"{len(renewals)} renewals, longest gap {max(gaps) / 60:.1f} min")
+    for zone in zones:
+        # Read with what's waiting to be written; a sample every 30 s.
+        added = (hours(zone) - hours_before[zone]) * 60
+        board.check(f"{label}: {zone}'s hours on count the {minutes} minutes", added >= minutes - 2,
+                    f"{added:+.1f} min this week")
 
 
 def summer(board, home, dehumidifier):

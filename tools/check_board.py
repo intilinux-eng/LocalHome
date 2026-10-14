@@ -1,6 +1,7 @@
 """A read-only check of a running board, after a deploy: nothing on it is
 changed. Every GET endpoint answers - each device's and each zone's too -
-the static files come versioned, gzipped and kept by the browser, and both
+each valve that answers has its on/off in the history, the static files
+come versioned, gzipped and kept by the browser, and both
 pages open at a phone's and a desk's width, in both schemes, without a
 script error, an untranslated text or anything past the screen's edge. On
 the home page it opens what a resident opens - each zone's details and
@@ -122,6 +123,32 @@ def check_api(c: Check) -> dict:
             count += 1
     print(f"  {count} answers checked")
     return {"zones": zones}
+
+
+# The history writes every 5 minutes (services/history.py's
+# WRITE_EVERY_SECONDS): LocalHome up longer than this, a valve that
+# answers has its on/off in it - off is a 0, not nothing.
+HISTORY_DUE_SECONDS = 7 * 60
+
+
+def check_history(c: Check, zones: list[dict], clock: dict) -> None:
+    """Found cooling for a while with the zone's hours on at 0: the Shelly
+    valves' on/off never reached the history, and an empty series answered
+    as well as a full one. Each valve that answers has its series."""
+    print("History")
+    up = clock["epoch_ms"] / 1000 - clock.get("started_at", 0)
+    if not clock.get("clock_synced") or up < HISTORY_DUE_SECONDS:
+        print(f"  not checked: LocalHome up {up / 60:.0f} min, the clock {'' if clock.get('clock_synced') else 'not '}"
+              f"synced - the history's first write is due after {HISTORY_DUE_SECONDS // 60}")
+        return
+    readings = c.get("/api/readings").get("readings", {})
+    for zone in zones:
+        valve = zone["valve"]
+        if not (readings.get(valve) or {}).get("ok"):
+            continue
+        path = urllib.parse.quote(f"/api/sensors/{valve}/history?field=is_on&range=24h", safe="/?=&")
+        series = c.get(path).get("series", {}).get("is_on", [])
+        c.ok(f"the history records {valve}'s on/off", bool(series), "nothing in the last 24 hours")
 
 
 def check_static(c: Check) -> None:
@@ -253,6 +280,7 @@ def main() -> None:
     print(f"{host}: version {clock.get('app_version')}, up since "
           f"{datetime.fromtimestamp(clock['started_at']):%Y-%m-%d %H:%M}" if clock.get("started_at") else host)
     zones = check_api(c)["zones"]
+    check_history(c, zones, clock)
     check_static(c)
     check_pages(c, zones)
     if args.log:
