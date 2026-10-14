@@ -781,6 +781,7 @@
     "shelly_setting_initial_state": "State at power-on",
     "shelly_setting_auto_off": "Auto OFF",
     "shelly_setting_auto_on": "Auto ON",
+    "shelly_setting_night_mode": "Night mode",
     "shelly_setting_mqtt_control": "MQTT control",
     "shelly_setting_mqtt_status": "Generic status update over MQTT",
     "shelly_setting_change": "{now} - should be: {want}",

@@ -781,6 +781,7 @@
     "shelly_setting_initial_state": "Stato all'accensione",
     "shelly_setting_auto_off": "Auto OFF (spegnimento automatico)",
     "shelly_setting_auto_on": "Auto ON (accensione automatica)",
+    "shelly_setting_night_mode": "Modalità notturna",
     "shelly_setting_mqtt_control": "Controllo via MQTT",
     "shelly_setting_mqtt_status": "Generic status update over MQTT",
     "shelly_setting_change": "{now} - da mettere: {want}",

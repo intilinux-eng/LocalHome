@@ -59,8 +59,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   now records its on/off; the test builds the valve as the panel does.
 - **The VMC's dimmer is checked for keeping its state through a power
   cut.** Set to "off at power-on" it would leave the house unventilated
-  after a black-out until the program's next change; the admin now says
-  so, like a valve's relay set otherwise, and the installer's guide says
+  after a black-out until the program's next change; and its own night
+  mode (found on, on the board) would be a second rule for the speed that
+  LocalHome doesn't see. The admin now says so, like a valve's relay set
+  otherwise, and the installer's guide says
   how to set it; the admin's VMC note says what the VMC does when the
   board stops.
 

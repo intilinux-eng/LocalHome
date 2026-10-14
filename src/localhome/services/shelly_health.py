@@ -153,12 +153,14 @@ def expected_settings(integration) -> dict:
     The VMC's dimmer (its speed, with the levels): its last state kept
     through a power cut, no timer - after a black-out the VMC runs on as
     it was; "off at power-on" would leave the house unventilated until the
-    program's next change, which LocalHome can't tell from a hand's.
+    program's next change, which LocalHome can't tell from a hand's. Its
+    own night mode off: a second rule for the speed inside the Shelly,
+    which LocalHome doesn't see - its night speeds are the program's.
     Empty for anything else."""
     options = integration.options or {}
     if (getattr(integration, "kind", None), getattr(integration, "type", None)) == ("number", "shelly_light") \
             and options.get("presets"):
-        return {"initial_state": "restore_last", "auto_off": 0, "auto_on": 0}
+        return {"initial_state": "restore_last", "auto_off": 0, "auto_on": 0, "night_mode": False}
     if getattr(integration, "kind", None) != "switch" \
             or not str(options.get("command_topic") or "").endswith("/command/switch:0"):
         return {}
@@ -194,6 +196,7 @@ def settings_wrong(expect: dict, config: dict) -> list[dict]:
         "initial_state": switch.get("initial_state"),
         "auto_off": timer(switch.get("auto_off"), switch.get("auto_off_delay")),
         "auto_on": timer(switch.get("auto_on"), switch.get("auto_on_delay")),
+        "night_mode": switch["night_mode"].get("enable") if isinstance(switch.get("night_mode"), dict) else None,
         "mqtt_control": mqtt.get("enable_control"),
         "mqtt_status": mqtt.get("status_ntf"),
     }

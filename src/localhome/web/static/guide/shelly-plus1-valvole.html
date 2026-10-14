@@ -764,10 +764,12 @@ stesso della sezione 15, con queste come giuste.</p>
   <tr><td>Stato all'accensione</td><td class="value">"…per ripristinare l'ultima modalità"</td></tr>
   <tr><td>Accensione automatica</td><td class="value">spenta</td></tr>
   <tr><td>Spegnimento automatico</td><td class="value">spento</td></tr>
+  <tr><td>Modalità notturna</td><td class="value">spenta</td></tr>
 </table>
 <div class="box"><strong>Perché.</strong> Dopo un black-out la VMC riparte alla velocità che aveva. Con "spegnersi
 all'accensione" la casa resterebbe senza ricambio d'aria fino al cambio di fascia dopo: LocalHome non distingue un black-out
-da chi la spegne apposta. Un timer la spegnerebbe da sola. Il controllo delle impostazioni è lo stesso della sezione 15, con
+da chi la spegne apposta. Un timer la spegnerebbe da sola. La modalità notturna dello Shelly sarebbe una seconda regola
+delle velocità che LocalHome non vede: quelle della notte le decide il programma della VMC. Il controllo delle impostazioni è lo stesso della sezione 15, con
 queste come giuste.</div>
 <p>Sulla Maico AERA 320 il segnale va all'ingresso 1-10 V / 0-10 V (schema 3 del manuale): <strong>jumper in posizione 1-10V</strong>,
 trimmer <strong>MIN al minimo e MAX al massimo</strong>, così tutta la scala segue il segnale e le percentuali di Notte, Giorno e

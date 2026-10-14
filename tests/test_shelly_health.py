@@ -485,8 +485,11 @@ def test_the_vmcs_dimmer_must_keep_its_state_through_a_power_cut(tmp_path):
     """Found asking what the VMC does when the power goes: "off at
     power-on" would leave the house unventilated until the program's next
     change - LocalHome can't tell its restart from a hand's. Its last state
-    restored, no timer; a plain dimmer (a lamp) is left as it's set."""
-    config = {"light:0": {"id": 0, "initial_state": "off", "auto_on": False, "auto_off": True, "auto_off_delay": 3600.0},
+    restored, no timer; and its own night mode off (found on antonio's,
+    on): a second rule for the speed LocalHome doesn't see. A plain dimmer
+    (a lamp) is left as it's set."""
+    config = {"light:0": {"id": 0, "initial_state": "off", "auto_on": False, "auto_off": True, "auto_off_delay": 3600.0,
+                          "night_mode": {"enable": True, "brightness": 50, "active_between": ["00:00", "00:00"]}},
               "mqtt": {"enable_control": True, "status_ntf": True}}
     rpc = RelayRpc(DIMMER_STATUS, config)
     rpc.status["sys"]["cfg_rev"] = 1
@@ -494,8 +497,10 @@ def test_the_vmcs_dimmer_must_keep_its_state_through_a_power_cut(tmp_path):
     watcher.poll_once()
     assert by_id(watcher, DIMMER)["settings_wrong"] == [
         {"key": "initial_state", "value": "off", "expected": "restore_last"},
-        {"key": "auto_off", "value": 3600, "expected": 0}]
+        {"key": "auto_off", "value": 3600, "expected": 0},
+        {"key": "night_mode", "value": True, "expected": False}]
     rpc.config["light:0"].update(initial_state="restore_last", auto_off=False)      # set in the app
+    rpc.config["light:0"]["night_mode"]["enable"] = False
     rpc.status["sys"]["cfg_rev"] = 2
     watcher.poll_once()
     assert by_id(watcher, DIMMER)["settings_wrong"] == []
