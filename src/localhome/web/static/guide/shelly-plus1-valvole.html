@@ -507,15 +507,19 @@ gli ultimi 10).</p>
 <div class="keep">
 <h3>Ore di accensione e consumi</h3>
 <p>Il clima arriva dalla centrale condominiale: i suoi consumi li conta il contatore di calore dell'appartamento, non il
-misuratore elettrico di casa. LocalHome conta invece le <strong>ore</strong>: quelle di ogni zona (valvola aperta) e quelle
-dell'<strong>impianto acceso</strong> (almeno una zona aperta, contata una volta sola). Le ore di ogni giorno restano 6 anni:
-quello in corso e i 5 prima. <em>Cancella storico</em> le toglie insieme alle letture del contatore.</p>
+misuratore elettrico di casa. LocalHome conta invece le <strong>ore</strong>: ogni 30 secondi registra se ogni valvola è
+aperta, e ne fa le ore di ogni zona e quelle dell'<strong>impianto acceso</strong> (almeno una zona aperta, contata una volta
+sola). D'estate contano anche le ore della valvola dei bagni aperta solo per l'acqua del deumidificatore: anche quella passa dal
+contatore. Le ore di ogni giorno restano 6 anni: quello in corso e i 5 prima. <em>Cancella storico</em> le toglie insieme alle
+letture del contatore.</p>
 <table>
   <tr><th>Dove</th><th>Cosa</th></tr>
   <tr><td>Home, in ogni zona: <em>Storico accensioni</em></td><td>Le ultime 24 ore; aperto, gli ultimi 7 o 30 giorni a barre.
       Tocca una barra per il giorno: ore e accensioni.</td></tr>
-  <tr><td>Admin → <em>Ore e consumi</em></td><td>Un anno mese per mese, accanto ai kWh del contatore di calore. Il mese in
-      corso mostra le ore fin qui.</td></tr>
+  <tr><td>Admin → <em>Ore e consumi</em></td><td>Un anno mese per mese, accanto ai kWh del contatore di calore; il mese in
+      corso mostra le ore fin qui. Solo un resoconto: non comanda niente. I 6 anni si aprono tutti, anche quelli vuoti (in
+      grigio), per scrivere le letture del contatore dal display (gli ultimi 15 mesi) o dalle bollette. <em>Esporta CSV</em>:
+      tutti i mesi dei 6 anni, da aprire in un foglio di calcolo.</td></tr>
 </table>
 </div>
 <div class="keep">
@@ -526,7 +530,8 @@ quello in corso e i 5 prima. <em>Cancella storico</em> le toglie insieme alle le
       meno la sua media quando è sotto i 20 °C. Più GG, più freddo. Compaiono quando la sonda esterna ha registrato tutti i
       giorni del mese.</td></tr>
   <tr><td>Acceso (ore)</td><td>Le ore con almeno una zona aperta, contate una volta sola; sotto, quelle di ogni zona.
-      «–»: LocalHome non registrava ancora le valvole; «ore di N giorni su M»: mancano dei giorni.</td></tr>
+      «–»: LocalHome non registrava ancora le valvole; «ore di N giorni su M»: degli altri giorni non c'è registrazione
+      (prima dell'installazione, o storico cancellato).</td></tr>
   <tr><td>Consumato nel mese (kWh)</td><td>La lettura di fine mese meno quella del mese prima; gennaio usa dicembre dell'anno
       prima. «–»: manca una delle due letture. Sotto, lo stesso mese dell'anno prima e la differenza («2025: 690 kWh
       (+10%)»); nel totale, gli stessi mesi dell'anno prima.</td></tr>

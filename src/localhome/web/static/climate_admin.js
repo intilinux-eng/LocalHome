@@ -817,12 +817,17 @@ function renderUsage(data) {
   const zones = data.zones || [];
   setPill("usage-summary", data.this_month_hours
     ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(data.this_month_hours, 0) })) : "");
+  // The six years kept, each one open to its meter values; one with nothing
+  // yet greyed, said so on a hover and to a screen reader.
+  const filled = new Set(data.years_with_data || data.years);
   const years = `<div class="toolbar usage-years" role="group" aria-label="${t("usage_years")}">
-      ${data.years.map(y => `<button type="button" class="range-btn${y === data.year ? " active" : ""}" aria-pressed="${y === data.year}"
+      ${data.years.map(y => `<button type="button" class="range-btn${y === data.year ? " active" : ""}${filled.has(y) ? "" : " usage-year-empty"}"
+        aria-pressed="${y === data.year}"${filled.has(y) ? "" : ` title="${t("usage_year_empty", { year: y })}" aria-label="${t("usage_year_empty", { year: y })}"`}
         onclick="pickUsageYear(${y})">${y}</button>`).join("")}
     </div>`;
   const partial = r => (r.days_known && r.days_known < r.days
-    ? `<span class="usage-partial">${t("usage_days_known", { known: r.days_known, days: r.days })}</span>` : "");
+    ? `<span class="usage-partial">${r.days_known === 1 ? t("usage_days_known_one", { days: r.days })
+      : t("usage_days_known", { known: r.days_known, days: r.days })}</span>` : "");
   const zoneHours = r => (zones.length > 1 && r.plant_hours != null
     ? `<span class="usage-partial">${zones.map(z => escapeHtml(`${displayName(z)} ${hours(r.zones[z])}`)).join(" · ")}</span>` : "");
   const small = text => `<span class="usage-partial">${text}</span>`;
@@ -887,7 +892,10 @@ function renderUsage(data) {
       <dt>${t("usage_col_kwh")}</dt><dd>${t("usage_legend_kwh")}</dd>
       <dt>${t("usage_col_kwh_h")}</dt><dd>${t("usage_legend_kwh_h")}</dd>
     </dl>`;
-  const edit = !ended.length ? "" : usageView.editing ? `<div class="admin-zone-card usage-form">
+  // Every month of every year kept, whatever year is shown - and in January
+  // too, when this year has no month over to type.
+  const exportCsv = `<a class="range-btn" href="/api/climate-admin/usage.csv" download>${t("usage_export")}</a>`;
+  const edit = ended.length && usageView.editing ? `<div class="admin-zone-card usage-form">
       <p class="hint-text">${t("usage_edit_note")}</p>
       <table class="usage-table usage-edit" oninput="usageCalc()">
         <tr><th>${t("usage_col_month")}</th><th>${t("usage_heat")}</th><th>${t("usage_cool")}</th></tr>
@@ -899,7 +907,8 @@ function renderUsage(data) {
         <button class="range-btn" type="button" onclick="editHeatYear(false)">${t("usage_cancel")}</button>
       </div>
     </div>` : `<div class="toolbar admin-actions">
-      <button class="range-btn" type="button" onclick="editHeatYear(true)">${t("usage_edit", { year: data.year })}</button>
+      ${ended.length ? `<button class="range-btn" type="button" onclick="editHeatYear(true)">${t("usage_edit", { year: data.year })}</button>` : ""}
+      ${exportCsv}
     </div>`;
   body.innerHTML = `${years}${table}${legend}${edit}<p class="hint-text" id="usage-result"></p>`;
   if (usageView.editing) usageCalc();

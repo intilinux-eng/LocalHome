@@ -6,10 +6,12 @@ broker's status, the season's rules, the extra devices' roles, the run
 hours against the heat meter."""
 from __future__ import annotations
 
+import csv
+import io
 import math
 from datetime import date
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 from localhome.config import LocalHomeConfig
 from localhome.core.manager import DeviceManager
@@ -46,21 +48,55 @@ def _usage_answer(app: Flask, year=None) -> dict:
     """The admin panel's hours and consumption: `year` (this one by
     default) month by month beside the heat meter's values and the
     outdoor temperature, this month's kWh estimated for the season the
-    plant is in, the years there's something for, and this month's
-    hours."""
+    plant is in, the six years kept and those there's something for, and
+    this month's hours."""
     zones = _valve_zones(app.config["THERMOSTAT"])
     history = app.config["HISTORY"]
     interval = app.config["HISTORY_POLL_INTERVAL"]
     meter = app.config["HEAT_METER"].get()
     today = date.today()
-    years = run_hours.years_of(history, meter, today)
+    years = run_hours.years_of(today)
     year = year if year in years else today.year
     thermostat = app.config["THERMOSTAT"]
     mode = thermostat.schedule_store.get_mode() if thermostat is not None else None
     report = run_hours.year_report(history, zones, interval, meter, year, mode=mode, outdoor=OUTDOOR_SENSOR_NAME)
     now = report if year == today.year else run_hours.year_report(history, zones, interval, meter, today.year)
-    return {"zones": [z["name"] for z in zones], "years": years, **report,
+    return {"zones": [z["name"] for z in zones], "years": years,
+            "years_with_data": run_hours.years_with_data(history, meter, today), **report,
             "this_month_hours": now["months"][-1]["plant_hours"]}
+
+
+def _usage_csv(app: Flask) -> tuple[str, str]:
+    """Every month of the six years kept, one row each: the hours - the
+    plant's, each zone's, how many days they cover - beside the meter's
+    values, the kWh they make, kWh per hour, the outdoor mean and degree
+    days. In the panel's language, with its decimal mark and separator, so
+    a spreadsheet opens it as it is. (file name, text)."""
+    texts = app.config["TRANSLATIONS"]["climate_admin"]
+    zones = _valve_zones(app.config["THERMOSTAT"])
+    rows = run_hours.kept_months(app.config["HISTORY"], zones, app.config["HISTORY_POLL_INTERVAL"],
+                                 app.config["HEAT_METER"].get(), outdoor=OUTDOOR_SENSOR_NAME)
+    decimal = texts["usage_csv_decimal"]
+
+    def number(value, digits):
+        return "" if value is None else f"{value:.{digits}f}".replace(".", decimal)
+
+    head = [texts["usage_csv_month"], texts["usage_csv_days"], texts["usage_csv_days_known"],
+            texts["usage_csv_plant_hours"], *(texts["usage_csv_zone_hours"].format(zone=z["name"]) for z in zones),
+            texts["usage_csv_heat_meter"], texts["usage_csv_cool_meter"], texts["usage_csv_heat_used"],
+            texts["usage_csv_cool_used"], texts["usage_csv_kwh"], texts["usage_csv_kwh_h"],
+            texts["usage_csv_outdoor"], texts["usage_csv_dd"], texts["usage_csv_kwh_dd"], texts["usage_csv_note"]]
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=texts["usage_csv_separator"], lineterminator="\r\n")
+    writer.writerow(head)
+    for r in rows:
+        writer.writerow([r["month"], r["days"], r["days_known"], number(r["plant_hours"], 2),
+                         *(number(r["zones"][z["name"]], 2) for z in zones),
+                         number(r["heat_meter"], 3), number(r["cool_meter"], 3), number(r["heat_kwh"], 3),
+                         number(r["cool_kwh"], 3), number(r["kwh"], 3), number(r["kwh_per_hour"], 2),
+                         number(r["outdoor_c"], 1), number(r["degree_days"], 0), number(r["kwh_per_dd"], 2),
+                         texts["usage_csv_open"] if r["open"] else ""])
+    return f"{texts['usage_csv_file']}-{date.today():%Y%m%d}.csv", out.getvalue()
 
 
 def _set_roles(roles: dict) -> dict:
@@ -274,6 +310,14 @@ def register(app: Flask) -> None:
     def api_usage():
         """?year=2025: that year; this one without."""
         return jsonify(ok=True, **_usage_answer(app, request.args.get("year", type=int)))
+
+    @app.route("/api/climate-admin/usage.csv")
+    def api_usage_csv():
+        """Every month kept, for a spreadsheet: the hours beside the meter's kWh."""
+        name, text = _usage_csv(app)
+        # The BOM: a spreadsheet then reads it as UTF-8 (°C, the zones' names).
+        return Response("﻿" + text, mimetype="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
     @app.route("/api/climate-admin/heat-meter/year", methods=["POST"])
     def api_heat_meter_year():

@@ -229,6 +229,17 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
         assert page.locator("#usage .usage-years button.active").inner_text() == str(this_year)
         assert "finora" in page.inner_text("#usage .usage-table"), "this month, still running"
         assert "meno quella del mese prima" in page.inner_text("#usage .usage-legend"), "each column says what it holds"
+        assert "Come funziona" in page.inner_text("#usage .usage-how")
+        # The six years kept, each one open to fill in; one with nothing yet greyed and said so.
+        years = page.locator("#usage .usage-years button")
+        assert years.all_inner_texts() == [str(y) for y in range(this_year, this_year - 6, -1)]
+        oldest = page.locator(f"#usage .usage-years button:has-text('{this_year - 5}')")
+        assert "usage-year-empty" in oldest.get_attribute("class") and "ancora niente" in oldest.get_attribute("title")
+        oldest.click()
+        assert eventually(page, lambda: page.locator(f"#usage button:has-text('Valori del contatore {this_year - 5}')").count() == 1)
+        with page.expect_download() as download:
+            page.click("#usage a:has-text('Esporta CSV')")
+        assert download.value.suggested_filename.startswith("ore-e-consumi-")
         page.click(f"#usage .usage-years button:has-text('{last_year}')")
         assert eventually(page, lambda: page.locator("#usage .usage-table tr").count() == 14)   # head, 12, total
         page.click(f"#usage button:has-text('Valori del contatore {last_year}')")

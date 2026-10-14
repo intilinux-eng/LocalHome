@@ -109,6 +109,13 @@ def check_api(c: Check) -> dict:
         for path in targets:
             url = urllib.parse.quote(path, safe="/?=&")
             try:
+                if route.endswith(".csv"):
+                    # A download: CSV, its header and a month at least.
+                    res, body = c.get(url, raw=True)
+                    c.ok(f"GET {path}", res.headers.get("Content-Type", "").startswith("text/csv")
+                         and body.count(b"\n") >= 2, res.headers.get("Content-Type", ""))
+                    count += 1
+                    continue
                 data = c.get(url)
                 if route == "/api/sensors/<name>" and data.get("ok") is False:
                     # The endpoint answered: the device itself didn't.

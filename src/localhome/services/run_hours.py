@@ -261,10 +261,28 @@ def year_report(history: HistoryStore, zones: list[dict], interval: float, meter
                                     "last_kwh": total(lambda r: r["last_year"]["kwh"], both)} if both else None}}
 
 
-def years_of(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
-    """The years there's something for, newest first - this one and the
-    one before always (the meter's 15 months reach into it), none before
-    the six kept."""
-    firsts = [int(k[:4]) for k in meter] + ([int(d[:4])] if (d := first_run_day(history)) else [])
-    oldest = max(first_year(today), min([today.year - 1, *firsts]))
-    return list(range(today.year, oldest - 1, -1))
+def years_of(today: date) -> list[int]:
+    """The six years kept, newest first: each one can be opened and its
+    meter values typed - the meter's display keeps the last 15 months, a
+    bill older ones - with hours or not (before LocalHome ran, none)."""
+    return list(range(today.year, first_year(today) - 1, -1))
+
+
+def years_with_data(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
+    """Of years_of(), those with hours or a meter value - the others are
+    shown empty, there to be filled in."""
+    first_day = first_run_day(history)
+    hours_from = int(first_day[:4]) if first_day else today.year
+    return [y for y in years_of(today) if y >= hours_from or any(k.startswith(f"{y}-") for k in meter)]
+
+
+def kept_months(history: HistoryStore, zones: list[dict], interval: float, meter: dict[str, dict],
+                now: datetime | None = None, outdoor: str | None = None) -> list[dict]:
+    """Every month of the six years kept, oldest first, up to this one -
+    _rows' - for the CSV export: the hours beside the meter's values."""
+    now = now or datetime.now()
+    today = now.date()
+    first = date(first_year(today), 1, 1)
+    by_day = run_days_of(history, [z["valve"] for z in zones], FIELD, interval, first, now)
+    temps = temp_days_of(history, outdoor, "temperature_c", interval, first, now) if outdoor else {}
+    return [row for year in years_of(today)[::-1] for row in _rows(by_day, temps, meter, zones, year, today)]
