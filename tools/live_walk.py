@@ -152,7 +152,7 @@ class Board:
         self.client.on_message = self._on_message
         # The broker may be the board's own: back within seconds of a reboot.
         self.client.reconnect_delay_set(1, 4)
-        self.boots: list[tuple[float, str, str]] = []      # (when, relay, "online"/"offline"/"init")
+        self.boots: list[tuple[float, str, str]] = []      # (when, relay, "online"/"offline")
         self.statuses: list[tuple[float, str, bool]] = []  # (when, relay, its output) - each live report
         self.client.on_connect = lambda c, u, f, r, p=None: [
             c.subscribe(f"{d}/{t}") for d in self.relays for t in ("status/switch:0", "command/switch:0", "online")] + [
@@ -252,10 +252,11 @@ class Board:
                 output = status.get("output")
             except ValueError:
                 return
+            # Its "source" stays "init" in every status after a restart until
+            # the relay moves - LocalHome's own status asks included: not a
+            # restart. Its "online" is (above).
             if not msg.retain:
                 self.statuses.append((time.time(), name, output))
-                if status.get("source") == "init":
-                    self.boots.append((time.time(), name, "init"))
             if self.relay_state.get(name) != output and not msg.retain:
                 say(f"   relay {name}: {'ON' if output else 'off'}")
             self.relay_state[name] = output
@@ -1119,7 +1120,7 @@ def power(board, home, dehumidifier):
         first = None
         end = asked + 600
         while time.time() < end and first is None:
-            first = next((at for at, _, what in board.boots if at >= asked and what in ("online", "init")), None)
+            first = next((at for at, _, what in board.boots if at >= asked and what == "online"), None)
             time.sleep(0.5)
         if first is None and "flick" in how:
             say(f"  {label}: no relay restarted - too short for them to notice; nothing to check")
