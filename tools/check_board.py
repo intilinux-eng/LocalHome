@@ -1,7 +1,9 @@
 """A read-only check of a running board, after a deploy: nothing on it is
 changed. Every GET endpoint answers - each device's and each zone's too -
-each valve that answers has its on/off in the history, the static files
-come versioned, gzipped and kept by the browser, and both
+and what they say holds: the loops running, the history written, each
+answering sensor and valve recorded, each zone's minutes today as its
+recorded on/off adds up, no Shelly set otherwise, every protection on.
+The static files come versioned, gzipped and kept by the browser, and both
 pages open at a phone's and a desk's width, in both schemes, without a
 script error, an untranslated text or anything past the screen's edge. On
 the home page it opens what a resident opens - each zone's details and
@@ -50,6 +52,7 @@ class Check:
         self.failed: list[str] = []
         self.passed = 0
         self.silent: list[str] = []     # devices that don't answer: their state, not a fault
+        self.problems: list[str] = []   # what the board says is wrong - said, for a person to judge
 
     def ok(self, what: str, good: bool, detail: str = "") -> bool:
         if good:
@@ -138,24 +141,73 @@ def check_api(c: Check) -> dict:
 HISTORY_DUE_SECONDS = 7 * 60
 
 
-def check_history(c: Check, zones: list[dict], clock: dict) -> None:
-    """Found cooling for a while with the zone's hours on at 0: the Shelly
-    valves' on/off never reached the history, and an empty series answered
-    as well as a full one. Each valve that answers has its series."""
-    print("History")
-    up = clock["epoch_ms"] / 1000 - clock.get("started_at", 0)
-    if not clock.get("clock_synced") or up < HISTORY_DUE_SECONDS:
-        print(f"  not checked: LocalHome up {up / 60:.0f} min, the clock {'' if clock.get('clock_synced') else 'not '}"
-              f"synced - the history's first write is due after {HISTORY_DUE_SECONDS // 60}")
+# A zone's minutes on today, as the page shows them, against its recorded
+# on/off added up: this far apart at most (the 5-minute buckets' edges).
+MINUTES_SLACK = 5
+# The history's chart buckets over 24 hours (services/history.py's RANGE_BUCKETS).
+BUCKET_SECONDS = 300
+
+
+def series(c: Check, sensor: str, field: str) -> list[dict]:
+    path = urllib.parse.quote(f"/api/sensors/{sensor}/history?field={field}&range=24h", safe="/?=&")
+    return c.get(path).get("series", {}).get(field, [])
+
+
+def check_values(c: Check, zones: list[dict], clock: dict) -> None:
+    """Not that each answer comes - that what it says is right. Found
+    cooling for a while with the zone's hours on at 0: the Shelly valves'
+    on/off never reached the history, and an empty series answered as well
+    as a full one. So: the loops running, the clock and the history going,
+    each answering sensor recorded, each valve's minutes today as its
+    recorded on/off adds up, no Shelly set otherwise, every protection on."""
+    print("Values")
+    status = c.get("/api/system-status")
+    now = clock["epoch_ms"] / 1000
+    for loop in status.get("loops", []):
+        late = loop.get("last_ok_seconds_ago")
+        c.ok(f"the {loop['name']} loop runs", not loop.get("stalled") and late is not None
+             and late <= 3 * loop.get("interval_seconds", 30), f"last cycle {late} s ago")
+    off = [name for name, on in status.get("protections", {}).get("items", {}).items() if not on]
+    c.ok("every protection of the board on", not off, ", ".join(off))
+    wrong = [f"{d['id']}: {', '.join(s['key'] for s in d['settings_wrong'])}"
+             for d in c.get("/api/climate-admin/shelly-health").get("devices", []) if d.get("settings_wrong")]
+    c.ok("no Shelly with a setting to put right", not wrong, "; ".join(wrong))
+    c.problems += [f"{p.get('code')}: {str(p.get('detail') or p.get('subject') or '')[:100]}"
+                   for p in status.get("problems", [])]
+    up = now - clock.get("started_at", 0)
+    database = status.get("database", {})
+    c.ok("the clock synchronized, the history recording", clock.get("clock_synced") and not database.get("paused_for_clock"))
+    if up < HISTORY_DUE_SECONDS:
+        print(f"  the history not checked: LocalHome up {up / 60:.0f} min, its first write is due after "
+              f"{HISTORY_DUE_SECONDS // 60}")
         return
+    # Its figures are counted every few minutes (what was waiting written
+    # first): its newest sample against when they were counted.
+    counted_at = now - (database.get("stats_age_seconds") or 0)
+    newest = database.get("newest_ts") or 0
+    c.ok("the history writing", counted_at - newest <= 6 * 60,
+         f"newest sample {(counted_at - newest) / 60:.0f} min before its figures were counted")
     readings = c.get("/api/readings").get("readings", {})
+    midnight = now - (now + clock.get("utc_offset_minutes", 0) * 60) % 86400
     for zone in zones:
-        valve = zone["valve"]
+        sensor, valve = zone["sensor"], zone["valve"]
+        if (readings.get(sensor) or {}).get("ok"):
+            temps = series(c, sensor, "temperature_c")
+            age = now - temps[-1]["ts"] if temps else None
+            c.ok(f"{sensor}'s temperature recorded", age is not None and age <= 15 * 60,
+                 "nothing in the last 24 hours" if age is None else f"last {age / 60:.0f} min ago")
         if not (readings.get(valve) or {}).get("ok"):
             continue
-        path = urllib.parse.quote(f"/api/sensors/{valve}/history?field=is_on&range=24h", safe="/?=&")
-        series = c.get(path).get("series", {}).get("is_on", [])
-        c.ok(f"the history records {valve}'s on/off", bool(series), "nothing in the last 24 hours")
+        runs = series(c, valve, "is_on")
+        if not c.ok(f"the history records {valve}'s on/off", bool(runs), "nothing in the last 24 hours"):
+            continue
+        # Each bucket's mean is the share of it the valve was open; the one
+        # still filling counts for its time so far.
+        recorded = sum(p["value"] * min(BUCKET_SECONDS, now - p["ts"]) for p in runs if p["ts"] >= midnight) / 60
+        name = urllib.parse.quote(zone["name"])
+        shown = c.get(f"/api/climate/zones/{name}/on-hours").get("today", 0) * 60
+        c.ok(f"{zone['name']}'s minutes on today as recorded", abs(shown - recorded) <= MINUTES_SLACK,
+             f"shown {shown:.0f} min, recorded {recorded:.0f} min")
 
 
 def check_static(c: Check) -> None:
@@ -287,7 +339,7 @@ def main() -> None:
     print(f"{host}: version {clock.get('app_version')}, up since "
           f"{datetime.fromtimestamp(clock['started_at']):%Y-%m-%d %H:%M}" if clock.get("started_at") else host)
     zones = check_api(c)["zones"]
-    check_history(c, zones, clock)
+    check_values(c, zones, clock)
     check_static(c)
     check_pages(c, zones)
     if args.log:
@@ -295,6 +347,10 @@ def main() -> None:
     if c.silent:
         print("\nDevices not answering (their state, said by the board - not a fault of the pages):")
         for line in c.silent:
+            print(f"  - {line}")
+    if c.problems:
+        print("\nProblems the board shows (in the admin too - to judge, not counted here):")
+        for line in c.problems:
             print(f"  - {line}")
     print(f"\n{c.passed} checks passed, {len(c.failed)} not")
     sys.exit(1 if c.failed else 0)
