@@ -377,6 +377,38 @@ def test_switch_seeds_its_on_off_state_from_a_persisted_cache(fake_connection, t
     assert second_run.read()["is_on"] is True
 
 
+def test_a_shelly_valve_built_by_the_panel_has_its_on_off_recorded(fake_connection, tmp_path):
+    """Found cooling for a while on antonio with the zone's hours on at 0:
+    the valve driver recorded only its extra fields, and a Shelly valve has
+    none - its on/off never reached the history. The simulated switch
+    records it, so no test saw it: this one builds the valve as the panel
+    does and goes through the recorder."""
+    from localhome.core import registry
+    from localhome.services.climate_map_store import valve_integration_options
+    from localhome.services.history import HistoryRecorder, HistoryStore
+
+    broker_file = tmp_path / "mqtt_broker.json"
+    broker_file.write_text(json.dumps(BROKER), encoding="utf-8")
+    options = valve_integration_options({"valve_device_id": "shellyplus1-XXXX"}, "Stanze Valve", str(broker_file))
+    [driver] = registry.create("switch", "mqtt_json", options)
+    assert "is_on" in driver.history_fields
+    fake_connection.deliver("shellyplus1-XXXX/status/switch:0", json.dumps({"output": True}))
+
+    class Poller:
+        def __init__(self):
+            self.driver = driver
+
+        def get(self):
+            return driver.read()
+
+    class Manager:
+        pollers = {"Stanze Valve": Poller()}
+
+    store = HistoryStore(str(tmp_path / "history.db"))
+    HistoryRecorder(Manager(), store).poll_once()
+    assert [point["value"] for point in store.query("Stanze Valve", "is_on", "24h")] == [1]
+
+
 # ------------------------------------------------------------ availability ----
 # availability_topic (see drivers/mqtt/base.py's Availability) overrides
 # even a still-fresh regular reading - a definitive "the broker says this

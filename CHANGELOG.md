@@ -8,6 +8,14 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Fixed
+- **A Shelly valve's hours on are recorded.** Found cooling for a
+  while on the board with the zone's hours on still at 0: the Shelly
+  switch driver recorded only its extra fields, and a valve has none - its
+  on/off never reached the history, so the hours on, the plant's bar and
+  the days' summaries stayed empty with real Shellys. Every MQTT switch
+  now records its on/off; the test builds the valve as the panel does.
+
 ## 1.0.0 - 2026-10-13
 
 The climate of a real home - Stanze and Bagni, the bypass, the

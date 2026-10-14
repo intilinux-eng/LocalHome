@@ -120,7 +120,10 @@ class MqttSwitchDriver(SwitchDriver):
         self.name = name
         self.poll_interval_seconds = poll_interval_seconds
         self._fields = fields or {}
-        self.history_fields = tuple(self._fields)
+        # Its on/off always recorded, beside any extra field: a valve's hours
+        # on, the plant's bar and the days' summaries are read from it - a
+        # Shelly valve has no extra field, and nothing at all was kept.
+        self.history_fields = ("is_on",) + tuple(f for f in self._fields if f != "is_on")
         self._command_topic = command_topic
         self._state_field = state_field
         self._payload_on = payload_on
