@@ -18,6 +18,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   one.
 
 ### Fixed
+- **The hours on can't come out short of a slow cycle.** Each history
+  sample stands for 30 seconds, but the recorder waited 30 seconds after
+  each cycle: one that wrote or pruned (up to 10 s on a big history) left
+  its hours short. The next sample is now due 30 seconds after the last one
+  began (measured on the board: 30.0 s apart already).
 - **A zone's minutes on count up without reloading the page.** Found
   cooling for a while: the minutes today, the day's strip and the last 24
   hours stayed put until a reload - the history is read every 5 minutes,

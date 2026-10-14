@@ -152,6 +152,41 @@ class FakeManager:
         self.pollers = pollers
 
 
+def test_a_slow_cycle_doesnt_stretch_the_interval(tmp_path, monkeypatch):
+    """Each sample stands for one interval - the hours on are the "on"
+    samples times it: a cycle that took 8 s (a write, a prune) waits 22 s
+    for the next, not 30, or those hours come out short; one longer than
+    the interval doesn't wait at all."""
+    store = HistoryStore(str(tmp_path / "history.db"))
+    recorder = HistoryRecorder(FakeManager({}), store, poll_interval_seconds=30)
+    clock = {"t": 1000.0}
+    cycles = iter([8, 8, 35])
+    waits = []
+
+    class Stop(Exception):
+        pass
+
+    def poll_once():
+        clock["t"] += next(cycles)
+
+    def sleep(seconds):
+        waits.append(seconds)
+        if len(waits) == 3:
+            raise Stop
+        clock["t"] += seconds
+
+    monkeypatch.setattr(recorder, "poll_once", poll_once)
+    monkeypatch.setattr("localhome.services.history.time.monotonic", lambda: clock["t"])
+    monkeypatch.setattr("localhome.services.history.time.sleep", sleep)
+    try:
+        with pytest.raises(Stop):
+            recorder._loop()
+    finally:
+        monkeypatch.undo()
+        store.close()
+    assert waits == [22, 22, 0]
+
+
 def test_poll_once_raises_on_a_failing_write_but_leaves_no_broken_state_behind(tmp_path):
     # _loop() (not exercised directly here - it's an unconditional `while
     # True`) wraps poll_once() in try/except and just retries next

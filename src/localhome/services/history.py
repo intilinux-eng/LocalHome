@@ -926,7 +926,13 @@ class HistoryRecorder:
                     logger.exception("Energy: couldn't work out %s's past days", name)
 
     def _loop(self) -> None:
+        # Each sample stands for one interval - the hours on are the "on"
+        # samples times it (on_stats(), run_days_of()): the next is due an
+        # interval after this one began, not after it ended, so a cycle that
+        # writes or prunes (up to PRUNE_SECONDS_PER_CYCLE) doesn't stretch it
+        # and leave those hours short.
         while True:
+            began = time.monotonic()
             try:
                 self.poll_once()
             except Exception:
@@ -937,7 +943,7 @@ class HistoryRecorder:
                 # about the app showing anything wrong. Same self-healing
                 # shape as ThermostatController/InterlockController's loops.
                 logger.exception("History recorder loop failed, will retry next interval")
-            time.sleep(self.poll_interval_seconds)
+            time.sleep(max(0.0, self.poll_interval_seconds - (time.monotonic() - began)))
 
     def poll_once(self) -> None:
         """One poll-everything-and-record cycle, split out of _loop() so a
