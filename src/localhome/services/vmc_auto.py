@@ -31,6 +31,9 @@ dry      winter only: the reference room's humidity under `dry_below_pct`
          (35% by default - the bottom of the comfortable band) - the night
          speed: in winter the outdoor air is very dry, and ventilating
          hard takes a house below it. Back when it's 3 points over again.
+         With the outdoor sensor, only while the outdoor dew point is under
+         the room's - air holding as much water as the room's dries
+         nothing once warmed; without it, as if it were.
 
 The adjustments never switch the unit on (off is someone's choice); a
 speed picked by hand - on the home page, in the Shelly app, on the
@@ -104,6 +107,7 @@ COOLING_STOP_DELTA_BY = 1.0     # the outdoor air this much less cool than the d
 COOLING_STOP_OUTDOOR_BY = 0.5   # the outdoor air this much under its floor
 COOLING_STOP_HUMID_BY = 0.5     # the outdoor dew point this much over the indoor one
 DRY_STOP_ABOVE_BY = 3           # the room this many points over dry_below_pct
+DRY_STOP_HUMID_BY = 0.5         # the outdoor dew point this much over the indoor one
 REASONS = ("shower", "humid", "dry", "cooling")   # in this order, the first under way wins
 
 
@@ -228,7 +232,7 @@ class VmcAutomation:
         self._shower(now, settings, bathroom)
         self._humid(settings, season, indoor, outdoor)
         self._cooling(settings, season, indoor, outdoor)
-        self._dry(settings, season, indoor)
+        self._dry(settings, season, indoor, outdoor)
         self.dismissed &= set(self.active())
 
     def _shower(self, now: float, settings: dict, bathroom: Air | None) -> None:
@@ -279,16 +283,25 @@ class VmcAutomation:
                             and t_out >= settings["cooling_outdoor_min_c"] and dew_out <= dew_in)
         self.last["cooling"] = {"outdoor": t_out, "indoor": t_in}
 
-    def _dry(self, settings: dict, season: str | None, indoor: Air | None) -> None:
+    def _dry(self, settings: dict, season: str | None, indoor: Air | None, outdoor: Air | None) -> None:
         if season != "heat" or not settings["dry"] or indoor is None:
             self.dry = False
             return
         rh = indoor.humidity_pct
+        # With the outdoor sensor, only while the air coming in is drier
+        # than the room's - its dew point lower: warmed to the room, air
+        # holding as much water dries nothing, and ventilating less would
+        # only cost fresh air. Without it, winter air is taken as dry.
+        dew_in = indoor.dew_point_c
+        dew_out = outdoor.dew_point_c if outdoor is not None else None
         if self.dry:
-            self.dry = rh < settings["dry_below_pct"] + DRY_STOP_ABOVE_BY
+            self.dry = rh < settings["dry_below_pct"] + DRY_STOP_ABOVE_BY \
+                and (dew_out is None or dew_out < dew_in + DRY_STOP_HUMID_BY)
         else:
-            self.dry = rh < settings["dry_below_pct"]
+            self.dry = rh < settings["dry_below_pct"] and (dew_out is None or dew_out < dew_in)
         self.last["dry"] = {"humidity": rh}
+        if dew_out is not None:
+            self.last["dry"].update(outdoor_dew=round(dew_out, 1), indoor_dew=round(dew_in, 1))
 
     def active(self) -> list[str]:
         return [r for r, on in (("shower", self.shower is not None), ("humid", self.humid), ("dry", self.dry),

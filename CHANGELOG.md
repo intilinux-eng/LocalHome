@@ -8,6 +8,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Changed
+- **"Aria troppo secca" looks at the outdoor air too.** With the outdoor
+  sensor, the VMC slows down for a dry house only while the air coming in
+  is drier than the room's - its dew point lower: on a mild, humid winter
+  day ventilating doesn't dry the house, and slowing down would only cost
+  fresh air. Without the sensor it goes by the room alone, as before. The
+  admin also says the threshold is the house's humidity, not the outdoor
+  one.
+
 ### Fixed
 - **A Shelly valve's hours on are recorded.** Found cooling for a
   while on the board with the zone's hours on still at 0: the Shelly

@@ -193,6 +193,28 @@ def test_winter_dry_air_the_night_speed_until_it_s_3_points_over_again():
     assert not automation.dry
 
 
+def test_dry_air_only_while_the_outdoor_air_is_drier_than_the_room():
+    """Asked looking at the admin: "shouldn't it compare with the outdoor
+    humidity?" A mild, foggy winter day - outdoor dew point 7.3 °C, the
+    room's 4.1 at 33% - brings in air wetter than the house: slowing down
+    wouldn't dry it less, only ventilate less."""
+    assert not summer((21, 33), (8, 95), season="heat").dry
+    automation = summer((21, 33), (2, 80), season="heat")
+    assert automation.dry
+    assert automation.last["dry"] == {"humidity": 33, "outdoor_dew": -1.1, "indoor_dew": 4.1}
+    summer((21, 33), (5, 93), automation, season="heat")
+    assert automation.dry, "the outdoor dew point (4.0) up to the indoor one is not enough to stop"
+    summer((21, 33), (6, 92), automation, season="heat")
+    assert not automation.dry, "4.8 against 4.1: stops"
+
+
+def test_dry_air_without_the_outdoor_sensor_goes_by_the_room_alone():
+    automation = VmcAutomation()
+    automation.observe(0, ALL_ON, "heat", None, Air(21, 33), None)
+    assert automation.dry
+    assert automation.last["dry"] == {"humidity": 33}
+
+
 def test_dry_air_only_in_winter_and_only_when_switched_on():
     assert not summer((26, 30), (28, 30)).dry, "summer"
     assert not summer((21, 30), (2, 80), settings={**ALL_ON, "dry": False}, season="heat").dry
