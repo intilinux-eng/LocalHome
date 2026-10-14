@@ -9,18 +9,18 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
-- **"Ore e consumi" exported as CSV.** Every month of the six years kept
+- **"Ore e consumi" exported as CSV.** Every month of every year shown
   - the plant's and each zone's hours, the meter's readings, the kWh they
   make, kWh per hour, the outdoor mean and degree days - for a
   spreadsheet, in the panel's language (Italian: ";" and decimal comma).
 
 ### Changed
-- **"Ore e consumi" opens every year kept.** The six years - this one and
-  the five before - can all be opened and their meter readings typed, the
-  empty ones too (greyed), for readings from the display or the bills;
-  before, only years with something and the one before. The card says how
-  it works: a report only, where the hours come from, what's typed, what's
-  kept; and "ore di 1 giorno", no longer "1 giorni".
+- **"Ore e consumi" starts from the year LocalHome began recording in.**
+  A board going into service shows its own year, none before - the year
+  before was always shown, empty - and each year shown opens to its meter
+  readings; up to six are kept. The card says how it works: a report
+  only, where the hours come from, what's typed, what's kept; and "ore di
+  1 giorno", no longer "1 giorni".
 - **"Aria troppo secca" looks at the outdoor air too.** With the outdoor
   sensor, the VMC slows down for a dry house only while the air coming in
   is drier than the room's - its dew point lower: on a mild, humid winter

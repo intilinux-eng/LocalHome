@@ -48,26 +48,25 @@ def _usage_answer(app: Flask, year=None) -> dict:
     """The admin panel's hours and consumption: `year` (this one by
     default) month by month beside the heat meter's values and the
     outdoor temperature, this month's kWh estimated for the season the
-    plant is in, the six years kept and those there's something for, and
-    this month's hours."""
+    plant is in, the years shown - from the first LocalHome recorded in -
+    and this month's hours."""
     zones = _valve_zones(app.config["THERMOSTAT"])
     history = app.config["HISTORY"]
     interval = app.config["HISTORY_POLL_INTERVAL"]
     meter = app.config["HEAT_METER"].get()
     today = date.today()
-    years = run_hours.years_of(today)
+    years = run_hours.years_of(history, meter, today)
     year = year if year in years else today.year
     thermostat = app.config["THERMOSTAT"]
     mode = thermostat.schedule_store.get_mode() if thermostat is not None else None
     report = run_hours.year_report(history, zones, interval, meter, year, mode=mode, outdoor=OUTDOOR_SENSOR_NAME)
     now = report if year == today.year else run_hours.year_report(history, zones, interval, meter, today.year)
-    return {"zones": [z["name"] for z in zones], "years": years,
-            "years_with_data": run_hours.years_with_data(history, meter, today), **report,
+    return {"zones": [z["name"] for z in zones], "years": years, **report,
             "this_month_hours": now["months"][-1]["plant_hours"]}
 
 
 def _usage_csv(app: Flask) -> tuple[str, str]:
-    """Every month of the six years kept, one row each: the hours - the
+    """Every month of the years shown, one row each: the hours - the
     plant's, each zone's, how many days they cover - beside the meter's
     values, the kWh they make, kWh per hour, the outdoor mean and degree
     days. In the panel's language, with its decimal mark and separator, so

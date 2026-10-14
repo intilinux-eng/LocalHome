@@ -261,28 +261,27 @@ def year_report(history: HistoryStore, zones: list[dict], interval: float, meter
                                     "last_kwh": total(lambda r: r["last_year"]["kwh"], both)} if both else None}}
 
 
-def years_of(today: date) -> list[int]:
-    """The six years kept, newest first: each one can be opened and its
-    meter values typed - the meter's display keeps the last 15 months, a
-    bill older ones - with hours or not (before LocalHome ran, none)."""
-    return list(range(today.year, first_year(today) - 1, -1))
-
-
-def years_with_data(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
-    """Of years_of(), those with hours or a meter value - the others are
-    shown empty, there to be filled in."""
+def years_of(history: HistoryStore, meter: dict[str, dict], today: date) -> list[int]:
+    """The years shown, newest first: from the first LocalHome recorded in
+    (or had a meter value typed for) to this one - a board going into
+    service starts with its own year, none before - and at most the six
+    kept, this one and the five before. Each one opens to its meter values."""
     first_day = first_run_day(history)
-    hours_from = int(first_day[:4]) if first_day else today.year
-    return [y for y in years_of(today) if y >= hours_from or any(k.startswith(f"{y}-") for k in meter)]
+    oldest_ts = history.oldest_ts()
+    firsts = [int(k[:4]) for k in meter] + ([int(first_day[:4])] if first_day else []) \
+        + ([datetime.fromtimestamp(oldest_ts).year] if oldest_ts is not None else [])
+    oldest = max(first_year(today), min([today.year, *firsts]))
+    return list(range(today.year, oldest - 1, -1))
 
 
 def kept_months(history: HistoryStore, zones: list[dict], interval: float, meter: dict[str, dict],
                 now: datetime | None = None, outdoor: str | None = None) -> list[dict]:
-    """Every month of the six years kept, oldest first, up to this one -
-    _rows' - for the CSV export: the hours beside the meter's values."""
+    """Every month of the years shown (years_of()), oldest first, up to this
+    one - _rows' - for the CSV export: the hours beside the meter's values."""
     now = now or datetime.now()
     today = now.date()
-    first = date(first_year(today), 1, 1)
+    years = years_of(history, meter, today)[::-1]
+    first = date(years[0], 1, 1)
     by_day = run_days_of(history, [z["valve"] for z in zones], FIELD, interval, first, now)
     temps = temp_days_of(history, outdoor, "temperature_c", interval, first, now) if outdoor else {}
-    return [row for year in years_of(today)[::-1] for row in _rows(by_day, temps, meter, zones, year, today)]
+    return [row for year in years for row in _rows(by_day, temps, meter, zones, year, today)]

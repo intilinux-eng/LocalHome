@@ -817,12 +817,9 @@ function renderUsage(data) {
   const zones = data.zones || [];
   setPill("usage-summary", data.this_month_hours
     ? pillHtml("idle", tr("climate_admin.usage_pill", { hours: usageNumber(data.this_month_hours, 0) })) : "");
-  // The six years kept, each one open to its meter values; one with nothing
-  // yet greyed, said so on a hover and to a screen reader.
-  const filled = new Set(data.years_with_data || data.years);
+  // From the first year LocalHome recorded in, each one open to its meter values.
   const years = `<div class="toolbar usage-years" role="group" aria-label="${t("usage_years")}">
-      ${data.years.map(y => `<button type="button" class="range-btn${y === data.year ? " active" : ""}${filled.has(y) ? "" : " usage-year-empty"}"
-        aria-pressed="${y === data.year}"${filled.has(y) ? "" : ` title="${t("usage_year_empty", { year: y })}" aria-label="${t("usage_year_empty", { year: y })}"`}
+      ${data.years.map(y => `<button type="button" class="range-btn${y === data.year ? " active" : ""}" aria-pressed="${y === data.year}"
         onclick="pickUsageYear(${y})">${y}</button>`).join("")}
     </div>`;
   const partial = r => (r.days_known && r.days_known < r.days

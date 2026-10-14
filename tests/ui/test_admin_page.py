@@ -217,10 +217,13 @@ def test_the_vmc_filters_are_set_here_and_cleaned_today(open_page, api):
 def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
     """A year's months beside the plant's hours; the meter's month-end
     values typed for the whole year at once, each month's kWh worked out;
-    a value below the month before's refused; this month still running."""
+    a value below the month before's refused; this month still running.
+    The years from the first with something: last year's January typed
+    already, so it's there - none before."""
     from datetime import date
     this_year = date.today().year
     last_year = this_year - 1
+    api("/api/climate-admin/heat-meter/year", {"year": last_year, "months": {"01": {"heat_kwh": 500}}})
     opened = open_page("/climate-admin", 390)
     page = opened.page
     try:
@@ -230,13 +233,7 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
         assert "finora" in page.inner_text("#usage .usage-table"), "this month, still running"
         assert "meno quella del mese prima" in page.inner_text("#usage .usage-legend"), "each column says what it holds"
         assert "Come funziona" in page.inner_text("#usage .usage-how")
-        # The six years kept, each one open to fill in; one with nothing yet greyed and said so.
-        years = page.locator("#usage .usage-years button")
-        assert years.all_inner_texts() == [str(y) for y in range(this_year, this_year - 6, -1)]
-        oldest = page.locator(f"#usage .usage-years button:has-text('{this_year - 5}')")
-        assert "usage-year-empty" in oldest.get_attribute("class") and "ancora niente" in oldest.get_attribute("title")
-        oldest.click()
-        assert eventually(page, lambda: page.locator(f"#usage button:has-text('Valori del contatore {this_year - 5}')").count() == 1)
+        assert page.locator("#usage .usage-years button").all_inner_texts() == [str(this_year), str(last_year)]
         with page.expect_download() as download:
             page.click("#usage a:has-text('Esporta CSV')")
         assert download.value.suggested_filename.startswith("ore-e-consumi-")

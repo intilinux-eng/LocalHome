@@ -217,16 +217,27 @@ def test_a_year_month_by_month_the_kwh_beside_the_plants_hours(store, tmp_path):
     # January and September: August's July is missing.
     assert (total["heat_kwh"], total["cool_kwh"], total["kwh"]) == (390.0, 0.0, 390.0)
     assert (total["plant_hours"], total["kwh_per_hour"], total["months_paired"]) == (181.0, 0.5, 1)
-    # The six years kept, each one open to its meter values; with something: this one, and 2025's December.
-    assert run_hours.years_of(NOW.date()) == [2026, 2025, 2024, 2023, 2022, 2021]
-    assert run_hours.years_with_data(store, meter.get(), NOW.date()) == [2026, 2025]
+    # From the first year with something - 2025's December - to this one.
+    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026, 2025]
 
-    # For the CSV: every month of the six years, oldest first, the same as the year's report.
+    # For the CSV: every month of those years, oldest first, the same as the year's report.
     kept = run_hours.kept_months(store, ZONES, STEP, meter.get(), now=NOW)
-    assert [r["month"] for r in kept][:2] == ["2021-01", "2021-02"] and kept[-1]["month"] == "2026-10"
-    assert len(kept) == 5 * 12 + 10
+    assert [r["month"] for r in kept][:2] == ["2025-01", "2025-02"] and kept[-1]["month"] == "2026-10"
+    assert len(kept) == 12 + 10
     assert {r["month"]: r for r in kept}["2026-09"] == {k: v for k, v in september.items() if k != "last_year"}
     assert {r["month"]: r for r in kept}["2025-12"]["heat_meter"] == 1000.0
+
+
+def test_the_years_start_from_the_one_localhome_began_recording_in(store, tmp_path):
+    """Asked going into service in October 2026: no 2021 to 2025 to scroll
+    through - its own year, then one more each year, six at most."""
+    meter = meter_at(tmp_path)
+    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026], "a new board: this year alone"
+    record(store, NOW.date(), (8, 9), stanze=[(8, 9)])
+    assert run_hours.years_of(store, meter.get(), NOW.date()) == [2026]
+    assert run_hours.years_of(store, meter.get(), date(2028, 2, 1)) == [2028, 2027, 2026], "a year more each year"
+    assert run_hours.years_of(store, meter.get(), date(2033, 2, 1)) == [2033, 2032, 2031, 2030, 2029, 2028], \
+        "six at most, as kept"
 
 
 ZONES_MAP = [
@@ -253,22 +264,19 @@ def test_the_routes(tmp_path):
         usage = c.get("/api/climate-admin/usage").get_json()
         this_year = date.today().year
         assert usage["zones"] == ["Stanze", "Bagni"] and usage["year"] == this_year
-        assert usage["years"] == list(range(this_year, this_year - 6, -1)), "the six kept, each one to fill in"
-        assert usage["years_with_data"] == [this_year]
+        assert usage["years"] == [this_year], "a new board: its own year, none before"
         assert len(usage["months"]) == date.today().month and usage["this_month_hours"] is not None
         post = lambda body: c.post("/api/climate-admin/heat-meter/year", json=body)
         refusal = post({"year": this_year - 1, "months": {"12": {"heat_kwh": "x"}}})
         assert refusal.status_code == 400 and refusal.get_json()["code"] == "heat_meter_value_invalid"
         assert refusal.get_json()["params"] == {"month": f"12/{this_year - 1}"}
         saved = post({"year": this_year - 1, "months": {"12": {"heat_kwh": 10}}}).get_json()
-        assert saved["year"] == this_year - 1 and saved["years_with_data"] == [this_year, this_year - 1]
+        assert saved["year"] == this_year - 1 and saved["years"] == [this_year, this_year - 1]
         assert saved["months"][-1]["heat_meter"] == 10
-        oldest = post({"year": this_year - 5, "months": {"03": {"heat_kwh": 4.5}}}).get_json()
-        assert oldest["year"] == this_year - 5 and this_year - 5 in oldest["years_with_data"], "the oldest kept, filled in"
         assert c.get(f"/api/climate-admin/usage?year={this_year - 1}").get_json()["year"] == this_year - 1
         assert c.get("/api/climate-admin/usage?year=1990").get_json()["year"] == this_year
 
-        # The CSV: every month kept, in the panel's language - its separator and decimal mark.
+        # The CSV: every month of the years shown, in the panel's language - its separator and decimal mark.
         res = c.get("/api/climate-admin/usage.csv")
         assert res.status_code == 200 and res.mimetype == "text/csv"
         assert "attachment" in res.headers["Content-Disposition"]
@@ -278,9 +286,8 @@ def test_the_routes(tmp_path):
         head = lines[0].split(";")
         assert head[:4] == ["Mese", "Giorni", "Giorni con le ore", "Impianto acceso (ore)"]
         assert head[4:6] == ["Stanze (ore)", "Bagni (ore)"] and head[-1] == "Nota"
-        assert len(lines) == 1 + 5 * 12 + date.today().month
+        assert len(lines) == 1 + 12 + date.today().month
         rows = {line.split(";")[0]: line.split(";") for line in lines[1:]}
-        assert rows[f"{this_year - 5}-03"][head.index("Lettura caldo (kWh)")] == "4,500"
         assert rows[f"{this_year - 1}-12"][head.index("Lettura caldo (kWh)")] == "10,000"
         assert rows[f"{this_year}-{date.today().month:02d}"][-1] == "mese in corso"
     finally:
