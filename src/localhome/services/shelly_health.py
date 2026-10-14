@@ -150,8 +150,15 @@ def expected_settings(integration) -> dict:
     power-on and Auto OFF (or ON) at the hold, which covers a restart of
     the Shelly itself. The bypass: its last state kept through anything
     - restored at power-on, no timer - so summer's closed stays closed.
-    Empty for anything that isn't a Shelly relay."""
+    The VMC's dimmer (its speed, with the levels): its last state kept
+    through a power cut, no timer - after a black-out the VMC runs on as
+    it was; "off at power-on" would leave the house unventilated until the
+    program's next change, which LocalHome can't tell from a hand's.
+    Empty for anything else."""
     options = integration.options or {}
+    if (getattr(integration, "kind", None), getattr(integration, "type", None)) == ("number", "shelly_light") \
+            and options.get("presets"):
+        return {"initial_state": "restore_last", "auto_off": 0, "auto_on": 0}
     if getattr(integration, "kind", None) != "switch" \
             or not str(options.get("command_topic") or "").endswith("/command/switch:0"):
         return {}
@@ -171,9 +178,10 @@ def expected_settings(integration) -> dict:
 
 def settings_wrong(expect: dict, config: dict) -> list[dict]:
     """The expected settings the device has otherwise, from its
-    Shelly.GetConfig: [{"key", "value", "expected"}]. A setting the device
-    doesn't report (another model, older firmware) isn't one."""
-    switch = config.get("switch:0") if isinstance(config.get("switch:0"), dict) else {}
+    Shelly.GetConfig: [{"key", "value", "expected"}] - a relay's switch, a
+    dimmer's light. A setting the device doesn't report (another model,
+    older firmware) isn't one."""
+    switch = next((config[key] for key in ("switch:0", "light:0") if isinstance(config.get(key), dict)), {})
     mqtt = config.get("mqtt") if isinstance(config.get("mqtt"), dict) else {}
 
     def timer(enabled, delay):

@@ -313,7 +313,9 @@ come: sezione 6.</p>
       <strong>filtri</strong> (avviso 14 giorni prima): sezione 20. La AERA 320 gira anche al 5%, a 0% si spegne.</li>
   <li><strong>Fuori casa</strong>: Minimo, Notte (di serie) o Spenta, scelta nel foglio. Vince su tutto, dall'app Shelly torna
       com'era entro un minuto, al rientro riprende il suo programma. Spenta risparmia, ma l'aria ristagna.</li>
-  <li>Un riavvio della scheda non la tocca: resta alla velocità che aveva.</li>
+  <li>Se la scheda si ferma o si riavvia, la VMC resta alla velocità che aveva: nessun timer, ventilare non è mai un rischio.
+      Dopo un black-out riparte com'era (impostazioni nella sezione 19); quando LocalHome riparte, rimette la velocità della
+      fascia in corso.</li>
 </ul>
 <div class="keep">
 <h3>La VMC: Maico AERA 320</h3>
@@ -416,8 +418,8 @@ con la sua acqua sui relè veri (13/10).</p>
       c'è</td><td>Scheda ferma, rete o Wi-Fi giù</td></tr>
   <tr><td>Spegnimento automatico</td><td>Lo stesso tempo impostato nell'app (sezione 14): 15 minuti, il deumidificatore
       8</td><td>Uno Shelly acceso da altri, o riavviato</td></tr>
-  <tr><td>Stato all'accensione</td><td>Valvole e deumidificatore ripartono spenti; il bypass com'era. Le valvole le riapre
-      LocalHome se servono, il deumidificatore resta spento finché non lo si riaccende</td><td>Black-out</td></tr>
+  <tr><td>Stato all'accensione</td><td>Valvole e deumidificatore ripartono spenti; il bypass e la VMC com'erano. Le valvole
+      le riapre LocalHome se servono, il deumidificatore resta spento finché non lo si riaccende</td><td>Black-out</td></tr>
   <tr><th colspan="3">In LocalHome - a ogni ciclo, ogni 60 secondi</th></tr>
   <tr><td>Stato vero dei relè</td><td>Rilegge cosa fa davvero ogni Shelly: cambiato dall'app, torna com'era entro un
       minuto</td><td>Comandi da altri, comandi persi</td></tr>
@@ -750,7 +752,17 @@ stesso della sezione 15, con queste come giuste.</p>
 </div>
 
 <h2 id="s19">19. Dimmer Gen3 (VMC)</h2>
-<p>MQTT come nella sezione 13, poi ID o prefisso in admin → Dispositivi → VMC. Come lavora: sezione 4.</p>
+<p>MQTT come nella sezione 13, poi ID o prefisso in admin → Dispositivi → VMC. Come lavora: sezione 4. Nell'app:</p>
+<table>
+  <tr><th>Impostazione</th><th>Scegli</th></tr>
+  <tr><td>Stato all'accensione</td><td class="value">"…per ripristinare l'ultima modalità"</td></tr>
+  <tr><td>Accensione automatica</td><td class="value">spenta</td></tr>
+  <tr><td>Spegnimento automatico</td><td class="value">spento</td></tr>
+</table>
+<div class="box"><strong>Perché.</strong> Dopo un black-out la VMC riparte alla velocità che aveva. Con "spegnersi
+all'accensione" la casa resterebbe senza ricambio d'aria fino al cambio di fascia dopo: LocalHome non distingue un black-out
+da chi la spegne apposta. Un timer la spegnerebbe da sola. Il controllo delle impostazioni è lo stesso della sezione 15, con
+queste come giuste.</div>
 <p>Sulla Maico AERA 320 il segnale va all'ingresso 1-10 V / 0-10 V (schema 3 del manuale): <strong>jumper in posizione 1-10V</strong>,
 trimmer <strong>MIN al minimo e MAX al massimo</strong>, così tutta la scala segue il segnale e le percentuali di Notte, Giorno e
 Massimo (sezione 20) sono quelle vere.</p>

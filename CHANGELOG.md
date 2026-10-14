@@ -15,6 +15,12 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   on/off never reached the history, so the hours on, the plant's bar and
   the days' summaries stayed empty with real Shellys. Every MQTT switch
   now records its on/off; the test builds the valve as the panel does.
+- **The VMC's dimmer is checked for keeping its state through a power
+  cut.** Set to "off at power-on" it would leave the house unventilated
+  after a black-out until the program's next change; the admin now says
+  so, like a valve's relay set otherwise, and the installer's guide says
+  how to set it; the admin's VMC note says what the VMC does when the
+  board stops.
 
 ## 1.0.0 - 2026-10-13
 

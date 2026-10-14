@@ -34,6 +34,10 @@ def role_integration(role: str, device_id: str) -> Integration | None:
     if role in ("dehumidifier", "bypass"):
         key = "dehumidifier_device_id" if role == "dehumidifier" else "bypass_valve_device_id"
         return panel.build_extra_switch_integrations({key: device_id}, "mqtt_broker.json")[0]
+    if role == "vmc":
+        # Its speed, the one with the levels: what a dimmer's settings follow.
+        return next(i for i in panel.build_extra_dimmer_integrations({"vmc_device_id": device_id}, "mqtt_broker.json")
+                    if i.kind == "number")
     return None
 
 

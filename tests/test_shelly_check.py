@@ -55,6 +55,15 @@ def test_the_bypass_is_checked_for_keeping_its_state(tmp_path):
     assert [(s["key"], s["expected"]) for s in wrong] == [("in_mode", "detached"), ("initial_state", "restore_last")]
 
 
+def test_the_vmcs_dimmer_is_checked_for_keeping_its_state(tmp_path):
+    """Its id typed in the admin: a dimmer that would come back off after a
+    power cut is said at once, like a relay set otherwise."""
+    config = {"light:0": {"id": 0, "initial_state": "off", "auto_on": False, "auto_off": False}}
+    check, _ = _check(tmp_path, FakeRpc(config=config))
+    wrong = check.check(RELAY, "vmc")["settings_wrong"]
+    assert wrong == [{"key": "initial_state", "value": "off", "expected": "restore_last"}]
+
+
 def test_a_silent_device_says_so(tmp_path):
     check, _ = _check(tmp_path, FakeRpc(silent=True))
     result = check.check(RELAY, "dehumidifier")
