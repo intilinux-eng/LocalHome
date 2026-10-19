@@ -9,6 +9,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **The installer's guide has a "23. Aggiornamenti futuri" section**:
+  ideas for coming versions, said as not yet tried nor handled by
+  LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four
+  Shelly 1 Gen3, with its wiring.
 - **The outdoor sensor's batteries said running down, on its tile.** The
   zones' sensors said "change them soon" at 20% on their cards; the
   outdoor one, with no card, only got the admin's "battery low" at 10%.

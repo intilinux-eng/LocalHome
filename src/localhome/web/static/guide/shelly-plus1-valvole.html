@@ -139,6 +139,8 @@ software lo forniamo noi.</p>
     <a href="#s20">20. Regolazioni nell'admin</a><a href="#s21">21. Rinominare uno Shelly</a></div>
   <div><strong>Quando qualcosa non va</strong>
     <a href="#s22">22. Cosa vedi, cosa fare</a></div>
+  <div><strong>Più avanti</strong>
+    <a href="#s23">23. Aggiornamenti futuri</a></div>
 </nav>
 
 <div class="keep">
@@ -851,6 +853,73 @@ nell'app non arriva niente.</div>
       oltre il comando a tempo (sezione 6): guarda corrente e rete</td><td>al ritorno</td></tr>
 </table>
 <p>La home al più tardi un minuto dopo l'admin. Misurato sulla scheda di produzione, 8–13 ottobre 2026.</p>
+
+<h2 id="s23">23. Aggiornamenti futuri</h2>
+<p>Idee valutate per le prossime versioni: <strong>non ancora provate e non ancora gestite da LocalHome</strong>.
+Servono a capire dove si può andare, non a installare oggi.</p>
+<div class="keep">
+<h3>Uno Shelly Pro 4PM al posto dei quattro Shelly 1</h3>
+<div class="box warn"><strong>Non ancora provato, e non ancora gestito da LocalHome.</strong> Oggi ogni valvola, il bypass e il
+deumidificatore usano il canale 0 di uno Shelly diverso: per usare i quattro canali di un solo Pro 4PM LocalHome va prima
+esteso (la scelta del canale nel pannello, il controllo delle impostazioni per canale). Fino ad allora restano i quattro Shelly 1
+Gen3 della sezione 11.</div>
+<p>Un solo modulo su barra DIN, in un quadretto vicino al collettore: una sola alimentazione, morsetti a vite, presa di rete
+(Ethernet) oltre al Wi-Fi, e la misura dei consumi su ogni uscita - utile in futuro per accorgersi di una valvola che, accesa,
+non assorbe niente. Il comando a tempo (sezione 6) funziona per ogni canale come per gli Shelly 1. Lo svantaggio: è un unico
+dispositivo per tutte e quattro le uscite, se si guasta si fermano insieme.</p>
+<div class="diagram" role="img" aria-label="Schema non provato: fase e neutro dell'impianto ai morsetti L e N dello Shelly Pro 4PM; le uscite O1, O2, O3 e O4 alla fase di valvola Stanze, valvola Bagni, bypass e deumidificatore; i neutri dei carichi al neutro dell'impianto; S1-S4 liberi">
+<svg viewBox="0 0 560 330" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="17">
+  <text x="10" y="24" font-weight="700">Impianto 230 V (non provato)</text>
+  <rect x="60" y="40" width="440" height="80" rx="10" fill="#f3f4f6" stroke="#1f2328" stroke-width="2"/>
+  <text x="280" y="70" text-anchor="middle" font-weight="700">Shelly Pro 4PM (barra DIN)</text>
+  <g font-weight="700" text-anchor="middle" font-size="15">
+    <text x="90" y="108">N</text><text x="150" y="108">L</text>
+    <text x="250" y="108">O1</text><text x="320" y="108">O2</text><text x="390" y="108">O3</text><text x="460" y="108">O4</text>
+  </g>
+  <g fill="#fff" stroke="#1f2328" stroke-width="2">
+    <circle cx="90" cy="120" r="8"/><circle cx="150" cy="120" r="8"/>
+    <circle cx="250" cy="120" r="8"/><circle cx="320" cy="120" r="8"/><circle cx="390" cy="120" r="8"/><circle cx="460" cy="120" r="8"/>
+  </g>
+  <line x1="10" y1="170" x2="150" y2="170" stroke="#8a4b1f" stroke-width="5"/>
+  <text x="10" y="162" fill="#8a4b1f" font-weight="600">Fase</text>
+  <line x1="150" y1="128" x2="150" y2="170" stroke="#8a4b1f" stroke-width="5"/>
+  <line x1="10" y1="300" x2="540" y2="300" stroke="#1f5fbf" stroke-width="5"/>
+  <text x="10" y="324" fill="#1f5fbf" font-weight="600">Neutro</text>
+  <line x1="90" y1="128" x2="90" y2="300" stroke="#1f5fbf" stroke-width="5"/>
+  <g stroke="#8a4b1f" stroke-width="5">
+    <line x1="250" y1="128" x2="250" y2="200"/><line x1="320" y1="128" x2="320" y2="200"/>
+    <line x1="390" y1="128" x2="390" y2="200"/><line x1="460" y1="128" x2="460" y2="200"/>
+  </g>
+  <g fill="#fff" stroke="#1f2328" stroke-width="2">
+    <rect x="218" y="200" width="64" height="60" rx="8"/><rect x="288" y="200" width="64" height="60" rx="8"/>
+    <rect x="358" y="200" width="64" height="60" rx="8"/><rect x="428" y="200" width="64" height="60" rx="8"/>
+  </g>
+  <g text-anchor="middle" font-size="13" font-weight="700">
+    <text x="250" y="226">Valvola</text><text x="250" y="244">Stanze</text>
+    <text x="320" y="226">Valvola</text><text x="320" y="244">Bagni</text>
+    <text x="390" y="234">Bypass</text>
+    <text x="460" y="226">Deumi-</text><text x="460" y="244">dificatore</text>
+  </g>
+  <g stroke="#1f5fbf" stroke-width="5">
+    <line x1="250" y1="260" x2="250" y2="300"/><line x1="320" y1="260" x2="320" y2="300"/>
+    <line x1="390" y1="260" x2="390" y2="300"/><line x1="460" y1="260" x2="460" y2="300"/>
+  </g>
+</svg>
+</div>
+<table>
+  <tr><th>Morsetto</th><th>Cosa ci va</th></tr>
+  <tr><td>N / L</td><td>Neutro e fase dell'impianto. Se il modulo ha più morsetti L (uno per gruppo di canali), con un'unica linea
+      si collegano tra loro: segui lo schema del foglietto della tua versione (V1 o V2, i morsetti delle uscite sono diversi).</td></tr>
+  <tr><td>O1 - O4</td><td>La fase di valvola Stanze, valvola Bagni, bypass e deumidificatore: le uscite portano già la fase, nessun
+      ponte come sullo Shelly 1.</td></tr>
+  <tr><td>Neutri dei carichi</td><td>Al neutro dell'impianto (una barra o un morsetto nel quadretto), non allo Shelly.</td></tr>
+  <tr><td>Terra</td><td>Dei carichi che ce l'hanno (deumidificatore), alla terra dell'impianto.</td></tr>
+  <tr><td>S1 - S4</td><td>Liberi.</td></tr>
+</table>
+<p>La corrente: le valvole assorbono pochi watt, il deumidificatore qualche ampere (la sua targhetta); controlla sulla scheda
+tecnica la corrente massima per canale e quella totale del modulo. La linea, l'interruttore magnetotermico e la sezione dei cavi
+li dimensiona l'elettricista come per qualunque circuito di casa.</p>
+</div>
 
 <footer>LocalHome - 13 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.
 Dati dell'H&amp;T Gen3 dalla <a href="https://kb.shelly.cloud/knowledge-base/shelly-h-t-gen3">scheda Shelly</a>.</footer>
