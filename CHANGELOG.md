@@ -9,6 +9,13 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **The outdoor sensor's batteries said running down, on its tile.** The
+  zones' sensors said "change them soon" at 20% on their cards; the
+  outdoor one, with no card, only got the admin's "battery low" at 10%.
+  Its tile in the home page now says it at the same 20% and 10%.
+- **The H&T sensors' battery volts kept in the history**, beside the
+  percent: the percent moves in whole steps and with the cold, the volts
+  show how fast the batteries really go down.
 - **A Meross plug's past days come back from the plug itself.** It keeps
   about a month of daily kWh (what the Meross app shows): LocalHome reads
   them once a day and writes each past day as the plug counted it - the

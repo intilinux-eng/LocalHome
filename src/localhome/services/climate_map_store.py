@@ -433,17 +433,22 @@ def _shelly_sensor_options(zone: dict, sensor_name: str, broker_file: str) -> di
             "temperature_c": "tC",
             "humidity_pct": "rh",
             "battery_pct": "battery.percent",
+            # The volts too: the percent comes in whole steps and moves with
+            # the cold - the volts show the batteries' trend (4 AA: about
+            # 6 V new, 4.4 V spent).
+            "battery_v": "battery.V",
             "wifi_rssi_dbm": "rssi",
             # Powered over USB-C: its battery isn't what keeps it going, and
             # isn't shown (web/routes/climate.py's zones).
             "external_power": "external.present",
         },
         # The numbers only, as before: whether it's on USB isn't history.
-        "history_fields": ["temperature_c", "humidity_pct", "battery_pct", "wifi_rssi_dbm"],
+        "history_fields": ["temperature_c", "humidity_pct", "battery_pct", "battery_v", "wifi_rssi_dbm"],
         # What an H&T Gen3 can measure, with room to spare: anything else is
         # a failing element, not the room (-127 °C, 0 %). Without a valid
         # temperature the sensor isn't "ok" - the thermostat's safe path.
-        "valid_ranges": {"temperature_c": [-30, 70], "humidity_pct": [1, 100], "battery_pct": [0, 100]},
+        "valid_ranges": {"temperature_c": [-30, 70], "humidity_pct": [1, 100], "battery_pct": [0, 100],
+                         "battery_v": [0, 10]},
         "required_fields": ["temperature_c"],
         # 4h - just under 2x the 2h heartbeat these devices promise
         # (confirmed live overnight: both real H&T sensors landed every

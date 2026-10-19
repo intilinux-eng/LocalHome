@@ -490,6 +490,35 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
 
 
+def test_the_outdoor_sensors_batteries_are_said_running_down(open_page):
+    """Asked on the board: the zones' sensors say "change them soon" at 20%,
+    the outdoor one - no card of its own - only got the admin's "battery
+    low" at 10%. Now its tile says it too, at the same levels; not on
+    USB-C, and nothing at all above 20%."""
+    opened = open_page("/", 390)
+    page = opened.page
+    tile = page.locator("#outdoor-chip")
+    battery = {"pct": 18, "usb": False}
+
+    def with_battery(route):
+        response = route.fetch()
+        data = response.json()
+        data["readings"].setdefault("Outdoor Sensor", {}).update(
+            ok=True, temperature_c=12.0, battery_pct=battery["pct"], external_power=battery["usb"])
+        route.fulfill(response=response, json=data)
+    page.route("**/api/readings", with_battery)
+    page.reload()
+    note = tile.locator(".outdoor-battery")
+    assert eventually(page, lambda: note.count() == 1)
+    assert note.get_attribute("data-level") == "soon" and "18%" in note.inner_text()
+    for pct, usb, level in ((8, False, "now"), (45, False, None), (8, True, None)):
+        battery.update(pct=pct, usb=usb)
+        page.reload()
+        page.wait_for_selector("#outdoor-chip .outdoor-value", timeout=20000)
+        assert eventually(page, lambda: (note.get_attribute("data-level") if note.count() else None) == level), (pct, usb)
+    assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
 def test_the_season_and_the_health_chips_say_it_in_plain_words(open_page, api):
     """Seen using it as a resident: both chips led into the admin pages.
     Now each opens a sheet - what the season does and who changes it;

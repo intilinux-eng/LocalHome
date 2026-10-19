@@ -127,8 +127,17 @@ function renderOutdoor() {
     // The zones' bar: lowest to highest, a ring where it is now.
     range = rangeBarHtml(today, reading.temperature_c, said, "outdoor-range");
   }
+  // Its batteries running down, said as a zone's are (zones.js's
+  // sensorNoteHtml(), the same levels): it has no card of its own, and the
+  // admin's "battery low" only comes at 10%.
+  let battery = "";
+  if (!reading.external_power && reading.battery_pct != null && reading.battery_pct <= BATTERY_SOON_PCT) {
+    const level = reading.battery_pct <= BATTERY_NOW_PCT ? "now" : "soon";
+    battery = `<span class="outdoor-battery" data-level="${level}">${ICONS.battery}${esc(tr(level === "now"
+      ? "home.battery_now" : "home.battery_soon", { pct: Math.round(reading.battery_pct) }))}</span>`;
+  }
   morph(chip, `${label}
-    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}`);
+    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}${battery}`);
 }
 
 const ICONS = {

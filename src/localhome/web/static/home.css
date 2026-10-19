@@ -278,6 +278,11 @@ body[data-offline="true"] :is(.hero-main, .outdoor, .zones, .plant, .tiles) { op
 .outdoor-range b { color: var(--text); }
 .outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
 .outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
+/* The outdoor sensor's batteries running down - a zone's sensor-note, small. */
+.outdoor-battery { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 10px; border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.8rem; line-height: 1.3; }
+.outdoor-battery[data-level="now"] { background: color-mix(in srgb, var(--warn) 22%, transparent); font-weight: 600; }
+.outdoor-battery svg { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .hero-season {
   display: flex;
   align-items: center;
