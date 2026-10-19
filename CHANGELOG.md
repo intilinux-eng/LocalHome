@@ -13,6 +13,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   ideas for coming versions, said as not yet tried nor handled by
   LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four
   Shelly 1 Gen3, with its wiring.
+- **The guide suggests the Shellys' Eco mode** (section 14), recommended
+  and not required: measured on the board, a relay ON in a shared box from
+  73 to 43 °C, about a tenth of a second more to answer, no command lost.
+  Best with a good Wi-Fi signal; left off on a weak one (the VMC's dimmer
+  far from the router). LocalHome doesn't check it.
 - **The outdoor sensor's batteries said running down, on its tile.** The
   zones' sensors said "change them soon" at 20% on their cards; the
   outdoor one, with no card, only got the admin's "battery low" at 10%.

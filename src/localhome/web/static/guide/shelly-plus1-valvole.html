@@ -659,6 +659,15 @@ con quelle qui sotto si riaprirebbe ogni 15 minuti.</div>
   <tr><td>Spegnimento automatico</td><td class="value">attivo, 00:15:00 - il deumidificatore <strong>00:08:00</strong></td></tr>
   <tr><td>Pulsante o interruttore</td><td>indifferente (SW è libero)</td></tr>
 </table>
+<div class="box"><strong>Consigliato, non obbligatorio: la modalità Eco</strong> (nell'app, impostazioni del dispositivo). Lo
+Shelly lavora più piano e il Wi-Fi riposa tra un messaggio e l'altro: molto meno caldo, soprattutto se è chiuso in una scatola
+con altri. Misurato sulla scheda di produzione (ottobre 2026), quattro Shelly 1 Gen3 nella stessa scatola: col relè acceso da
+<strong>73 a 43 °C</strong>, spento da circa 60 a 35 °C. Il prezzo è circa un decimo di secondo in più per rispondere a un
+comando - nulla, per un termostato che decide ogni minuto: nessun comando perso sui relè veri, provato con aperture, chiusure,
+fuori casa e soglie. Vale soprattutto con un buon segnale Wi-Fi, lo Shelly vicino al router: con un segnale debole (sotto
+-75 dBm, sezione 16) il Wi-Fi che riposa può fare perdere o ritardare messaggi, ed è meglio lasciarla spenta. Per questo non la
+attivare sul dimmer della VMC se è lontano dal router. LocalHome non la controlla e non la segnala: le impostazioni della
+tabella qui sopra sì.</div>
 
 <h2 id="s15">15. In LocalHome</h2>
 <p>Su una scheda nuova (o dopo <em>Reset di fabbrica</em>) ci sono già Stanze, Bagni e tutti gli Shelly,
