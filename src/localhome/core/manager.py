@@ -137,7 +137,9 @@ class DeviceManager:
             return {"ok": False, "error": f"unknown sensor '{name}'"}
         return poller.get()
 
-    def notify(self, text: str) -> bool:
+    def notify(self, text: str, key: str | None = None, **params) -> bool:
+        """An alert to whoever is told (the Telegram bot's chats): `key`
+        names it for a channel that says it in the board's language."""
         if self.notifier is None:
             return False
-        return self.notifier.send(text)
+        return self.notifier.send_event(key, params, text) if key else self.notifier.send(text)

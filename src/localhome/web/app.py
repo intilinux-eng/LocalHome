@@ -51,6 +51,8 @@ from localhome.services.interlock import (
 )
 from localhome.services.service_watchdog import ServiceWatchdog
 from localhome.services import system_status
+from localhome.services.telegram_bot import NotifiedStore, TelegramBot, TelegramStore
+from localhome.services.telegram_replies import Replies
 from localhome.services.thermostat import ScheduleStore, ThermostatController, Zone
 from localhome.services import vmc_speeds
 from localhome.services.energy import EnergyLedger
@@ -517,6 +519,7 @@ def create_app(config_path: str | None = None) -> Flask:
         manual_override_path,
         config.resolve("mqtt_state_cache.json"),
         config.resolve("panel_settings.json"),
+        config.resolve("telegram_notified.json"),
         positions_path,
     ]
     if thermostat is not None:
@@ -530,6 +533,15 @@ def create_app(config_path: str | None = None) -> Flask:
     )
 
     register_routes(app)
+    # The board's own Telegram bot, set up in the admin panel - idle until
+    # it has a token. The alerts' channel too (the power budget's), unless
+    # config.yaml names another. See services/telegram_bot.py.
+    telegram = TelegramBot(TelegramStore(config.resolve(config.telegram_file)), Replies(app),
+                           NotifiedStore(config.resolve("telegram_notified.json")))
+    app.config["TELEGRAM"] = telegram
+    if manager.notifier is None:
+        manager.notifier = telegram
+    telegram.start()
     # The UNO Q's LED matrix: health at a glance for whoever is standing
     # in front of the box - off by itself on anything that isn't a UNO Q
     # (no arduino-router socket). See services/led_matrix.py.

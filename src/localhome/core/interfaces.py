@@ -106,3 +106,9 @@ class Notifier(ABC):
 
     @abstractmethod
     def send(self, text: str) -> bool: ...
+
+    def send_event(self, key: str, params: dict, text: str) -> bool:
+        """An alert with a key of its own (bot.<key> in the locale files):
+        a channel that speaks the board's language says it in its words,
+        any other sends the English `text`."""
+        return self.send(text)

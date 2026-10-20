@@ -16,6 +16,7 @@ from localhome.core.manager import DeviceManager
 from localhome.core.registry import skipped_driver_modules
 from localhome.services import panel_settings
 from localhome.services.climate_map_store import apply_to_config, open_climate_map, setup_todo
+from localhome.services.telegram_bot import TelegramStore
 from localhome.services.thermostat import ScheduleStore
 
 
@@ -105,7 +106,11 @@ def _run_doctor(config: LocalHomeConfig, manager: DeviceManager, thermostat_cfg:
         print(f"Thermostat zones: {len(thermostat_cfg.get('zones', []))} ({', '.join(state)})")
     if todo:
         print(f"Shellys to configure in the admin panel ({len(todo)}): {', '.join(item['name'] for item in todo)}")
-    print(f"Notifier configured: {'yes' if manager.notifier else 'no'}")
+    telegram = TelegramStore(config.resolve(config.telegram_file)).get()
+    print(f"Telegram bot: {'connected' if telegram['bot_token'] else 'not set up'} "
+          f"({len(telegram['chats'])} chat(s) authorized) - set up in the admin panel")
+    if manager.notifier is not None:
+        print("Other notifier configured: yes")
     # Not a problem on its own - an optional driver nobody configured is
     # expected to be missing. One that *is* configured already fails
     # above, with the same install command in its error.

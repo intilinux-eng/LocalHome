@@ -41,7 +41,8 @@ def test_every_parameter_a_text_uses_is_one_the_code_can_send(lang):
     """A text naming {zone} for a code that never sends it would show the
     placeholder itself."""
     texts = json.loads((LOCALES / f"{lang}.json").read_text(encoding="utf-8"))["errors"]
-    allowed = {"zone", "count", "max", "value", "key", "label", "choices", "min", "length", "period", "name", "month"}
+    allowed = {"zone", "count", "max", "value", "key", "label", "choices", "min", "length", "period", "name", "month",
+               "detail"}
     for code, text in texts.items():
         assert set(re.findall(r"\{(\w+)\}", text)) <= allowed, code
 

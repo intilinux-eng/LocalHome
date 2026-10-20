@@ -1109,9 +1109,10 @@ class HistoryRecorder:
         threshold = self.power_budget.available_power_w
         if power_w >= threshold:
             if not self._alert_active or (now - self._last_alert_ts) >= self.alert_cooldown_seconds:
-                self.manager.notify(f"High power draw: {power_w:.0f} W (safe limit {threshold:.0f} W)")
+                self.manager.notify(f"High power draw: {power_w:.0f} W (safe limit {threshold:.0f} W)",
+                                    "power_high", power=round(power_w), limit=round(threshold))
                 self._last_alert_ts = now
             self._alert_active = True
         elif self._alert_active:
-            self.manager.notify(f"Power draw back to normal: {power_w:.0f} W")
+            self.manager.notify(f"Power draw back to normal: {power_w:.0f} W", "power_normal", power=round(power_w))
             self._alert_active = False

@@ -19,7 +19,7 @@ integrations:
 
 notifications:
   type: telegram
-  secrets_file: "secrets_telegram.json"
+  secrets_file: "telegram_bot.json"
 
 energy:
   sensor: "Home Power Meter"
@@ -36,8 +36,17 @@ energy:
     assert len(config.integrations) == 1
     assert config.integrations[0].kind == "cover"
     assert config.integrations[0].options["devices_file"] == "devices.json"
-    assert config.notifier.type == "telegram"
+    # Telegram is the board's bot, not a second sender: only its file.
+    assert config.notifier is None and config.telegram_file == "telegram_bot.json"
     assert config.raw["energy"]["contract_limit_w"] == 3000
+
+
+def test_without_notifications_the_bot_keeps_its_file_next_to_the_config(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("integrations: []\n", encoding="utf-8")
+    config = load_config(config_path)
+    assert config.notifier is None
+    assert config.resolve(config.telegram_file) == str(tmp_path / "secrets_telegram.json")
 
 
 def test_relative_paths_resolve_against_the_config_files_own_directory(tmp_path):

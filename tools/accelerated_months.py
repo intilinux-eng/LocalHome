@@ -198,11 +198,12 @@ def _no_threads() -> callable:
     from localhome.services.led_matrix import LedMatrixService
     from localhome.services.shelly_health import ShellyHealth
     from localhome.services.system_status import WriteRate
+    from localhome.services.telegram_bot import TelegramBot
     from localhome.services.thermostat import ThermostatController
     from localhome.services.vmc_schedule import VmcScheduleController
 
     classes = (DeviceManager, HistoryRecorder, ThermostatController, InterlockController, VmcScheduleController,
-               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService)
+               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService, TelegramBot)
     saved = {cls: cls.__dict__["start"] for cls in classes}
     for cls in classes:
         cls.start = lambda self, *args, **kwargs: None

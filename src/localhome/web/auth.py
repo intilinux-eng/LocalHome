@@ -34,6 +34,11 @@ def register_auth(app: Flask, secrets_file: str) -> None:
 
     @app.before_request
     def _require_auth():
+        # The board's own Telegram bot, calling these endpoints in-process
+        # (services/telegram_replies.py): a WSGI key no HTTP request can
+        # set - headers arrive as HTTP_*.
+        if request.environ.get("localhome.internal"):
+            return None
         auth = request.authorization
         if auth and auth.username and auth.password and is_valid(auth.username, auth.password):
             return None

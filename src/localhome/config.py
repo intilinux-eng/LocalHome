@@ -36,6 +36,9 @@ class LocalHomeConfig:
     integrations: list[Integration]
     notifier: Integration | None
     raw: dict
+    # The board's Telegram bot: its token and chats, set from the admin
+    # panel - see services/telegram_bot.py.
+    telegram_file: str = "secrets_telegram.json"
 
     def resolve(self, relative_path: str) -> str:
         """Resolve a config-relative path against the directory the
@@ -74,14 +77,18 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
         if entry.get("enabled", True) is not False
     ]
 
+    # Telegram is the board's own bot, set up in the admin panel: a
+    # `notifications: {type: telegram}` from before it only says where its
+    # file is - a second sender would say everything twice.
     notifications = raw.get("notifications")
+    telegram = bool(notifications) and notifications.get("type") == "telegram"
     notifier = (
         Integration(
             kind="notifier",
             type=notifications["type"],
             options={k: v for k, v in notifications.items() if k != "type"},
         )
-        if notifications
+        if notifications and not telegram
         else None
     )
 
@@ -93,4 +100,5 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
         integrations=integrations,
         notifier=notifier,
         raw=raw,
+        telegram_file=(notifications.get("secrets_file") if telegram else None) or "secrets_telegram.json",
     )

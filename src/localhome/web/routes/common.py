@@ -55,6 +55,10 @@ _DEVICE_WORDS = (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"),
 
 
 def _who(req) -> str:
+    # The board's Telegram bot, for whoever pressed: "Telegram (Antonio)".
+    telegram = req.environ.get("localhome.telegram_from")
+    if telegram is not None:
+        return f"Telegram ({telegram})" if telegram else "Telegram"
     agent = req.headers.get("User-Agent", "")
     device = next((name for word, name in _DEVICE_WORDS if word in agent), None)
     address = req.remote_addr or "?"
