@@ -3416,6 +3416,200 @@ function watchDeviceRows() {
   }, true);
 }
 
+// ------------------------------------------------------------ Telegram ----
+// The board's own bot (services/telegram_bot.py): connected with the token
+// from @BotFather, then the chats that wrote to it authorized - each told
+// the problems or not, allowed to change things or only to look. Read
+// again every few seconds while the section is open: a chat that just
+// pressed Start in the bot shows up by itself.
+const TELEGRAM_POLL_MS = 4000;
+let telegramTimer = null;
+let telegramChangingToken = false;
+
+async function loadTelegram() {
+  try {
+    const res = await fetch("/api/climate-admin/telegram", { cache: "no-store" });
+    const data = await res.json();
+    if (data.ok) renderTelegram(data);
+  } catch (e) {
+    // Kept as it was: the next read.
+  }
+}
+
+function telegramStatusText(data) {
+  if (!data.configured) return tr("climate_admin.tg_status_off");
+  const bot = data.bot && data.bot.username ? `@${data.bot.username}` : tr("climate_admin.tg_heading");
+  return tr(`climate_admin.tg_status_${data.status}`, { bot });
+}
+
+function renderTelegram(data) {
+  const state = !data.configured ? "idle" : data.status === "running" ? "ok"
+    : data.status === "connecting" ? "neutral" : "bad";
+  setPill("telegram-status", pillHtml(state, data.configured && data.status === "running" && data.bot
+    ? `@${data.bot.username}` : telegramStatusText(data)));
+  const body = document.getElementById("telegram-body");
+  // Not while a token is being typed: the field would lose it.
+  if (body.contains(document.activeElement) && document.activeElement.id === "telegram-token") return;
+  if (!data.configured || telegramChangingToken) {
+    morph(body, telegramTokenHtml(data.configured));
+    return;
+  }
+  const chats = data.chats.length
+    ? data.chats.map(telegramChatHtml).join("")
+    : `<p class="hint-text">${escapeHtml(tr("climate_admin.tg_no_chats"))}</p>`;
+  const waiting = data.waiting.length ? `
+    <h3 class="admin-subheading">${escapeHtml(tr("climate_admin.tg_waiting_heading"))}</h3>
+    <p class="hint-text">${escapeHtml(tr("climate_admin.tg_waiting_note"))}</p>
+    ${data.waiting.map(telegramWaitingHtml).join("")}` : "";
+  morph(body, `<div class="admin-zone-card">
+      <p class="tg-state" data-state="${state}">${escapeHtml(telegramStatusText(data))}</p>
+      <h3 class="admin-subheading">${escapeHtml(tr("climate_admin.tg_chats_heading"))}</h3>
+      ${chats}${waiting}
+      <div class="toolbar admin-actions">
+        <button class="range-btn" type="button" onclick="telegramChangeToken(true)">${escapeHtml(tr("climate_admin.tg_change_token"))}</button>
+        <button class="range-btn" type="button" onclick="telegramRemove(this)">${escapeHtml(tr("climate_admin.tg_remove"))}</button>
+      </div>
+    </div>`);
+}
+
+function telegramTokenHtml(configured) {
+  const steps = [1, 2, 3, 4].map(n => `<li>${escapeHtml(tr(`climate_admin.tg_step${n}`))}</li>`).join("");
+  const cancel = configured
+    ? `<button class="range-btn" type="button" onclick="telegramChangeToken(false)">${escapeHtml(tr("climate_admin.maint_cancel_button"))}</button>`
+    : "";
+  return `<div class="admin-zone-card">
+      <h3 class="admin-subheading">${escapeHtml(tr("climate_admin.tg_steps_title"))}</h3>
+      <ol class="tg-steps">${steps}</ol>
+      <div class="admin-field">
+        <label for="telegram-token">${escapeHtml(tr("climate_admin.tg_token_label"))}</label>
+        <input type="password" id="telegram-token" autocomplete="off" spellcheck="false" autocapitalize="off"
+          placeholder="123456789:AA…" onkeydown="telegramTokenKey(event)">
+      </div>
+      <div class="toolbar admin-actions">
+        <button class="tbtn open" type="button" id="telegram-connect" onclick="telegramConnect(this)">${escapeHtml(tr("climate_admin.tg_connect"))}</button>
+        ${cancel}
+      </div>
+    </div>`;
+}
+
+function telegramWaitingHtml(chat) {
+  const ago = tr("climate_admin.tg_wrote_ago", { ago: formatAge(chat.seconds_ago) || "0s" });
+  return `<div class="tg-chat" data-chat="${chat.id}">
+      <div class="tg-chat-name"><b>${escapeHtml(chat.name || String(chat.id))}</b>
+        <span class="hint-text">${escapeHtml(tr(`climate_admin.tg_kind_${chat.kind}`))} · ${escapeHtml(ago)}</span></div>
+      <div class="toolbar">
+        <button class="tbtn open" type="button" onclick="telegramChat(this, ${chat.id}, {})">${escapeHtml(tr("climate_admin.tg_allow"))}</button>
+      </div>
+    </div>`;
+}
+
+function telegramChatHtml(chat) {
+  const toggle = (key, checked) => `<label class="admin-checkbox">
+      <input type="checkbox" ${checked ? "checked" : ""} onchange="telegramChat(this, ${chat.id}, { ${key}: this.checked })">
+      <span>${escapeHtml(tr(`climate_admin.tg_${key}`))}<br><span class="hint-text">${escapeHtml(tr(`climate_admin.tg_${key}_hint`))}</span></span>
+    </label>`;
+  return `<div class="tg-chat" data-chat="${chat.id}">
+      <div class="tg-chat-name"><b>${escapeHtml(chat.name || String(chat.id))}</b>
+        <span class="hint-text">${escapeHtml(tr(`climate_admin.tg_kind_${chat.kind}`))}</span></div>
+      ${toggle("notify", chat.notify)}${toggle("control", chat.control)}
+      <div class="toolbar">
+        <button class="range-btn" type="button" onclick="telegramTest(this, ${chat.id})">${escapeHtml(tr("climate_admin.tg_test"))}</button>
+        <button class="range-btn" type="button" onclick="telegramChat(this, ${chat.id}, null)">${escapeHtml(tr("climate_admin.tg_remove_chat"))}</button>
+      </div>
+    </div>`;
+}
+
+function telegramResult(text, ok) {
+  const result = document.getElementById("telegram-result");
+  result.textContent = text;
+  result.className = `hint-text ${ok ? "admin-success" : "admin-error"}`;
+}
+
+async function telegramPost(path, body, button) {
+  if (button) button.disabled = true;
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const data = await res.json();
+    if (!data.ok) telegramResult(tr("sensors.error_prefix") + apiError(data), false);
+    return data;
+  } catch (e) {
+    telegramResult(tr("sensors.request_failed"), false);
+    return null;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function telegramTokenKey(event) {
+  if (event.key === "Enter") telegramConnect(document.getElementById("telegram-connect"));
+}
+
+async function telegramConnect(button) {
+  const input = document.getElementById("telegram-token");
+  const token = input.value.trim();
+  if (!token) {
+    input.focus();
+    return;
+  }
+  telegramResult(tr("climate_admin.tg_connecting"), true);
+  const data = await telegramPost("/api/climate-admin/telegram/token", { token }, button);
+  if (!data || !data.ok) return;
+  input.value = "";
+  input.blur();
+  telegramChangingToken = false;
+  telegramResult(tr("climate_admin.tg_connected", { bot: data.bot ? `@${data.bot.username}` : "" }), true);
+  renderTelegram(data);
+}
+
+function telegramChangeToken(on) {
+  telegramChangingToken = on;
+  document.getElementById("telegram-result").textContent = "";
+  loadTelegram();
+}
+
+// Authorizes a chat that wrote ({}), changes one's choices ({notify} or
+// {control}), or takes it off (null).
+async function telegramChat(control, id, values) {
+  const path = values === null ? `/api/climate-admin/telegram/chats/${id}/remove` : `/api/climate-admin/telegram/chats/${id}`;
+  const data = await telegramPost(path, values || {}, control);
+  if (data && data.ok) {
+    document.getElementById("telegram-result").textContent = "";
+    renderTelegram(data);
+  } else if (control.type === "checkbox") {
+    control.checked = !control.checked;
+  }
+}
+
+async function telegramTest(button, id) {
+  const data = await telegramPost(`/api/climate-admin/telegram/chats/${id}/test`, {}, button);
+  if (data && data.ok) telegramResult(tr("climate_admin.tg_test_sent"), true);
+}
+
+async function telegramRemove(button) {
+  if (!confirm(tr("climate_admin.tg_remove_confirm"))) return;
+  const data = await telegramPost("/api/climate-admin/telegram/remove", {}, button);
+  if (data && data.ok) {
+    telegramResult(tr("climate_admin.tg_removed"), true);
+    renderTelegram(data);
+  }
+}
+
+function watchTelegram() {
+  const section = document.getElementById("telegram");
+  if (!section) return;
+  const sync = () => {
+    if (telegramTimer) clearInterval(telegramTimer);
+    telegramTimer = null;
+    if (section.open && !document.hidden) {
+      loadTelegram();
+      telegramTimer = setInterval(loadTelegram, TELEGRAM_POLL_MS);
+    }
+  };
+  section.addEventListener("toggle", sync);
+  document.addEventListener("visibilitychange", sync);
+  loadTelegram();   // the header's pill, even while it's collapsed
+}
+
 rememberOpenSections();
 watchNav();
 loadMap();
@@ -3435,6 +3629,7 @@ setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);
 loadMaintenance();
 loadSettings();
 watchLedMatrix();
+watchTelegram();
 
 // A link to a collapsed section (a bookmark, another page) opens it.
 // A link to something inside one (the LED matrix's card) opens that one.

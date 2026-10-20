@@ -33,6 +33,7 @@
     "led": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
     "usage": '<path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
     "settings": '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    "telegram": '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
     "diagnostic": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   } -%}
   {%- macro icon(name) -%}
@@ -84,6 +85,7 @@
     <a href="#group-devices">{{ t.climate_admin.group_devices }}</a>
     <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
     <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
+    <a href="#telegram">{{ t.climate_admin.tg_heading }}</a>
     <a href="#group-tools">{{ t.climate_admin.group_tools }}</a>
   </nav>
 
@@ -454,6 +456,21 @@
       <button class="range-btn" onclick="resetSettings(this)">{{ t.climate_admin.settings_defaults }}</button>
     </div>
     <p class="hint-text settings-result" id="settings-result"></p>
+  </details>
+
+  <!-- The board's own Telegram bot: its token from @BotFather, then the
+       chats that may use it - see services/telegram_bot.py and
+       docs/integrations/telegram.md. Filled by loadTelegram(); read again
+       while open, so a chat that just pressed Start shows up by itself. -->
+  <details class="admin-details" id="telegram" data-nav="telegram">
+    <summary>{{ icon("telegram") }}<span class="sec-title">{{ t.climate_admin.tg_heading }}</span><span class="sec-pills" id="telegram-status"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.tg_note }}</p>
+    <div id="telegram-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
+    <p class="hint-text" id="telegram-result" aria-live="polite"></p>
+    <details class="admin-more">
+      <summary>{{ t.climate_admin.tg_security_title }}</summary>
+      <p class="hint-text">{{ t.climate_admin.tg_security }}</p>
+    </details>
   </details>
 
   <!-- ============================================================ tools -->

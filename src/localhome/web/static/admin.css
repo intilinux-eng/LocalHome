@@ -647,3 +647,20 @@
 /* What one switch opens with it (a dehumidifier -> its zone's valve). */
 .season-links { margin-top: 12px; }
 .season-link { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0; font-size: 0.9rem; }
+
+/* Telegram: the bot's chats, one card each, and the steps to create it. */
+.tg-steps { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+.tg-state { margin: 0; font-weight: 600; }
+.tg-state[data-state="ok"] { color: var(--ok); }
+.tg-state[data-state="bad"] { color: var(--bad); }
+.tg-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.tg-chat-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; overflow-wrap: anywhere; }
+.tg-chat-name .hint-text, .tg-chat .admin-checkbox .hint-text { margin: 0; }
+.tg-chat .admin-checkbox { align-items: flex-start; }
+.tg-chat .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }

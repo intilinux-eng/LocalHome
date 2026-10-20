@@ -432,3 +432,26 @@ def test_a_shellys_safety_timer_is_said_in_system_status_and_in_the_history(open
     history = page.locator("#system-status li", has_text="comando non rinnovato").first
     assert "Shelly" in history.locator(".admin-pill").inner_text()
     assert page.evaluate(UNTRANSLATED_JS) == [] and opened.errors == []
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_telegram_bot_is_set_up_here_step_by_step(open_page, api, width):
+    """Each LocalHome has a bot of its own, connected here: how to create
+    it with @BotFather, then its token - a paste gone wrong is said before
+    Telegram is asked, and nothing is saved."""
+    opened = open_page("/climate-admin", width)
+    page = opened.page
+    section = page.locator("#telegram")
+    assert eventually(page, lambda: section.locator("#telegram-status").inner_text() == "Non configurato")
+    section.locator("> summary").click()
+    assert eventually(page, lambda: section.locator(".tg-steps li").count() == 4)
+    assert "@BotFather" in section.locator(".tg-steps").inner_text()
+    token = section.locator("#telegram-token")
+    assert token.get_attribute("type") == "password"
+    token.fill("non è un token")
+    section.locator("#telegram-connect").click()
+    result = page.locator("#telegram-result")
+    assert eventually(page, lambda: "Non sembra un token di @BotFather" in result.inner_text()), result.inner_text()
+    assert api("/api/climate-admin/telegram")["configured"] is False
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    assert [e for e in opened.errors if "status of 400" not in e] == [], "the refusal is the only one"
