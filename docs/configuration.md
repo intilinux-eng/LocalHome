@@ -47,9 +47,8 @@ web:
 
 integrations: [...]   # see below
 
-notifications:        # optional
-  type: telegram
-  secrets_file: "secrets_telegram.json"
+# Telegram needs nothing here: the board's bot is set up in the admin
+# panel - see integrations/telegram.md.
 
 energy:                # optional, power-budget alerting
   sensor: "Home Power Meter"   # must match an integration's `name`
@@ -128,7 +127,7 @@ after installing to list what your checkout actually has registered):
 | `switch`      | `meross_plug`         | [integrations/meross.md](integrations/meross.md) |
 | `cover`/`climate`/`power_meter`/`switch`/`number` | `mqtt_json` | [integrations/mqtt.md](integrations/mqtt.md) - generic, covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc. |
 | `climate`/`switch` | `simulated`      | [integrations/simulated.md](integrations/simulated.md) - no hardware required |
-| `notifier`    | `telegram`            | [integrations/telegram.md](integrations/telegram.md) |
+| -             | Telegram (the board's bot) | [integrations/telegram.md](integrations/telegram.md) - set up in the admin panel, not here |
 
 `number` is a controllable analog value (a dimmer, a fan speed, a 0-10V
 output) - see `core/interfaces.py`'s `NumberDriver`. It's currently only
@@ -233,8 +232,10 @@ up to three in the last year.
 If set, `energy.sensor` must name a `power_meter` integration by its
 `name`. Whenever that sensor's `power_w` reading crosses
 `contract_limit_w * 1.10` ("safe indefinitely" limit), a notification is
-sent through whatever `notifications` driver is configured (silently
-skipped if none is). It re-notifies at most every 10 minutes while the
+sent to the board's Telegram bot's chats (see
+[integrations/telegram.md](integrations/telegram.md)) - or through another
+`notifications` driver, if one is configured; silently skipped without
+either. It re-notifies at most every 10 minutes while the
 condition persists, and once more when it clears. See
 `services/history.py`'s `PowerBudget` for the full three-zone model and
 how to adjust its ratios - the 1.10/1.33 defaults approximate a typical

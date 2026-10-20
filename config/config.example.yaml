@@ -205,10 +205,9 @@ thermostat:
     - switch: "Cooling Bypass Valve"
       active_in_mode: "cool"
 
-# Optional: push notifications for the power-budget alert below.
-notifications:
-  type: telegram
-  secrets_file: "secrets_telegram.json"
+# Telegram: the board's own bot (the home at a glance, simple commands,
+# problems and the power-budget alert below told) is set up in the admin
+# panel, nothing here - see docs/integrations/telegram.md.
 
 # Optional: power-budget alerting for one power_meter sensor (by name,
 # matching an integration above). Trips a notification when power draw

@@ -182,6 +182,17 @@ else that speaks MQTT+JSON, instead of one driver per brand.
   has been continuously unreachable and, past `sensor_failsafe_hours`,
   forces that valve closed rather than leaving it frozen forever - see
   [docs/configuration.md#sensor-edge-cases-explained-in-panel](docs/configuration.md#sensor-edge-cases-explained-in-panel).
+- **`services/telegram_bot.py`** is the board's own Telegram bot, one per
+  LocalHome, set up in the admin panel: a thread long-polls Telegram
+  (HTTPS out, no port opened), answers only the chats authorized there,
+  and a second one tells those chats the problems the home page lists
+  once they've lasted a few minutes. It's also the manager's notifier
+  (the power-budget alert). What it says and does is
+  **`services/telegram_replies.py`**: the home page's own rules for what
+  a zone is doing (ported from `static/home/`), and every command sent
+  through LocalHome's own endpoints in-process - the same checks and
+  refusals as the page's buttons. See
+  [docs/integrations/telegram.md](docs/integrations/telegram.md).
 
 ## The climate admin panel: config built at runtime, not by hand
 

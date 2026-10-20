@@ -9,6 +9,22 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **A Telegram bot for each LocalHome**, set up in the admin panel's new
+  Telegram section: the token from @BotFather pasted there (tried with
+  Telegram before it's saved, never shown again), then the chats that
+  wrote to the bot authorized - each with notifications or not, allowed
+  to change things or only to look. From a phone, anywhere: `/stato`
+  gives the home as the top of its page does (outside, each zone, the
+  dehumidifier, the VMC, the meters, what needs looking at), with
+  buttons for a zone's temperature, away and back, the VMC's speeds and
+  the dehumidifier; the same typed, in Italian or English (`/zona stanze
+  21 3h`, `/fuori 3`, `/vmc giorno`). Every command goes through the
+  same checks as the home page's buttons, refusals in the board's
+  language; one sent while the board couldn't hear it isn't carried out
+  late. The problems the home page lists are told once they've lasted 5
+  minutes, and "solved" when gone - not again after a restart. Nothing
+  opened on the router: the board asks Telegram. The procedure, and what
+  is and isn't safe about it: docs/integrations/telegram.md.
 - **The installer's guide has a "23. Aggiornamenti futuri" section**:
   ideas for coming versions, said as not yet tried nor handled by
   LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four
@@ -37,6 +53,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   spreadsheet, in the panel's language (Italian: ";" and decimal comma).
 
 ### Changed
+- **Telegram's `notifications:` in config.yaml is the bot now**: it only
+  says where the bot's file is, and an older file's single `chat_id` is
+  that chat, authorized. The power alert goes to the bot's chats, in the
+  board's language.
 - **The home page says things once and plainly** (read over as a resident
   would): the next stretch's switch-on edge is said as the next stretch's -
   "Poi 24° domani alle 00:00, e da lì si accende solo sopra 24,5°"; after

@@ -216,7 +216,7 @@ generic, and a few other devices run in the same apartment:
 | `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
 | `switch` | `meross_plug` | Meross smartplugs | No - Meross cloud, see [docs/integrations/meross.md](docs/integrations/meross.md) |
 | `climate` / `switch` / `number` | `simulated` | **No hardware** - try a whole setup before owning it | - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
-| `notifier` | `telegram` | Telegram bot API | Cloud by nature |
+| - | Telegram | The board's own bot: the home at a glance, simple commands, problems told - set up in the admin panel, see [docs/integrations/telegram.md](docs/integrations/telegram.md) | Cloud by nature (no port opened) |
 
 Adding a driver is a self-contained change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).

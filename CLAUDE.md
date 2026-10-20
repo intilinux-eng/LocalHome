@@ -68,6 +68,7 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 | VMC | `services/vmc_*.py` |
 | Board health, boots, diagnostics | `services/system_status.py`, `services/diagnostics.py`, `services/maintenance.py` |
 | Devices | `drivers/<brand>/` - registered with `@register_driver`, see `core/registry.py` |
+| The Telegram bot (one per board) | `services/telegram_bot.py` (reading, sending, problems told), `services/telegram_replies.py` (what it says and does - the home page's rules), `web/routes/telegram.py` (the admin's section) |
 | Board setup and deploy | `deploy/` (service, `tune-board.sh`, watchdogs), `tools/deploy_board.py` |
 | The installer's guide | `static/guide/shelly-plus1-valvole.html` |
 
