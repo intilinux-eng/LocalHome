@@ -9,6 +9,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **The house's long-term record, for analysis and one day a model of the
+  house**: every 5 minutes each zone's temperature, humidity, target and
+  share of time its valve was open, the outdoor air, the VMC, the
+  dehumidifier, the bypass, the season and away; every event at its own
+  time with why (a sensor's report, a relay switching, the season, away,
+  a zone held by hand). Its own file beside the history, which is
+  unchanged; kept 6 years (about 14 MB a year); at its first start it
+  fills the past month from the history. CSV export:
+  `/api/climate-admin/dataset.csv` (`?from=&to=&what=slots|events`).
 - **The installer's guide has a "23. Aggiornamenti futuri" section**:
   ideas for coming versions, said as not yet tried nor handled by
   LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four

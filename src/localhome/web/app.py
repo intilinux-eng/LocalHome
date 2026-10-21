@@ -36,6 +36,7 @@ from localhome.services.climate_map_store import (
 from localhome.services.day_range import DayRange
 from localhome.services.dehumidifier import DehumidifierSettingsStore, DehumidifierTimer
 from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudget
+from localhome.services.house_dataset import DatasetStore, HouseDataset, Plant, ZoneSource
 from localhome.services import led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
@@ -530,6 +531,32 @@ def create_app(config_path: str | None = None) -> Flask:
     )
 
     register_routes(app)
+    # The house's long-term record, apart from the history and kept 6
+    # years: 5-minute slots and events, for analysis and a model of the
+    # house - see services/house_dataset.py. `dataset: {enabled: false}`
+    # in config.yaml switches it off.
+    dataset_cfg = config.raw.get("dataset") or {}
+    app.config["HOUSE_DATASET"] = None
+    if dataset_cfg.get("enabled", True):
+        def vmc_device() -> dict | None:
+            name = _vmc_speed_device(manager)
+            return {"name": name, "paired_switch": manager.paired_switch.get(name)} if name else None
+
+        bypass = EXTRA_SWITCH_FIELDS["bypass_valve_device_id"]
+        plant = Plant(
+            zones=[ZoneSource(z.name, z.sensor, z.valve, z.cool_enabled) for z in (thermostat.zones if thermostat else [])],
+            outdoor=OUTDOOR_SENSOR_NAME if OUTDOOR_SENSOR_NAME in manager.pollers else None,
+            vmc_speed=vmc_device,
+            dehumidifier=dehumidifier.switch if dehumidifier else None,
+            bypass=bypass if bypass in manager.pollers else None,
+        )
+        house_dataset = HouseDataset(
+            DatasetStore(config.resolve(dataset_cfg.get("db_file", "data/house_dataset.db")),
+                         retention_years=dataset_cfg.get("retention_years", 6)),
+            manager, thermostat, plant, dehumidifier=dehumidifier, vmc=vmc,
+            clock_synced=system_status.clock_synced_fast, history_path=db_path)
+        app.config["HOUSE_DATASET"] = house_dataset
+        house_dataset.start()
     # The UNO Q's LED matrix: health at a glance for whoever is standing
     # in front of the box - off by itself on anything that isn't a UNO Q
     # (no arduino-router socket). See services/led_matrix.py.

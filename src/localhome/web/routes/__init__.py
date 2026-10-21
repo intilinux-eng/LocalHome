@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from flask import Flask
 
-from localhome.web.routes import admin, climate, devices, pages, plant, system
+from localhome.web.routes import admin, climate, dataset, devices, pages, plant, system
 
 
 def register_routes(app: Flask) -> None:
-    for area in (pages, system, devices, plant, climate, admin):
+    for area in (pages, system, devices, plant, climate, admin, dataset):
         area.register(app)
