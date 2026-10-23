@@ -4,6 +4,8 @@ number commanded, covers and their position, energy meters' days."""
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as wait_for
 
 from flask import Flask, jsonify, request
 
@@ -108,37 +110,59 @@ def register(app: Flask) -> None:
             }
             return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None)), 502
 
+    # "All" asks every cover at once, each on its own thread. One by one, a
+    # shutter off the network held the others back for its whole socket
+    # timeout, and its error left the ones after it without the command.
+    # The answer comes when they've all replied, or after this long: the
+    # ones still trying go on, and are said as still waiting.
+    COVER_ALL_WAIT_SECONDS = 4.0
+    cover_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="cover")
+
+    def _send_cover(cover, action: str) -> None:
+        positions: PositionStore = app.config["POSITIONS"]
+        cover.send(action)
+        app.config["COVER_READS"].pop(cover.name, None)  # it answered: poll it normally again
+        if action in ("open", "close"):
+            positions.set(cover.id, 100 if action == "open" else 0)
+
+    def _cover_all(action: str):
+        manager: DeviceManager = app.config["MANAGER"]
+        positions: PositionStore = app.config["POSITIONS"]
+        covers = list(manager.covers.values())
+        for cover in covers:
+            positions.cancel_pending_move(cover.id)
+            positions.mark_own_command(cover.id)
+        futures = {cover_pool.submit(_send_cover, cover, action): cover.name for cover in covers}
+        done, _ = wait_for(futures, timeout=app.config.get("COVER_ALL_WAIT_SECONDS", COVER_ALL_WAIT_SECONDS))
+        outcome = {}
+        for future in done:
+            exc = future.exception()
+            outcome[futures[future]] = None if exc is None else exc
+        sent = [c.name for c in covers if c.name in outcome and outcome[c.name] is None]
+        failed = [{"name": c.name, "error": str(outcome[c.name]), "code": getattr(outcome[c.name], "code", None)}
+                  for c in covers if outcome.get(c.name) is not None]
+        pending = [c.name for c in covers if c.name not in outcome]
+        if covers and not sent and not pending:
+            return jsonify(ok=False, error="no cover answered", sent=[], failed=failed, pending=[]), 502
+        return jsonify(ok=True, sent=sent, failed=failed, pending=pending)
+
     @app.route("/api/covers/<name>/action/<action>", methods=["POST"])
     def api_cover_action(name, action):
         if action not in ("open", "close", "stop"):
             return jsonify(ok=False, error="invalid action"), 400
+        if name.lower() == "all":
+            return _cover_all(action)
         manager: DeviceManager = app.config["MANAGER"]
         positions: PositionStore = app.config["POSITIONS"]
-
-        if name.lower() == "all":
-            targets = list(manager.covers.values())
-        else:
-            cover = manager.covers.get(name)
-            if cover is None:
-                return jsonify(ok=False, error=f"unknown cover '{name}'"), 404
-            targets = [cover]
-
-        for cover in targets:
-            positions.cancel_pending_move(cover.id)
-            positions.mark_own_command(cover.id)
-
+        cover = manager.covers.get(name)
+        if cover is None:
+            return jsonify(ok=False, error=f"unknown cover '{name}'"), 404
+        positions.cancel_pending_move(cover.id)
+        positions.mark_own_command(cover.id)
         try:
-            for cover in targets:
-                cover.send(action)
+            _send_cover(cover, action)
         except Exception as exc:
             return jsonify(ok=False, error=str(exc), code=getattr(exc, "code", None)), 502
-        for cover in targets:
-            app.config["COVER_READS"].pop(cover.name, None)  # it answered: poll it normally again
-
-        if action in ("open", "close"):
-            for cover in targets:
-                positions.set(cover.id, 100 if action == "open" else 0)
-
         return jsonify(ok=True)
 
     @app.route("/api/covers/<name>/position", methods=["POST"])
