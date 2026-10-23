@@ -91,7 +91,7 @@ def check_api(c: Check) -> dict:
     zones = c.get("/api/climate/zones").get("zones", [])
     readings = c.get("/api/readings").get("readings", {})
     sensors = [d["name"] for d in devices.get("sensors", [])]
-    covers = [d["name"] for d in devices.get("covers", [])]
+    covers = list(devices.get("covers", []))  # their names
     meters = [d["name"] for d in devices.get("sensors", [])
               if d.get("kind") == "power_meter" or (readings.get(d["name"]) or {}).get("power_w") is not None]
     fills = {
