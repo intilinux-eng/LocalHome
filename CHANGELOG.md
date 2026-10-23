@@ -9,6 +9,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **The shutters in one card on the home page**, only when config.yaml has
+  some: "Apri tutte", "Ferma tutte" and "Chiudi tutte" on top, each
+  shutter on its own row below (the word they share left out of the
+  rows). Under them, what was sent and which ones didn't answer. "All"
+  now asks every shutter at the same time: one off the network no longer
+  holds the others back or leaves them without the command, and the page
+  gets its answer within a few seconds, a slow one said as still waiting.
+  A simulated shutter (`kind: cover`, `type: simulated`) to try it, and
+  for the tests.
 - **The installer's guide has a "23. Aggiornamenti futuri" section**:
   ideas for coming versions, said as not yet tried nor handled by
   LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four

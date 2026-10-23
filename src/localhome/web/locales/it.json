@@ -21,9 +21,22 @@
     "empty_open_admin": "Apri il pannello di configurazione"
   },
   "covers": {
-    "btn_open": "Apri",
-    "btn_stop": "Ferma",
-    "btn_close": "Chiudi"
+    "heading": "Tapparelle",
+    "open_all": "Apri tutte",
+    "stop_all": "Ferma tutte",
+    "close_all": "Chiudi tutte",
+    "one_btn_open": "Apri {name}",
+    "one_btn_stop": "Ferma {name}",
+    "one_btn_close": "Chiudi {name}",
+    "all_open": "Tutte in apertura",
+    "all_stop": "Tutte ferme",
+    "all_close": "Tutte in chiusura",
+    "one_open": "{name} in apertura",
+    "one_stop": "{name} ferma",
+    "one_close": "{name} in chiusura",
+    "not_answered": "Non hanno risposto: {names}",
+    "one_not_answered": "{name} non risponde",
+    "still_trying": "Ancora in attesa: {names}"
   },
   "fields": {
     "power_w": "Potenza",

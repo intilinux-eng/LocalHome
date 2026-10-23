@@ -21,6 +21,7 @@ import urllib.request
 
 import pytest
 
+from .conftest import CONFIG
 from .helpers import OVERFLOW_JS, SIMULATED_ZONE, UNTRANSLATED_JS
 
 pytestmark = [pytest.mark.ui, pytest.mark.enduser]
@@ -408,6 +409,53 @@ def test_a_light_switched_and_back(walk):
     w.check("switched", w.wait(lambda: switch.get_attribute("aria-checked") == other))
     switch.click()
     w.check("and back", w.wait(lambda: switch.get_attribute("aria-checked") == was))
+
+
+# The usual board plus three shutters, one of them off the network.
+SHUTTERS_CONFIG = CONFIG.replace("integrations:\n", """integrations:
+  - kind: cover
+    type: simulated
+    name: "Tapparella Soggiorno"
+  - kind: cover
+    type: simulated
+    name: "Tapparella Cucina"
+  - kind: cover
+    type: simulated
+    name: "Tapparella Bagno"
+    unreachable: true
+""", 1)
+
+
+@pytest.fixture(scope="module")
+def shutters_house(start_server):
+    return House(start_server([dict(SIMULATED_ZONE, name=ROOMS), dict(SIMULATED_ZONE, name=BATHS)], SHUTTERS_CONFIG))
+
+
+def test_no_shutters_in_the_config_no_shutters_card(walk):
+    w = walk()
+    w.check("no shutters card", w.page.locator("#house-body .covers").count() == 0)
+
+
+def test_the_shutters_all_at_once_then_one_by_itself(browser, shutters_house, tmp_path):
+    w = Walk(browser, shutters_house, tmp_path, width=320)
+    try:
+        state = lambda name: shutters_house.call(f"/api/covers/{urllib.parse.quote(name)}/status")["state"]
+        card = w.page.locator("#house-body .tile.covers")
+        w.check("one card, each shutter by the rest of its name",
+                card.count() == 1 and card.locator(".cover-name").all_inner_texts() == ["Soggiorno", "Cucina", "Bagno"])
+        card.locator('button[data-cover="all"][data-cover-action="open"]').click()
+        note = card.locator(".cover-note")
+        w.check("all opening, the one off the network named",
+                w.wait(lambda: note.count() == 1 and "Tutte in apertura" in note.inner_text() and "Bagno" in note.inner_text()))
+        w.check("and the board sent it to the others", state("Tapparella Soggiorno") == "open" and state("Tapparella Cucina") == "open")
+        card.get_by_role("button", name="Chiudi Cucina").click()
+        w.check("one closing by itself", w.wait(lambda: note.inner_text() == "Cucina in chiusura"))
+        w.check("only that one", state("Tapparella Cucina") == "close" and state("Tapparella Soggiorno") == "open")
+        w.network_errors_expected = True  # the board's 502 for the shutter that didn't answer
+        card.get_by_role("button", name="Ferma Bagno").click()
+        w.check("the one off the network says so", w.wait(lambda: note.inner_text() == "Bagno non risponde"))
+    finally:
+        w.context.close()
 
 
 def test_manual_and_cancel_by_keyboard(walk):

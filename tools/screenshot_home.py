@@ -8,8 +8,10 @@ The board: two zones as a real home's - Stanze, with a week (24° at night,
 23° by day), and Bagni, left out of the summer - cooling, the simulated
 VMC, dehumidifier, outdoor sensor and a light. States, each a full page:
 hourly (as found), details (the rooms' details open), manual / off (the
-choice open), held (manual applied for 2 h), away (24 h). Needs the
-browser tests' setup: pip install -e ".[dev,ui]", playwright install chromium.
+choice open), held (manual applied for 2 h), away (24 h), covers (four
+simulated shutters in config.yaml, "Apri tutte" tapped - with it, the other
+states have the shutters' card too). Needs the browser tests' setup:
+pip install -e ".[dev,ui]", playwright install chromium.
 """
 from __future__ import annotations
 
@@ -30,7 +32,10 @@ from tests.ui.helpers import SIMULATED_ZONE  # noqa: E402
 
 ROOMS, BATHS = "Stanze", "Bagni"
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
-STATES = ["hourly", "details", "manual", "off", "held", "away"]
+STATES = ["hourly", "details", "manual", "off", "held", "away", "covers"]
+# The shutters' card needs shutters in config.yaml: four simulated ones.
+COVERS = "".join(f'  - kind: cover\n    type: simulated\n    name: "Tapparella {room}"\n'
+                 for room in ("Soggiorno", "Cucina", "Camera", "Studio"))
 
 
 def main() -> None:
@@ -45,8 +50,9 @@ def main() -> None:
     states = STATES if not args.state or "all" in args.state else args.state
     args.out.mkdir(parents=True, exist_ok=True)
 
+    config = CONFIG.replace("integrations:\n", "integrations:\n" + COVERS, 1) if "covers" in states else CONFIG
     base, proc = _launch(Path(tempfile.mkdtemp()),
-                         [dict(SIMULATED_ZONE, name=ROOMS), dict(SIMULATED_ZONE, name=BATHS, cool_enabled=False)], CONFIG)
+                         [dict(SIMULATED_ZONE, name=ROOMS), dict(SIMULATED_ZONE, name=BATHS, cool_enabled=False)], config)
 
     def call(path, body=None):
         req = urllib.request.Request(base + path, method="GET" if body is None else "POST",
@@ -88,6 +94,9 @@ def main() -> None:
                             page.click("#away-chip")
                             page.locator("#sheet button[data-away='24']").click()
                             page.wait_for_selector(".zone .away-note", timeout=10000)
+                        elif state == "covers":
+                            page.click('#house-body button[data-cover="all"][data-cover-action="open"]')
+                            page.wait_for_selector("#house-body .cover-note", timeout=10000)
                         page.wait_for_timeout(600)
                         shot = args.out / f"{state}_{width}_{scheme}.png"
                         page.screenshot(path=str(shot), full_page=True)

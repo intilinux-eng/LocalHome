@@ -46,21 +46,87 @@ function renderHouse() {
         <div class="tile-value">${r.temperature_c != null ? `${fmt(r.temperature_c)}<small>°</small>` : "--"}${r.humidity_pct != null ? ` <small>${fmt(r.humidity_pct, 0)}%</small>` : ""}</div>${readingNote(r)}</div>`);
     }
   });
-  (state.devices ? state.devices.covers : []).forEach(name => {
-    tiles.push(`<div class="tile"><div class="tile-head"><span class="tile-name">${esc(name)}</span></div>
-      <div class="segmented">
-        <button type="button" data-cover="${esc(name)}" data-cover-action="open">${esc(tr("covers.btn_open"))}</button>
-        <button type="button" data-cover="${esc(name)}" data-cover-action="stop">${esc(tr("covers.btn_stop"))}</button>
-        <button type="button" data-cover="${esc(name)}" data-cover-action="close">${esc(tr("covers.btn_close"))}</button>
-      </div></div>`);
-  });
-  // The wide ones (a meter's days, the air's day) first, the small ones
-  // after: two wide ones fill a row, and the small ones the gaps (CSS
-  // dense) - a wide one after a small one left a hole beside it.
-  const wide = html => /^<div class="tile (energy|air)\b/.test(html);
+  const covers = state.devices ? state.devices.covers : [];
+  if (covers.length) tiles.push(coversTile(covers));
+  // The wide ones (the shutters, a meter's days, the air's day) first, the
+  // small ones after: two wide ones fill a row, and the small ones the gaps
+  // (CSS dense) - a wide one after a small one left a hole beside it.
+  const wide = html => /^<div class="tile (covers|energy|air)\b/.test(html);
   tiles.sort((a, b) => wide(b) - wide(a));
   document.getElementById("house").hidden = !tiles.length;
   morph(document.getElementById("house-body"), tiles.join(""));
+}
+
+// ---------------------------------------------------- the shutters --
+// Only with shutters in config.yaml: all of them in one card - open, stop
+// or close them all at once, the everyday use, and each one by itself
+// below. The card doesn't ask the shutters where they are (the cheap
+// curtain switches only know their last command): it says what was sent
+// and which ones didn't answer.
+
+function coverLabel(name, names) {
+  // "Tapparella Cucina", "Tapparella Soggiorno": the word they all share
+  // is the card's title already - each row keeps only the rest.
+  const first = name.split(" ")[0];
+  const shared = names.length > 1 && names.every(n => n.startsWith(`${first} `) && n.length > first.length + 1);
+  return shared ? name.slice(first.length + 1) : displayName(name);
+}
+
+function coversTile(names) {
+  const button = (target, action, text, label) => `<button type="button" data-cover="${esc(target)}"
+    data-cover-action="${action}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>${esc(text)}</button>`;
+  const rows = names.map(name => {
+    const label = coverLabel(name, names);
+    return `<li class="cover-row"><span class="cover-name">${esc(label)}</span>
+      <span class="cover-ctl">${button(name, "open", "▲", tr("covers.one_btn_open", { name: label }))}${button(name, "stop", "■", tr("covers.one_btn_stop", { name: label }))}${button(name, "close", "▼", tr("covers.one_btn_close", { name: label }))}</span></li>`;
+  }).join("");
+  const note = state.coverNote;
+  return `<div class="tile covers">
+    <div class="tile-head"><span class="tile-name">${esc(tr("covers.heading"))}</span></div>
+    <div class="covers-all">
+      ${button("all", "open", tr("covers.open_all"))}${button("all", "stop", "■", tr("covers.stop_all"))}${button("all", "close", tr("covers.close_all"))}
+    </div>
+    <ul class="cover-rows">${rows}</ul>
+    ${note ? `<div class="tile-note cover-note" data-tone="${note.tone}" role="status">${esc(note.text)}</div>` : ""}
+  </div>`;
+}
+
+// What a command did, said in the card: sent, or which ones didn't answer
+// (and which are still being tried) - gone again after a while.
+function coverOutcome(target, action, result) {
+  const names = state.devices ? state.devices.covers : [];
+  const label = n => coverLabel(n, names);
+  const failed = (result.failed || []).map(f => label(f.name));
+  const pending = (result.pending || []).map(label);
+  const sent = target === "all" ? (result.sent || []).length + pending.length > 0 : !failed.length;
+  const parts = [];
+  if (sent) parts.push(target === "all" ? tr(`covers.all_${action}`) : tr(`covers.one_${action}`, { name: label(target) }));
+  if (failed.length) {
+    parts.push(target === "all" ? tr("covers.not_answered", { names: failed.join(", ") })
+      : tr("covers.one_not_answered", { name: failed[0] }));
+  }
+  if (pending.length) parts.push(tr("covers.still_trying", { names: pending.join(", ") }));
+  state.coverNote = { text: parts.join(" · "), tone: !sent ? "bad" : failed.length || pending.length ? "warn" : "ok" };
+  clearTimeout(state.coverNoteTimer);
+  state.coverNoteTimer = setTimeout(() => { state.coverNote = null; steady(renderHouse); }, 30000);
+  steady(renderHouse);
+}
+
+async function sendCover(button) {
+  const target = button.dataset.cover, action = button.dataset.coverAction;
+  // "All": its three buttons wait together - a second tap would only send it again.
+  const group = target === "all" ? [...document.querySelectorAll('#house-body button[data-cover="all"]')] : [button];
+  group.forEach(b => busy(b, true));
+  try {
+    coverOutcome(target, action, await api(`/api/covers/${encodeURIComponent(target)}/action/${action}`, {}));
+  } catch (e) {
+    // The shutter didn't answer (the board did): said in the card, by name.
+    if (e.data && e.data.failed) coverOutcome(target, action, e.data);
+    else if (target !== "all" && e.data && e.data.error) coverOutcome(target, action, { failed: [{ name: target }] });
+    else notify(errorText(e));
+  } finally {
+    group.forEach(b => busy(b, false));
+  }
 }
 
 // --------------------------------------------------------- the air --
@@ -296,16 +362,7 @@ async function onHouseClick(event) {
     return;
   }
   if (button.dataset.switch) { await flipSwitch(button); return; }
-  button.disabled = true;
-  try {
-    if (button.dataset.cover) {
-      await api(`/api/covers/${encodeURIComponent(button.dataset.cover)}/action/${button.dataset.coverAction}`, {});
-    }
-  } catch (e) {
-    notify(errorText(e));
-  } finally {
-    button.disabled = false;
-  }
+  if (button.dataset.cover) await sendCover(button);
 }
 
 async function onHouseChange(event) {

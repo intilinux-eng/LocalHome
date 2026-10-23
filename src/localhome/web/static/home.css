@@ -837,6 +837,37 @@ body[data-running="true"] .hero-season::before {
 .tile-off { display: flex; align-items: center; gap: 6px; color: var(--warn); font-weight: 600; }
 .tile-off::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 
+/* The shutters: all of them at once on top - open and close wide, stop
+   between - then each one on its row with its three arrows, and the last
+   command said under them (amber when one didn't answer). */
+@media (min-width: 600px) { .covers { grid-column: span 2; } }
+.covers-all { display: grid; grid-template-columns: 1fr 48px 1fr; gap: 8px; }
+.covers-all button, .cover-ctl button {
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.covers-all button { padding: 9px 10px; }
+.covers button:disabled { opacity: 0.5; }
+.covers button:active { transform: scale(0.96); }
+.cover-rows { list-style: none; margin: 0; padding: 0; display: grid; column-gap: 24px; }
+.cover-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.cover-row:first-child { border-top: 0; }
+.cover-name { min-width: 0; overflow-wrap: anywhere; color: var(--text-2); }
+.cover-ctl { display: flex; flex: none; gap: 6px; }
+.cover-ctl button { width: 44px; padding: 0; color: var(--text-2); font-size: 0.8rem; font-weight: 400; }
+@media (min-width: 900px) {
+  .cover-rows { grid-template-columns: 1fr 1fr; }
+  .cover-row:nth-child(2) { border-top: 0; }
+}
+.cover-note[data-tone="ok"] { color: var(--ok); }
+.cover-note[data-tone="warn"] { color: var(--warn); }
+.cover-note[data-tone="bad"] { color: var(--bad); font-weight: 600; }
+
 /* The VMC: a card like a zone's, three big speeds with their icon and
    level, a fan that turns as fast as it runs (home/plant.js vmcTile). */
 .vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }

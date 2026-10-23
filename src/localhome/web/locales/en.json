@@ -21,9 +21,22 @@
     "empty_open_admin": "Open the configuration panel"
   },
   "covers": {
-    "btn_open": "Open",
-    "btn_stop": "Stop",
-    "btn_close": "Close"
+    "heading": "Shutters",
+    "open_all": "Open all",
+    "stop_all": "Stop all",
+    "close_all": "Close all",
+    "one_btn_open": "Open {name}",
+    "one_btn_stop": "Stop {name}",
+    "one_btn_close": "Close {name}",
+    "all_open": "All opening",
+    "all_stop": "All stopped",
+    "all_close": "All closing",
+    "one_open": "{name} opening",
+    "one_stop": "{name} stopped",
+    "one_close": "{name} closing",
+    "not_answered": "Didn't answer: {names}",
+    "one_not_answered": "{name} isn't answering",
+    "still_trying": "Still waiting for: {names}"
   },
   "fields": {
     "power_w": "Power",
