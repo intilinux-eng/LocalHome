@@ -9,6 +9,16 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **Each shutter's state on the home page**, under its name in the
+  shutters' card: open, closed, part way (a percent), moving up or down,
+  or not answering. LocalHome now follows every shutter all the time, on
+  a connection it keeps open: the modules say each change by themselves,
+  the wall button's too, so the state stays right whoever moves them. The
+  position is estimated from how long each run lasted; each shutter's
+  real time up and down, measured once with a stopwatch, goes in the
+  admin panel (Dispositivi > Tapparelle). A shutter that stops answering
+  shows in the system status at once, page open or not. A Tuya module
+  not answering no longer has its run time taken as 120 s.
 - **The shutters in one card on the home page**, only when config.yaml has
   some: "Apri tutte", "Ferma tutte" and "Chiudi tutte" on top, each
   shutter on its own row below (the word they share left out of the

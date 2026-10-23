@@ -617,6 +617,65 @@ async function saveVmc(button) {
   }
 }
 
+// ------------------------------------------------------------ covers --
+// The shutters (only with some in config.yaml): each one's real travel
+// time up and down, measured with a stopwatch - the home page's position
+// estimate runs on it. Empty: the module's own run timer, which has some
+// margin, shown as the placeholder. Taken at the next run, no restart.
+
+async function loadCoverTimes() {
+  const box = document.getElementById("covers-times");
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/covers", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  const covers = data.covers || [];
+  box.hidden = !covers.length;
+  if (!covers.length) return;
+  const measured = covers.filter(c => c.times.open || c.times.close).length;
+  setPill("covers-summary", pillHtml(measured === covers.length ? "ok" : "idle",
+    tr("climate_admin.covers_pill", { n: measured, total: covers.length })));
+  const field = (c, i, direction) => `<div class="admin-field">
+      <label for="cover-${direction}-${i}">${escapeHtml(tr(`climate_admin.covers_${direction}_label`))}</label>
+      <input type="number" id="cover-${direction}-${i}" min="2" max="300" step="0.5" inputmode="decimal" data-direction="${direction}"
+        value="${c.times[direction] ?? ""}" placeholder="${c.device_s ?? ""}"></div>`;
+  morph(document.getElementById("covers-form"), covers.map((c, i) => `<div class="cover-times" data-cover-times="${escapeHtml(c.name)}">
+      <span class="cover-times-name">${escapeHtml(c.name)}</span>${field(c, i, "open")}${field(c, i, "close")}
+      <p class="hint-text">${escapeHtml(c.device_s != null ? tr("climate_admin.covers_device", { s: c.device_s })
+        : tr("climate_admin.covers_device_unknown"))}</p>
+    </div>`).join(""));
+}
+
+async function saveCoverTimes(button) {
+  const result = document.getElementById("save-covers-result");
+  button.disabled = true;
+  try {
+    for (const row of document.querySelectorAll("[data-cover-times]")) {
+      const body = {};
+      row.querySelectorAll("input[data-direction]").forEach(i => { body[i.dataset.direction] = i.value === "" ? null : Number(i.value); });
+      const res = await fetch(`/api/climate-admin/covers/${encodeURIComponent(row.dataset.coverTimes)}/times`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        result.textContent = `${row.dataset.coverTimes}: ${tr("sensors.error_prefix")}${apiError(data)}`;
+        result.className = "hint-text admin-error";
+        return;
+      }
+    }
+    result.textContent = tr("climate_admin.covers_saved");
+    result.className = "hint-text admin-success";
+    await loadCoverTimes();
+  } catch (e) {
+    result.textContent = tr("sensors.request_failed");
+    result.className = "hint-text admin-error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // The VMC's night/day/boost percentages (services/vmc_speeds.py): in use
 // as soon as they're saved, on the cards and in the programs.
 async function loadVmcSpeeds() {
@@ -3425,6 +3484,7 @@ loadSeasonRules();
 loadDehumSettings();
 loadExtraSensor();
 loadVmc();
+loadCoverTimes();
 loadVmcSpeeds();
 loadVmcAuto();
 loadVmcFilters();

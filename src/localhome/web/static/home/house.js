@@ -72,12 +72,30 @@ function coverLabel(name, names) {
   return shared ? name.slice(first.length + 1) : displayName(name);
 }
 
+// Where a shutter is, in words: moving which way (and how far, once a full
+// run has shown where it is), open, closed, part way, or not answering.
+function coverState(cover) {
+  if (!cover) return { text: "", tone: "" };
+  if (cover.reached === false) return { text: tr("covers.state_unreached"), tone: "warn" };
+  const pct = cover.percent;
+  if (cover.moving) {
+    const way = tr(cover.moving === "open" ? "covers.state_opening" : "covers.state_closing");
+    return { text: pct == null ? way : `${way} · ${pct}%`, tone: "active" };
+  }
+  if (pct == null) return { text: tr("covers.state_unknown"), tone: "" };
+  if (pct >= 100) return { text: tr("covers.state_open"), tone: "" };
+  if (pct <= 0) return { text: tr("covers.state_closed"), tone: "" };
+  return { text: tr("covers.state_at", { pct }), tone: "" };
+}
+
 function coversTile(names) {
   const button = (target, action, text, label) => `<button type="button" data-cover="${esc(target)}"
     data-cover-action="${action}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>${esc(text)}</button>`;
   const rows = names.map(name => {
     const label = coverLabel(name, names);
-    return `<li class="cover-row"><span class="cover-name">${esc(label)}</span>
+    const where = coverState(state.coverStates[name]);
+    return `<li class="cover-row"><span class="cover-name"><span class="cover-label">${esc(label)}</span>${where.text
+      ? `<small class="cover-state" data-tone="${where.tone}">${esc(where.text)}</small>` : ""}</span>
       <span class="cover-ctl">${button(name, "open", "▲", tr("covers.one_btn_open", { name: label }))}${button(name, "stop", "■", tr("covers.one_btn_stop", { name: label }))}${button(name, "close", "▼", tr("covers.one_btn_close", { name: label }))}</span></li>`;
   }).join("");
   const note = state.coverNote;
@@ -119,6 +137,7 @@ async function sendCover(button) {
   group.forEach(b => busy(b, true));
   try {
     coverOutcome(target, action, await api(`/api/covers/${encodeURIComponent(target)}/action/${action}`, {}));
+    refreshCovers();
   } catch (e) {
     // The shutter didn't answer (the board did): said in the card, by name.
     if (e.data && e.data.failed) coverOutcome(target, action, e.data);
@@ -127,6 +146,23 @@ async function sendCover(button) {
   } finally {
     group.forEach(b => busy(b, false));
   }
+}
+
+// Where each shutter is, as the board follows it (services/cover_watch.py):
+// read with the devices, and every second and a half while one is moving.
+const COVER_MOVING_MS = 1500;
+
+async function refreshCovers() {
+  if (!(state.devices && state.devices.covers.length)) return;
+  clearTimeout(state.coverTimer);
+  try {
+    const data = await api("/api/covers");
+    state.coverStates = Object.fromEntries(data.covers.map(c => [c.name, c]));
+  } catch (e) {
+    return;
+  }
+  steady(renderHouse);
+  if (Object.values(state.coverStates).some(c => c.moving)) state.coverTimer = setTimeout(refreshCovers, COVER_MOVING_MS);
 }
 
 // --------------------------------------------------------- the air --

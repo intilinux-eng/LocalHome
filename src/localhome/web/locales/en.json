@@ -36,7 +36,14 @@
     "one_close": "{name} closing",
     "not_answered": "Didn't answer: {names}",
     "one_not_answered": "{name} isn't answering",
-    "still_trying": "Still waiting for: {names}"
+    "still_trying": "Still waiting for: {names}",
+    "state_open": "Open",
+    "state_closed": "Closed",
+    "state_at": "{pct}% open",
+    "state_opening": "Opening",
+    "state_closing": "Closing",
+    "state_unknown": "Position unknown",
+    "state_unreached": "Not answering"
   },
   "fields": {
     "power_w": "Power",
@@ -892,7 +899,15 @@
     "link_row": "{leader} on → {zone} valve open; off → closed",
     "link_when_cool": "in summer",
     "link_when_heat": "in winter",
-    "link_when_always": "always"
+    "link_when_always": "always",
+    "covers_heading": "Shutters",
+    "covers_note": "Each shutter's real time up and down, measured once with a stopwatch from the start to when it reaches the end. The home page estimates the position from it: the time set in the module usually has a few seconds of margin. Empty: the module's own is used. Taken from the next run.",
+    "covers_open_label": "Up (s)",
+    "covers_close_label": "Down (s)",
+    "covers_device": "Module's time: {s} s",
+    "covers_device_unknown": "The module isn't answering",
+    "covers_pill": "{n} of {total} measured",
+    "covers_saved": "Saved: taken from the next run."
   },
   "vmc_presets": {
     "min": "Minimum",
@@ -974,7 +989,9 @@
     "override_while_away": "You're away: the zones stay off. Tap “I'm back” to change them.",
     "switch_away": "You're away: “{name}” stays off. Tap “I'm back” to switch it on.",
     "dehumidifier_away": "You're away: the dehumidifier stays off. Tap “I'm back” to switch it on.",
-    "schedule_while_away": "You're away: the weekly plan changes when you're back. Tap “I'm back”."
+    "schedule_while_away": "You're away: the weekly plan changes when you're back. Tap “I'm back”.",
+    "cover_unknown": "Unknown shutter '{name}'.",
+    "cover_time_invalid": "Invalid times: seconds between {min} and {max}."
   },
   "home": {
     "problem_technical": "For whoever looks after the system: {what}",

@@ -385,3 +385,35 @@ def register(app: Flask) -> None:
         if thermostat:
             thermostat.tick()
         return jsonify(ok=True)
+
+    # ------------------------------------------------------------ covers --
+
+    @app.route("/api/climate-admin/covers")
+    def api_climate_admin_covers():
+        """Each cover's travel time up and down: the one measured and set
+        here, and the one its device reports (asked once, then kept)."""
+        manager: DeviceManager = app.config["MANAGER"]
+        times = app.config["COVER_TIMES"].all()
+        positions = app.config["POSITIONS"]
+        covers = []
+        for cover in manager.covers.values():
+            try:
+                device_s = positions.device_travel_time(cover)
+            except Exception:  # not answering: the panel shows the times set, if any
+                device_s = None
+            covers.append({"name": cover.name, "times": times.get(cover.name) or {}, "device_s": device_s})
+        return jsonify(ok=True, covers=covers)
+
+    @app.route("/api/climate-admin/covers/<name>/times", methods=["POST"])
+    def api_climate_admin_set_cover_times(name):
+        """{"open": s, "close": s}, each a number of seconds or null for the
+        device's own. Taken at the next run."""
+        manager: DeviceManager = app.config["MANAGER"]
+        if name not in manager.covers:
+            return _fail("cover_unknown", f"unknown cover '{name}'", 404, name=name)
+        data = _json_body()
+        try:
+            saved = app.config["COVER_TIMES"].put(name, {k: data.get(k) for k in ("open", "close")})
+        except (TypeError, ValueError):
+            return _fail("cover_time_invalid", "times must be seconds between 2 and 300", min=2, max=300)
+        return jsonify(ok=True, times=saved)

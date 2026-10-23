@@ -171,6 +171,7 @@ async function refreshDevices(anchor) {
     renderHouse();
     if (rangesMoved && state.climate) renderZones();
   }, anchor);
+  refreshCovers();
 }
 
 async function refreshProblems() {

@@ -78,6 +78,8 @@ const state = {
   energyPick: {},         // meter or plug -> the bar tapped, to read its numbers
   coverNote: null,        // the shutters' last command: {text, tone}, said in their card
   coverNoteTimer: null,   // the note's clearing, 30 s on
+  coverStates: {},        // shutter -> {moving, percent, reached}, as the board follows it (/api/covers)
+  coverTimer: null,       // the next read while one is moving
   // When the history was last read (the board's epoch, ms), and each
   // valve's opening and closing seen since: [from, to], `to` null while
   // it's open (start.js's noteValveChanges()).

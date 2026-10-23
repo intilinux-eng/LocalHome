@@ -72,7 +72,8 @@ def test_one_not_answering_leaves_the_others_moving(board):
     assert body["pending"] == []
     assert kitchen.sent == ["open"] and lounge.sent == ["open"]
     positions = app.config["POSITIONS"]
-    assert positions.get(kitchen.id) == 100 and positions.get(lounge.id) == 100
+    assert positions.run_of(kitchen.id)["direction"] == "open" and positions.run_of(lounge.id)["direction"] == "open"
+    assert positions.run_of(dead.id) is None
 
 
 def test_a_slow_one_is_said_waiting_and_the_answer_does_not_wait_for_it(board):

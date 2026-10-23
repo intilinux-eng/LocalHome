@@ -416,9 +416,11 @@ SHUTTERS_CONFIG = CONFIG.replace("integrations:\n", """integrations:
   - kind: cover
     type: simulated
     name: "Tapparella Soggiorno"
+    travel_time_seconds: 2
   - kind: cover
     type: simulated
     name: "Tapparella Cucina"
+    travel_time_seconds: 2
   - kind: cover
     type: simulated
     name: "Tapparella Bagno"
@@ -439,18 +441,27 @@ def test_no_shutters_in_the_config_no_shutters_card(walk):
 def test_the_shutters_all_at_once_then_one_by_itself(browser, shutters_house, tmp_path):
     w = Walk(browser, shutters_house, tmp_path, width=320)
     try:
-        state = lambda name: shutters_house.call(f"/api/covers/{urllib.parse.quote(name)}/status")["state"]
+        board = lambda: {c["name"]: c for c in shutters_house.call("/api/covers")["covers"]}
         card = w.page.locator("#house-body .tile.covers")
+
+        def where(label):
+            state = card.locator(".cover-row", has=w.page.locator(".cover-label", has_text=label)).locator(".cover-state")
+            return state.inner_text() if state.count() else ""
+
         w.check("one card, each shutter by the rest of its name",
-                card.count() == 1 and card.locator(".cover-name").all_inner_texts() == ["Soggiorno", "Cucina", "Bagno"])
+                card.count() == 1 and card.locator(".cover-label").all_inner_texts() == ["Soggiorno", "Cucina", "Bagno"])
+        w.check("where they are: not known before a full run, the one off the network said",
+                w.wait(lambda: where("Soggiorno") == "Posizione non nota" and where("Bagno") == "Non risponde"))
         card.locator('button[data-cover="all"][data-cover-action="open"]').click()
         note = card.locator(".cover-note")
         w.check("all opening, the one off the network named",
                 w.wait(lambda: note.count() == 1 and "Tutte in apertura" in note.inner_text() and "Bagno" in note.inner_text()))
-        w.check("and the board sent it to the others", state("Tapparella Soggiorno") == "open" and state("Tapparella Cucina") == "open")
+        w.check("on their way up", w.wait(lambda: where("Soggiorno").startswith("In salita"), 1500))
+        w.check("then open, as the board has it", w.wait(lambda: where("Soggiorno") == "Aperta" and where("Cucina") == "Aperta")
+                and board()["Tapparella Soggiorno"]["percent"] == 100)
         card.get_by_role("button", name="Chiudi Cucina").click()
-        w.check("one closing by itself", w.wait(lambda: note.inner_text() == "Cucina in chiusura"))
-        w.check("only that one", state("Tapparella Cucina") == "close" and state("Tapparella Soggiorno") == "open")
+        w.check("one closing by itself", w.wait(lambda: note.inner_text() == "Cucina in chiusura" and where("Cucina").startswith("In discesa")))
+        w.check("closed, the other one still open", w.wait(lambda: where("Cucina") == "Chiusa") and where("Soggiorno") == "Aperta")
         w.network_errors_expected = True  # the board's 502 for the shutter that didn't answer
         card.get_by_role("button", name="Ferma Bagno").click()
         w.check("the one off the network says so", w.wait(lambda: note.inner_text() == "Bagno non risponde"))

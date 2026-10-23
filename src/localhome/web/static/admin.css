@@ -532,6 +532,11 @@
 .device-role[open] > summary::after { transform: rotate(225deg); }
 .device-role[open] { padding-bottom: 14px; }
 .device-role .admin-zone-card { background: var(--surface); }
+/* The shutters' travel times: one row each - its name, up and down. */
+.cover-times { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cover-times:first-child { border-top: 0; padding-top: 0; }
+.cover-times-name { grid-column: 1 / -1; font-weight: 600; }
+.cover-times > .hint-text { grid-column: 1 / -1; margin: 0; }
 .device-role .sec-pills { font-weight: 400; }
 .settings-extra { margin-top: 16px; }
 /* The VMC's automatics: one block each, the fields greyed out while it's off. */

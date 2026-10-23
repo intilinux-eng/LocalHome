@@ -113,6 +113,6 @@ def test_a_command_that_works_clears_the_wait(client):
 
     c.post("/api/covers/Kitchen Blind/action/open")
 
-    assert "Kitchen Blind" not in app.config["COVER_READS"]
+    assert app.config["COVER_READS"]["Kitchen Blind"]["ok"] is True  # reached: no more waiting
     c.get("/api/covers/Kitchen Blind/status")
     assert cover.status_calls == 2

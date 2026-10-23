@@ -36,7 +36,14 @@
     "one_close": "{name} in chiusura",
     "not_answered": "Non hanno risposto: {names}",
     "one_not_answered": "{name} non risponde",
-    "still_trying": "Ancora in attesa: {names}"
+    "still_trying": "Ancora in attesa: {names}",
+    "state_open": "Aperta",
+    "state_closed": "Chiusa",
+    "state_at": "Al {pct}%",
+    "state_opening": "In salita",
+    "state_closing": "In discesa",
+    "state_unknown": "Posizione non nota",
+    "state_unreached": "Non risponde"
   },
   "fields": {
     "power_w": "Potenza",
@@ -892,7 +899,15 @@
     "link_row": "{leader} acceso → valvola {zone} aperta; spento → chiusa",
     "link_when_cool": "d'estate",
     "link_when_heat": "d'inverno",
-    "link_when_always": "sempre"
+    "link_when_always": "sempre",
+    "covers_heading": "Tapparelle",
+    "covers_note": "Il tempo reale di salita e di discesa di ogni tapparella, misurato una volta col cronometro dalla partenza a quando arriva in fondo. La home ci stima la posizione: il tempo impostato nel modulo ha di solito qualche secondo di margine. Vuoto: si usa quello del modulo. Vale dalla corsa successiva.",
+    "covers_open_label": "Salita (s)",
+    "covers_close_label": "Discesa (s)",
+    "covers_device": "Tempo del modulo: {s} s",
+    "covers_device_unknown": "Il modulo non risponde",
+    "covers_pill": "{n} di {total} misurate",
+    "covers_saved": "Salvato: vale dalla prossima corsa."
   },
   "vmc_presets": {
     "min": "Minimo",
@@ -974,7 +989,9 @@
     "override_while_away": "Sei fuori casa: le zone restano spente. Premi «Sono rientrato» per cambiarle.",
     "switch_away": "Sei fuori casa: «{name}» resta spento. Premi «Sono rientrato» per accenderlo.",
     "dehumidifier_away": "Sei fuori casa: il deumidificatore resta spento. Premi «Sono rientrato» per accenderlo.",
-    "schedule_while_away": "Sei fuori casa: la programmazione si cambia al rientro. Premi «Sono rientrato»."
+    "schedule_while_away": "Sei fuori casa: la programmazione si cambia al rientro. Premi «Sono rientrato».",
+    "cover_unknown": "Tapparella «{name}» sconosciuta.",
+    "cover_time_invalid": "Tempi non validi: secondi tra {min} e {max}."
   },
   "home": {
     "problem_technical": "Da far vedere a chi gestisce l'impianto: {what}",

@@ -65,6 +65,27 @@ def register(app: Flask) -> None:
 
         return jsonify(covers=list(manager.covers), sensors=sensors)
 
+    @app.route("/api/covers")
+    def api_covers():
+        """Every cover as LocalHome follows it (services/cover_watch.py) -
+        no device asked: which way it's moving, where it's estimated to be
+        (None until a full run has shown it), and whether it's reached
+        (None until first tried)."""
+        manager: DeviceManager = app.config["MANAGER"]
+        positions: PositionStore = app.config["POSITIONS"]
+        reads = app.config["COVER_READS"]
+        covers = []
+        for cover in manager.covers.values():
+            run = positions.run_of(cover.id)
+            read = reads.get(cover.name)
+            covers.append({
+                "name": cover.name,
+                "moving": run["direction"] if run else None,
+                "percent": positions.where(cover.id),
+                "reached": None if read is None else bool(read.get("ok")),
+            })
+        return jsonify(ok=True, covers=covers)
+
     # A cover that fails is asked again after this long, doubling up to
     # the ceiling: every open page asks every 8s, and a device that isn't
     # answering costs a full socket timeout each time - five of those had
@@ -121,9 +142,10 @@ def register(app: Flask) -> None:
     def _send_cover(cover, action: str) -> None:
         positions: PositionStore = app.config["POSITIONS"]
         cover.send(action)
-        app.config["COVER_READS"].pop(cover.name, None)  # it answered: poll it normally again
-        if action in ("open", "close"):
-            positions.set(cover.id, 100 if action == "open" else 0)
+        app.config["COVER_READS"][cover.name] = {"ok": True, "at": time.time()}  # it answered
+        # The run starts (or ends) now: the cover's own report of it comes a
+        # moment later, and is then nothing new.
+        positions.observe_state(cover, action)
 
     def _cover_all(action: str):
         manager: DeviceManager = app.config["MANAGER"]
