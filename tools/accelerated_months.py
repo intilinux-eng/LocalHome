@@ -192,6 +192,7 @@ def _patch_modules(fast_datetime, fast_date, patched: dict) -> None:
 def _no_threads() -> callable:
     """Each loop's start() does nothing: this drives their cycles itself."""
     from localhome.core.manager import DeviceManager
+    from localhome.services.cover_watch import CoverWatcher
     from localhome.services.dehumidifier import DehumidifierTimer
     from localhome.services.history import HistoryRecorder
     from localhome.services.interlock import InterlockController
@@ -202,7 +203,7 @@ def _no_threads() -> callable:
     from localhome.services.vmc_schedule import VmcScheduleController
 
     classes = (DeviceManager, HistoryRecorder, ThermostatController, InterlockController, VmcScheduleController,
-               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService)
+               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService, CoverWatcher)
     saved = {cls: cls.__dict__["start"] for cls in classes}
     for cls in classes:
         cls.start = lambda self, *args, **kwargs: None

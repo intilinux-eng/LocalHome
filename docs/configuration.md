@@ -56,6 +56,7 @@ energy:                # optional, power-budget alerting
   contract_limit_w: 3000
 
 positions_file: "positions.json"   # default shown
+cover_times_file: "cover_times.json"   # default shown - each cover's measured travel time, set in the admin panel
 history:
   db_file: "data/history.db"        # default shown
   poll_interval_seconds: 30          # default shown

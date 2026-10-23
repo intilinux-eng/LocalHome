@@ -687,11 +687,10 @@ def device_health(manager) -> list[dict]:
 
 
 def cover_health(last_reads: dict, now: float | None = None) -> list[dict]:
-    """Covers are the one kind of device nothing polls in the background:
-    they're read when the dashboard asks. This turns what those reads
-    last said into the same shape device_health() produces, so an
-    unreachable cover shows up in the system status like anything else.
-    A cover nobody has opened the dashboard for yet simply isn't listed."""
+    """Covers are followed by services.cover_watch, not the DeviceManager's
+    pollers: whether each one is reached is kept in app.config["COVER_READS"].
+    This turns that into the same shape device_health() produces, so an
+    unreachable cover shows up in the system status like anything else."""
     now = time.time() if now is None else now
     return [
         {

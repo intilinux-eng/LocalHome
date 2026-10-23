@@ -1,14 +1,19 @@
 """Best-effort open/closed *position* (0-100%) for covers that only
 report a raw motor command (open/close/stop), not an absolute position -
 true of most inexpensive curtain-switch modules. Position is derived from
-how long the motor has been told to run for, calibrated against each
-device's own reported travel time. This works against any CoverDriver,
+how long the motor ran, against each cover's travel time: the one set in
+the admin panel for that direction (measured with a stopwatch), else the
+time the device itself reports. This works against any CoverDriver,
 regardless of brand.
 
-Also detects moves triggered by something other than this app (e.g. a
-voice-assistant routine talking to the device directly) well enough to
-keep the estimate roughly in sync: if the motor starts moving without us
-having sent that command, and later stops, assume it ran to completion.
+Every reported change goes through observe_state(), whoever moved the
+cover - LocalHome, a wall button, an app: an open or close starts a run, the
+next state ends it, and the run's length says how far it got. A run that
+lasted the whole travel time reached the end (the curtain switches stop
+their motor on a timer a little longer than the run, so their "stop"
+after a full run means fully open or closed). A cover never seen making a
+full run has no known position until it does: a part run from an unknown
+place says nothing about where it ended.
 """
 from __future__ import annotations
 
@@ -24,17 +29,23 @@ from localhome.util.jsonfile import load_json, save_json_atomic
 logger = logging.getLogger(__name__)
 
 OWN_COMMAND_GRACE_SECONDS = 60
+# A move not given by LocalHome (a wall button) is reported about this
+# late: measured on a LoraTap module, 1.2 s after the press.
+EXTERNAL_REPORT_LAG_SECONDS = 1.2
 
 
 class PositionStore:
-    def __init__(self, path: str):
+    def __init__(self, path: str, travel_times=None):
+        """`travel_times(cover, direction)`: the measured seconds for a run
+        that way, or None to use the time the device reports."""
         self.path = path
+        self._travel_times = travel_times
         self._lock = threading.Lock()
         self._active_timers: dict[str, threading.Timer] = {}
         self._active_moves: dict[str, dict] = {}
         self._own_command_until: dict[str, float] = {}
         self._last_seen_state: dict[str, str] = {}
-        self._pending_external_move: dict[str, str] = {}
+        self._runs: dict[str, dict] = {}
 
     def _load(self) -> dict:
         if not os.path.exists(self.path):
@@ -49,17 +60,25 @@ class PositionStore:
         save_json_atomic(self.path, positions)
 
     def get(self, cover_id: str, default: int = 100) -> int:
-        """Current best-effort position. While a move_to_percent() move is
-        still running, this interpolates between where it started and its
-        target based on elapsed time, rather than returning the pre-move
-        value until the motor timer fires - otherwise a status poll mid-move
-        looks like the cover hasn't budged yet."""
+        """Current best-effort position. While a move is still running,
+        this interpolates from where it started by the time elapsed,
+        rather than returning the pre-move value until the motor stops -
+        otherwise a status poll mid-move looks like the cover hasn't
+        budged yet."""
+        value = self.where(cover_id)
+        return default if value is None else value
+
+    def where(self, cover_id: str) -> int | None:
+        """Like get(), but None when the position isn't known."""
         with self._lock:
             move = self._active_moves.get(cover_id)
+            run = self._runs.get(cover_id)
         if move is not None:
             frac = min(1.0, (time.time() - move["start"]) / move["duration"]) if move["duration"] > 0 else 1.0
             return round(move["start_percent"] + (move["target_percent"] - move["start_percent"]) * frac)
-        return self._load().get(cover_id, default)
+        if run is not None:
+            return self._run_position(run, time.time())
+        return self._load().get(cover_id)
 
     def is_calibrated(self, cover_id: str) -> bool:
         return cover_id in self._load()
@@ -87,43 +106,73 @@ class PositionStore:
 
     def mark_own_command(self, cover_id: str, grace_seconds: float = OWN_COMMAND_GRACE_SECONDS) -> None:
         """Record that a move for `cover_id` was just triggered by this
-        app, so observe_state() doesn't mistake it for an
-        externally-triggered move."""
+        app: observe_state() then takes its start as reported on time, not
+        late like a wall button's."""
         with self._lock:
             self._own_command_until[cover_id] = time.time() + grace_seconds
 
-    def observe_state(self, cover: CoverDriver, state: str) -> None:
-        """Feed a freshly-polled raw motor state in, to catch covers moved
-        by something other than this app. These devices report only the
-        current motor command, not an absolute position, so the best we
-        can do is: if we see a full open/close start that we didn't
-        initiate, and then see the motor go back to stop, assume it ran
-        to completion and record the resulting position as 100/0."""
+    def travel_time(self, cover: CoverDriver, direction: str) -> float:
+        """Seconds for a full run that way: measured, else the device's own."""
+        measured = self._travel_times(cover, direction) if self._travel_times else None
+        if measured:
+            return float(measured)
+        return self.device_travel_time(cover)
+
+    @staticmethod
+    def device_travel_time(cover: CoverDriver) -> float:
+        """The run time the device itself reports (a Tuya module's timer,
+        remembered by its driver once it has said it)."""
+        return float(cover.read_travel_time())
+
+    @staticmethod
+    def _run_position(run: dict, at: float) -> int | None:
+        if run["start_percent"] is None:
+            return None
+        sign = 1 if run["direction"] == "open" else -1
+        moved = (at - run["start"]) / run["travel"] * 100 if run["travel"] > 0 else 100
+        return round(max(0.0, min(100.0, run["start_percent"] + sign * moved)))
+
+    def run_of(self, cover_id: str) -> dict | None:
+        """The run going on, if any: {direction, start, travel}."""
+        with self._lock:
+            run = self._runs.get(cover_id)
+        return dict(run) if run else None
+
+    def observe_state(self, cover: CoverDriver, state: str, at: float | None = None) -> None:
+        """A motor command the cover reported (heard as it happened, or
+        polled), whoever gave it: an open or close starts a run from where
+        the cover is, the next state ends it where the time says."""
+        now = time.time() if at is None else at
         cover_id = cover.id
         with self._lock:
             previous = self._last_seen_state.get(cover_id)
             self._last_seen_state[cover_id] = state
-            if previous == state:
+            if previous == state or cover_id in self._active_timers:
+                # Nothing new; or a move_to_percent() move, which knows its target.
                 return
-
-            if state in ("open", "close"):
-                until = self._own_command_until.get(cover_id)
-                own_move = cover_id in self._active_timers or (until is not None and time.time() < until)
-                direction = None
-                if not own_move:
-                    self._pending_external_move[cover_id] = state
-            elif state == "stop":
-                direction = self._pending_external_move.pop(cover_id, None)
+            run = self._runs.pop(cover_id, None)
+            until = self._own_command_until.get(cover_id)
+            own = until is not None and now < until
+        if run is not None:
+            elapsed = now - run["start"]
+            if elapsed >= run["travel"]:
+                self.set(cover_id, 100 if run["direction"] == "open" else 0)
             else:
-                direction = None
-
-        if direction:
-            self.set(cover_id, 100 if direction == "open" else 0)
+                ended = self._run_position(run, now)
+                if ended is not None:
+                    self.set(cover_id, ended)
+        if state in ("open", "close"):
+            start = now if own else now - EXTERNAL_REPORT_LAG_SECONDS
+            travel = self.travel_time(cover, state)
+            start_percent = self._load().get(cover_id)
+            with self._lock:
+                self._runs[cover_id] = {"direction": state, "start": start, "start_percent": start_percent,
+                                        "travel": travel}
 
     def move_to_percent(self, cover: CoverDriver, target_percent: int) -> dict:
         """0% = fully closed, 100% = fully open. Position is a
-        best-effort estimate: derived from the configured travel time,
-        not a real sensor reading."""
+        best-effort estimate: derived from the travel time, not a real
+        sensor reading."""
         cover_id = cover.id
         target_percent = max(0, min(100, int(target_percent)))
 
@@ -134,9 +183,8 @@ class PositionStore:
         if abs(delta) < 1:
             return {"moved": False, "duration": 0, "position": current}
 
-        travel_time = cover.read_travel_time()
-        duration = abs(delta) / 100.0 * travel_time
         direction = "open" if delta > 0 else "close"
+        duration = abs(delta) / 100.0 * self.travel_time(cover, direction)
 
         def finish():
             try:
@@ -148,11 +196,12 @@ class PositionStore:
                     self._active_moves.pop(cover_id, None)
 
         # Register the timer (marking this as our own move) before sending
-        # the command, so a concurrent observe_state() poll can't see the
-        # motor start moving and mistake it for an externally-triggered move.
+        # the command, so a concurrent observe_state() can't see the motor
+        # start moving and take it for a run of its own.
         timer = threading.Timer(duration, finish)
         with self._lock:
             self._active_timers[cover_id] = timer
+            self._runs.pop(cover_id, None)
             self._active_moves[cover_id] = {
                 "start": time.time(),
                 "start_percent": current,

@@ -39,6 +39,8 @@ from localhome.services.history import HistoryRecorder, HistoryStore, PowerBudge
 from localhome.services import led_matrix, panel_settings
 from localhome.services.maintenance import Maintenance
 from localhome.services.manual_override import ManualOverrideStore
+from localhome.services.cover_times import CoverTimes
+from localhome.services.cover_watch import CoverWatcher
 from localhome.services.position_control import PositionStore
 from localhome.services.interlock import (
     SEASON_ACTIONS,
@@ -221,7 +223,11 @@ def create_app(config_path: str | None = None) -> Flask:
         register_auth(app, config.resolve(auth_cfg["secrets_file"]))
 
     positions_path = config.resolve(config.raw.get("positions_file", "positions.json"))
-    positions = PositionStore(positions_path)
+    # Each cover's travel time measured up and down, set in the admin panel.
+    cover_times = CoverTimes(config.resolve(config.raw.get("cover_times_file", "cover_times.json")))
+    positions = PositionStore(positions_path, travel_times=lambda cover, direction: cover_times.get(cover.name, direction))
+    # Whether each cover is reached, as services.cover_watch last found it.
+    cover_reads: dict = {}
 
     history_cfg = config.raw.get("history", {})
     db_path = config.resolve(history_cfg.get("db_file", "data/history.db"))
@@ -396,6 +402,9 @@ def create_app(config_path: str | None = None) -> Flask:
     recorder.energy = EnergyLedger(store)
     recorder.backfill_energy()
     manager.start()
+    # Every cover followed all the time, so its position stays right whoever moves it.
+    cover_watch = CoverWatcher(manager, positions, cover_reads)
+    cover_watch.start()
     recorder.start()
     if thermostat:
         thermostat.start()
@@ -456,6 +465,8 @@ def create_app(config_path: str | None = None) -> Flask:
     app.config["TRANSLATIONS"] = load_translations(config.web_language)
     app.config["MANAGER"] = manager
     app.config["POSITIONS"] = positions
+    app.config["COVER_TIMES"] = cover_times
+    app.config["COVER_WATCH"] = cover_watch
     app.config["HISTORY"] = store
     app.config["DAY_RANGE"] = day_range
     app.config["HISTORY_POLL_INTERVAL"] = history_poll_interval
@@ -477,9 +488,9 @@ def create_app(config_path: str | None = None) -> Flask:
     # When its filters were last cleaned, and how often - the home card's
     # reminder; see services/vmc_filters.py.
     app.config["VMC_FILTERS"] = VmcFilterStore(config.resolve("vmc_filters.json"))
-    # What each cover's last read said - covers are read on demand, not
-    # polled, so this is where the system status learns about them.
-    app.config["COVER_READS"] = {}
+    # Whether each cover is reached - services.cover_watch keeps it, and
+    # this is where the system status learns about them.
+    app.config["COVER_READS"] = cover_reads
     # Whether the Shellys still reach the board - see system_status.LanWatch.
     app.config["LAN_WATCH"] = system_status.LanWatch()
     # The eMMC's writes over the last hour - see system_status.WriteRate.

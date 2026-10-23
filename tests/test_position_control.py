@@ -54,17 +54,76 @@ def test_move_to_percent_is_a_noop_when_already_there(tmp_path):
     assert cover.sent == []
 
 
-def test_observe_state_records_completed_external_move(tmp_path):
+def test_a_full_run_by_someone_else_ends_fully_open(tmp_path):
+    # A wall button opens it: the module says "open", and "stop" when its
+    # run timer is over - a run as long as the travel time reached the end.
     store = PositionStore(str(tmp_path / "positions.json"))
-    cover = FakeCover("c1")
+    cover = FakeCover("c1", travel_time=10.0)
     store.set(cover.id, 0)
 
-    # Something other than this app (e.g. a voice-assistant routine) drives
-    # the motor directly: we see it start opening, then stop.
-    store.observe_state(cover, "open")
-    store.observe_state(cover, "stop")
+    store.observe_state(cover, "open", at=1000.0)
+    store.observe_state(cover, "stop", at=1010.0)
 
     assert store.get(cover.id) == 100
+
+
+def test_a_run_stopped_half_way_ends_half_way(tmp_path):
+    # Stopped by LocalHome 5 s into a 10 s run: half open. (A wall button's
+    # start is reported about 1.2 s late - that's counted too.)
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=10.0)
+    store.set(cover.id, 0)
+
+    store.mark_own_command(cover.id)
+    store.observe_state(cover, "open", at=time.time())
+    store.observe_state(cover, "stop", at=time.time() + 5.0)
+    assert store.get(cover.id) == 50
+
+    other = FakeCover("c2", travel_time=10.0)
+    store.set(other.id, 50)
+    store.observe_state(other, "close", at=2000.0)  # by the wall button: started at 1998.8
+    store.observe_state(other, "stop", at=2001.3)
+    assert store.get(other.id) == 25
+
+
+def test_a_part_run_from_nowhere_known_says_nothing_until_a_full_one(tmp_path):
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=10.0)
+
+    store.observe_state(cover, "close", at=1000.0)
+    store.observe_state(cover, "stop", at=1003.0)
+    assert store.where(cover.id) is None
+
+    store.observe_state(cover, "close", at=1100.0)
+    store.observe_state(cover, "stop", at=1110.0)
+    assert store.where(cover.id) == 0
+
+
+def test_the_measured_travel_time_is_the_one_used(tmp_path):
+    # The module's timer has a margin (19 s for a 16 s run): the time
+    # measured with a stopwatch, set in the admin panel, wins.
+    store = PositionStore(str(tmp_path / "positions.json"),
+                          travel_times=lambda cover, direction: 20.0 if direction == "open" else None)
+    cover = FakeCover("c1", travel_time=10.0)
+    store.set(cover.id, 0)
+    assert store.travel_time(cover, "open") == 20.0 and store.travel_time(cover, "close") == 10.0
+
+    store.mark_own_command(cover.id)
+    store.observe_state(cover, "open", at=time.time())
+    store.observe_state(cover, "stop", at=time.time() + 10.0)
+    assert store.get(cover.id) == 50
+
+
+def test_where_it_is_moves_while_it_runs(tmp_path):
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=10.0)
+    store.set(cover.id, 0)
+
+    store.mark_own_command(cover.id)
+    store.observe_state(cover, "open", at=time.time() - 4.0)
+
+    assert store.run_of(cover.id)["direction"] == "open"
+    assert 35 <= store.where(cover.id) <= 45
 
 
 def test_get_interpolates_towards_the_target_while_a_move_is_in_flight(tmp_path):
@@ -102,7 +161,7 @@ def test_cancel_pending_move_stops_interpolating(tmp_path):
     assert store.get(cover.id) == 100
 
 
-def test_observe_state_ignores_moves_this_app_triggered(tmp_path):
+def test_an_own_run_stopped_at_once_moves_nothing(tmp_path):
     store = PositionStore(str(tmp_path / "positions.json"))
     cover = FakeCover("c1")
     store.set(cover.id, 0)
@@ -111,9 +170,20 @@ def test_observe_state_ignores_moves_this_app_triggered(tmp_path):
     store.observe_state(cover, "open")
     store.observe_state(cover, "stop")
 
-    # Not attributed to an external move, so the position estimate is left
-    # alone - move_to_percent()/finish() is what would normally update it.
     assert store.get(cover.id) == 0
+
+
+def test_a_move_to_percent_is_left_to_its_own_timer(tmp_path):
+    # Its target is known: the module's reports of the same run change nothing.
+    store = PositionStore(str(tmp_path / "positions.json"))
+    cover = FakeCover("c1", travel_time=1.0)
+    store.set(cover.id, 0)
+
+    store.move_to_percent(cover, 60)
+    store.observe_state(cover, "open")
+    assert store.run_of(cover.id) is None
+    time.sleep(0.8)
+    assert store.get(cover.id) == 60
 
 
 def test_set_survives_many_covers_finishing_at_the_same_instant(tmp_path):
