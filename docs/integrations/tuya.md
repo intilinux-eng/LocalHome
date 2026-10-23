@@ -133,6 +133,30 @@ Both drivers load *every* matching entry from `devices_file` as a
 separate cover/sensor named after its `name` field in that file - you
 don't list devices individually in `config.yaml`.
 
+### How the covers are followed
+
+Each curtain switch is kept on a connection that stays open, and says
+every change by itself - LocalHome's commands, the wall button's, the
+app's - so the home page knows at once which way each shutter is moving
+(services/cover_watch.py). A module that stops answering is tried again
+after 5 s, then less and less often, and shows as not answering in the
+system status.
+
+These modules don't know where the shutter is: they report only the last
+command, and "stop" when their own run timer (DP10, set in the Tuya
+app) runs out. LocalHome estimates the position from how long each run
+lasted (services/position_control.py): a run as long as the travel
+time reached the end; one stopped earlier got that share of the way.
+The timer is usually set with a few seconds of margin, so measure each
+shutter's real time up and down once with a stopwatch and enter it in
+the admin panel (Dispositivi > Tapparelle): it's kept in
+`cover_times.json` beside config.yaml. Until a shutter has made one full
+run, its position is shown as unknown.
+
+Give each module a fixed address in the router (a DHCP reservation
+by MAC): LocalHome finds a moved module again by its id, but meanwhile
+it isn't answering.
+
 ## 4. Command-line control (optional)
 
 ```bash

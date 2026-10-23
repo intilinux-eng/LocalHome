@@ -40,6 +40,15 @@ class CoverDriver(ABC):
         own travel time (most Tuya curtain switches do)."""
         return default
 
+    def listen(self, on_state, on_link, stop) -> bool:
+        """For a device that says each change by itself: keep a connection
+        open until `stop` (a threading.Event) is set, calling
+        `on_state(state)` with each motor command it reports - whoever gave
+        it, an app, a wall button - and `on_link(ok, error)` when it's
+        reached or lost. Returns False at once if the device can't do it:
+        services.cover_watch then asks its status() every few seconds."""
+        return False
+
 
 class PollingDriver(ABC):
     """Base for anything read on a fixed interval rather than commanded:

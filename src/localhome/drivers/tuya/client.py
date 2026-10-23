@@ -183,6 +183,21 @@ class TuyaConnection:
     def set_value(self, dp: int | str, value) -> None:
         self._call(lambda device: require_dps(device.set_value(dp, value), self.name))
 
+    def open_persistent(self, listen_timeout: float = 1.0):
+        """A connection kept open, to hear what the device says by itself:
+        (device, its dps now). Reached like every call - one look for a new
+        address if nothing answers. Reads on it wait `listen_timeout`."""
+        def connect(device):
+            device.set_socketPersistent(True)
+            try:
+                dps = require_dps(device.status(), self.name)
+            except Exception:
+                device.close()
+                raise
+            device.set_socketTimeout(listen_timeout)
+            return device, dps
+        return self._call(connect)
+
 
 def address_book_for(devices_file: str, finder=None) -> TuyaAddressBook:
     """One address book per devices.json, stored beside it."""

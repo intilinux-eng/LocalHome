@@ -1,7 +1,8 @@
 # Simulated (no hardware required)
 
 Covers `type: simulated`, registered for `climate`, `switch`, `cover`
-(a roller shutter: it keeps the last open/close/stop as its state) and
+(a roller shutter: its state is the last open/close/stop, a run stops by
+itself after its travel time, and it says each change to whoever listens) and
 `number` (a dimmer or fan speed: `initial_value`, `min`, `max`, `unit`
 - enough to try a VMC and its day/night program with no hardware; with
 `paired_switch` and `on_with_value: true`, picking a speed also switches
@@ -95,7 +96,7 @@ real installation:
 | Option | Default | Meaning |
 |---|---|---|
 | `name` | "Simulated shutter" | dashboard/API/CLI name |
-| `travel_time_seconds` | 15.0 | a full open-close run, for the estimated position |
+| `travel_time_seconds` | 15.0 | a full run: it stops by itself after it, as a curtain switch's timer does |
 | `unreachable` | false | fail every call, as a shutter off the network does |
 
 ## Example - a fake power meter with no thermostat involved
