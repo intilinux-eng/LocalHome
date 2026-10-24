@@ -274,8 +274,33 @@ for t in $targets; do
 done
 echo "   undo: systemctl disable --now localhome-flash-mounts.service && rm $FLASH_UNIT && mount -o remount,nolazytime,commit=5 <each of: $targets>"
 
+echo "== 12. LocalHome may talk to the microcontroller"
+# The LED matrix's frames reach the MCU through arduino-router's socket.
+# Since arduino-router 0.11 (October 2026) that socket is open only to root
+# and the arduino-router group, and the update puts nobody in it: without
+# this the matrix stays dark ("LED matrix: Permission denied" in the log),
+# and so does any script of yours that uses the bridge. LocalHome's user
+# joins the group; a process gets its groups when it starts, so LocalHome
+# is restarted once.
+LH_USER=$(systemctl show -p User --value localhome 2>/dev/null || true)
+[ -n "$LH_USER" ] || LH_USER=${SUDO_USER:-}
+if ! getent group arduino-router >/dev/null 2>&1; then
+    echo "   no arduino-router group here (an older arduino-router, or not a UNO Q) - nothing to do"
+elif [ -z "$LH_USER" ] || ! id "$LH_USER" >/dev/null 2>&1; then
+    echo "   LocalHome's user not found - add it by hand: usermod -aG arduino-router <user>"
+elif id -nG "$LH_USER" | tr ' ' '\n' | grep -qx arduino-router; then
+    echo "   $LH_USER is already in the arduino-router group"
+else
+    usermod -aG arduino-router "$LH_USER"
+    if systemctl is-active --quiet localhome; then
+        systemctl restart localhome
+    fi
+    echo "   on: $LH_USER added to the arduino-router group (an open SSH session sees it after logging in again)"
+fi
+echo "   undo: gpasswd -d ${LH_USER:-<user>} arduino-router"
+
 if [ "$LEAN" = 1 ]; then
-    echo "== 12. Lean: remove what LocalHome doesn't use"
+    echo "== 13. Lean: remove what LocalHome doesn't use"
     if command -v docker >/dev/null 2>&1; then
         docker image prune -a -f >/dev/null 2>&1 || true   # App Lab's images, unused by LocalHome
     fi

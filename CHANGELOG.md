@@ -77,6 +77,12 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   one.
 
 ### Fixed
+- **The LED matrix after the October 2026 Arduino update.** arduino-router
+  0.11 opens its socket to the microcontroller only to a new
+  `arduino-router` group, and the update puts nobody in it: the matrix
+  stayed dark, with "LED matrix: Permission denied" in the log.
+  `deploy/tune-board.sh` now adds LocalHome's user to that group and
+  restarts LocalHome once; run it again on a board that had the update.
 - **The hours on can't come out short of a slow cycle.** Each history
   sample stands for 30 seconds, but the recorder waited 30 seconds after
   each cycle: one that wrote or pruned (up to 10 s on a big history) left

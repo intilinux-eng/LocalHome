@@ -173,6 +173,7 @@ the installed version.
 | mosquitto log into the system log | the last log still written to the eMMC | set `log_dest file /var/log/mosquitto/mosquitto.log` in `/etc/mosquitto/mosquitto.conf` |
 | No graphical desktop | no monitor attached; ~80 MB of RAM | `systemctl set-default graphical.target && systemctl enable --now lightdm` |
 | ext4 `lazytime,commit=60` on `/` and LocalHome's disk, at every boot | reading a file no longer writes it; one journal commit a minute instead of every 5 s | `systemctl disable --now localhome-flash-mounts.service`, then `mount -o remount,nolazytime,commit=5` each |
+| LocalHome's user in the `arduino-router` group | since arduino-router 0.11 (October 2026) the bridge to the microcontroller is open only to that group; without it the LED matrix stays dark | `gpasswd -d <user> arduino-router` |
 
 `sudo sh deploy/tune-board.sh --lean` - also removes what LocalHome
 doesn't use, recommended on the 2 GB board:
@@ -186,6 +187,12 @@ doesn't use, recommended on the 2 GB board:
 
 Kept on purpose: `adbd` (USB access - your way in if the Wi-Fi is ever
 lost) and `arduino-router` (the Linux-microcontroller bridge).
+
+**Run it again after every `sudo apt upgrade`.** The Arduino packages can
+undo it: the October 2026 update turned `arduino-app-cli` and
+`arduino-cloud-connector` back on, and closed arduino-router's socket to a
+new group. A second run puts it all back as it was, and changes nothing
+else.
 
 ## Updating
 

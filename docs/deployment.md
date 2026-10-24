@@ -271,6 +271,11 @@ each step reversible (it prints how):
    loses at most the last minute of the rest, and the file system stays
    intact. Applied at boot by `localhome-flash-mounts.service` -
    `/etc/fstab` is not touched.
+6. **LocalHome may talk to the microcontroller** (step 12, Arduino UNO Q):
+   since arduino-router 0.11 its socket is open only to the
+   `arduino-router` group. LocalHome's user joins it, or the LED matrix
+   stays dark ("Permission denied" in the log). Nothing to do on boards
+   without that group.
 
 Left as they are, on purpose: Arduino App Lab and its services
 (`arduino-app-cli`, `arduino-router`, Docker) - turn them off only if
