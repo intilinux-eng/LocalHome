@@ -195,6 +195,7 @@ def _no_threads() -> callable:
     from localhome.services.cover_watch import CoverWatcher
     from localhome.services.dehumidifier import DehumidifierTimer
     from localhome.services.history import HistoryRecorder
+    from localhome.services.house_dataset import HouseDataset
     from localhome.services.interlock import InterlockController
     from localhome.services.led_matrix import LedMatrixService
     from localhome.services.shelly_health import ShellyHealth
@@ -203,7 +204,7 @@ def _no_threads() -> callable:
     from localhome.services.vmc_schedule import VmcScheduleController
 
     classes = (DeviceManager, HistoryRecorder, ThermostatController, InterlockController, VmcScheduleController,
-               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService, CoverWatcher)
+               DehumidifierTimer, ShellyHealth, WriteRate, LedMatrixService, CoverWatcher, HouseDataset)
     saved = {cls: cls.__dict__["start"] for cls in classes}
     for cls in classes:
         cls.start = lambda self, *args, **kwargs: None
