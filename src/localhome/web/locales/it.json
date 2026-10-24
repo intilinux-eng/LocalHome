@@ -43,7 +43,10 @@
     "state_opening": "In salita",
     "state_closing": "In discesa",
     "state_unknown": "Posizione non nota",
-    "state_unreached": "Non risponde"
+    "state_unreached": "Non risponde",
+    "sum_moving": "In movimento",
+    "sum_all_open": "Tutte aperte",
+    "sum_all_closed": "Tutte chiuse"
   },
   "fields": {
     "power_w": "Potenza",

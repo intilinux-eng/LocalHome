@@ -9,6 +9,18 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **The shutters' card redrawn for the phone.**
+  - Each shutter has a small window beside its name, its slats down as
+    far as it's closed. They slide while it moves; a dashed frame means
+    its place isn't known yet, amber means it isn't answering.
+  - Its three arrows sit in one pill, drawn rather than typed so they're
+    the same on every phone. The arrow of the way it's going is lit, so
+    the stop beside it is easy to find.
+  - "Apri tutte · ■ · Chiudi tutte" are raised keys in one bar.
+  - The card's head says "In movimento" while one moves, and "Tutte
+    aperte" or "Tutte chiuse" when every one is known and they agree.
+  - On a wide screen the rows go side by side only when the card itself
+    has the room.
 - **Each shutter's state on the home page**, under its name in the
   shutters' card: open, closed, part way (a percent), moving up or down,
   or not answering. LocalHome now follows every shutter all the time, on

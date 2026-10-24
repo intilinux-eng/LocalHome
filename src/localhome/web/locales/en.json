@@ -43,7 +43,10 @@
     "state_opening": "Opening",
     "state_closing": "Closing",
     "state_unknown": "Position unknown",
-    "state_unreached": "Not answering"
+    "state_unreached": "Not answering",
+    "sum_moving": "Moving",
+    "sum_all_open": "All open",
+    "sum_all_closed": "All closed"
   },
   "fields": {
     "power_w": "Power",

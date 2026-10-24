@@ -9,9 +9,11 @@ The board: two zones as a real home's - Stanze, with a week (24° at night,
 VMC, dehumidifier, outdoor sensor and a light. States, each a full page:
 hourly (as found), details (the rooms' details open), manual / off (the
 choice open), held (manual applied for 2 h), away (24 h), covers (four
-simulated shutters in config.yaml, "Apri tutte" tapped - with it, the other
-states have the shutters' card too). Needs the browser tests' setup:
-pip install -e ".[dev,ui]", playwright install chromium.
+simulated shutters in config.yaml, one of them off the network: all opened,
+one stopped half way, one closing - the page and the card alone, as
+covers_card_*.png; with it, the other states have the shutters' card too).
+Needs the browser tests' setup: pip install -e ".[dev,ui]", playwright
+install chromium.
 """
 from __future__ import annotations
 
@@ -33,9 +35,11 @@ from tests.ui.helpers import SIMULATED_ZONE  # noqa: E402
 ROOMS, BATHS = "Stanze", "Bagni"
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
 STATES = ["hourly", "details", "manual", "off", "held", "away", "covers"]
-# The shutters' card needs shutters in config.yaml: four simulated ones.
-COVERS = "".join(f'  - kind: cover\n    type: simulated\n    name: "Tapparella {room}"\n'
-                 for room in ("Soggiorno", "Cucina", "Camera", "Studio"))
+# The shutters' card needs shutters in config.yaml: four simulated ones, 3 s
+# up or down, the last one off the network.
+COVERS = "".join(f'  - kind: cover\n    type: simulated\n    name: "Tapparella {room}"\n    travel_time_seconds: 3\n'
+                 for room in ("Soggiorno", "Cucina", "Camera")) + \
+    '  - kind: cover\n    type: simulated\n    name: "Tapparella Studio"\n    unreachable: true\n'
 
 
 def main() -> None:
@@ -95,12 +99,24 @@ def main() -> None:
                             page.locator("#sheet button[data-away='24']").click()
                             page.wait_for_selector(".zone .away-note", timeout=10000)
                         elif state == "covers":
+                            # All opened (a full run: each one's place is known),
+                            # Cucina stopped half way down, Camera on its way down.
                             page.click('#house-body button[data-cover="all"][data-cover-action="open"]')
                             page.wait_for_selector("#house-body .cover-note", timeout=10000)
+                            page.wait_for_timeout(3800)
+                            page.click('#house-body button[data-cover="Tapparella Cucina"][data-cover-action="close"]')
+                            page.wait_for_timeout(1500)
+                            page.click('#house-body button[data-cover="Tapparella Cucina"][data-cover-action="stop"]')
+                            page.click('#house-body button[data-cover="Tapparella Camera"][data-cover-action="close"]')
+                            page.wait_for_timeout(900)
                         page.wait_for_timeout(600)
                         shot = args.out / f"{state}_{width}_{scheme}.png"
                         page.screenshot(path=str(shot), full_page=True)
                         print(shot)
+                        if state == "covers":
+                            card = args.out / f"covers_card_{width}_{scheme}.png"
+                            page.locator("#house-body .tile.covers").screenshot(path=str(card))
+                            print(card)
                         page.close()
             browser.close()
     finally:

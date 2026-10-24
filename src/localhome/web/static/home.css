@@ -838,35 +838,90 @@ body[data-running="true"] .hero-season::before {
 .tile-off::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 
 /* The shutters: all of them at once on top - open and close wide, stop
-   between - then each one on its row with its three arrows, and the last
-   command said under them (amber when one didn't answer). */
+   between, as raised keys in one bar - then each one on its row: a small
+   window showing how far down it is, its name and where it is, and its
+   three arrows in one pill (the way it's going lit). The last command is
+   said under them (amber when one didn't answer). */
 @media (min-width: 600px) { .covers { grid-column: span 2; } }
-.covers-all { display: grid; grid-template-columns: 1fr 48px 1fr; gap: 8px; }
-.covers-all button, .cover-ctl button {
-  min-height: 44px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.92rem;
-  font-weight: 600;
+.covers { gap: 10px; }
+.covers-sum { font-size: 0.8rem; color: var(--text-3); white-space: nowrap; }
+.covers-sum[data-tone="active"] { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; }
+.covers-sum[data-tone="active"]::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); animation: pulse 2.4s ease-in-out infinite;
 }
-.covers-all button { padding: 9px 10px; }
-.covers button:disabled { opacity: 0.5; }
-.covers button:active { transform: scale(0.96); }
+.covers svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.covers [data-cover-action="stop"] svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+/* The rows side by side only when the card itself is wide enough for two
+   (a wide screen gives it two of the grid's columns - not enough). */
+.covers { container-type: inline-size; }
+
+.covers-all { display: grid; grid-template-columns: 1fr 52px 1fr; gap: 3px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
+.covers-all button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 46px; padding: 8px 10px; border: 0; border-radius: 999px;
+  background: var(--surface); box-shadow: var(--shadow); color: var(--text);
+  font-size: 0.92rem; font-weight: 600; white-space: nowrap;
+}
+.covers-all button svg { width: 18px; height: 18px; color: var(--text-2); }
+.covers-all button[data-cover-action="stop"] svg { width: 15px; height: 15px; }
+/* The narrowest phones: the words only, they need the room. */
+@media (max-width: 359px) { .covers-all button:not([data-cover-action="stop"]) svg { display: none; } }
+
 .cover-rows { list-style: none; margin: 0; padding: 0; display: grid; column-gap: 24px; }
-.cover-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.cover-row { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 6px 0; border-top: 1px solid var(--line); }
 .cover-row:first-child { border-top: 0; }
-.cover-name { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; color: var(--text-2); }
-.cover-state { font-size: 0.78rem; color: var(--text-3); }
+
+/* The window: its frame, the sky in it, the shutter's slats down to how far
+   it's closed - sliding while it moves (the page reads it every 1.5 s, the
+   slats follow over the same time). Not known: an empty dashed frame. */
+.cover-pic {
+  position: relative; flex: none; width: 30px; height: 34px; overflow: hidden;
+  border: 2px solid var(--text-3); border-radius: 7px;
+  background: color-mix(in srgb, var(--cool) 14%, var(--surface));
+}
+.cover-pic::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: var(--shut, 0%);
+  background: repeating-linear-gradient(to bottom, var(--text-3) 0 3px, color-mix(in srgb, var(--text-3) 55%, var(--surface)) 3px 5px);
+  transition: height 1.5s linear;
+}
+.cover-row[data-where="opening"] .cover-pic, .cover-row[data-where="closing"] .cover-pic { border-color: var(--accent); }
+.cover-row[data-where="opening"] .cover-pic::before, .cover-row[data-where="closing"] .cover-pic::before {
+  background: repeating-linear-gradient(to bottom, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 45%, var(--surface)) 3px 5px);
+}
+.cover-row[data-where="unknown"] .cover-pic { border-style: dashed; background: var(--surface-2); }
+.cover-row[data-where="unreached"] .cover-pic { border-style: dashed; border-color: var(--warn); opacity: 0.6; }
+
+.cover-name { display: grid; gap: 1px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cover-label { color: var(--text); font-weight: 500; }
+.cover-state { font-size: 0.8rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .cover-state[data-tone="active"] { color: var(--accent); font-weight: 600; }
 .cover-state[data-tone="warn"] { color: var(--warn); font-weight: 600; }
-.cover-ctl { display: flex; flex: none; gap: 6px; }
-.cover-ctl button { width: 44px; padding: 0; color: var(--text-2); font-size: 0.8rem; font-weight: 400; }
-@media (min-width: 900px) {
+
+.cover-ctl { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
+.cover-ctl button {
+  display: grid; place-items: center; width: 44px; min-height: 40px; padding: 0;
+  border: 0; border-radius: 999px; background: transparent; color: var(--text-2);
+  transition: background 0.2s, color 0.2s;
+}
+.cover-ctl button[data-going="true"] { background: var(--accent-soft); color: var(--accent); }
+.cover-row[data-where="unreached"] .cover-ctl button { color: var(--text-3); }
+.covers button:disabled { opacity: 0.5; }
+@media (hover: hover) {
+  .covers-all button:not(:disabled):hover { color: var(--accent); }
+  .cover-ctl button:not(:disabled):not([data-going]):hover { background: var(--surface); color: var(--text); }
+}
+/* The narrowest phones: a smaller window and arrows, the name keeps its room. */
+@media (max-width: 359px) {
+  .cover-row { gap: 10px; }
+  .cover-pic { width: 24px; height: 28px; border-radius: 6px; }
+  .cover-ctl button { width: 40px; }
+}
+@container (min-width: 680px) {
   .cover-rows { grid-template-columns: 1fr 1fr; }
   .cover-row:nth-child(2) { border-top: 0; }
 }
+.cover-note { padding: 8px 12px; border-radius: var(--radius-s); background: var(--surface-2); }
 .cover-note[data-tone="ok"] { color: var(--ok); }
 .cover-note[data-tone="warn"] { color: var(--warn); }
 .cover-note[data-tone="bad"] { color: var(--bad); font-weight: 600; }

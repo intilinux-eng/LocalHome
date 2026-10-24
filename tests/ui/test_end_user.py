@@ -457,11 +457,18 @@ def test_the_shutters_all_at_once_then_one_by_itself(browser, shutters_house, tm
         w.check("all opening, the one off the network named",
                 w.wait(lambda: note.count() == 1 and "Tutte in apertura" in note.inner_text() and "Bagno" in note.inner_text()))
         w.check("on their way up", w.wait(lambda: where("Soggiorno").startswith("In salita"), 1500))
+        row = lambda label: card.locator(".cover-row", has=w.page.locator(".cover-label", has_text=label))
+        w.check("the way it's going lit, the card's head says something moves",
+                w.wait(lambda: row("Soggiorno").locator('button[data-cover-action="open"][data-going="true"]').count() == 1
+                       and card.locator(".covers-sum").inner_text() == "In movimento", 1500))
         w.check("then open, as the board has it", w.wait(lambda: where("Soggiorno") == "Aperta" and where("Cucina") == "Aperta")
                 and board()["Tapparella Soggiorno"]["percent"] == 100)
         card.get_by_role("button", name="Chiudi Cucina").click()
         w.check("one closing by itself", w.wait(lambda: note.inner_text() == "Cucina in chiusura" and where("Cucina").startswith("In discesa")))
         w.check("closed, the other one still open", w.wait(lambda: where("Cucina") == "Chiusa") and where("Soggiorno") == "Aperta")
+        w.check("its window drawn closed, nothing lit, nothing said moving",
+                row("Cucina").get_attribute("data-where") == "closed" and card.locator("[data-going]").count() == 0
+                and card.locator(".covers-sum").count() == 0)
         w.network_errors_expected = True  # the board's 502 for the shutter that didn't answer
         card.get_by_role("button", name="Ferma Bagno").click()
         w.check("the one off the network says so", w.wait(lambda: note.inner_text() == "Bagno non risponde"))

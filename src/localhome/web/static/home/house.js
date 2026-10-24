@@ -60,9 +60,17 @@ function renderHouse() {
 // ---------------------------------------------------- the shutters --
 // Only with shutters in config.yaml: all of them in one card - open, stop
 // or close them all at once, the everyday use, and each one by itself
-// below. The card doesn't ask the shutters where they are (the cheap
-// curtain switches only know their last command): it says what was sent
-// and which ones didn't answer.
+// below, with a small window showing how far down it is and words for
+// where it is, as the board follows it. Under them, what was sent and
+// which ones didn't answer.
+
+// The arrows drawn rather than typed: ▲■▼ come out in a different size
+// and weight on every phone.
+const COVER_ICONS = {
+  open: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
+};
 
 function coverLabel(name, names) {
   // "Tapparella Cucina", "Tapparella Soggiorno": the word they all share
@@ -73,36 +81,57 @@ function coverLabel(name, names) {
 }
 
 // Where a shutter is, in words: moving which way (and how far, once a full
-// run has shown where it is), open, closed, part way, or not answering.
+// run has shown where it is), open, closed, part way, or not answering -
+// with `where` for its picture and `shut`, how far down it is (0-100, null
+// when not known).
 function coverState(cover) {
-  if (!cover) return { text: "", tone: "" };
-  if (cover.reached === false) return { text: tr("covers.state_unreached"), tone: "warn" };
+  if (!cover) return { text: "", tone: "", where: "unknown", shut: null };
   const pct = cover.percent;
+  const shut = pct == null ? null : 100 - pct;
+  if (cover.reached === false) return { text: tr("covers.state_unreached"), tone: "warn", where: "unreached", shut };
   if (cover.moving) {
     const way = tr(cover.moving === "open" ? "covers.state_opening" : "covers.state_closing");
-    return { text: pct == null ? way : `${way} · ${pct}%`, tone: "active" };
+    return { text: pct == null ? way : `${way} · ${pct}%`, tone: "active", where: cover.moving === "open" ? "opening" : "closing", shut };
   }
-  if (pct == null) return { text: tr("covers.state_unknown"), tone: "" };
-  if (pct >= 100) return { text: tr("covers.state_open"), tone: "" };
-  if (pct <= 0) return { text: tr("covers.state_closed"), tone: "" };
-  return { text: tr("covers.state_at", { pct }), tone: "" };
+  if (pct == null) return { text: tr("covers.state_unknown"), tone: "", where: "unknown", shut };
+  if (pct >= 100) return { text: tr("covers.state_open"), tone: "", where: "open", shut: 0 };
+  if (pct <= 0) return { text: tr("covers.state_closed"), tone: "", where: "closed", shut: 100 };
+  return { text: tr("covers.state_at", { pct }), tone: "", where: "part", shut };
+}
+
+// The card's head, at a glance: something moving, or all of them open or
+// all closed - said only when every shutter answered and is known.
+function coversSummary(names) {
+  const all = names.map(n => state.coverStates[n]);
+  if (all.some(c => c && c.moving)) return { text: tr("covers.sum_moving"), tone: "active" };
+  if (!all.every(c => c && c.reached !== false && c.percent != null)) return null;
+  if (all.every(c => c.percent >= 100)) return { text: tr("covers.sum_all_open"), tone: "" };
+  if (all.every(c => c.percent <= 0)) return { text: tr("covers.sum_all_closed"), tone: "" };
+  return null;
 }
 
 function coversTile(names) {
-  const button = (target, action, text, label) => `<button type="button" data-cover="${esc(target)}"
-    data-cover-action="${action}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}>${esc(text)}</button>`;
+  const button = (target, action, inside, label, extra = "") => `<button type="button" data-cover="${esc(target)}"
+    data-cover-action="${action}"${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ""}${extra}>${inside}</button>`;
   const rows = names.map(name => {
     const label = coverLabel(name, names);
     const where = coverState(state.coverStates[name]);
-    return `<li class="cover-row"><span class="cover-name"><span class="cover-label">${esc(label)}</span>${where.text
-      ? `<small class="cover-state" data-tone="${where.tone}">${esc(where.text)}</small>` : ""}</span>
-      <span class="cover-ctl">${button(name, "open", "▲", tr("covers.one_btn_open", { name: label }))}${button(name, "stop", "■", tr("covers.one_btn_stop", { name: label }))}${button(name, "close", "▼", tr("covers.one_btn_close", { name: label }))}</span></li>`;
+    // The arrow of the way it's going lit, so the stop beside it is easy to find.
+    const going = action => (where.where === "opening" && action === "open") || (where.where === "closing" && action === "close")
+      ? ' data-going="true"' : "";
+    return `<li class="cover-row" data-where="${where.where}">
+      <span class="cover-pic" aria-hidden="true"${where.shut == null ? "" : ` style="--shut: ${where.shut}%"`}></span>
+      <span class="cover-name"><span class="cover-label">${esc(label)}</span>${where.text
+        ? `<small class="cover-state" data-tone="${where.tone}">${esc(where.text)}</small>` : ""}</span>
+      <span class="cover-ctl">${button(name, "open", COVER_ICONS.open, tr("covers.one_btn_open", { name: label }), going("open"))}${button(name, "stop", COVER_ICONS.stop, tr("covers.one_btn_stop", { name: label }))}${button(name, "close", COVER_ICONS.close, tr("covers.one_btn_close", { name: label }), going("close"))}</span></li>`;
   }).join("");
   const note = state.coverNote;
+  const summary = coversSummary(names);
   return `<div class="tile covers">
-    <div class="tile-head"><span class="tile-name">${esc(tr("covers.heading"))}</span></div>
+    <div class="tile-head"><span class="tile-name">${esc(tr("covers.heading"))}</span>${summary
+      ? `<span class="covers-sum" data-tone="${summary.tone}">${esc(summary.text)}</span>` : ""}</div>
     <div class="covers-all">
-      ${button("all", "open", tr("covers.open_all"))}${button("all", "stop", "■", tr("covers.stop_all"))}${button("all", "close", tr("covers.close_all"))}
+      ${button("all", "open", `${COVER_ICONS.open}<span>${esc(tr("covers.open_all"))}</span>`)}${button("all", "stop", COVER_ICONS.stop, tr("covers.stop_all"))}${button("all", "close", `${COVER_ICONS.close}<span>${esc(tr("covers.close_all"))}</span>`)}
     </div>
     <ul class="cover-rows">${rows}</ul>
     ${note ? `<div class="tile-note cover-note" data-tone="${note.tone}" role="status">${esc(note.text)}</div>` : ""}
