@@ -853,6 +853,70 @@ async function loadUsage(year) {
   if (data.ok) renderUsage(data);
 }
 
+// ----------------------------------------------- the house's record --
+// How much the long-term record holds, and its CSV for the period and
+// format picked (routes/dataset.py) - up to the moment of the download.
+const recordView = { first: null };
+
+async function loadHouseRecord() {
+  const state = document.getElementById("house-record-state");
+  if (!state) return;
+  let data;
+  try {
+    data = await (await fetch("/api/climate-admin/dataset", { cache: "no-store" })).json();
+  } catch (e) {
+    return;
+  }
+  const form = document.getElementById("house-record-form");
+  if (!data.enabled) {
+    state.textContent = tr("climate_admin.record_off");
+    form.hidden = true;
+    setPill("house-record-summary", "");
+    return;
+  }
+  form.hidden = false;
+  if (!data.slots) {
+    state.textContent = tr("climate_admin.record_empty");
+  } else {
+    const days = Math.max(1, Math.round((data.last_ts - data.first_ts) / 86400));
+    state.textContent = tr("climate_admin.record_summary", {
+      first: new Date(data.first_ts * 1000).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" }),
+      days, slots: data.slots.toLocaleString(LOCALE), events: data.events.toLocaleString(LOCALE),
+      size: usageNumber(data.size_mb, 1),
+    });
+    recordView.first = new Date(data.first_ts * 1000);
+  }
+  setPill("house-record-summary", data.slots ? pillHtml("idle", tr("climate_admin.record_summary_pill", {
+    days: Math.max(1, Math.round((data.last_ts - data.first_ts) / 86400)) })) : "");
+  recordLinks();
+}
+
+// The board's days, as the page's own clock has them (YYYY-MM-DD).
+function recordDay(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function recordLinks() {
+  const period = document.getElementById("record-period").value;
+  const dates = document.getElementById("record-dates");
+  const from = document.getElementById("record-from"), to = document.getElementById("record-to");
+  const today = new Date();
+  dates.hidden = period !== "custom";
+  let first = new Date(today);
+  if (period === "7" || period === "30") first.setDate(today.getDate() - Number(period) + 1);
+  else if (period === "all") first = recordView.first || first;
+  if (period === "custom") {
+    if (!from.value) from.value = recordDay(new Date(today.getTime() - 6 * 86400000));
+    if (!to.value) to.value = recordDay(today);
+  }
+  const range = period === "custom" ? { from: from.value, to: to.value } : { from: recordDay(first), to: recordDay(today) };
+  const format = document.getElementById("record-format").value;
+  const query = what => `/api/climate-admin/dataset.csv?${new URLSearchParams({
+    what, from: range.from, to: range.to, ...(format === "sheet" ? { format: "sheet" } : {}) })}`;
+  document.getElementById("record-slots").href = query("slots");
+  document.getElementById("record-events").href = query("events");
+}
+
 function pickUsageYear(year) {
   usageView.editing = false;
   return loadUsage(year);
@@ -3489,6 +3553,7 @@ loadVmcSpeeds();
 loadVmcAuto();
 loadVmcFilters();
 loadUsage();
+loadHouseRecord();
 watchDeviceRows();
 loadShellyHealth();
 setInterval(loadShellyHealth, SHELLY_HEALTH_EVERY_MS);

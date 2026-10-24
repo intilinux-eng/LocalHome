@@ -144,6 +144,24 @@ def test_events_at_their_own_time_with_why_never_for_what_was_there_before(tmp_p
     assert [(what, value) for _, device, what, value, _ in events if device == "plant"] == [("away", 1.0)]
 
 
+def test_a_download_mid_slot_has_the_minutes_so_far_and_the_slot_is_written_whole_after(tmp_path):
+    house = House(tmp_path)
+    house.look()
+    house.valve(True)
+    house.look()
+    house.look()
+    house.dataset.checkpoint()                      # a download, 90 s into the slot
+    ((plant, zones),) = house.slots()
+    assert plant["ts"] == T0 and plant["samples"] == 3 and zones["Stanze"]["valve_open"] == pytest.approx(2 / 3)
+    assert [what for _, device, what, *_ in house.events() if device == "Stanze Valve"] == ["on"]
+    for _ in range(7):
+        house.look()
+    house.look()                                    # the next slot begins: this one is written again, whole
+    ((plant, zones),) = house.slots()
+    assert plant["ts"] == T0 and plant["samples"] == 10 and zones["Stanze"]["valve_open"] == pytest.approx(0.9)
+    assert [what for _, device, what, *_ in house.events() if device == "Stanze Valve"] == ["on"], "never twice"
+
+
 def test_a_safety_timer_from_before_a_start_isnt_taken_for_one(tmp_path):
     house = House(tmp_path)
     house.valve(True, rest=T0 - 86400)              # a day old, already there
@@ -247,6 +265,36 @@ def test_the_app_records_the_house_and_gives_it_back_as_csv(tmp_path, monkeypatc
         refused = c.get("/api/climate-admin/dataset.csv?from=ieri")
         assert refused.status_code == 400 and refused.get_json()["code"] == "dataset_dates_invalid"
         assert c.get("/api/climate-admin/dataset.csv?what=all").get_json()["code"] == "dataset_what_invalid"
+    finally:
+        app.config["HISTORY"].close()
+
+
+def test_for_a_spreadsheet_in_the_panels_language_up_to_the_moment_asked(tmp_path, monkeypatch):
+    app = _app(tmp_path, monkeypatch)
+    try:
+        dataset = app.config["HOUSE_DATASET"]
+        for _ in range(3):
+            dataset.sample()                        # no flush: the slot is still going on
+        texts = app.config["TRANSLATIONS"]["climate_admin"]
+        sep, cols = texts["usage_csv_separator"], texts["dataset_cols"]
+        answer = app.test_client().get("/api/climate-admin/dataset.csv?format=sheet")
+        assert answer.status_code == 200 and answer.mimetype == "text/csv"
+        assert texts["dataset_file"] in answer.headers["Content-Disposition"]
+        text = answer.get_data(as_text=True)
+        assert text.startswith("﻿"), "read as UTF-8 by a spreadsheet"
+        rows = list(csv.reader(io.StringIO(text[1:]), delimiter=sep))
+        head, row = rows[0], rows[1]
+        assert head[:3] == [cols["time_local"], cols["time_utc"], cols["samples"]]
+        assert cols["zone_valve_open"].format(zone="Stanze") in head and cols["zone_temp_c"].format(zone="Bagni") in head
+        values = dict(zip(head, row))
+        assert values[cols["samples"]] == "3", "the minutes going on are in it"
+        assert values[cols["zone_valve_open"].format(zone="Stanze")] in ("0", "100"), "a share as a percent"
+        assert len(row[0]) == len("2026-10-24 13:45:00")
+        temp = values[cols["zone_temp_c"].format(zone="Stanze")]
+        assert temp and "." not in temp.replace(texts["usage_csv_decimal"], ""), "the panel's decimal mark"
+        events = app.test_client().get("/api/climate-admin/dataset.csv?format=sheet&what=events").get_data(as_text=True)
+        assert next(csv.reader(io.StringIO(events[1:]), delimiter=sep))[2:] == [
+            cols["device"], cols["what"], cols["value"], cols["why"]]
     finally:
         app.config["HISTORY"].close()
 

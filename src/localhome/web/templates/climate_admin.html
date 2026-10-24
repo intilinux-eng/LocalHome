@@ -82,6 +82,7 @@
     <a href="#zones">{{ t.climate_admin.zones_heading }}</a>
     <a href="#plant-settings">{{ t.climate_admin.plant_settings_nav }}</a>
     <a href="#usage">{{ t.climate_admin.usage_nav }}</a>
+    <a href="#house-record">{{ t.climate_admin.record_nav }}</a>
     <a href="#group-devices">{{ t.climate_admin.group_devices }}</a>
     <a href="#system-status">{{ t.climate_admin.system_heading }}</a>
     <a href="#settings">{{ t.climate_admin.settings_heading }}</a>
@@ -259,6 +260,48 @@
       </ul>
     </div>
     <div id="usage-body"><p class="hint-text">{{ t.climate_admin.status_loading }}</p></div>
+  </details>
+
+  <!-- The house's long-term record (services/house_dataset.py), out as a
+       CSV: the period, a spreadsheet's format or the plain one, the 5-minute
+       rows or the events - up to the moment of the download. Filled by
+       loadHouseRecord(); the links follow the choices (recordLinks()). -->
+  <details class="admin-details" id="house-record" data-nav="house-record">
+    <summary>{{ icon("usage") }}<span class="sec-title">{{ t.climate_admin.record_heading }}</span><span class="sec-pills" id="house-record-summary"></span></summary>
+    <p class="hint-text">{{ t.climate_admin.record_note }}</p>
+    <p class="hint-text" id="house-record-state">{{ t.climate_admin.status_loading }}</p>
+    <div id="house-record-form" hidden>
+      <div class="record-form">
+        <div class="admin-field">
+          <label for="record-period">{{ t.climate_admin.record_period }}</label>
+          <select id="record-period" onchange="recordLinks()">
+            <option value="7">{{ t.climate_admin.record_last7 }}</option>
+            <option value="30">{{ t.climate_admin.record_last30 }}</option>
+            <option value="all">{{ t.climate_admin.record_all }}</option>
+            <option value="custom">{{ t.climate_admin.record_custom }}</option>
+          </select>
+        </div>
+        <div class="admin-field" id="record-dates" hidden>
+          <label for="record-from">{{ t.climate_admin.record_from }} · {{ t.climate_admin.record_to }}</label>
+          <span class="record-dates">
+            <input type="date" id="record-from" aria-label="{{ t.climate_admin.record_from }}" onchange="recordLinks()">
+            <input type="date" id="record-to" aria-label="{{ t.climate_admin.record_to }}" onchange="recordLinks()">
+          </span>
+        </div>
+        <div class="admin-field">
+          <label for="record-format">{{ t.climate_admin.record_format }}</label>
+          <select id="record-format" onchange="recordLinks()">
+            <option value="sheet">{{ t.climate_admin.record_format_sheet }}</option>
+            <option value="raw">{{ t.climate_admin.record_format_raw }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar admin-actions">
+        <a class="tbtn open" id="record-slots" href="/api/climate-admin/dataset.csv" download>{{ t.climate_admin.record_slots_button }}</a>
+        <a class="range-btn" id="record-events" href="/api/climate-admin/dataset.csv?what=events" download>{{ t.climate_admin.record_events_button }}</a>
+      </div>
+      <p class="hint-text">{{ t.climate_admin.record_live }}</p>
+    </div>
   </details>
 
   <!-- ========================================================== devices -->

@@ -533,6 +533,12 @@
 .device-role[open] { padding-bottom: 14px; }
 .device-role .admin-zone-card { background: var(--surface); }
 /* The shutters' travel times: one row each - its name, up and down. */
+/* The house's record: the period, its days when picked by hand, the
+   format - side by side where they fit - then the two downloads. */
+.record-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 16px; margin: 4px 0 12px; }
+.record-dates { display: flex; gap: 8px; }
+.record-dates input { min-width: 0; flex: 1; }
+
 .cover-times { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .cover-times:first-child { border-top: 0; padding-top: 0; }
 .cover-times-name { grid-column: 1 / -1; font-weight: 600; }

@@ -319,6 +319,8 @@ class HouseDataset:
         self._seen: dict[str, object] = {}
         self._last_prune = 0.0
         self._started = False
+        # The thread's looks and a download's checkpoint() take turns.
+        self._lock = threading.RLock()
 
     def start(self) -> None:
         if self._started:
@@ -352,6 +354,10 @@ class HouseDataset:
     # ------------------------------------------------------------ a look --
 
     def sample(self) -> None:
+        with self._lock:
+            self._look()
+
+    def _look(self) -> None:
         now = self.clock()
         start = int(now // SLOT_SECONDS) * SLOT_SECONDS
         if self._slot is not None and self._slot.start != start:
@@ -442,8 +448,21 @@ class HouseDataset:
 
     def flush(self) -> None:
         """The slot gathered so far, written with the events seen meanwhile."""
-        slot, events = self._slot, self._events
-        self._slot, self._events = None, []
+        with self._lock:
+            slot, events = self._slot, self._events
+            self._slot, self._events = None, []
+            self._write(slot, events)
+
+    def checkpoint(self) -> None:
+        """What's gathered so far written now, the slot going on: a download
+        then has the house up to this moment. The slot's row is written
+        again, whole, when it ends; the events written now aren't kept back
+        to be written twice."""
+        with self._lock:
+            events, self._events = self._events, []
+            self._write(self._slot, events)
+
+    def _write(self, slot: _Slot | None, events: list[tuple]) -> None:
         if slot is None or not slot.samples:
             if events:
                 self.store.write(None, [], events)

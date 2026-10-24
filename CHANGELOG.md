@@ -47,8 +47,19 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   time with why (a sensor's report, a relay switching, the season, away,
   a zone held by hand). Its own file beside the history, which is
   unchanged; kept 6 years (about 14 MB a year); at its first start it
-  fills the past month from the history. CSV export:
-  `/api/climate-admin/dataset.csv` (`?from=&to=&what=slots|events`).
+  fills the past month from the history.
+  - Downloaded from the admin panel's "Registro della casa" section. It
+    says how much the record holds; you pick the period (7 days, 30, all,
+    or from–to) and the format, then download the 5-minute rows or the
+    events.
+  - The file goes up to the moment of the download: the 5 minutes going
+    on are written first, and the row is written again, whole, when they
+    end.
+  - "Per Excel": the panel's language for the headers, its separator and
+    decimal mark, shares of time as percents, the local time first.
+    "Per analisi": the standard CSV, UTC beside the local time.
+  - The address: `/api/climate-admin/dataset.csv`
+    (`?from=&to=&what=slots|events&format=sheet`).
 - **The installer's guide has a "23. Aggiornamenti futuri" section**:
   ideas for coming versions, said as not yet tried nor handled by
   LocalHome - first, one Shelly Pro 4PM on a DIN rail in place of the four

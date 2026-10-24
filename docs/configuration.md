@@ -63,7 +63,18 @@ history:
   retention_days: 30                 # default shown - rows older than this are pruned once a day
   max_db_mb: 300                     # default shown - hard ceiling: over it, the oldest days go first
   write_every_seconds: 300           # default shown - samples reach the file together, this often
+dataset:                             # the house's long-term record - see below
+  enabled: true                      # default shown
+  db_file: "data/house_dataset.db"   # default shown
+  retention_years: 6                 # default shown
 ```
+
+**The house's record** (`dataset`) is apart from the history.
+- Every 5 minutes it keeps each zone's temperature, humidity, target and share of time its valve was open. With them go the outdoor air, the VMC, the dehumidifier, the bypass, the season and away.
+- Every switch on or off is kept with why.
+- It's kept 6 years, about 14 MB a year. At its first start it fills the past from the history, read only.
+- The admin panel's "Registro della casa" section downloads it as a CSV, up to the moment of the download. Pick the period, and either "Per Excel" (the panel's language, separator and decimal mark) or "Per analisi" (the standard CSV, UTC beside the local time).
+- `enabled: false` turns it off.
 
 The samples of each cycle wait in memory and are written together, every
 `write_every_seconds`: a cycle committed on its own rewrote every sensor's

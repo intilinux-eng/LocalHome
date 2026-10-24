@@ -288,6 +288,38 @@ def test_hours_and_the_heat_meter_a_year_month_by_month(open_page, api):
     assert [e for e in opened.errors if "400" not in e] == []
 
 
+def test_the_houses_record_is_downloaded_for_a_spreadsheet_or_as_it_is(open_page):
+    """The record's own section: how much it holds, then a period and a
+    format picked and the file downloaded - the links follow the choices."""
+    from datetime import date, timedelta
+    opened = open_page("/climate-admin", 390)
+    page = opened.page
+    try:
+        page.wait_for_selector("#house-record-form:not([hidden])", state="attached", timeout=20000)
+        page.evaluate("document.getElementById('house-record').open = true")
+        assert page.inner_text("#house-record-state") not in ("", "Caricamento…")
+        slots = page.locator("#record-slots")
+        today = date.today()
+        week = f"from={today - timedelta(days=6):%Y-%m-%d}&to={today:%Y-%m-%d}"
+        assert week in slots.get_attribute("href") and "format=sheet" in slots.get_attribute("href")
+        with page.expect_download() as download:
+            slots.click()
+        assert download.value.suggested_filename.startswith("registro-casa-slots-")
+        page.select_option("#record-format", "raw")
+        page.select_option("#record-period", "custom")
+        assert page.locator("#record-dates").is_visible()
+        page.fill("#record-from", "2026-10-01")
+        page.dispatch_event("#record-from", "change")
+        events = page.locator("#record-events").get_attribute("href")
+        assert "what=events" in events and "from=2026-10-01" in events and "format" not in events
+        with page.expect_download() as download:
+            page.click("#record-events")
+        assert download.value.suggested_filename.startswith("house-events-")
+        assert opened.errors == []
+    finally:
+        page.close()
+
+
 def test_the_plants_tuning_and_the_boards_settings_are_one_form(open_page, api):
     """Shown in two places - the thermostat's next to the zones, the rest
     under Board - and either Save sends every field: none is lost."""
