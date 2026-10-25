@@ -128,6 +128,8 @@
   margin-bottom: 8px;
 }
 @media (min-width: 640px) { .admin-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* A phone 320 px wide keeps "Raffrescamento" whole, in Linux's wider font too. */
+@media (max-width: 360px) { .ov-tile { padding: 12px 11px; } .ov-value { font-size: 0.96rem; } }
 
 .ov-tile {
   --state: var(--text-3);
@@ -154,7 +156,7 @@
 .ov-label { display: flex; align-items: center; gap: 7px; font-size: 0.74rem; color: var(--text-3); font-weight: 600; letter-spacing: 0.03em; }
 .ov-label::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--state); margin-left: auto; flex: none; }
 .ov-label .sec-icon { width: 15px; height: 15px; color: var(--text-3); }
-.ov-value { font-size: 1.02rem; font-weight: 650; line-height: 1.25; }
+.ov-value { font-size: 1.02rem; font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
 .ov-tile[data-state="bad"] .ov-value { color: var(--bad); }
 .ov-sub { font-size: 0.78rem; color: var(--text-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .ov-sub:empty { display: none; }

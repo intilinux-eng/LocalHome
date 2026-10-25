@@ -152,6 +152,9 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   otherwise, and the installer's guide says
   how to set it; the admin's VMC note says what the VMC does when the
   board stops.
+- **The admin's overview on a 320 px phone.** "Raffrescamento" in its
+  tile was a few pixels too wide in Linux's font, and pushed the whole
+  page sideways; the tiles are a little tighter there now.
 
 ## 1.0.0 - 2026-10-13
 
