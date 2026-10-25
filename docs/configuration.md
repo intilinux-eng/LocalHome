@@ -48,10 +48,6 @@ web:
 
 integrations: [...]   # see below
 
-notifications:        # optional
-  type: telegram
-  secrets_file: "secrets_telegram.json"
-
 energy:                # optional, power-budget alerting
   sensor: "Home Power Meter"   # must match an integration's `name`
   contract_limit_w: 3000
@@ -140,7 +136,6 @@ after installing to list what your checkout actually has registered):
 | `switch`      | `meross_plug`         | [integrations/meross.md](integrations/meross.md) |
 | `climate`/`switch`/`number` | `mqtt_json` | [integrations/mqtt.md](integrations/mqtt.md) - generic, covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc. |
 | `climate`/`switch` | `simulated`      | [integrations/simulated.md](integrations/simulated.md) - no hardware required |
-| `notifier`    | `telegram`            | [integrations/telegram.md](integrations/telegram.md) |
 
 `number` is a controllable analog value (a dimmer, a fan speed, a 0-10V
 output) - see `core/interfaces.py`'s `NumberDriver`. It's currently only
@@ -243,11 +238,12 @@ kWh per hour of the last months of the same kind as the plant's season,
 up to three in the last year.
 
 If set, `energy.sensor` must name a `power_meter` integration by its
-`name`. Whenever that sensor's `power_w` reading crosses
-`contract_limit_w * 1.10` ("safe indefinitely" limit), a notification is
-sent through whatever `notifications` driver is configured (silently
-skipped if none is). It re-notifies at most every 10 minutes while the
-condition persists, and once more when it clears. See
+`name`. Its tile on the home page turns amber when the sensor's
+`power_w` crosses `contract_limit_w * 1.10` ("safe indefinitely" limit),
+and red past the trip risk. A `notifications:` entry naming a notifier
+driver (`kind: notifier` - none ships with LocalHome at the moment, see
+[adding-a-driver.md](adding-a-driver.md)) is told as well: at most every
+10 minutes while the condition persists, and once more when it clears. See
 `services/history.py`'s `PowerBudget` for the full three-zone model and
 how to adjust its ratios - the 1.10/1.33 defaults approximate a typical
 European residential contract's tolerance, not a universal constant;

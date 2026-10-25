@@ -188,16 +188,11 @@ thermostat:
     - switch: "Cooling Bypass Valve"
       active_in_mode: "cool"
 
-# Optional: push notifications for the power-budget alert below.
-notifications:
-  type: telegram
-  secrets_file: "secrets_telegram.json"
-
 # Optional: power-budget alerting for one power_meter sensor (by name,
-# matching an integration above). Trips a notification when power draw
-# leaves the "safe indefinitely" zone - see services/history.py for the
-# three-zone model. contract_limit_w should match your actual utility
-# contract or breaker rating.
+# matching an integration above). Its tile on the home page turns amber
+# when power draw leaves the "safe indefinitely" zone, red near the trip -
+# see services/history.py for the three-zone model. contract_limit_w
+# should match your actual utility contract or breaker rating.
 energy:
   sensor: "Home Power Meter"
   contract_limit_w: 3000

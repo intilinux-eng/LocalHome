@@ -12,7 +12,6 @@ on top of the AGPL's:
 | [Waitress](https://github.com/Pylons/waitress)      | ZPL-2.1         | The production web server the dashboard/API runs on |
 | [aiohttp](https://github.com/aio-libs/aiohttp)       | Apache-2.0 / MIT | eWeLink cloud HTTP/WebSocket client |
 | [meross-iot](https://github.com/albertogeniola/MerossIot) | MIT       | Meross smartplug cloud/MQTT client |
-| [requests](https://github.com/psf/requests)          | Apache-2.0      | Telegram notifications |
 | [PyYAML](https://github.com/yaml/pyyaml)             | MIT             | Reading config.yaml |
 | [paho-mqtt](https://github.com/eclipse-paho/paho.mqtt.python) | EPL-2.0 OR BSD-3-Clause (dual-licensed; used here under the BSD-3-Clause option) | The generic MQTT driver family |
 | [msgpack](https://github.com/msgpack/msgpack-python) | Apache-2.0      | RPC to Arduino MCU bridge (LED matrix) |
@@ -42,8 +41,8 @@ This is a common, long-standing pattern in the home-automation
 interoperability community, but it is **not sanctioned by Coolkit/eWeLink**,
 isn't covered by any license grant from them, and may be inconsistent
 with their Terms of Service. LocalHome is not affiliated with, endorsed
-by, or sponsored by Coolkit, eWeLink, Sonoff, Tuya, Meross, LoraTap, or
-Telegram - all trademarks belong to their respective owners. If you use
+by, or sponsored by Coolkit, eWeLink, Sonoff, Tuya, Meross or LoraTap -
+all trademarks belong to their respective owners. If you use
 the eWeLink driver, you're relying on the same interoperability
 precedent SonoffLAN and similar projects have operated under for years,
 at your own risk; if that's not a tradeoff you want, skip that one

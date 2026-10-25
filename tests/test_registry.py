@@ -27,10 +27,12 @@ def test_unknown_driver_raises_a_helpful_error():
 
 
 def test_a_driver_taken_out_says_so_and_what_to_do():
-    with pytest.raises(ValueError, match="no longer has the Tuya air-quality sensor .*delete this entry"):
+    with pytest.raises(ValueError, match="no longer has the Tuya air-quality sensor .*delete it from config.yaml"):
         create("climate", "tuya_air_quality", {"devices_file": "devices.json"})
     with pytest.raises(ValueError, match="no longer has the generic MQTT shutter"):
         create("cover", "mqtt_json", {"name": "Shutter"})
+    with pytest.raises(ValueError, match="no longer has the Telegram notifier"):
+        create("notifier", "telegram", {"secrets_file": "secrets_telegram.json"})
     # The same type stays for what's still there: a zone's sensor, a valve.
     assert {("climate", "mqtt_json"), ("switch", "mqtt_json")} <= set(known_drivers())
 

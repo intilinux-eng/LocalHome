@@ -19,7 +19,6 @@ dependencies = [
     "tinytuya>=1.13,<2",
     "aiohttp>=3.9,<4",
     "meross-iot>=0.4,<0.5",
-    "requests>=2.31,<3",
     "PyYAML>=6.0,<7",
     "paho-mqtt>=2.0,<3",
     # arduino-router (the UNO Q's Linux-to-MCU bridge) speaks msgpack-RPC -

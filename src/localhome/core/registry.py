@@ -34,6 +34,7 @@ REMOVED: dict[tuple[str, str], str] = {
     ("climate", "tuya_air_quality"): "the Tuya air-quality sensor",
     ("cover", "mqtt_json"): "the generic MQTT shutter",
     ("power_meter", "mqtt_json"): "the generic MQTT power meter",
+    ("notifier", "telegram"): "the Telegram notifier",
 }
 
 
@@ -109,7 +110,7 @@ def create(kind: str, type_name: str, options: dict) -> list:
     factory = _FACTORIES.get(key)
     if factory is None and key in REMOVED:
         raise ValueError(f"LocalHome no longer has {REMOVED[key]} ({kind}/{type_name}): "
-                         "delete this entry from config.yaml - CHANGELOG.md says why.")
+                         "delete it from config.yaml - CHANGELOG.md says why.")
     if factory is None:
         available = sorted(f"{k}/{t}" for k, t in _FACTORIES)
         message = f"No driver registered for kind={kind!r} type={type_name!r}."

@@ -276,7 +276,6 @@ generic, and a few other devices run in the same apartment:
 | `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
 | `switch` | `meross_plug` | Meross smartplugs | No - Meross cloud, see [docs/integrations/meross.md](docs/integrations/meross.md) |
 | `climate` / `switch` / `number` | `simulated` | **No hardware** - try a whole setup before owning it | - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |
-| `notifier` | `telegram` | Telegram bot API | Cloud by nature |
 
 Adding a driver is a self-contained change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).
@@ -323,7 +322,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 - [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation
 - [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: limits, tuning, updating
 - [docs/configuration.md](docs/configuration.md) - every `config.yaml` option, and the admin panel
-- [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, Meross, eWeLink, Telegram, simulated)
+- [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, Meross, eWeLink, simulated)
 - [docs/deployment.md](docs/deployment.md) - Docker, systemd, addressing by name, pinned versions
 - [docs/troubleshooting.md](docs/troubleshooting.md) - known error messages and fixes
 - [ARCHITECTURE.md](ARCHITECTURE.md), [docs/adding-a-driver.md](docs/adding-a-driver.md), [CONTRIBUTING.md](CONTRIBUTING.md)

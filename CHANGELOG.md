@@ -19,6 +19,9 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   `kind: power_meter` with `type: mqtt_json`): never tried on a real
   device. The generic MQTT sensor, relay and dimmer stay - the climate's
   Shellys run on them, and they're what fits other MQTT devices in.
+- **The Telegram notifier** (`notifications: type: telegram`). It only
+  sent the power meter's "high draw" alert; the meter's tile on the home
+  page says the same, amber past the safe limit and red near the trip.
 
 ## 1.1.0 - 2026-10-25
 
