@@ -116,9 +116,9 @@ same `MqttConnection` for an identical (host, port, username), so N
 connection; [`drivers/mqtt/base.py`](src/localhome/drivers/mqtt/base.py)'s
 `MqttJsonState` then gives each driver instance its own
 subscribe-and-cache-the-latest-payload view over that shared connection.
-The four `mqtt_json` driver modules (`sensor.py`/`switch.py`/`number.py`/
-`cover.py`) are thin: each just picks which interface to implement and
-which JSON path(s) matter, all four via the same `extract_path()`
+The three `mqtt_json` driver modules (`sensor.py`/`switch.py`/`number.py`)
+are thin: each just picks which interface to implement and which JSON
+path(s) matter, all three via the same `extract_path()`
 dot-path convention (see [`drivers/mqtt/paths.py`](src/localhome/drivers/mqtt/paths.py)
 and [docs/integrations/mqtt.md](docs/integrations/mqtt.md)) - which is
 also why *one* driver covers Shelly, Tasmota, Zigbee2MQTT and anything

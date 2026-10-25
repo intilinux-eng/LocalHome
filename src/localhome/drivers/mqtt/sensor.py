@@ -4,9 +4,7 @@ publishes JSON telemetry over MQTT - Shelly, Tasmota, Zigbee2MQTT,
 ESPHome, a few lines of a microcontroller sketch - works without a
 brand-specific driver. See docs/integrations/mqtt.md for real examples.
 
-Registered under both `climate` and `power_meter`: the logic is
-identical, `kind` in config.yaml is what decides which dashboard card it
-gets and which of the two the `energy:` alert can target.
+Registered as a `climate` sensor.
 
 config.yaml options:
   broker_file (or inline broker: {...}): connection details
@@ -40,17 +38,6 @@ config.yaml options:
                for each of these (an H&T's temperature: the thermostat then
                treats the sensor as unreachable - its own safe path -
                instead of acting on nothing, or on nonsense)
-
-Example - a Tasmota plug's periodic energy telemetry:
-  kind: power_meter
-  type: mqtt_json
-  name: "Workshop Plug"
-  broker_file: "mqtt_broker.json"
-  state_topic: "tele/tasmota_workshop/SENSOR"
-  fields:
-    power_w: "ENERGY.Power"
-    voltage_v: "ENERGY.Voltage"
-    current_a: "ENERGY.Current"
 
 Example - a Shelly H&T publishing temperature, humidity and battery on
 separate per-component topics (confirmed with mosquitto_sub -t '<id>/#'
@@ -236,4 +223,3 @@ def _create(options: dict) -> MqttSensorDriver:
 
 
 register_driver("climate", "mqtt_json")(_create)
-register_driver("power_meter", "mqtt_json")(_create)

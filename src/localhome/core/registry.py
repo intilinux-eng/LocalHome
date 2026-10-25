@@ -32,6 +32,8 @@ _EXTRA_FOR_PACKAGE: dict[str, str] = {}
 # one is told so, and what to do, rather than shown every driver there is.
 REMOVED: dict[tuple[str, str], str] = {
     ("climate", "tuya_air_quality"): "the Tuya air-quality sensor",
+    ("cover", "mqtt_json"): "the generic MQTT shutter",
+    ("power_meter", "mqtt_json"): "the generic MQTT power meter",
 }
 
 

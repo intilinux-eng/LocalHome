@@ -1,8 +1,7 @@
 """Shared plumbing for every generic MQTT-JSON driver: subscribe to one
 topic, cache the latest parsed JSON payload, extract fields from it on
-demand. `sensor.py`/`switch.py`/`number.py`/`cover.py` each wrap this in
-whatever interface (PollingDriver/SwitchDriver/NumberDriver/CoverDriver)
-their `kind` needs.
+demand. `sensor.py`/`switch.py`/`number.py` each wrap this in whatever
+interface (PollingDriver/SwitchDriver/NumberDriver) their `kind` needs.
 """
 from __future__ import annotations
 

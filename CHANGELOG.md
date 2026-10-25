@@ -15,6 +15,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   said in the System status as no longer there, to be deleted. The air's
   card on the home page stays for any sensor that reports CO2 or
   particles.
+- **The generic MQTT shutter and power meter** (`kind: cover` and
+  `kind: power_meter` with `type: mqtt_json`): never tried on a real
+  device. The generic MQTT sensor, relay and dimmer stay - the climate's
+  Shellys run on them, and they're what fits other MQTT devices in.
 
 ## 1.1.0 - 2026-10-25
 

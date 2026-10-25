@@ -54,18 +54,6 @@ integrations:
     devices_file: "meross_devices.json"
     secrets_file: "secrets_meross.json"
 
-  # Generic MQTT examples - covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc.
-  # without a brand-specific driver. See docs/integrations/mqtt.md for
-  # many more shapes (plain-string payloads, JSON booleans, ...).
-  # - kind: power_meter
-  #   name: "Workshop Plug"
-  #   type: mqtt_json
-  #   broker_file: "mqtt_broker.json"
-  #   state_topic: "tele/tasmota_workshop/SENSOR"
-  #   fields:
-  #     power_w: "ENERGY.Power"
-  #     voltage_v: "ENERGY.Voltage"
-
   # A controllable analog value - a dimmer, a fan speed, a 0-10V output -
   # anything set to a number in a range rather than toggled or driven
   # open/closed. This shape (type: mqtt_json) is for a device that

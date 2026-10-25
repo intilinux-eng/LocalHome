@@ -11,7 +11,6 @@ import json
 
 import pytest
 
-from localhome.drivers.mqtt.cover import MqttCoverDriver
 from localhome.drivers.mqtt.number import MqttNumberDriver
 from localhome.drivers.mqtt.sensor import MqttSensorDriver
 from localhome.drivers.mqtt.switch import MqttSwitchDriver
@@ -269,38 +268,6 @@ def test_number_clamps_set_value_to_the_configured_range(fake_connection):
         ("shellies/vmc-dimmer/set", json.dumps({"brightness": 100.0})),
         ("shellies/vmc-dimmer/set", json.dumps({"brightness": 0.0})),
     ]
-
-
-# ---------------------------------------------------------------- cover ----
-
-def test_cover_reports_unknown_state_before_any_message(fake_connection):
-    driver = MqttCoverDriver(
-        name="MQTT Shutter", broker=BROKER,
-        state_topic="shellies/shutter1/status", command_topic="shellies/shutter1/set",
-    )
-    assert driver.status()["state"] == "unknown"
-
-
-def test_cover_maps_state_and_defaults_id_to_name(fake_connection):
-    driver = MqttCoverDriver(
-        name="MQTT Shutter", broker=BROKER,
-        state_topic="shellies/shutter1/status", command_topic="shellies/shutter1/set",
-    )
-    fake_connection.deliver("shellies/shutter1/status", json.dumps({"state": "open"}))
-
-    assert driver.status()["state"] == "open"
-    assert driver.id == "MQTT Shutter"
-
-
-def test_cover_send_publishes_the_configured_action_payload(fake_connection):
-    driver = MqttCoverDriver(
-        name="MQTT Shutter", broker=BROKER,
-        state_topic="shellies/shutter1/status", command_topic="shellies/shutter1/set",
-    )
-
-    driver.send("stop")
-
-    assert fake_connection.published == [("shellies/shutter1/set", "stop")]
 
 
 # --------------------------------------------------- state persistence ----

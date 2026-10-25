@@ -1,6 +1,6 @@
 import pytest
 
-from localhome.core.registry import create, register_driver
+from localhome.core.registry import create, known_drivers, register_driver
 
 
 def test_register_and_create_round_trip():
@@ -29,6 +29,10 @@ def test_unknown_driver_raises_a_helpful_error():
 def test_a_driver_taken_out_says_so_and_what_to_do():
     with pytest.raises(ValueError, match="no longer has the Tuya air-quality sensor .*delete this entry"):
         create("climate", "tuya_air_quality", {"devices_file": "devices.json"})
+    with pytest.raises(ValueError, match="no longer has the generic MQTT shutter"):
+        create("cover", "mqtt_json", {"name": "Shutter"})
+    # The same type stays for what's still there: a zone's sensor, a valve.
+    assert {("climate", "mqtt_json"), ("switch", "mqtt_json")} <= set(known_drivers())
 
 
 def test_duplicate_registration_is_rejected():

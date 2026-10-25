@@ -1,6 +1,6 @@
 """Shelly Gen2/Gen3 RPC-over-MQTT request/response helper.
 
-Most generic MQTT drivers in this package (sensor/switch/number/cover)
+Most generic MQTT drivers in this package (sensor/switch/number)
 are passive: subscribe to one topic, cache whatever gets published to it.
 That works well for a device that republishes its full state on every
 change - Shelly's own H&T sensor does exactly that on dedicated
