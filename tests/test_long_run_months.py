@@ -5,17 +5,27 @@ threads, files, the history - a day costs the same at the end, every day
 has its summary, nothing logged as an error. The months, on a board:
 the tool itself (`--days 90 --no-trace`)."""
 import importlib.util
+import json
+import subprocess
+import sys
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location(
-    "accelerated_months", Path(__file__).resolve().parents[1] / "tools" / "accelerated_months.py")
+TOOL = Path(__file__).resolve().parents[1] / "tools" / "accelerated_months.py"
+spec = importlib.util.spec_from_file_location("accelerated_months", TOOL)
 months = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(months)
 
 
 def test_two_weeks_across_new_year_leave_nothing_growing(tmp_path):
-    report = months.run(tmp_path, days=14, step=1800, retention=4, ask_every=3 * 3600, start="2026-12-24")
-    assert report["problems"] == [], months.summary(report)
+    # In a process of its own: the run's clock moves with every time.sleep
+    # in the process, and a thread another test left running (CI's Python
+    # 3.10 had hundreds) pushed it on by days and slowed every answer.
+    done = subprocess.run([sys.executable, "-X", "utf8", str(TOOL), "--days", "14", "--step", "1800",
+                           "--retention", "4", "--ask-every", str(3 * 3600), "--start", "2026-12-24",
+                           "--out", str(tmp_path)], capture_output=True, text=True, encoding="utf-8", timeout=900)
+    assert (tmp_path / "report.json").exists(), done.stderr[-3000:]
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert report["problems"] == [], done.stdout
     daily = report["daily"]
     assert (daily[0]["date"], daily[-1]["date"]) == ("2026-12-24", "2027-01-06")
     assert daily[-1]["daily_runs"] >= 3 * 13, "each valve's and the plant's day kept, every day"
