@@ -4,15 +4,15 @@ and the hours each zone ran and its temperatures' days."""
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Flask, jsonify, request
 
 from localhome.core.manager import DeviceManager
-from localhome.services.climate_map_store import setup_todo
+from localhome.services.climate_map_store import OUTDOOR_SENSOR_NAME, setup_todo
 from localhome.services.dehumidifier import DehumidifierTimer
 from localhome.services.dewpoint import dew_point_c
-from localhome.services.history import HistoryStore
+from localhome.services.history import RUN_YEARS, HistoryStore, temp_days_of
 from localhome.services.interlock import InterlockController
 from localhome.services import system_status
 from localhome.services.system_clock import local_after
@@ -396,6 +396,21 @@ def register(app: Flask) -> None:
         report = run_hours.temp_report(app.config["HISTORY"], _sensor_zones(app.config["THERMOSTAT"]),
                                        app.config["HISTORY_POLL_INTERVAL"])
         return jsonify(ok=True, **report)
+
+    @app.route("/api/climate/outdoor")
+    def api_climate_outdoor():
+        """The outdoor sensor's days as kept - six years of each day's mean,
+        lowest and highest and when, today's so far - for the home page's
+        outdoor sheet: days, weeks, months and years are made from them
+        there. No outdoor sensor (none, or one still to configure): said,
+        with whatever days there are - nothing to fail on."""
+        manager: DeviceManager = app.config["MANAGER"]
+        first = date(date.today().year - RUN_YEARS + 1, 1, 1)
+        days = temp_days_of(app.config["HISTORY"], OUTDOOR_SENSOR_NAME, "temperature_c",
+                            app.config["HISTORY_POLL_INTERVAL"], first)
+        return jsonify(ok=True, configured=OUTDOOR_SENSOR_NAME in manager.pollers,
+                       days=[{"day": day, "mean": mean, "min": low, "max": high, "min_at": low_at, "max_at": high_at}
+                             for day, (mean, low, high, low_at, high_at) in sorted(days.items())])
 
     @app.route("/api/climate/zones/<name>/on-hours")
     def api_climate_on_hours(name):

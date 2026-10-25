@@ -283,6 +283,13 @@ body[data-offline="true"] :is(.hero-main, .outdoor, .zones, .plant, .tiles) { op
   background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.8rem; line-height: 1.3; }
 .outdoor-battery[data-level="now"] { background: color-mix(in srgb, var(--warn) 22%, transparent); font-weight: 600; }
 .outdoor-battery svg { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* With a sensor the tile opens its sheet (home/outdoor.js): an arrow beside
+   "Outside" says so, and a touch more colour under a pointer. */
+.outdoor[data-opens="true"] { cursor: pointer; }
+.outdoor[data-opens="true"]:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 75%); }
+.outdoor[data-opens="true"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.outdoor-open { display: inline-flex; margin-left: auto; }
+.outdoor-label .outdoor-open svg { width: 16px; height: 16px; stroke: var(--text-3); }
 .hero-season {
   display: flex;
   align-items: center;
@@ -1184,6 +1191,44 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .zone-temps .energy-labels { padding-left: 30px; pointer-events: none; }
 .zone-temps .energy-labels .on { color: var(--text); font-weight: 600; }
 .temps-versus { display: block; margin-top: 2px; font-size: 0.84rem; }
+
+/* The outdoor sensor's sheet (home/outdoor.js): its views as the energy
+   card's; its days, weeks and months as a zone's 7 days - thinner, more of
+   them, a tick at the mean; its last 24 hours as a line; its years as a
+   table. Zero drawn a little stronger: below it, frost. */
+.outdoor-sheet { display: grid; gap: 10px; }
+.outdoor-sheet .sheet-note { margin: 0; }
+.outdoor-views button { min-height: 40px; padding: 6px 12px; }
+.outdoor-chart { height: 150px; }
+.outdoor-chart .temp-bars { gap: 2px; }
+.outdoor-chart .temp-bar > span { width: min(10px, 70%); }
+.outdoor-mean { position: absolute; left: 50%; bottom: var(--mean); width: min(14px, 100%); height: 2px; border-radius: 1px;
+  transform: translate(-50%, 50%); background: var(--text); transition: opacity 0.2s; }
+.temp-lines > span.zero { border-top: 1px solid color-mix(in srgb, var(--cool) 60%, transparent); }
+.outdoor-labels { padding-left: 30px; }
+.outdoor-labels .on { color: var(--text); font-weight: 600; }
+.outdoor-labels span:last-child { direction: rtl; text-align: right; }
+.outdoor-line { position: relative; height: 150px; margin-top: 6px; touch-action: pan-y; cursor: crosshair; }
+.outdoor-plot { position: absolute; inset: 0 0 0 30px; }
+.outdoor-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.outdoor-plot path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.outdoor-dot { position: absolute; left: var(--x); bottom: var(--y); width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, 50%); background: var(--surface); border: 2px solid var(--text); pointer-events: none; }
+.outdoor-dot[data-kind="cursor"] { width: 11px; height: 11px; background: var(--accent); border-color: var(--surface); }
+.outdoor-cursor { position: absolute; top: 0; bottom: 0; left: var(--x); width: 1px; background: var(--text-3); pointer-events: none; }
+.outdoor-hours { position: relative; height: 14px; margin: -2px 0 0 30px; font-size: 0.68rem; color: var(--text-3); }
+.outdoor-hours span { position: absolute; left: var(--x); transform: translateX(-50%); white-space: nowrap; }
+.outdoor-years { overflow-x: auto; }
+.outdoor-years table { width: 100%; border-collapse: collapse; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.outdoor-years th, .outdoor-years td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+.outdoor-years th:first-child { text-align: left; }
+.outdoor-years thead th { color: var(--text-2); font-weight: 650; border-bottom: 1px solid var(--line); }
+.outdoor-years tbody th { color: var(--text-2); font-weight: 500; }
+.outdoor-years td[data-current="true"] { font-weight: 700; }
+.outdoor-years td[data-few="true"], .outdoor-years td.none { color: var(--text-3); }
+.outdoor-years tfoot th, .outdoor-years tfoot td { border-top: 1px solid var(--line); }
+.outdoor-years tfoot th { color: var(--text-2); font-weight: 600; white-space: normal; }
+.outdoor-years td small { margin-left: 5px; font-size: 0.72rem; color: var(--text-3); }
 
 /* An air-quality sensor (home/house.js airTile): CO2 with its day, the rest as
    dots - green under the usual limit, amber worth airing, red poor. */

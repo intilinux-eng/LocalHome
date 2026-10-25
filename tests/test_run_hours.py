@@ -250,6 +250,46 @@ ZONES_MAP = [
 ]
 
 
+def test_the_outdoor_sheets_days(tmp_path):
+    """The home page's outdoor sheet: each day kept - its mean, lowest and
+    highest and when - and today's so far. With no outdoor sensor (a new
+    board's, still to configure): said, no days, no error."""
+    import json
+    (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
+    (tmp_path / "climate_map.json").write_text(json.dumps({"zones": ZONES_MAP}), encoding="utf-8")
+    app = create_app(str(tmp_path / "config.yaml"))
+    try:
+        res = app.test_client().get("/api/climate/outdoor")
+        assert res.status_code == 200 and res.get_json() == {"ok": True, "configured": False, "days": []}
+    finally:
+        app.config["HISTORY"].close()
+
+    # A board with its history: yesterday whole, today's first half hour.
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    (tmp_path / "data").mkdir(exist_ok=True)
+    store = HistoryStore(str(tmp_path / "data" / "history.db"))
+    record(store, yesterday, (0, 24), outdoor=lambda h: 2.0 if h < 6 else 9.0)
+    record(store, today, (0, 0.5), outdoor=lambda h: -1.5)
+    store.close()
+    (tmp_path / "climate_map.json").write_text(json.dumps(
+        {"zones": ZONES_MAP, "extra_sensors": {"outdoor_sensor_mode": "simulated"}}), encoding="utf-8")
+    app = create_app(str(tmp_path / "config.yaml"))
+    try:
+        data = app.test_client().get("/api/climate/outdoor").get_json()
+        assert data["configured"] is True
+        days = {d["day"]: d for d in data["days"]}
+        kept = days[yesterday.isoformat()]
+        assert (kept["min"], kept["max"]) == (2.0, 9.0) and kept["min_at"] == at(yesterday, 0)
+        assert 7 < kept["mean"] < 8, "a quarter of the day at 2°, the rest at 9°"
+        # Today so far: below zero first thing - the simulated sensor's own
+        # readings, recorded meanwhile, are warmer.
+        assert days[today.isoformat()]["min"] == -1.5
+        assert list(days) == sorted(days), "oldest first"
+    finally:
+        app.config["HISTORY"].close()
+
+
 def test_the_routes(tmp_path):
     import json
     (tmp_path / "config.yaml").write_text("web:\n  port: 5000\n  language: it\nintegrations: []\nthermostat:\n  mode: heat\n"

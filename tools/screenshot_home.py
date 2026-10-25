@@ -16,17 +16,22 @@ simulated shutters in config.yaml, one of them off the network: all opened,
 one stopped half way, one closing - the page and the card alone, as
 covers_card_*.png; with it, the other states have the shutters' card too),
 admin (the admin panel's first screen: its overview and menu - the window,
-not the whole page). Needs the browser tests' setup: pip install -e
-".[dev,ui]", playwright install chromium.
+not the whole page), outdoor (the outdoor sensor's sheet over two years of
+made-up Turin days, each of its views as outdoor_<view>_*.png - the
+window). Needs the browser tests' setup: pip install -e ".[dev,ui]",
+playwright install chromium.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +50,36 @@ NAMES = {
            "covers": ("Living room", "Kitchen", "Bedroom", "Study")},
 }
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
-STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin"]
+STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin", "outdoor"]
+OUTDOOR_VIEWS = ["24h", "days", "weeks", "months", "years"]
+
+
+def outdoor_days(today: date) -> list[dict]:
+    """Two years of made-up days as a Turin balcony has them - about 3° in
+    January and 24° in July, a wider day in summer - with a three-day gap,
+    as /api/climate/outdoor gives them."""
+    days = []
+    for back in range(730, 0, -1):
+        day = today - timedelta(days=back)
+        if 150 <= back <= 152:
+            continue
+        season = math.sin(2 * math.pi * (day.timetuple().tm_yday - 110) / 365)
+        mean = 13.5 + 10.5 * season + 3 * math.sin(back * 1.7) * math.cos(back * 0.31)
+        half = 3.5 + 1.5 * season
+        low_at = datetime.combine(day, datetime.min.time()) + timedelta(hours=6, minutes=30)
+        days.append({"day": day.isoformat(), "mean": round(mean, 2), "min": round(mean - half, 1), "max": round(mean + half, 1),
+                     "min_at": int(low_at.timestamp()), "max_at": int((low_at + timedelta(hours=8)).timestamp())})
+    return days
+
+
+def outdoor_line(now: float) -> list[dict]:
+    """The last 24 hours, every 5 minutes: lowest at dawn, highest after noon."""
+    points = []
+    for k in range(288):
+        ts = int(now // 300 * 300 - (287 - k) * 300)
+        hour = datetime.fromtimestamp(ts).hour + datetime.fromtimestamp(ts).minute / 60
+        points.append({"ts": ts, "value": round(11 + 4.5 * math.sin(2 * math.pi * (hour - 10.5) / 24), 2)})
+    return points
 
 
 def covers_config(names: dict) -> str:
@@ -129,6 +163,24 @@ def main() -> None:
                             page.click("#away-chip")
                             page.locator("#sheet button[data-away='24']").click()
                             page.wait_for_selector(".zone .away-note", timeout=10000)
+                        elif state == "outdoor":
+                            # Two years of days and a day's line, made up: a new
+                            # board has neither. Each view, the window.
+                            days, line = outdoor_days(date.today()), outdoor_line(time.time())
+                            page.route("**/api/climate/outdoor", lambda route: route.fulfill(
+                                json={"ok": True, "configured": True, "days": days}))
+                            page.route("**/api/sensors/Outdoor%20Sensor/history*", lambda route: route.fulfill(
+                                json={"ok": True, "series": {"temperature_c": line}}))
+                            page.click("#outdoor-chip")
+                            page.wait_for_selector("#outdoor-sheet .outdoor-views", timeout=10000)
+                            for view in OUTDOOR_VIEWS:
+                                page.click(f'#outdoor-sheet button[data-outdoor-view="{view}"]')
+                                page.wait_for_timeout(400)
+                                shot = args.out / f"outdoor_{view}_{width}_{scheme}.png"
+                                page.screenshot(path=str(shot))
+                                print(shot)
+                            page.close()
+                            continue
                         elif state == "covers":
                             # All opened (a full run: each one's place is known),
                             # the second stopped half way down, the third on its way down.

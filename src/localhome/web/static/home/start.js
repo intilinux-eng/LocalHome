@@ -235,6 +235,16 @@ document.getElementById("house-body").addEventListener("change", onHouseChange);
 document.getElementById("away-chip").addEventListener("click", openAway);
 document.getElementById("season-chip").addEventListener("click", openSeason);
 document.getElementById("health").addEventListener("click", openHealth);
+// The outdoor tile is a button only with a sensor (renderOutdoor()): a tap,
+// or Enter or the space bar on it, opens its sheet.
+const outdoorChip = document.getElementById("outdoor-chip");
+outdoorChip.addEventListener("click", () => { if (outdoorChip.dataset.opens === "true") openOutdoor(); });
+outdoorChip.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && outdoorChip.dataset.opens === "true") {
+    e.preventDefault();
+    openOutdoor();
+  }
+});
 document.getElementById("sheet").addEventListener("click", e => state.sheet && state.sheet.onClick && state.sheet.onClick(e));
 document.getElementById("sheet-close").addEventListener("click", closeSheet);
 document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);

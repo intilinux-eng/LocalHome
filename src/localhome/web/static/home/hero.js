@@ -93,10 +93,22 @@ function renderOutdoor() {
   const sensors = (state.devices && state.devices.sensors) || [];
   const device = deviceByName("Outdoor Sensor");
   const reading = state.readings["Outdoor Sensor"];
+  // With a sensor, real or simulated, the tile opens its days, weeks,
+  // months and years (home/outdoor.js); without one it's only words.
+  const opens = !!device;
+  chip.dataset.opens = String(opens);
+  if (opens) {
+    chip.setAttribute("role", "button");
+    chip.setAttribute("aria-haspopup", "dialog");
+    chip.tabIndex = 0;
+    chip.title = tr("home.outdoor_open");
+  } else {
+    ["role", "aria-haspopup", "tabindex", "title"].forEach(name => chip.removeAttribute(name));
+  }
   // A simulated one says so, as a zone's sensor does: an invented outdoor
   // temperature isn't read as the real one.
   const label = `<span class="outdoor-label">${ICONS.leaf}${esc(tr("home.outside"))}${device && device.simulated
-    ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}</span>`;
+    ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}${opens ? `<span class="outdoor-open">${ICONS.next}</span>` : ""}</span>`;
   if (!reading || reading.temperature_c == null) {
     // Not wired yet, or wired and not heard from yet: said, not left out -
     // in a home with rooms to heat or cool (a sensor of theirs is here).
@@ -155,6 +167,7 @@ const ICONS = {
   filter: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>`,
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
   chevron: `<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
+  next: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`,
   hand: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-4.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6.5 7S5 17 5 13v-2a1.5 1.5 0 0 1 3 0"/></svg>`,
   battery: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4M6.5 10.5v3"/></svg>`,
   power: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg>`,

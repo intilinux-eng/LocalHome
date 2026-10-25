@@ -111,6 +111,9 @@ const state = {
   offlineSince: null,
   retryTimer: null,
   sheet: null,            // what the sheet shows
+  // The outdoor sensor's sheet (home/outdoor.js): the view shown, the bar
+  // picked in each, and what it read when it opened.
+  outdoor: { view: "24h", pick: {}, days: [], line: [], lineScale: null },
 };
 
 function esc(value) {

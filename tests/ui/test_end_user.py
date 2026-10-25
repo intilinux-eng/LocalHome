@@ -16,8 +16,11 @@ after each step. Each case found in real use belongs here, so it's tried
 every time from then on.
 """
 import json
+import math
+import time
 import urllib.parse
 import urllib.request
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -595,6 +598,134 @@ def test_the_schedules_cleared_by_the_admin_leave_no_promise_on_the_home_page(wa
     w.page.wait_for_timeout(1500)
     line = w.card().locator(".mode-line").inner_text() if w.card().locator(".mode-line").count() else ""
     w.check("no next change promised once the week is gone", "Poi" not in line)
+
+
+# ------------------------------------------------------------------ outside --
+
+def _outdoor_days(today, back=400):
+    """Made-up days as the board keeps them (/api/climate/outdoor), today's
+    too: a year and more, colder in winter - some nights below zero - and
+    two days missing, the board off."""
+    days = []
+    for n in range(back, -1, -1):
+        day = today - timedelta(days=n)
+        if n in (40, 41):
+            continue
+        mean = 13 + 10 * math.sin(2 * math.pi * (day.timetuple().tm_yday - 110) / 365)
+        low_at = datetime.combine(day, datetime.min.time()) + timedelta(hours=6)
+        days.append({"day": day.isoformat(), "mean": round(mean, 1), "min": round(mean - 4, 1), "max": round(mean + 4, 1),
+                     "min_at": int(low_at.timestamp()), "max_at": int((low_at + timedelta(hours=8)).timestamp())})
+    return days
+
+
+def _outdoor_answers(w, days, line):
+    w.page.route("**/api/climate/outdoor", lambda route: route.fulfill(json={"ok": True, "configured": True, "days": days}))
+    w.page.route("**/api/sensors/Outdoor%20Sensor/history*", lambda route: route.fulfill(
+        json={"ok": True, "series": {"temperature_c": line}}))
+
+
+def test_outside_by_the_day_the_week_the_month_and_the_year(walk):
+    """Outside's tile opens its sheet: the last 24 hours as a line, then the
+    days, weeks and months as bars - a tap reads one - and the years month by
+    month. The board's days are made up here: a new board has hours, not years."""
+    w = walk()
+    now = int(time.time())
+    _outdoor_answers(w, _outdoor_days(date.today()),
+                     [{"ts": now - 86400 + k * 300, "value": round(10 + 3 * math.sin(k / 40), 2)} for k in range(288)])
+    tile = w.page.locator("#outdoor-chip")
+    w.check("outside's tile is a button, its arrow says so",
+            tile.get_attribute("role") == "button" and tile.locator(".outdoor-open").count() == 1)
+    tile.click()
+    sheet = w.page.locator("#outdoor-sheet")
+    w.check("its sheet opens on the last 24 hours, said simulated",
+            w.wait(lambda: sheet.locator(".outdoor-line path").count() == 1)
+            and "Sensore simulato" in sheet.inner_text() and w.page.locator("#sheet-title").inner_text() == "Temperatura esterna")
+    said = sheet.locator("#outdoor-line-text")
+    w.check("the day's lowest and highest, with when", said.inner_text().startswith("Ultime 24 ore: min "))
+    plot = sheet.locator(".outdoor-plot").bounding_box()
+    w.page.mouse.click(plot["x"] + plot["width"] / 2, plot["y"] + plot["height"] / 2)
+    w.check("a tap on the line reads that time", w.wait(lambda: said.inner_text().startswith("Alle ")))
+
+    view = lambda name: sheet.locator(f'button[data-outdoor-view="{name}"]')
+    bars, line = sheet.locator(".temp-bar"), sheet.locator(".energy-total b")
+    view("days").click()
+    w.check("a month of days, today's numbers under them",
+            w.wait(lambda: bars.count() == 30) and line.inner_text().startswith("Oggi: min ") and " · media " in line.inner_text())
+    bars.nth(10).click()
+    w.check("a day tapped: its own, with when", bars.nth(10).get_attribute("aria-pressed") == "true"
+            and " alle " in line.inner_text() and not line.inner_text().startswith("Oggi"))
+    bars.nth(10).click()
+    w.check("tapped again: back to today", bars.nth(10).get_attribute("aria-pressed") == "false"
+            and line.inner_text().startswith("Oggi"))
+    view("weeks").click()
+    w.check("half a year of weeks, this one in progress",
+            w.wait(lambda: bars.count() == 26) and line.inner_text().endswith("in corso"))
+    view("months").click()
+    w.check("a year of months, each against the same month a year before",
+            w.wait(lambda: bars.count() == 12) and "un anno prima: media" in line.inner_text())
+    w.check("the nights below zero counted", "sotto zero" in sheet.locator(".temps-versus").inner_text())
+    view("years").click()
+    table = sheet.locator(".outdoor-years table")
+    w.check("the years month by month, this one first", w.wait(lambda: table.count() == 1)
+            and table.locator("tbody tr").count() == 12 and table.locator("thead th").nth(1).inner_text() == str(date.today().year))
+    w.page.keyboard.press("Escape")
+    w.check("closed with Esc", w.page.locator("#sheet").is_hidden())
+
+
+def test_outside_with_nothing_kept_yet_or_the_board_not_answering(walk):
+    """A new board's sensor, nothing kept yet: said, not an empty chart. A
+    sensor silent for days: its 24 hours said empty, its last days still
+    there. The board not answering as it opens: said too, nothing breaks."""
+    w = walk(network_errors_expected=True)
+
+    def no_day_so_far(route):
+        # Today's lowest and highest left out: nothing at all, as on a new board.
+        response = route.fetch()
+        data = response.json()
+        data.get("day_ranges", {}).pop("Outdoor Sensor", None)
+        route.fulfill(response=response, json=data)
+    w.page.route("**/api/readings", no_day_so_far)
+    w.page.evaluate("refreshDevices()")
+    w.page.wait_for_timeout(500)
+    _outdoor_answers(w, [], [])
+    tile, sheet = w.page.locator("#outdoor-chip"), w.page.locator("#outdoor-sheet")
+    tile.click()
+    w.check("nothing kept yet: said, no chart", w.wait(lambda: "Ancora nessun dato" in sheet.inner_text())
+            and sheet.locator(".outdoor-views").count() == 0)
+    w.page.keyboard.press("Escape")
+
+    w.page.unroute("**/api/climate/outdoor")
+    w.page.unroute("**/api/sensors/Outdoor%20Sensor/history*")
+    _outdoor_answers(w, _outdoor_days(date.today())[:-5], [])
+    tile.click()
+    w.check("silent for days: no line in the last 24 hours, said",
+            w.wait(lambda: "Nessuna lettura nelle ultime 24 ore" in sheet.inner_text()) and sheet.locator(".outdoor-line").count() == 0)
+    sheet.locator('button[data-outdoor-view="days"]').click()
+    bars = sheet.locator(".temp-bar")
+    w.check("its days up to the last one heard, the rest empty", w.wait(lambda: bars.count() == 30)
+            and sheet.locator(".temp-bar[disabled]").count() == 5
+            and not sheet.locator(".energy-total b").inner_text().startswith("Oggi"))
+    w.page.keyboard.press("Escape")
+
+    w.page.unroute("**/api/climate/outdoor")
+    w.page.route("**/api/climate/outdoor", lambda route: route.abort())
+    tile.click()
+    w.check("the board not answering: said", w.wait(lambda: "I dati non sono arrivati" in sheet.inner_text()))
+    w.page.keyboard.press("Escape")
+    w.check("and closed as ever", w.page.locator("#sheet").is_hidden())
+
+
+def test_no_outdoor_sensor_the_tile_opens_nothing(walk):
+    """A home without one (none in the admin panel): its tile only says so."""
+    w = walk()
+    w.page.evaluate("""() => { state.devices.sensors = state.devices.sensors.filter(d => d.name !== "Outdoor Sensor");
+                               delete state.readings["Outdoor Sensor"]; renderOutdoor(); }""")
+    tile = w.page.locator("#outdoor-chip")
+    w.check("words, not a button", tile.get_attribute("role") is None and tile.get_attribute("data-opens") == "false"
+            and tile.locator(".outdoor-open").count() == 0)
+    tile.click()
+    w.page.wait_for_timeout(300)
+    w.check("a tap opens nothing", w.page.locator("#sheet").is_hidden())
 
 
 def test_the_history_cleared_by_the_admin_breaks_nothing_open(walk, house):
