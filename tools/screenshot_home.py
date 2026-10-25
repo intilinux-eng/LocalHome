@@ -11,9 +11,10 @@ hourly (as found), details (the rooms' details open), manual / off (the
 choice open), held (manual applied for 2 h), away (24 h), covers (four
 simulated shutters in config.yaml, one of them off the network: all opened,
 one stopped half way, one closing - the page and the card alone, as
-covers_card_*.png; with it, the other states have the shutters' card too).
-Needs the browser tests' setup: pip install -e ".[dev,ui]", playwright
-install chromium.
+covers_card_*.png; with it, the other states have the shutters' card too),
+admin (the admin panel's first screen: its overview and menu - the window,
+not the whole page). Needs the browser tests' setup: pip install -e
+".[dev,ui]", playwright install chromium.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ from tests.ui.helpers import SIMULATED_ZONE  # noqa: E402
 
 ROOMS, BATHS = "Stanze", "Bagni"
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
-STATES = ["hourly", "details", "manual", "off", "held", "away", "covers"]
+STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin"]
 # The shutters' card needs shutters in config.yaml: four simulated ones, 3 s
 # up or down, the last one off the network.
 COVERS = "".join(f'  - kind: cover\n    type: simulated\n    name: "Tapparella {room}"\n    travel_time_seconds: 3\n'
@@ -81,6 +82,17 @@ def main() -> None:
                         reset()
                         page = browser.new_page(viewport={"width": width, "height": 900})
                         page.emulate_media(color_scheme=scheme)
+                        if state == "admin":
+                            page.goto(base + "/climate-admin")
+                            page.wait_for_function("() => document.querySelectorAll('.ov-tile .ov-value').length"
+                                                   " && ![...document.querySelectorAll('.ov-tile .ov-value')]"
+                                                   ".some(v => v.textContent.includes('…'))", timeout=30000)
+                            page.wait_for_timeout(1500)
+                            shot = args.out / f"{state}_{width}_{scheme}.png"
+                            page.screenshot(path=str(shot))
+                            print(shot)
+                            page.close()
+                            continue
                         page.goto(base + "/")
                         page.wait_for_selector(".zone .mode-row", timeout=30000)
                         page.wait_for_timeout(1200)
