@@ -1,7 +1,8 @@
-# Tuya (covers + air-quality sensor)
+# Tuya roller shutters
 
-Covers the `tuya_curtain_switch` (`cover`) and `tuya_air_quality`
-(`climate`) drivers. Both talk to devices directly over your LAN via
+The `tuya_curtain_switch` (`cover`) driver: Tuya curtain switches, such
+as the LoraTap roller shutter modules five shutters run on in the home
+LocalHome was built for. It talks to them directly over your LAN via
 [tinytuya](https://github.com/jasonacox/tinytuya) - fully local at
 runtime. The Tuya *cloud* is only involved in the one-time setup step
 below, to fetch each device's `local_key`.
@@ -92,8 +93,7 @@ python -m tinytuya wizard
 Enter the Access ID, Access Secret, a sample Device ID, and the region
 when prompted, pointing it at `tuya_cloud.json` if asked for a
 credentials file. This downloads all your devices (with their
-`local_key`) into `config/devices.json` - the file both Tuya drivers
-read.
+`local_key`) into `config/devices.json` - the file the driver reads.
 
 ## 2. Find device IPs on your network
 
@@ -103,8 +103,8 @@ python -m tinytuya scan
 ```
 
 Saves `config/snapshot.json` with device IDs and IPs. If a
-`config/devices.json` entry is missing its `ip` field (both Tuya drivers
-skip devices without one, and say so in the log), merge it in from
+`config/devices.json` entry is missing its `ip` field (the driver skips
+devices without one, and says so in the log), merge it in from
 `snapshot.json` by matching on the device `id`.
 
 **An address that changes later takes care of itself.** A Tuya device is
@@ -115,7 +115,7 @@ address in `config/tuya_addresses.json`, which it starts from next time.
 The lookup is throttled (once every 5 minutes per device), so a device
 that's simply switched off doesn't cost a scan on every poll.
 
-## 3. Enable the drivers
+## 3. Enable the driver
 
 ```yaml
 integrations:
@@ -123,15 +123,12 @@ integrations:
     type: tuya_curtain_switch
     devices_file: "devices.json"
     # categories: ["clkg", "tdq"]   # override if your curtain switch reports a different category
-
-  - kind: climate
-    type: tuya_air_quality
-    devices_file: "devices.json"
 ```
 
-Both drivers load *every* matching entry from `devices_file` as a
-separate cover/sensor named after its `name` field in that file - you
-don't list devices individually in `config.yaml`.
+The driver loads *every* matching entry from `devices_file` as a
+separate cover named after its `name` field in that file - you don't
+list devices individually in `config.yaml`. The shutters' card on the
+home page, and their section in the admin panel, appear only then.
 
 ### How the covers are followed
 
@@ -217,8 +214,7 @@ Nothing answered at that address: the device is off, off the Wi-Fi, or
 it moved (see the note in step 2 - LocalHome looks it up and heals that
 case by itself). The card reads "not answering".
 
-**A cover/sensor doesn't show up on the dashboard**
+**A shutter doesn't show up on the home page**
 Check it has an `ip` field in `devices.json` (see step 2) and that its
-`category` matches what the driver expects (`clkg`/`tdq` for covers,
-`hjjcy` for the air-quality sensor - override with `categories:` in
-config.yaml if your device reports something else).
+`category` is one the driver expects (`clkg`/`tdq` - override with
+`categories:` in config.yaml if your device reports something else).

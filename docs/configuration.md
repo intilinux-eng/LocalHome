@@ -136,7 +136,6 @@ after installing to list what your checkout actually has registered):
 | kind          | type                  | Docs |
 |---------------|------------------------|------|
 | `cover`       | `tuya_curtain_switch` | [integrations/tuya.md](integrations/tuya.md) |
-| `climate`     | `tuya_air_quality`    | [integrations/tuya.md](integrations/tuya.md) |
 | `power_meter` | `ewelink_powct`       | [integrations/ewelink.md](integrations/ewelink.md) |
 | `switch`      | `meross_plug`         | [integrations/meross.md](integrations/meross.md) |
 | `cover`/`climate`/`power_meter`/`switch`/`number` | `mqtt_json` | [integrations/mqtt.md](integrations/mqtt.md) - generic, covers Shelly/Tasmota/Zigbee2MQTT/ESPHome/etc. |

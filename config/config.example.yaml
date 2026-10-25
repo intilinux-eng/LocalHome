@@ -39,11 +39,6 @@ integrations:
     type: tuya_curtain_switch
     devices_file: "devices.json"
 
-  # Tuya's "9-in-1"/"12-in-1" air-quality sensor, same devices_file.
-  - kind: climate
-    type: tuya_air_quality
-    devices_file: "devices.json"
-
   # A Sonoff POWCT power-monitoring relay, read through the eWeLink cloud
   # (see docs/integrations/ewelink.md for why this one isn't fully local).
   - kind: power_meter

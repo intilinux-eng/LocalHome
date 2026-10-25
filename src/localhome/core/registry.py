@@ -28,6 +28,11 @@ _SKIPPED: dict[str, str] = {}
 # Missing package -> optional extra that installs it (if any), so the
 # remedy shown is the project's own install command, not a bare pip name.
 _EXTRA_FOR_PACKAGE: dict[str, str] = {}
+# Drivers LocalHome had and no longer has: a config.yaml that still names
+# one is told so, and what to do, rather than shown every driver there is.
+REMOVED: dict[tuple[str, str], str] = {
+    ("climate", "tuya_air_quality"): "the Tuya air-quality sensor",
+}
 
 
 def register_driver(kind: str, type_name: str):
@@ -100,6 +105,9 @@ def create(kind: str, type_name: str, options: dict) -> list:
     load_builtin_drivers()
     key = (kind, type_name)
     factory = _FACTORIES.get(key)
+    if factory is None and key in REMOVED:
+        raise ValueError(f"LocalHome no longer has {REMOVED[key]} ({kind}/{type_name}): "
+                         "delete this entry from config.yaml - CHANGELOG.md says why.")
     if factory is None:
         available = sorted(f"{k}/{t}" for k, t in _FACTORIES)
         message = f"No driver registered for kind={kind!r} type={type_name!r}."

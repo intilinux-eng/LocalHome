@@ -273,7 +273,6 @@ generic, and a few other devices run in the same apartment:
 | `cover` / `climate` / `power_meter` / `switch` / `number` | `mqtt_json` | **Anything publishing JSON over MQTT** - Shelly, Tasmota, Zigbee2MQTT, ESPHome, your own sketch | Yes - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
 | `switch` / `number` | `shelly_light` | Shelly Gen2/Gen3 dimmers, over RPC on MQTT | Yes |
 | `cover` | `tuya_curtain_switch` | Tuya curtain switches (e.g. LoraTap roller shutter modules) | Yes (LAN) |
-| `climate` | `tuya_air_quality` | Tuya 9-in-1/12-in-1 air-quality sensors | Yes (LAN) |
 | `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
 | `switch` | `meross_plug` | Meross smartplugs | No - Meross cloud, see [docs/integrations/meross.md](docs/integrations/meross.md) |
 | `climate` / `switch` / `number` | `simulated` | **No hardware** - try a whole setup before owning it | - see [docs/integrations/simulated.md](docs/integrations/simulated.md) |

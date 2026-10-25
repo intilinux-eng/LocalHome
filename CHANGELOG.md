@@ -8,6 +8,14 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Removed
+- **The Tuya air-quality sensor** (`tuya_air_quality`). Unused in the home
+  LocalHome runs, and its readings were off (the humidity by 20 points).
+  A config.yaml that still lists it starts as before, with that entry
+  said in the System status as no longer there, to be deleted. The air's
+  card on the home page stays for any sensor that reports CO2 or
+  particles.
+
 ## 1.1.0 - 2026-10-25
 
 Two weeks of the home in daily use: the shutters on the home page, each

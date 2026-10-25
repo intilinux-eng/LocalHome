@@ -68,7 +68,7 @@ python tools/check_board.py antonio
 - the commit now on antonio (`/api/system-status` → `software.commit`), and
   whether it's pushed;
 - check_board: passed / not, each "NO" with its line; the problems the
-  board shows (the air-quality sensor offline is known);
+  board shows;
 - anything the user has to do (tune-board, a setting in the Shelly app the
   admin flags);
 - the second check's result when it comes.

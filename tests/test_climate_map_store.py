@@ -530,7 +530,7 @@ def test_snapshot_pads_up_to_zone_count_with_blank_entries():
 
 def test_snapshot_falls_back_to_an_empty_shelly_slot_for_an_unknown_driver_type():
     zones = [Zone(name="Rooms", sensor="Rooms Sensor", valve="Rooms Valve")]
-    integrations = [Integration("climate", "tuya_air_quality", {"name": "Rooms Sensor"})]
+    integrations = [Integration("climate", "acme_sensor", {"name": "Rooms Sensor"})]
 
     snapshot = snapshot_from_config(zones, integrations)
 
