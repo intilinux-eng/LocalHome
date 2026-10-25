@@ -12,6 +12,11 @@ no hub, no subscription: the sensors and relays talk to a Mosquitto broker
 on the board, and LocalHome runs the thermostat, the schedules, the
 ventilation and the dashboard next to it.
 
+It's that home's system, made to be installed again: two zones on a
+radiant ceiling, a bypass valve and a dehumidifier for the summer, a VMC.
+A new board starts as that home, every device to configure, and you
+adapt it to yours from there - [is it for your home?](#is-it-for-your-home)
+
 <p align="center">
   <img src="docs/photos/arduino-uno-q-led-matrix.jpg" alt="The Arduino UNO Q running LocalHome, its LED matrix showing the home's state" width="440">
   &nbsp;
@@ -64,6 +69,39 @@ What daily use has shown so far, on this board:
 - **The clock changes** are handled: both 2 o'clocks of the October
   night are in the history, and the schedules ran on time.
 - **1,000+ unit tests and 150 browser tests** run on every push.
+
+## Is it for your home?
+
+LocalHome is one home's system, made to be installed again: a new board
+starts as that home, every device to configure, and you change it from
+there.
+
+**As it is**, it fits a home with:
+
+- two zones, each with a relay-switched valve on its manifold and a
+  temperature and humidity sensor in the room - the water heated or
+  chilled by a plant LocalHome doesn't drive: a building's central
+  plant, or a heat pump with its own controls;
+- if it has them, a bathroom bypass valve and a dehumidifier for the
+  summer, an outdoor sensor, and a VMC with a 0-10 V speed input.
+
+**From the pages**, with no file to edit: the zones' names and which of
+them sits out the summer; each device's Shelly id, typed in as it's
+installed - or simulated, to try first; no outdoor sensor, or no VMC;
+the schedules, the season, the VMC's program and its adjustments, the
+dehumidifier's thresholds.
+
+**In config.yaml, if you have them**: Tuya (LoraTap) roller shutters, a
+Sonoff POWCT meter, a Meross plug - each with its card on the home page
+only once it's there - and sensors, relays or dimmers of other brands
+that speak JSON over MQTT; a zone made of those is wired in config.yaml
+instead of the admin panel ([Beyond Shelly](#beyond-shelly),
+[configuration](docs/configuration.md#thermostat-heatingcooling-zones)).
+
+**Not yet**: more than two zones from the admin panel, or more than one
+sensor in a zone; leaving out the bypass valve or the dehumidifier - a
+home without them still lists them as to configure; driving the boiler
+or the heat pump itself. Some of it is on the [roadmap](#roadmap).
 
 ## Try it in one minute
 
@@ -265,12 +303,14 @@ passwords stay out of git.
 
 ## Beyond Shelly
 
-The climate side is Shelly-first, but the drivers underneath are
-generic, and a few other devices run in the same apartment:
+The climate runs on Shellys; underneath, the drivers are generic.
+Everything beside the climate is optional - added in config.yaml, its
+card on the home page only once it's there - and has run in the same
+apartment:
 
 | Kind | Driver | Talks to | Local? |
 |---|---|---|---|
-| `climate` / `switch` / `number` | `mqtt_json` | **Anything publishing JSON over MQTT** - Shelly, Tasmota, Zigbee2MQTT, ESPHome, your own sketch | Yes - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
+| `climate` / `switch` / `number` | `mqtt_json` | **Sensors, relays and dimmers publishing JSON over MQTT** - the climate's own Shellys; Tasmota, Zigbee2MQTT, ESPHome or your own sketch by the same shapes | Yes - see [docs/integrations/mqtt.md](docs/integrations/mqtt.md) |
 | `switch` / `number` | `shelly_light` | Shelly Gen2/Gen3 dimmers, over RPC on MQTT | Yes |
 | `cover` | `tuya_curtain_switch` | Tuya curtain switches (e.g. LoraTap roller shutter modules) | Yes (LAN) |
 | `power_meter` | `ewelink_powct` | Sonoff POWCT | No - eWeLink cloud, see [docs/integrations/ewelink.md](docs/integrations/ewelink.md) |
@@ -291,6 +331,8 @@ What comes next, most of it already measured for in the house's record:
   from how fast this house warms and cools.
 - **Summer cooling held back near the dew point** - the radiant ceiling's
   own protection against condensation, from each zone's sensor.
+- **A zone with more than one sensor** - two bathrooms on one valve -
+  and a home without the bypass valve or the dehumidifier.
 - **Ventilation on CO2**, and the shower's boost judged on absolute
   humidity against the outdoor air.
 - **A Telegram bot per board** - alerts and a few commands.
