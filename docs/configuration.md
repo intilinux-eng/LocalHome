@@ -42,6 +42,7 @@ web:
   port: 5000          # default: 5000
   language: "en"       # optional, default: "en" - see "Language" below
   site_name: "LocalHome"  # optional - the name shown on the dashboard, max 24 characters
+  source_url: "https://github.com/intilinux-eng/LocalHome"  # optional - the "Source code" link at the bottom of the home page; a modified copy points it at its own source (AGPL-3.0)
   auth:                # optional, off by default - see "Web auth" below
     secrets_file: "secrets_web.json"
 

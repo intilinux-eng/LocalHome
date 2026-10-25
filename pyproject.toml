@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "A local-first, no-cloud-required framework for small smart-home setups: roller shutters, power meters, climate sensors, smart plugs and alerts, talked to over your LAN wherever possible."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-or-later" }
 
 # What LocalHome works with, up to the next major version - one that may
 # change what LocalHome relies on (0.x versions: the next minor). The

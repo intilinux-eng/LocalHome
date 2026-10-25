@@ -4,3 +4,9 @@
 # CHANGELOG.md's Unreleased goes under it, and a tag vX.Y.Z on its commit.
 # pyproject.toml says the same (tests/test_version.py).
 __version__ = "1.0.0"
+
+# Where this program's source is - linked at the bottom of the home page.
+# LocalHome is under the AGPL-3.0: whoever runs a modified copy for others
+# to use over the network must offer them its source, so a modified copy
+# points this at its own (web.source_url in config.yaml).
+SOURCE_URL = "https://github.com/intilinux-eng/LocalHome"

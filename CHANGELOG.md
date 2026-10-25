@@ -88,6 +88,14 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   spreadsheet, in the panel's language (Italian: ";" and decimal comma).
 
 ### Changed
+- **The license is now the GNU Affero General Public License v3.0 or
+  later** (it was MIT).
+  - Anyone may still use LocalHome, change it, install it for others and
+    charge for that work.
+  - Whoever passes it on, or lets others use a changed copy over the
+    network, passes on its source too, under the same license.
+  - The home page's footer links to the source ("Codice sorgente"). A
+    changed copy points that link at its own source with `web.source_url`.
 - **The home page says things once and plainly** (read over as a resident
   would): the next stretch's switch-on edge is said as the next stretch's -
   "Poi 24° domani alle 00:00, e da lì si accende solo sopra 24,5°"; after

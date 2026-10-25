@@ -43,8 +43,8 @@ through the exact interface to implement. In short:
   driver, starts everything else normally), so nothing every user needs
   is pip-installed automatically for a device only some users own.
 - **Check a new dependency's license before adding it**, the same way
-  you'd check a device's local-vs-cloud protocol. This project stays
-  under permissive licenses (see
+  you'd check a device's local-vs-cloud protocol. Its dependencies
+  stay under permissive licenses (see
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) on purpose - a
   copyleft one (GPL, AGPL, ...) isn't automatically disqualifying, but
   it needs its own extra (per the rule above, doubly so here) and an

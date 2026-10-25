@@ -54,7 +54,8 @@ def register(app: Flask) -> None:
         # The home page - glance, tweak, plan; see static/home/.
         config: LocalHomeConfig = app.config["LOCALHOME_CONFIG"]
         return render_template("home.html", site_name=site_name(), t=app.config["TRANSLATIONS"],
-                               lang=config.web_language, version=app.config["SOFTWARE_VERSION"]["version"])
+                               lang=config.web_language, version=app.config["SOFTWARE_VERSION"]["version"],
+                               source_url=config.web_source_url)
 
     @app.route("/api/server-time")
     def api_server_time():

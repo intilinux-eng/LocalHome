@@ -1,8 +1,9 @@
 # Third-party notices
 
-LocalHome itself is [MIT licensed](LICENSE). All of its runtime dependencies
-are under permissive licenses compatible with MIT, imposing no
-copyleft/share-alike obligations on binary distributions of this project:
+LocalHome itself is licensed under the [GNU Affero General Public License
+v3.0 or later](LICENSE). All of its runtime dependencies are under
+permissive licenses compatible with it, adding no obligations of their own
+on top of the AGPL's:
 
 | Package      | License        | Used for |
 |---------------|-----------------|----------|

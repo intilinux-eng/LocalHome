@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from localhome import SOURCE_URL
+
 CONFIG_ENV_VAR = "LOCALHOME_CONFIG"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -36,6 +38,8 @@ class LocalHomeConfig:
     integrations: list[Integration]
     notifier: Integration | None
     raw: dict
+    # Where the source of the copy running here is (see localhome.SOURCE_URL).
+    web_source_url: str = SOURCE_URL
 
     def resolve(self, relative_path: str) -> str:
         """Resolve a config-relative path against the directory the
@@ -93,4 +97,5 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
         integrations=integrations,
         notifier=notifier,
         raw=raw,
+        web_source_url=web.get("source_url") or SOURCE_URL,
     )
