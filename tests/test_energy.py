@@ -183,8 +183,13 @@ def test_the_route_answers_for_a_plug_that_measures_its_power(tmp_path):
     (tmp_path / "config.yaml").write_text("web:\n  port: 5000\nintegrations: []\n", encoding="utf-8")
     app = create_app(str(tmp_path / "config.yaml"))
     try:
-        app.config["MANAGER"].pollers["Scrivania"] = SimpleNamespace(driver=SimpleNamespace(history_fields=("power_w",)))
-        app.config["MANAGER"].pollers["Lampada"] = SimpleNamespace(driver=SimpleNamespace(history_fields=("is_on",)))
+        # Read like a real poller: the app's own recorder goes on reading
+        # them, in its thread, for as long as the test session lasts.
+        unread = lambda: {"ok": False}  # noqa: E731
+        app.config["MANAGER"].pollers["Scrivania"] = SimpleNamespace(
+            driver=SimpleNamespace(history_fields=("power_w",)), get=unread)
+        app.config["MANAGER"].pollers["Lampada"] = SimpleNamespace(
+            driver=SimpleNamespace(history_fields=("is_on",)), get=unread)
         client = app.test_client()
         assert client.get("/api/energy/Scrivania").get_json()["ok"] is True
         assert client.get("/api/energy/Lampada").status_code == 404

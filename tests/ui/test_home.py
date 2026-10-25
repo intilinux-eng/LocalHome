@@ -1023,7 +1023,10 @@ def test_a_zone_says_its_mode_and_changes_it_in_one_tap(open_page, api):
         assert eventually(page, lambda: (_zone(api, ZONE_A)["override"] or {"target": 0})["target"] is None)
         assert eventually(page, lambda: mode("off").get_attribute("aria-checked") == "true")
         assert card.locator(".mode-line").count() == 0, "by hand: its own line says until when"
-        assert card.locator(".quick .manual-banner").count() == 1 and label.get_attribute("data-in-use") == ""
+        # The table's heading follows the zone's card a moment later on a
+        # slow machine (CI): it's redrawn with the zone's details.
+        assert eventually(page, lambda: card.locator(".quick .manual-banner").count() == 1
+                          and label.get_attribute("data-in-use") == "")
         mode("manual").click()
         assert mode("manual").get_attribute("aria-checked") == "true" and card.locator(".pending .stepper").is_visible()
         card.locator("button[data-action=cancel-pending]").click()
