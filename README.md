@@ -1,22 +1,69 @@
 # LocalHome
 
 [![Tests](https://github.com/intilinux-eng/LocalHome/actions/workflows/tests.yml/badge.svg)](https://github.com/intilinux-eng/LocalHome/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 ![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue.svg)
+![Runs on Arduino UNO Q](https://img.shields.io/badge/runs%20on-Arduino%20UNO%20Q-00979D.svg)
 
-**Heating, cooling and ventilation for Shelly Gen3 devices - entirely
-local, over MQTT.** No Shelly cloud, no hub, no subscription: the
-sensors and relays talk to a Mosquitto broker on a small board in the
-apartment, and LocalHome runs the thermostat, the schedules and the
-dashboard next to it. It runs on an
-[Arduino UNO Q](https://www.arduino.cc/product-uno-q), in real
-apartments, every day.
+**The heating, cooling and ventilation of a real apartment in Turin, run
+every day by an [Arduino UNO Q](https://www.arduino.cc/product-uno-q) and
+a handful of Shelly Gen3 devices - entirely local, over MQTT.** No cloud,
+no hub, no subscription: the sensors and relays talk to a Mosquitto broker
+on the board, and LocalHome runs the thermostat, the schedules, the
+ventilation and the dashboard next to it.
 
-It's also a reference for anyone using **Shelly H&T Gen3 sensors on
-batteries** over local MQTT: how they really report, how to tell a
-sleeping sensor from a dead one, and what the network under them needs
-- measured on real devices, written up in
+<p align="center">
+  <img src="docs/photos/arduino-uno-q-led-matrix.jpg" alt="The Arduino UNO Q running LocalHome, its LED matrix showing the home's state" width="440">
+  &nbsp;
+  <img src="docs/screenshots/home-phone.png" alt="The home page on a phone: what the climate is doing, each zone, the ventilation" width="230">
+</p>
+
+It's also a field reference for anyone using **Shelly Gen3 devices over
+local MQTT** - H&T sensors on batteries above all: how they really report,
+how to tell a sleeping sensor from a dead one, and what the network under
+them needs, measured on real devices in
 **[docs/shelly-gen3.md](docs/shelly-gen3.md)**.
+
+## In daily use, in a home in Turin
+
+Since September 2026 LocalHome has run the climate of an apartment in
+Turin, Italy:
+
+- **two zones on a radiant ceiling** - the rooms and the bathrooms -
+  heated and cooled by the building's central heat pump, metered per
+  apartment;
+- **a bathroom bypass valve and a dehumidifier** for the summer;
+- **mechanical ventilation (VMC)** on a weekly program, with automatic
+  adjustments for a shower, a humid day or air that's too dry;
+- **an outdoor sensor** - and, alongside the climate, five roller shutters,
+  a power meter and a smart plug.
+
+| Role | Device | In the field |
+|---|---|---|
+| The board | **Arduino UNO Q**, 4 GB (a 2 GB one tested too) | Debian 13 - LocalHome, Mosquitto, avahi |
+| Zone valves, bathroom bypass, dehumidifier | 4 × **Shelly 1 Gen3** (S3SW-001X16EU) | firmware 2.0.1, each with its own safety off-timer |
+| Zone and outdoor sensors | 3 × **Shelly H&T Gen3**, on batteries | a report on every change and every 2 hours |
+| Ventilation speed | **Shelly Dimmer 0/1-10V PM Gen3** (S3DM-0010WW) | firmware 2.0.1, into the unit's 0-10 V input |
+| Alongside | 5 × LoraTap roller shutter modules (Tuya, on the LAN), Sonoff POWCT, Meross plug | optional drivers |
+
+| | | |
+|---|---|---|
+| ![Four Shelly 1 Gen3 on a DIN rail, wired to the zone valves, the bypass and the dehumidifier](docs/photos/shelly-1-gen3-valves.jpg) | ![A Shelly H&T Gen3 on the wall: 23.1 °C, 50%](docs/photos/shelly-ht-gen3.jpg) | ![The Arduino UNO Q on the wall, its LED matrix lit](docs/photos/arduino-uno-q-on-the-wall.jpg) |
+| *The valves' relays* | *A zone's sensor* | *The board on the wall* |
+
+What daily use has shown so far, on this board:
+
+- **About 100 MB of memory** (of 4 GB; LocalHome is capped at 512 MB),
+  levelling off after the first days; **under 1% of one CPU core**.
+- **About 0.35 GB a day written** to the soldered eMMC, after
+  [`deploy/tune-board.sh`](deploy/tune-board.sh) - decades of life.
+- **Power cuts, router restarts and a Wi-Fi channel gone bad** were all
+  lived through: the board comes back by itself, the devices that drop
+  out are named on the home page, and they're picked up again when they
+  return.
+- **The clock changes** are handled: both 2 o'clocks of the October
+  night are in the history, and the schedules ran on time.
+- **1,000+ unit tests and 150 browser tests** run on every push.
 
 ## Try it in one minute
 
@@ -45,9 +92,10 @@ LOCALHOME_CONFIG=/tmp/localhome-demo/config.yaml .venv/bin/localhome
 
 | Device | Role here | In the field |
 |---|---|---|
-| **Shelly H&T Gen3**, on batteries | each zone's temperature and humidity; the outdoor sensor | two units, daily |
+| **Shelly H&T Gen3**, on batteries | each zone's temperature and humidity; the outdoor sensor | three units, daily |
+| **Shelly 1 Gen3** | zone valves, bathroom bypass valve, dehumidifier | four units, daily |
 | **Shelly Dimmer 0/1-10V PM Gen3** | the ventilation unit's (VMC) speed, through its 0-10 V input | one unit, daily |
-| Shelly Plus 1 | zone valves, bathroom bypass valve, dehumidifier | supported, not yet in the field |
+| Shelly Plus 1 | the same roles as the Shelly 1 Gen3 | supported, tested on the bench |
 
 A few of the things learned on the way - each explained in
 [docs/shelly-gen3.md](docs/shelly-gen3.md):
@@ -65,7 +113,9 @@ A few of the things learned on the way - each explained in
 - The dimmer publishes its state only on change: it's **asked**, over
   RPC on MQTT - and it silently ignores a fractional brightness.
 - The router matters more than the devices: Wi-Fi clients must reach
-  each other, and 5 GHz belongs on a fixed non-radar channel.
+  each other, 5 GHz belongs on a fixed non-radar channel, and the 2.4 GHz
+  channel the Shellys live on is shared with the neighbours - one crowded
+  channel was enough to make them drop out.
 
 The admin panel shows what every Shelly says about itself: signal now
 and over a day and a week, battery, reports lost, internal temperature,
@@ -79,11 +129,19 @@ mains voltage, restarts and firmware updates.
   can sit out the summer. A silent sensor closes its valve after a day
   instead of leaving it open forever.
 - **The rest of the plant** - a bathroom bypass valve and a dehumidifier
-  following per-season rules, the ventilation's speed on a weekly
-  program with a timed boost, an outdoor sensor.
+  following per-season rules; the ventilation's speed on a weekly
+  program with a timed boost, and adjustments that switch on by
+  themselves - a shower, a humid summer day, winter air too dry; an
+  outdoor sensor.
 - **Statistics** - every run of the last day or week, with what the
   temperature and humidity did meanwhile, in a SQLite history on the
-  board.
+  board; the hours on beside the heat meter's kWh, month by month.
+- **The house's record** - every 5 minutes each zone, the outdoor air and
+  the plant, every switch with why, kept 6 years and downloaded from the
+  admin panel as a CSV for a spreadsheet or a notebook: the data to
+  understand how the house behaves.
+- **Roller shutters, when there are some** - open, stop or close them all
+  at once, or each one, with where each is: open, closed, part way, moving.
 - **An admin panel for installers** (`/climate-admin`) - a new board
   already lists the apartment's Shellys, each to configure: type in each
   one's id from the browser as it goes in, one at a time (or try it
@@ -96,21 +154,24 @@ mains voltage, restarts and firmware updates.
 - **A status display on the board itself** - the UNO Q's LED matrix, for
   whoever stands in front of it without a phone.
 
-English and Italian UI; optional HTTP Basic Auth.
+English and Italian UI; optional HTTP Basic Auth. For use away from
+home, a private network such as Tailscale - never a port opened on the
+router.
 
 ## Screenshots
 
-Captured against the simulated devices - what the demo shows.
+Captured against the simulated devices - what the demo shows
+([`tools/screenshot_home.py`](tools/screenshot_home.py) makes them again).
 
-| Home | Heating & Cooling |
-|---|---|
-| ![Home tab: sensor cards and covers](docs/screenshots/home.png) | ![Heating & Cooling tab: a tile per zone, the zone in detail with its weekly schedule, and the other devices](docs/screenshots/climate.png) |
+| On a phone | In the dark | The shutters |
+|---|---|---|
+| ![The home page on a phone: the climate at a glance, each zone with its target and schedule, the plant](docs/screenshots/home-phone.png) | ![The same page in the dark scheme](docs/screenshots/home-phone-dark.png) | ![The shutters' card: all at once on top, then each one with where it is - open, part way, closing, not answering](docs/screenshots/shutters.png) |
 
-![A zone's statistics: every run in the last 24 hours with what temperature and humidity did meanwhile, then the charts with the stretches the system was on shaded](docs/screenshots/statistics.png)
-*A zone's statistics: when the system ran, and what it did.*
+![The home page on a desktop: the rooms' zone in detail, with its weekly schedule painted by the hour](docs/screenshots/home-desktop.png)
+*A zone in detail: its target, what the schedule does next, and the week painted by the hour.*
 
-![Admin panel: an overview of the whole installation, the zones mapped onto Shelly device ids with their live status, and every other section folded with its state in its header](docs/screenshots/climate-admin.png)
-*The admin panel.*
+![The admin panel's overview: the state of the installation, the season, the zones, the devices, the board](docs/screenshots/admin.png)
+*The admin panel, for the installer.*
 
 ## Built on the Arduino UNO Q
 
@@ -125,9 +186,9 @@ What it costs the board, measured on a UNO Q in daily use:
 
 | | |
 |---|---|
-| LocalHome's memory | about 110-120 MB of 4 GB (capped at 512 MB) |
-| CPU | under 2% of one core |
-| eMMC writes | about 0.25-0.6 GB a day, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
+| LocalHome's memory | about 100 MB of 4 GB (capped at 512 MB) |
+| CPU | under 1% of one core |
+| eMMC writes | about 0.35 GB a day for the whole board, after [`deploy/tune-board.sh`](deploy/tune-board.sh) |
 | Power-on to dashboard | about 40 seconds |
 
 Any other Linux board (a Raspberry Pi, ...) runs it too - the LED matrix
@@ -221,6 +282,26 @@ generic, and a few other devices run in the same apartment:
 Adding a driver is a self-contained change - see
 [docs/adding-a-driver.md](docs/adding-a-driver.md).
 
+## Roadmap
+
+What comes next, most of it already measured for in the house's record:
+
+- **A Debian package** - `apt install` on a new board, then updates
+  from the admin panel through an apt repository.
+- **Starting and stopping ahead of time** - the radiant ceiling keeps
+  heating for an hour after its valve closes: when to open and close it,
+  from how fast this house warms and cools.
+- **Summer cooling held back near the dew point** - the radiant ceiling's
+  own protection against condensation, from each zone's sensor.
+- **Ventilation on CO2**, and the shower's boost judged on absolute
+  humidity against the outdoor air.
+- **A Telegram bot per board** - alerts and a few commands.
+- **A valve's fault told from its power draw**, and one DIN-rail
+  Shelly Pro 4PM instead of four relays.
+- **A camera, locally** - a snapshot on the home page, live view on demand.
+
+Ideas and reports are welcome in the issues.
+
 ## How it's organized
 
 ```
@@ -257,8 +338,8 @@ every commit carries a `Co-Authored-By: Claude` line. The code was
 written in conversation; the decisions, the installation and the
 testing in two real apartments were not:
 
-- **Every change is tested.** Over 650 unit tests, with no hardware and
-  no network, and browser tests driving a real Chromium at phone and
+- **Every change is tested.** Over 1,000 unit tests, with no hardware and
+  no network, and 150 browser tests driving a real Chromium at phone and
   desktop widths - all run by CI on every push.
 - **Nothing is claimed that wasn't measured on the board.** Memory,
   eMMC writes, report timings, signal levels: the numbers in these
@@ -281,8 +362,16 @@ live with - and hand over to the next apartment.
 
 ## Legal & licensing
 
-LocalHome is [MIT licensed](LICENSE). Its dependencies are permissive
-(MIT/BSD/Apache) - see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright (C) 2026 intilinux. LocalHome is free software under the
+[GNU Affero General Public License v3.0 or later](LICENSE): use it, study
+it, change it, install it for others and charge for that work - but
+whoever passes it on, or lets others use a changed copy over the network,
+passes on its source too, under the same license. The link to the source
+at the bottom of the home page is that offer; a changed copy points it
+at its own (`web.source_url` in config.yaml).
+
+Its dependencies are permissive (MIT/BSD/Apache) - see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The `ewelink_powct` driver relies on unofficial eWeLink app credentials,
 not sanctioned by Coolkit/eWeLink - see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#a-note-on-the-ewelink-driver-specifically).
