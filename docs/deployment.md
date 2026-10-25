@@ -9,7 +9,7 @@ systemd - not a microcontroller-only board), so everything below -
 Docker and bare-metal/systemd alike - applies to it exactly as
 written; no board-specific steps.
 
-> **Arduino UNO Q, climate only with Shelly devices?** Follow
+> **On an Arduino UNO Q, with Shelly devices?** Follow
 > [arduino-uno-q.md](arduino-uno-q.md) instead: the same steps, in the
 > order that board needs, with its limits and tuning explained.
 >
@@ -89,14 +89,13 @@ sudo systemctl restart mosquitto
 # docs/integrations/mqtt.md#1-configure-the-broker-connection for a
 # username/password setup instead.
 
-# 4. Configure LocalHome itself - either by hand:
+# 4. Configure LocalHome itself - the climate, every Shelly added later
+#    in the admin panel (see "A new apartment" below):
 cp config/config.example.yaml config/config.yaml
-#    (Heating/cooling with Shelly devices only? Copy
-#    config/config.climate.example.yaml instead - see "A new apartment
-#    (climate only)" below.)
-#    ...and the *.example.json files you need; see docs/configuration.md
-#    and docs/integrations/ - or, if every device is Shelly, skip this
-#    and use the climate admin panel instead (step 6).
+cp config/mqtt_broker.example.json config/mqtt_broker.json
+#    Anything beside the climate (shutters, a meter, a plug) is in that
+#    file, commented out, with the *.example.json files it needs - see
+#    docs/configuration.md and docs/integrations/.
 #    MQTT: config/mqtt_broker.json's "host" is "localhost" - mosquitto
 #    runs on this same board (step 3), so LocalHome reaches it with no
 #    IP address at all. Devices use the board's name instead, see
@@ -139,25 +138,16 @@ Map your zones onto this home's actual Shelly device ids from
 Remember it needs a restart (`sudo systemctl restart localhome`) after
 every save before a change actually takes effect.
 
-## A new apartment (climate only)
+## A new apartment
 
-When LocalHome only runs the heating/cooling with Shelly devices - the
-usual case for a new apartment - start from the climate-only example
-instead of `config.example.yaml` in quick start step 4:
-
-```bash
-cp config/config.climate.example.yaml config/config.yaml
-cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
-```
-
-It has no devices at all: no Tuya, Meross or eWeLink entries to
-remove, nothing that fails to load. Every device is already listed in
-`/climate-admin`, to configure - the two zones, Stanze and Bagni (H&T
-sensor + relay valve), the bathroom bypass valve, the dehumidifier, the
-outdoor sensor and the VMC: each gets its Shelly id there - and each
-Shelly's MQTT server is set to
-`<board-name>.local:1883` (see
-[Addressing](#addressing-names-not-ip-addresses)).
+`config.example.yaml`, copied as it is in quick start step 4, is the
+climate of the home LocalHome was built for, with no devices in the
+file - nothing to remove, nothing that fails to load. Every device is
+already listed in `/climate-admin`, to configure - the two zones, Stanze
+and Bagni (H&T sensor + relay valve), the bathroom bypass valve, the
+dehumidifier, the outdoor sensor and the VMC: each gets its Shelly id
+there - and each Shelly's MQTT server is set to `<board-name>.local:1883`
+(see [Addressing](#addressing-names-not-ip-addresses)).
 
 **A device that's missing, switched off or unreachable never stops the
 rest.** Tested with every device of the configuration unreachable, and

@@ -1,210 +1,93 @@
 # LocalHome configuration.
 #
-# Copy this file to config.yaml (in this same directory) and edit it to
-# match your own devices. config.yaml is gitignored - your real setup
-# never gets published. See docs/configuration.md for the full reference
-# and docs/integrations/ for how to get each device's config/secrets
-# files in the first place.
+#   cp config/config.example.yaml config/config.yaml
+#   cp config/mqtt_broker.example.json config/mqtt_broker.json   # "host": "localhost"
 #
-# Every relative path in this file (devices_file, secrets_file,
-# positions_file, history.db_file) is resolved against this file's own
-# directory - i.e. against config/ itself, not the repo root or your
-# current working directory. So a device file that lives right next to
-# this one is just "devices.json", not "config/devices.json".
+# As it is, this is what a new board starts with: the climate of the home
+# LocalHome was built for - two zones, Stanze and Bagni (an H&T sensor and
+# a relay valve each), the bathroom bypass valve, the dehumidifier, the
+# outdoor sensor and the VMC - each Shelly to configure by its id in the
+# admin panel (http://<board>.local:5000/climate-admin), one at a time.
+# None of them is written here.
+#
+# Further down, commented out, what a home may have beside the climate:
+# uncomment what yours has. config.yaml is gitignored - your real setup
+# never gets published. Every option: docs/configuration.md. A relative
+# path in this file is read from this file's own directory (config/).
+#
+# A device that isn't installed, switched off or unreachable is never a
+# problem for the rest: its card shows it, the admin panel's system
+# status lists it, and the thermostat simply leaves that zone alone -
+# closing its valve after `sensor_failsafe_hours` without a reading.
 
 web:
   host: "0.0.0.0"
   port: 5000
-  # Dashboard UI language. Default: "en". Any code with a matching
-  # src/localhome/web/locales/<code>.json file works - "it" ships
-  # out of the box; add your own by copying that directory's en.json
-  # and translating the values. See docs/configuration.md#language.
-  # language: "it"
-  # Optional HTTP Basic Auth, off by default (this project assumes a
-  # trusted LAN). See docs/configuration.md#web-auth-optional before
-  # relying on this over anything but plain HTTP on your own network.
+  # The pages' language: "it" or "en".
+  language: "it"
+  # Optional HTTP Basic Auth, off by default (a trusted LAN is assumed) -
+  # read docs/configuration.md#web-auth-optional first.
   # auth:
   #   secrets_file: "secrets_web.json"
 
-# Each entry below turns on one driver. `kind` + `type` select which
-# built-in driver handles it (see docs/adding-a-driver.md for the full
-# list, or add your own). Every other key is passed straight to that
-# driver's factory function.
+# The climate's Shellys are added in the admin panel, not here. Each entry
+# below is a device beside them; its card shows on the home page only
+# once it's here. Sensors, relays and dimmers of other brands that speak
+# JSON over MQTT: docs/integrations/mqtt.md.
 integrations:
-  # Tuya-based curtain switches (e.g. LoraTap WiFi roller shutter
-  # modules). One entry here loads *every* matching device found in
-  # devices_file - the file produced by `python -m tinytuya wizard` - so
-  # you don't need to list each shutter by hand.
-  - kind: cover
-    type: tuya_curtain_switch
-    devices_file: "devices.json"
+  # Tuya roller shutters (LoraTap modules, say): one entry loads every one
+  # found in devices_file - see docs/integrations/tuya.md.
+  # - kind: cover
+  #   type: tuya_curtain_switch
+  #   devices_file: "devices.json"
 
-  # A Sonoff POWCT power-monitoring relay, read through the eWeLink cloud
-  # (see docs/integrations/ewelink.md for why this one isn't fully local).
-  - kind: power_meter
-    name: "Home Power Meter"
-    type: ewelink_powct
-    devices_file: "ewelink_devices.json"
-    secrets_file: "secrets_ewelink.json"
+  # The house's power, from a Sonoff POWCT through the eWeLink cloud - see
+  # docs/integrations/ewelink.md, and `energy:` below.
+  # - kind: power_meter
+  #   type: ewelink_powct
+  #   name: "Home Power Meter"
+  #   devices_file: "ewelink_devices.json"
+  #   secrets_file: "secrets_ewelink.json"
 
-  # A Meross smartplug, controlled via the Meross cloud (MQTT).
-  - kind: switch
-    name: "Desk Plug"
-    type: meross_plug
-    devices_file: "meross_devices.json"
-    secrets_file: "secrets_meross.json"
+  # A Meross smartplug, switched and measured through the Meross cloud -
+  # see docs/integrations/meross.md.
+  # - kind: switch
+  #   type: meross_plug
+  #   name: "Desk Plug"
+  #   devices_file: "meross_devices.json"
+  #   secrets_file: "secrets_meross.json"
 
-  # A controllable analog value - a dimmer, a fan speed, a 0-10V output -
-  # anything set to a number in a range rather than toggled or driven
-  # open/closed. This shape (type: mqtt_json) is for a device that
-  # republishes its full state on a retained topic (Tasmota,
-  # Zigbee2MQTT); uncomment and point it at your own device once you
-  # have one, it's otherwise inert. A Shelly Gen2/Gen3 dimmer commonly
-  # does NOT behave this way - see "Shelly components without a
-  # retained status topic" in docs/integrations/mqtt.md for the
-  # `type: shelly_light` alternative, confirmed against real hardware.
-  # - kind: number
-  #   name: "VMC Dimmer"
-  #   type: mqtt_json
-  #   broker_file: "mqtt_broker.json"
-  #   state_topic: "shellies/vmc-dimmer/status"
-  #   command_topic: "shellies/vmc-dimmer/set"
-  #   value_field: "brightness"
-  #   command_payload_field: "brightness"
-  #   min_value: 0
-  #   max_value: 100
-  #   unit: "%"
-
-  # `type: simulated` fakes a device with no hardware behind it at all -
-  # for trying out the dashboard (or, as below, a whole thermostat setup)
-  # before you own the real thing. Swap the type for a real driver later;
-  # nothing else changes, since it's the same interface either way. See
-  # docs/integrations/simulated.md. `dashboard_tab: "climate"` here keeps
-  # these off the generic Home grid - see the `thermostat:` section below,
-  # which is what actually renders them (as zone cards, not generic ones).
-  #
-  # influence_target_c above base_temperature_c simulates "opening the
-  # valve warms the room" - right for heat mode (the default below). The
-  # fake sensor has no idea what season it is: if you switch mode to
-  # "cool" to try that out, drop these below base_temperature_c instead
-  # so an open valve cools the room. Real hardware doesn't need this -
-  # the actual plant decides whether the water is hot or cold.
-  - kind: climate
-    type: simulated
-    name: "Living Areas Temperature"
-    base_temperature_c: 19.0
-    influenced_by: "Living Areas Valve"    # drifts toward influence_target_c while that switch is on
-    influence_target_c: 26.0
-    dashboard_tab: "climate"
-  - kind: switch
-    type: simulated
-    name: "Living Areas Valve"
-    dashboard_tab: "climate"
-  - kind: climate
-    type: simulated
-    name: "Bathrooms Temperature"
-    base_temperature_c: 20.0
-    influenced_by: "Bathrooms Valve"
-    influence_target_c: 27.0
-    dashboard_tab: "climate"
-  - kind: switch
-    type: simulated
-    name: "Bathrooms Valve"
-    dashboard_tab: "climate"
-
-  # `visible_in_mode` hides a device's dashboard card outside the given
-  # thermostat mode - here, a dehumidifier that only makes sense in summer
-  # (see the `thermostat:` section below for the mode toggle itself).
-  # Works on any integration entry, not just this one.
-  - kind: switch
-    type: simulated
-    name: "Dehumidifier"
-    dashboard_tab: "climate"
-    visible_in_mode: "cool"
-
-  # An outdoor sensor - not wired to any valve (no `influenced_by`), just
-  # read-only context. Also what a future automatic heat/cool changeover
-  # would key off (an outdoor-temperature threshold sustained for a few
-  # hours is the standard approach for shared-plant systems - not a fixed
-  # calendar date, since actual weather varies year to year); not wired
-  # up yet, just here to have the data available already.
-  - kind: climate
-    type: simulated
-    name: "Outdoor Temperature"
-    base_temperature_c: 17.0
-    base_humidity_pct: 65.0
-    dashboard_tab: "climate"
-
-# Optional: two-zone (or more) valve thermostat for a shared-plant
-# radiant-panel setup - a central boiler/chiller feeds hot or cold water
-# to per-zone valves, and this just decides when each valve should be
-# open: current zone temperature vs. that zone's own weekly schedule
-# (edited from the dashboard's "Heating & Cooling" tab), with hysteresis
-# so a valve doesn't chatter open/close right at the setpoint. See
-# docs/configuration.md#thermostat-heatingcooling-zones and
-# services/thermostat.py.
 thermostat:
-  mode: "heat"          # "heat" or "cool" - shared by every zone (one plant); also changeable from the dashboard
-  hysteresis_c: 0.3
+  # The season a fresh install starts in - after that it's switched from
+  # the admin panel's Season section and remembered in schedules.json.
+  mode: "heat"
+  # Matches the Shelly H&T Gen3's own 0.5 °C reporting step.
+  hysteresis_c: 0.5
   schedules_file: "schedules.json"
   poll_interval_seconds: 60
-  zones:
-    - name: "Living Areas"
-      sensor: "Living Areas Temperature"   # must name a `climate` integration above
-      valve: "Living Areas Valve"           # must name a `switch` integration above
-    - name: "Bathrooms"
-      sensor: "Bathrooms Temperature"
-      valve: "Bathrooms Valve"
-      # A room a radiant-panel system physically can't cool safely - high
-      # ambient humidity (showers) condenses on a cold ceiling panel
-      # regardless of the room's own temperature. `cool_enabled: false`
-      # means the thermostat never touches this valve for temperature
-      # reasons while mode is "cool" (not even a forced "closed" command -
-      # see the interlocks example below for why that distinction
-      # matters); it behaves normally in "heat" mode.
-      cool_enabled: false
+  # A zone's sensor unreachable this long (it is after 4 hours without a
+  # report): its valve is closed - 7 hours after its last report in all.
+  # Longer would leave a radiant panel open blind for a day.
+  sensor_failsafe_hours: 3
+  # The bypass valve and the dehumidifier entered in the admin panel get
+  # their season rules there (Extra switches -> Behaviour per season):
+  # by default the bypass is on in summer and off in winter, the
+  # dehumidifier yours to switch in summer and off in winter. Writing a
+  # rule here instead (`season_rules`, see docs/configuration.md) takes
+  # precedence and makes the panel's read-only.
 
-  # `interlocks`: force one switch to mirror another's on-state,
-  # independent of the thermostat's own temperature logic - e.g. a
-  # water-based dehumidifier that draws chilled water through this same
-  # bathroom valve's circuit needs it open whenever it's running, even
-  # though the zone above is excluded from normal cooling control.
-  # `active_in_mode` (optional) scopes it to one thermostat mode; omit it
-  # to apply regardless of mode. See docs/configuration.md.
-  interlocks:
-    - leader: "Dehumidifier"
-      follower: "Bathrooms Valve"
-      active_in_mode: "cool"
+# With the power meter above: its tile on the home page turns amber when
+# the house draws more than it can indefinitely, red near the trip.
+# contract_limit_w is your contract's or your breaker's.
+# energy:
+#   sensor: "Home Power Meter"
+#   contract_limit_w: 3000
 
-  # `mode_switches`: like an interlock, but with no leader switch at all -
-  # the switch just mirrors the thermostat's current mode directly. For
-  # a switch with no other owner (unlike a zone's own valve, which the
-  # thermostat itself drives), this is the difference that matters: it's
-  # actively forced OFF outside `active_in_mode`, not just left alone -
-  # e.g. a cooling-only bypass valve that reroutes water around a zone's
-  # radiant panel so the panel's own valve can stay closed (avoiding
-  # condensation) while the circuit still moves chilled water elsewhere.
-  mode_switches:
-    - switch: "Cooling Bypass Valve"
-      active_in_mode: "cool"
-
-# Optional: power-budget alerting for one power_meter sensor (by name,
-# matching an integration above). Its tile on the home page turns amber
-# when power draw leaves the "safe indefinitely" zone, red near the trip -
-# see services/history.py for the three-zone model. contract_limit_w
-# should match your actual utility contract or breaker rating.
-energy:
-  sensor: "Home Power Meter"
-  contract_limit_w: 3000
-
-# Where per-cover estimated position and the sqlite history database are
-# stored.
 positions_file: "positions.json"
 history:
   db_file: "data/history.db"
   poll_interval_seconds: 30
-  # Charts only ever show up to 7 days, but rows aren't deleted just
-  # because they scroll out of that view - without this, the database
-  # would keep every reading forever. Rows older than this are pruned
-  # once a day.
   retention_days: 30
+  # Hard ceiling on the history database, on top of retention_days: over
+  # it, the oldest days go first. A sensor that's off adds nothing.
+  max_db_mb: 300

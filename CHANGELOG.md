@@ -8,6 +8,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Changed
+- **`config/config.example.yaml` is where every installation starts**:
+  the climate of the home LocalHome was built for, its Shellys added in
+  the admin panel, and what a home may have beside it - Tuya shutters, a
+  POWCT power meter, a Meross plug - commented out, to uncomment if
+  you have it. It was a demo of every driver, simulated zones and all;
+  `config.climate.example.yaml`, the climate-only one, is now this.
+  An `integrations:` left with every entry commented out reads as none.
+
 ### Removed
 - **The Tuya air-quality sensor** (`tuya_air_quality`). Unused in the home
   LocalHome runs, and its readings were off (the humidity by 20 points).

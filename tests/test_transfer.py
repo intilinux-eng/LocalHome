@@ -17,7 +17,7 @@ GZIP = {"Accept-Encoding": "gzip, deflate, br"}
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
     home = tmp_path_factory.mktemp("transfer")
-    shutil.copy(ROOT / "config" / "config.climate.example.yaml", home / "config.yaml")
+    shutil.copy(ROOT / "config" / "config.example.yaml", home / "config.yaml")
     app = create_app(str(home / "config.yaml"))
     yield app.test_client(), app.config["ASSET_VERSION"]
     app.config["HISTORY"].close()

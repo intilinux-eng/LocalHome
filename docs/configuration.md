@@ -8,6 +8,10 @@ LocalHome reads one file, `config/config.yaml`, plus whatever
 cp config/config.example.yaml config/config.yaml
 ```
 
+As it comes, it's the climate of the home LocalHome was built for - its
+devices are added in the admin panel, not in the file - with what a home
+may have beside it (shutters, a power meter, a plug) commented out.
+
 `config.yaml` and everything else you add under `config/` except the
 `*.example.*` files are gitignored - see [.gitignore](../.gitignore).
 

@@ -64,8 +64,8 @@ python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e . -c constraints.txt
 
-# 5. Configuration: climate only, no devices in the file.
-cp config/config.climate.example.yaml config/config.yaml
+# 5. Configuration: the climate, no devices in the file.
+cp config/config.example.yaml config/config.yaml
 cp config/mqtt_broker.example.json config/mqtt_broker.json     # "host": "localhost"
 .venv/bin/localhome-cli doctor
 

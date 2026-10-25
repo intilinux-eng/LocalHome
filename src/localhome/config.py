@@ -63,7 +63,9 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
     with open(config_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
-    web = raw.get("web", {})
+    # A section left with every line commented out - `integrations:` as
+    # config.example.yaml comes - reads as empty, not as an error.
+    web = raw.get("web") or {}
     # `enabled: false` keeps an entry in the file but out of LocalHome - a
     # device that isn't installed yet, or is out for repair, then raises no
     # error anywhere (the admin panel, the LED matrix) and needs no
@@ -74,7 +76,7 @@ def load_config(path: str | Path | None = None) -> LocalHomeConfig:
             type=entry["type"],
             options={k: v for k, v in entry.items() if k not in ("kind", "type", "enabled")},
         )
-        for entry in raw.get("integrations", [])
+        for entry in raw.get("integrations") or []
         if entry.get("enabled", True) is not False
     ]
 

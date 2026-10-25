@@ -63,6 +63,20 @@ def test_missing_config_file_raises_with_a_helpful_hint(tmp_path):
         load_config(tmp_path / "does-not-exist.yaml")
 
 
+def test_the_example_as_it_comes_is_the_climate_with_nothing_else(tmp_path):
+    """config.example.yaml copied as it is: `integrations:` with every
+    entry commented out is no device, not an error."""
+    from pathlib import Path
+    example = Path(__file__).resolve().parents[1] / "config" / "config.example.yaml"
+    path = tmp_path / "config.yaml"
+    path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+
+    config = load_config(path)
+
+    assert config.integrations == [] and config.notifier is None
+    assert config.web_language == "it" and config.raw["thermostat"]["mode"] == "heat"
+
+
 def test_an_entry_with_enabled_false_is_left_out(tmp_path):
     """A device not installed yet stays in the file, but isn't loaded -
     so it raises no error in the admin panel or on the LED matrix."""
