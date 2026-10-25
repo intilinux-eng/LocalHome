@@ -16,7 +16,7 @@ from localhome.services.shelly_health import (
 )
 
 HT = "shellyhtg3-c0ffee000002"
-DIMMER = "shelly0110dimg3-c0ffee000003"
+DIMMER = "shelly0110dimg3-a1b2c3d4e5f6"
 
 DIMMER_STATUS = {
     "light:0": {"id": 0, "output": True, "brightness": 50, "temperature": {"tC": 57.6, "tF": 135.7},
