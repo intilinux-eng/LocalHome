@@ -8,6 +8,13 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-25
+
+Two weeks of the home in daily use: the shutters on the home page, each
+with its state; the house's long-term record, downloaded from the admin;
+the fixes living with it brought out - the hours on, the LED matrix after
+Arduino's update, the VMC's dimmer. The license is now the GNU AGPL.
+
 ### Added
 - **The shutters' card redrawn for the phone.**
   - Each shutter has a small window beside its name, its slats down as
