@@ -3,10 +3,13 @@ a change to the page without writing a script for it each time.
 
     python tools/screenshot_home.py OUT_DIR [--width 390] [--width 1280]
                                     [--dark] [--state hourly] [--state all]
+                                    [--lang en]
 
 The board: two zones as a real home's - Stanze, with a week (24° at night,
 23° by day), and Bagni, left out of the summer - cooling, the simulated
-VMC, dehumidifier, outdoor sensor and a light. States, each a full page:
+VMC, dehumidifier, outdoor sensor and a light; with --lang en the page in
+English and the zones and shutters named in English too (the README's
+pictures). States, each a full page:
 hourly (as found), details (the rooms' details open), manual / off (the
 choice open), held (manual applied for 2 h), away (24 h), covers (four
 simulated shutters in config.yaml, one of them off the network: all opened,
@@ -33,14 +36,24 @@ sys.path.insert(0, str(ROOT / "src"))
 from tests.ui.conftest import CONFIG, _launch  # noqa: E402
 from tests.ui.helpers import SIMULATED_ZONE  # noqa: E402
 
-ROOMS, BATHS = "Stanze", "Bagni"
+# The names, in the page's language: the two zones, the shutters' shared
+# word and their rooms.
+NAMES = {
+    "it": {"rooms": "Stanze", "baths": "Bagni", "cover": "Tapparella",
+           "covers": ("Soggiorno", "Cucina", "Camera", "Studio")},
+    "en": {"rooms": "Rooms", "baths": "Bathrooms", "cover": "Shutter",
+           "covers": ("Living room", "Kitchen", "Bedroom", "Study")},
+}
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
 STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin"]
-# The shutters' card needs shutters in config.yaml: four simulated ones, 3 s
-# up or down, the last one off the network.
-COVERS = "".join(f'  - kind: cover\n    type: simulated\n    name: "Tapparella {room}"\n    travel_time_seconds: 3\n'
-                 for room in ("Soggiorno", "Cucina", "Camera")) + \
-    '  - kind: cover\n    type: simulated\n    name: "Tapparella Studio"\n    unreachable: true\n'
+
+
+def covers_config(names: dict) -> str:
+    """The shutters' card needs shutters in config.yaml: four simulated ones,
+    3 s up or down, the last one off the network."""
+    *moving, off = (f'{names["cover"]} {room}' for room in names["covers"])
+    return "".join(f'  - kind: cover\n    type: simulated\n    name: "{name}"\n    travel_time_seconds: 3\n'
+                   for name in moving) + f'  - kind: cover\n    type: simulated\n    name: "{off}"\n    unreachable: true\n'
 
 
 def main() -> None:
@@ -49,15 +62,21 @@ def main() -> None:
     parser.add_argument("--width", type=int, action="append", help="390 and 1280 if not given")
     parser.add_argument("--dark", action="store_true", help="the dark scheme too")
     parser.add_argument("--state", action="append", choices=STATES + ["all"], help="hourly if not given")
+    parser.add_argument("--lang", choices=sorted(NAMES), default="it", help="the page's language (it if not given)")
     args = parser.parse_args()
     widths = args.width or [390, 1280]
     schemes = ["light", "dark"] if args.dark else ["light"]
     states = STATES if not args.state or "all" in args.state else args.state
     args.out.mkdir(parents=True, exist_ok=True)
+    names = NAMES[args.lang]
+    rooms, cover = names["rooms"], lambda i: f'{names["cover"]} {names["covers"][i]}'
 
-    config = CONFIG.replace("integrations:\n", "integrations:\n" + COVERS, 1) if "covers" in states else CONFIG
+    config = CONFIG.replace('language: "it"', f'language: "{args.lang}"')
+    if "covers" in states:
+        config = config.replace("integrations:\n", "integrations:\n" + covers_config(names), 1)
     base, proc = _launch(Path(tempfile.mkdtemp()),
-                         [dict(SIMULATED_ZONE, name=ROOMS), dict(SIMULATED_ZONE, name=BATHS, cool_enabled=False)], config)
+                         [dict(SIMULATED_ZONE, name=rooms), dict(SIMULATED_ZONE, name=names["baths"], cool_enabled=False)],
+                         config)
 
     def call(path, body=None):
         req = urllib.request.Request(base + path, method="GET" if body is None else "POST",
@@ -67,13 +86,13 @@ def main() -> None:
             return json.load(res)
 
     def reset():
-        call(f"/api/climate/zones/{urllib.parse.quote(ROOMS)}/override/cancel", {})
+        call(f"/api/climate/zones/{urllib.parse.quote(rooms)}/override/cancel", {})
         if call("/api/climate/zones").get("away_until"):
             call("/api/climate/away/cancel", {})
 
     from playwright.sync_api import sync_playwright
     try:
-        call(f"/api/climate/zones/{urllib.parse.quote(ROOMS)}/schedule", {"week": WEEK, "mode": "cool"})
+        call(f"/api/climate/zones/{urllib.parse.quote(rooms)}/schedule", {"week": WEEK, "mode": "cool"})
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for width in widths:
@@ -96,7 +115,7 @@ def main() -> None:
                         page.goto(base + "/")
                         page.wait_for_selector(".zone .mode-row", timeout=30000)
                         page.wait_for_timeout(1200)
-                        card = page.locator(f'.zone[data-zone="{ROOMS}"]')
+                        card = page.locator(f'.zone[data-zone="{rooms}"]')
                         if state == "details" and card.locator(".zone-more").get_attribute("open") is None:
                             card.locator(".zone-more > summary").click()
                         elif state in ("manual", "off"):
@@ -112,14 +131,14 @@ def main() -> None:
                             page.wait_for_selector(".zone .away-note", timeout=10000)
                         elif state == "covers":
                             # All opened (a full run: each one's place is known),
-                            # Cucina stopped half way down, Camera on its way down.
+                            # the second stopped half way down, the third on its way down.
                             page.click('#house-body button[data-cover="all"][data-cover-action="open"]')
                             page.wait_for_selector("#house-body .cover-note", timeout=10000)
                             page.wait_for_timeout(3800)
-                            page.click('#house-body button[data-cover="Tapparella Cucina"][data-cover-action="close"]')
+                            page.click(f'#house-body button[data-cover="{cover(1)}"][data-cover-action="close"]')
                             page.wait_for_timeout(1500)
-                            page.click('#house-body button[data-cover="Tapparella Cucina"][data-cover-action="stop"]')
-                            page.click('#house-body button[data-cover="Tapparella Camera"][data-cover-action="close"]')
+                            page.click(f'#house-body button[data-cover="{cover(1)}"][data-cover-action="stop"]')
+                            page.click(f'#house-body button[data-cover="{cover(2)}"][data-cover-action="close"]')
                             page.wait_for_timeout(900)
                         page.wait_for_timeout(600)
                         shot = args.out / f"{state}_{width}_{scheme}.png"
