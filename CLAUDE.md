@@ -53,7 +53,7 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 | For | Look in |
 |---|---|
 | The home page (residents) | `src/localhome/web/templates/home.html`, `static/home.css`, `static/home/*.js` |
-| ... its script, in load order | `core` (API, texts, clock, weeks) · `zones` (a zone's card, modes) · `zone-details` (table, hours, lows and highs) · `hero` (the top, its sheets) · `plant` (dehumidifier, VMC) · `house` (lights, air, energy) · `start` (refreshes, listeners, start) |
+| ... its script, in load order | `core` (API, texts, clock, weeks) · `zones` (a zone's card, modes) · `zone-details` (table, hours, lows and highs) · `hero` (the top, its sheets) · `outdoor` (the outdoor sensor's sheet: days, weeks, months, years) · `plant` (dehumidifier, VMC) · `house` (lights, air, energy) · `start` (refreshes, listeners, start) |
 | The admin panel (installer) | `templates/climate_admin.html`, `static/climate_admin.js`, `static/admin.css` |
 | The weekly table (both pages) | `static/schedule_grid.js` |
 | Redrawing without losing taps/scroll | `static/morph.js` (`morph()`, `steady()`) |

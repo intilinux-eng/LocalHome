@@ -8,6 +8,23 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Added
+- **The outdoor temperature over days, weeks, months and years.** A tap
+  on the "Fuori" tile at the top of the home page opens its sheet:
+  - the last 24 hours as a line - a tap on it reads that time;
+  - the last 30 days, 26 weeks and 12 months as bars from the lowest to
+    the highest, the mean marked - a tap reads one bar: its lowest and
+    highest and when, its mean, the same month a year before; the period's
+    coldest and warmest day, and its days below zero;
+  - the years month by month, each month's mean, each year's coldest and
+    warmest day.
+
+  Nothing new is kept: it's the days the board already keeps, six years
+  of each day's mean, lowest and highest (`/api/climate/outdoor`). Only
+  with an outdoor sensor - a simulated one said so; with none, the tile
+  stays words. Nothing kept yet, a sensor silent for days, the board not
+  answering: each said in the sheet.
+
 ### Changed
 - **`config/config.example.yaml` is where every installation starts**:
   the climate of the home LocalHome was built for, its Shellys added in
