@@ -8,6 +8,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-26
+
+The outdoor temperature over days, weeks, months and years, from a tap on
+its tile. And LocalHome said as what it is - one home's climate, made to
+be installed again and adapted: a config example that starts from that
+climate, and the drivers no home here used taken out. A config.yaml that
+still names one keeps running, the entry said in the System status as no
+longer there, to delete.
+
 ### Added
 - **The outdoor temperature over days, weeks, months and years.** A tap
   on the "Fuori" tile at the top of the home page opens its sheet:
