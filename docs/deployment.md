@@ -177,6 +177,7 @@ python tools/deploy_board.py antonio             # over the network (antonio.loc
 python tools/deploy_board.py antonio --usb       # over the USB cable
 python tools/deploy_board.py antonio --check     # what it would do, changing nothing
 python tools/deploy_board.py antonio --rollback  # back to the version before
+python tools/deploy_board.py antonio --resync    # a board from before the history was rewritten (25 Oct 2026)
 ```
 
 It deploys the latest commit of the branch the board is on (`--branch`

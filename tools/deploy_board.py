@@ -6,6 +6,7 @@ network (<name>.local, SSH) or, with --usb, over the USB cable (adb).
     python tools/deploy_board.py antonio --check      # say what would happen, change nothing
     python tools/deploy_board.py antonio --rollback   # back to the commit before the last update
     python tools/deploy_board.py antonio --branch main --allow-older   # another branch, even an older one
+    python tools/deploy_board.py antonio --resync     # a board from before this repository's history was rewritten
 
 What goes to the board is a commit of this repository: committed work
 only, never what's uncommitted here. By default the latest commit of the
@@ -21,6 +22,12 @@ the script waits for the page to answer, then prints any warning logged
 since. Each update is noted on the board (~/.localhome-deploys), which is
 what --rollback goes back to. A board with local changes to tracked files
 is left alone.
+
+A board on a commit this repository doesn't have - its history rewritten
+here since (25 Oct 2026: device ids and names taken out) - is refused
+unless --resync says so: then the whole branch travels, and the board's
+branch moves onto it, whatever it had; what changed is read on the board
+itself, which has both. A rollback can't go back across it.
 
 The board's password is asked once (or read from LH_SSH_PW): used for
 SSH and for sudo, never written anywhere. Needs paramiko for the network
@@ -217,6 +224,9 @@ def main() -> int:
     parser.add_argument("--allow-older", action="store_true", help="allow a commit that takes commits away")
     parser.add_argument("--rollback", action="store_true", help="back to the commit before the last update")
     parser.add_argument("--check", action="store_true", help="say what would happen, change nothing")
+    parser.add_argument("--resync", action="store_true",
+                        help="the board is on a commit this repository doesn't have (a rewritten history): "
+                             "send the whole branch and move the board onto it")
     parser.add_argument("--service", default="localhome", help="the systemd service (default: localhome)")
     parser.add_argument("--port", type=int, default=5000, help="the web page's port (default: 5000)")
     args = parser.parse_args()
@@ -257,8 +267,12 @@ def deploy(board: Board, password: str, args) -> int:
             print("note: this repository has uncommitted changes - they are not deployed, only commits are")
 
     if not known_here(head):
-        raise SystemExit(f"{name} is on {head[:7]}, which this repository doesn't have - update it by hand")
-    kind = plan_update(head, target)
+        if not args.resync or args.rollback:
+            raise SystemExit(f"{name} is on {head[:7]}, which this repository doesn't have - a history rewritten "
+                             f"here since? --resync sends the whole {target_branch} and moves {name} onto it")
+        kind = "resync"
+    else:
+        kind = plan_update(head, target)
     if kind == "same" and target_branch == branch:
         print(f"{name} already runs {target[:7]} ({git('log', '-1', '--format=%s', target)}) - nothing to do")
         return 0
@@ -280,27 +294,36 @@ def deploy(board: Board, password: str, args) -> int:
         print(f"back from {head[:7]} to {target[:7]}, removing:")
         for line in commits_between(target, head)[:30]:
             print(f"  - {line}")
+    elif kind == "resync":
+        print(f"{name}'s {head[:7]} isn't in this repository: its {target_branch} goes over whole, "
+              f"{git('rev-list', '--count', target)} commits, and {name} moves onto {target[:7]}")
     if target_branch != branch:
         print(f"branch: {branch or '-'} -> {target_branch}")
-    changed = git("diff", "--name-only", head, target).splitlines()
-    reinstall = any(path in DEPENDENCY_FILES for path in changed)
-    if reinstall:
-        print("dependencies changed: the board's Python environment will be reinstalled")
-    if any(path.startswith("deploy/") for path in changed):
-        print(f"note: deploy/ changed - afterwards, on {name}: cd {repo} && sudo sh deploy/tune-board.sh")
 
     # The new commits, sent and fetched - this much --check does too: it
     # proves the transfer works, and touches nothing but FETCH_HEAD.
     # A rollback goes back to a commit the board already had: nothing to send.
-    if kind == "forward" and not args.rollback:
+    if kind in ("forward", "resync") and not args.rollback:
         with tempfile.TemporaryDirectory() as tmp:
             bundle = os.path.join(tmp, "update.bundle")
-            git("bundle", "create", bundle, f"{head}..refs/heads/{target_branch}")
+            git("bundle", "create", bundle,
+                f"refs/heads/{target_branch}" if kind == "resync" else f"{head}..refs/heads/{target_branch}")
             board.put(Path(bundle).read_bytes(), BUNDLE)
         fetched = board.out(f"{in_repo} fetch -q {BUNDLE} {shlex.quote(target_branch)} && {in_repo} rev-parse FETCH_HEAD")
         board.run(f"rm -f {BUNDLE}")
         if fetched != target:
             raise SystemExit(f"{name} received {fetched[:7]}, not {target[:7]} - nothing changed")
+    # What changes: here, or - its commit unknown here - on the board, which
+    # now has both.
+    changed = (board.out(f"{in_repo} diff --name-only {head} {target}") if kind == "resync"
+               else git("diff", "--name-only", head, target)).splitlines()
+    reinstall = any(path in DEPENDENCY_FILES for path in changed)
+    if kind == "resync":
+        print(f"{len(changed)} file(s) differ from what {name} has")
+    if reinstall:
+        print("dependencies changed: the board's Python environment will be reinstalled")
+    if any(path.startswith("deploy/") for path in changed):
+        print(f"note: deploy/ changed - afterwards, on {name}: cd {repo} && sudo sh deploy/tune-board.sh")
     if args.check:
         print("--check: the password works and the transfer works; nothing was changed")
         return 0
