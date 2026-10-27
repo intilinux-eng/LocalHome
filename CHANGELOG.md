@@ -8,6 +8,30 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+### Changed
+- **The VMC's card, redrawn.** What it's doing reads at a glance:
+  - a dial filled to its speed, a notch at each level, the level's name in
+    it - "Su misura" between levels;
+  - under its name, in one word, where the speed comes from: Programma,
+    A mano, Manuale, A tempo, Automatico, Spenta, Non risponde, Fuori casa;
+  - beside the dial what comes next ("Poi giorno domani alle 07:00", "Il
+    programma riprende alle 22:00"), or why (a shower in the bathroom);
+  - today's program as a strip, now marked on it, a speed held for a while
+    striped to its end;
+  - the levels as one segmented control, the slider filled up to the speed
+    with a notch under each level;
+  - the ready-made programs each with its day drawn (weekdays and the
+    weekend when they differ).
+- The filters: how long they have left and when they were last cleaned,
+  under the card, once a cleaning is recorded.
+
+### Added
+- **Half an hour more** for a speed for a while ("+30 min"), from its card;
+  how long it has left, said.
+- **The VMC not answering** (its dimmer hung, as on 26 October): the card
+  says so and what to do - restart it from the Shelly app - instead of a
+  speed as if all were well.
+
 ## 1.2.0 - 2026-10-26
 
 The outdoor temperature over days, weeks, months and years, from a tap on
