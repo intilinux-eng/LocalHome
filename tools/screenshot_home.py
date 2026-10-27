@@ -18,8 +18,11 @@ covers_card_*.png; with it, the other states have the shutters' card too),
 admin (the admin panel's first screen: its overview and menu - the window,
 not the whole page), outdoor (the outdoor sensor's sheet over two years of
 made-up Turin days, each of its views as outdoor_<view>_*.png - the
-window). Needs the browser tests' setup: pip install -e ".[dev,ui]",
-playwright install chromium.
+window), vmc (the VMC's card alone in each of its cases, as
+vmc_<case>_*.png: manual, a program, a speed picked by hand over it, the
+maximum for a while, an automatic (a shower), off, the filters' reminder,
+the programs open, away). Needs the browser tests' setup: pip install -e
+".[dev,ui]", playwright install chromium.
 """
 from __future__ import annotations
 
@@ -50,8 +53,11 @@ NAMES = {
            "covers": ("Living room", "Kitchen", "Bedroom", "Study")},
 }
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
-STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin", "outdoor"]
+STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin", "outdoor", "vmc"]
 OUTDOOR_VIEWS = ["24h", "days", "weeks", "months", "years"]
+# The VMC's "day and night" program, as the home page's ready-made one:
+# night until 7, day until 22.
+VMC_WEEK = {d: [25] * 7 + [50] * 15 + [25] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
 
 
 def outdoor_days(today: date) -> list[dict]:
@@ -80,6 +86,68 @@ def outdoor_line(now: float) -> list[dict]:
         hour = datetime.fromtimestamp(ts).hour + datetime.fromtimestamp(ts).minute / 60
         points.append({"ts": ts, "value": round(11 + 4.5 * math.sin(2 * math.pi * (hour - 10.5) / 24), 2)})
     return points
+
+
+def vmc_cases(page, call, out: Path, width: int, scheme: str, bathroom: str) -> None:
+    """The VMC's card in each of its cases, one after the other on the
+    simulated VMC - then as it was: no program, on, at Giorno."""
+    speed = next(d for d in call("/api/devices")["sensors"] if d["kind"] == "number" and d.get("presets"))
+    name, power = (urllib.parse.quote(n, safe="") for n in (speed["name"], speed["paired_switch"]))
+    card = page.locator("#vmc-card")
+
+    def shot(case: str) -> None:
+        page.evaluate("refreshDevices()")
+        page.wait_for_timeout(800)
+        path = out / f"vmc_{case}_{width}_{scheme}.png"
+        card.screenshot(path=str(path))
+        print(path)
+
+    def plain() -> None:
+        if "override" in call("/api/vmc-schedule")["status"]:
+            call("/api/vmc-schedule/boost/cancel", {})
+        call("/api/vmc-schedule", {"enabled": False, "week": VMC_WEEK})
+        call(f"/api/sensors/{power}/on", {})
+        call(f"/api/sensors/{name}/set-value", {"value": 50})
+
+    try:
+        plain()
+        # Cleaned a month ago: how long they have left, under the card.
+        call("/api/climate-admin/vmc-filters", {"interval_days": 90,
+                                                "cleaned_on": (date.today() - timedelta(days=30)).isoformat()})
+        shot("manual")
+        call("/api/vmc-schedule", {"enabled": True, "target": speed["name"], "week": VMC_WEEK})
+        shot("program")
+        call(f"/api/sensors/{name}/set-value", {"value": 62})
+        shot("hand")
+        call("/api/vmc-schedule/boost", {"device": speed["name"], "value": 100, "minutes": 30})
+        shot("timed")
+        call("/api/vmc-schedule/boost/cancel", {})
+        page.evaluate("refreshDevices()")
+        page.wait_for_timeout(800)
+        # A shower, as the status would bring it: the page is told, not the board.
+        page.evaluate("auto => { state.vmc.status = { ...(state.vmc.status || {}), auto }; renderPlant(); }",
+                      {"reason": "shower", "value": 100, "zone": bathroom, "humidity": 78, "baseline": 55})
+        path = out / f"vmc_auto_{width}_{scheme}.png"
+        card.screenshot(path=str(path))
+        print(path)
+        call(f"/api/sensors/{power}/off", {})
+        shot("off")
+        call(f"/api/sensors/{power}/on", {})
+        call("/api/climate-admin/vmc-filters", {"cleaned_on": (date.today() - timedelta(days=85)).isoformat()})
+        shot("filters")
+        page.evaluate("refreshDevices()")
+        page.wait_for_timeout(800)
+        card.locator("#vmc-plan > summary").click()
+        shot("plan")
+        page.click("#away-chip")
+        page.locator("#sheet button[data-away='24']").click()
+        page.wait_for_selector("#vmc-card.vmc-held", timeout=10000)
+        shot("away")
+    finally:
+        if call("/api/climate/zones").get("away_until"):
+            call("/api/climate/away/cancel", {})
+        plain()
+        call("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
 
 
 def covers_config(names: dict) -> str:
@@ -179,6 +247,10 @@ def main() -> None:
                                 shot = args.out / f"outdoor_{view}_{width}_{scheme}.png"
                                 page.screenshot(path=str(shot))
                                 print(shot)
+                            page.close()
+                            continue
+                        elif state == "vmc":
+                            vmc_cases(page, call, args.out, width, scheme, names["baths"])
                             page.close()
                             continue
                         elif state == "covers":
