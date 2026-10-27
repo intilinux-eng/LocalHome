@@ -149,7 +149,20 @@ function renderOutdoor() {
       ? "home.battery_now" : "home.battery_soon", { pct: Math.round(reading.battery_pct) }))}</span>`;
   }
   morph(chip, `${label}
-    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}${battery}`);
+    <span class="outdoor-value">${fmt(reading.temperature_c)}<small>°</small></span>${range}${rh}${insideHtml()}${battery}`);
+}
+
+// Inside, beside outside: the zones' temperatures as their sensors read
+// them, lowest to highest - not their mean, which no room would have
+// (the bathrooms colder, the rooms warmed by the sun). One value when
+// they agree; nothing without a zone that reads one.
+function insideHtml() {
+  const temps = ((state.climate && state.climate.zones) || [])
+    .filter(zone => zone.temperature_c != null && zone.sensor_ok !== false && !zone.sensor_manual)
+    .map(zone => zone.temperature_c);
+  if (!temps.length) return "";
+  const low = fmt(Math.min(...temps)), high = fmt(Math.max(...temps));
+  return `<span class="outdoor-inside">${ICONS.home}${esc(tr("home.outdoor_inside", { range: low === high ? `${low}°` : `${low}–${high}°` }))}</span>`;
 }
 
 const ICONS = {
@@ -157,6 +170,7 @@ const ICONS = {
   snow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6L4 18M9 3l3 3 3-3M9 21l3-3 3 3"/></svg>`,
   suitcase: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`,
   drop: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/></svg>`,
+  home: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5L12 4l8 7.5"/><path d="M6.5 10v10h11V10"/></svg>`,
   target: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>`,
   flow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/></svg>`,
   link: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`,

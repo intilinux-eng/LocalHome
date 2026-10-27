@@ -26,6 +26,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   under the card, once a cleaning is recorded.
 
 ### Added
+- **Inside beside outside.** The "Fuori" tile at the top says, under its
+  humidity, the zones' temperatures from lowest to highest ("dentro
+  21,5–22,7°") - not their mean, which no room has: the bathrooms are
+  colder, the rooms warm with the sun. A sensor not answering, or a
+  temperature written by hand, is left out.
 - **Half an hour more** for a speed for a while ("+30 min"), from its card;
   how long it has left, said.
 - **The VMC not answering** (its dimmer hung, as on 26 October): the card

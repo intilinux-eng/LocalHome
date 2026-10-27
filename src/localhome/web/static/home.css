@@ -278,6 +278,9 @@ body[data-offline="true"] :is(.hero-main, .outdoor, .zones, .plant, .tiles) { op
 .outdoor-range b { color: var(--text); }
 .outdoor-rh { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
 .outdoor-rh svg { width: 12px; height: 12px; fill: var(--cool); stroke: none; }
+/* Inside beside outside: the zones' range, under the humidity. */
+.outdoor-inside { display: inline-flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.outdoor-inside svg { flex: none; width: 12px; height: 12px; fill: none; stroke: var(--text-3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 /* The outdoor sensor's batteries running down - a zone's sensor-note, small. */
 .outdoor-battery { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 10px; border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: 0.8rem; line-height: 1.3; }

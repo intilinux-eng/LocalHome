@@ -1128,6 +1128,7 @@
     "outdoor_waiting": "Waiting for its first report",
     "outdoor_range": "Today: low {min}°, high {max}°",
     "outdoor_range_at": "Today: low {min}° at {min_at}, high {max}° at {max_at}",
+    "outdoor_inside": "inside {range}",
     "outside": "Outside",
     "outdoor_open": "The outdoor temperature's statistics",
     "outdoor_title": "Outdoor temperature",

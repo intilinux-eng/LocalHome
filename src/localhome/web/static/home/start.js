@@ -59,6 +59,7 @@ async function refreshClimate(anchor) {
     document.getElementById("offline").hidden = true;
     delete document.body.dataset.offline;
     renderHero();
+    if (state.devices) renderOutdoor();   // inside, beside outside: the zones' temperatures
     renderZones();
     renderPlant();
     renderHealth();

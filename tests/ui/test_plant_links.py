@@ -3,6 +3,7 @@ board: a bypass valve that is normally open (its Shelly on closes it)
 and a dehumidifier that draws its water through the bathrooms' valve -
 a zone kept out of cooling, whose valve it opens while it runs. Its own
 server, in summer (conftest.py's start_server)."""
+import re
 import urllib.parse
 
 import pytest
@@ -119,8 +120,9 @@ def test_the_dehumidifier_is_switched_on_for_a_while_and_opens_the_bathrooms_val
     assert eventually(page, lambda: _valve_on(plant, f"{ZONE_B} Valve") is True), "it still opens the valve"
     device = page.locator("#season-devices .season-device")
     assert eventually(page, lambda: device.get_attribute("data-on") == "true")
-    assert "Acceso fino alle" in device.inner_text()
-    assert eventually(page, lambda: "Deumidificatore acceso fino alle" in page.inner_text("#hero-detail"))
+    # An hour from 23:00 on is tomorrow's: "until tomorrow at 00:05".
+    assert re.search(r"Acceso fino (a domani )?alle", device.inner_text())
+    assert eventually(page, lambda: re.search(r"Deumidificatore acceso fino (a domani )?alle", page.inner_text("#hero-detail")))
     card = page.locator(".zone", has_text=ZONE_B)
     page.wait_for_timeout(1500)
     assert "Esclusa d'estate" in card.locator(".zone-head").inner_text(), "the bathrooms aren't cooling for it"

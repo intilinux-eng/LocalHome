@@ -493,6 +493,28 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
 
 
+def test_inside_beside_outside_the_zones_lowest_to_highest(open_page, api):
+    """Asked on the board: inside next to outside. Not a mean of the zones -
+    no room has it, the bathrooms are colder and the rooms warm with the
+    sun - but their range, as the cards read it; one value when they
+    agree; a sensor not answering or written by hand left out."""
+    opened = _open_home(open_page)
+    page = opened.page
+    inside = page.locator("#outdoor-chip .outdoor-inside")
+    temps = [z["temperature_c"] for z in api("/api/climate/zones")["zones"] if z["temperature_c"] is not None]
+    low, high = (f"{v:.1f}".replace(".", ",") for v in (min(temps), max(temps)))
+    assert eventually(page, lambda: inside.count() == 1)
+    assert inside.inner_text() == (f"dentro {low}°" if low == high else f"dentro {low}–{high}°")
+    page.evaluate("""() => { const [a, b] = state.climate.zones;
+      a.temperature_c = 22.64; b.temperature_c = 21.5; renderOutdoor(); }""")
+    assert inside.inner_text() == "dentro 21,5–22,6°"
+    page.evaluate("() => { state.climate.zones[0].sensor_ok = false; renderOutdoor(); }")
+    assert inside.inner_text() == "dentro 21,5°", "the one not answering left out"
+    page.evaluate("() => { state.climate.zones[1].sensor_manual = true; renderOutdoor(); }")
+    assert inside.count() == 0, "nothing measured: nothing said"
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
 def test_the_outdoor_sensors_batteries_are_said_running_down(open_page):
     """Asked on the board: the zones' sensors say "change them soon" at 20%,
     the outdoor one - no card of its own - only got the admin's "battery
