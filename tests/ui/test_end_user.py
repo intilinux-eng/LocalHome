@@ -395,12 +395,40 @@ def test_the_vmc_its_speeds_a_boost_and_off_and_on(walk):
     w.page.locator("#vmc-card button[data-vmc-boost='30']").click()
     cancel = w.page.locator("#vmc-card button[data-vmc-boost-cancel]")
     w.check("a boost, with the way to stop it", w.wait(lambda: cancel.count() == 1))
+    until = lambda: datetime.fromisoformat(w.house.call("/api/vmc-schedule")["status"]["override"]["until"])
+    first = until()
+    w.page.locator("#vmc-card button[data-vmc-boost-extend]").click()
+    w.check("half an hour more", w.wait(lambda: (until() - first).total_seconds() >= 25 * 60))
     cancel.click()
     power = w.page.locator("#plant-body button[data-vmc-power]")
     power.click()
     w.check("off", w.wait(lambda: power.get_attribute("aria-checked") == "false"))
     power.click()
     w.check("on again", w.wait(lambda: power.get_attribute("aria-checked") == "true"))
+
+
+def test_the_vmc_not_answering_says_so_and_what_to_do(walk):
+    """26 Oct 2026: the VMC's dimmer hung - a ping answered, the board's
+    commands didn't. Its card says it isn't answering, and what to do,
+    instead of a speed as if all were well; answering again, as before."""
+    w = walk()
+    card = w.page.locator("#vmc-card")
+    speed = card.get_attribute("data-device")
+
+    def hung(route):
+        response = route.fetch()
+        data = response.json()
+        data["readings"][speed] = {"name": speed, "ok": False, "error": "no reply"}
+        route.fulfill(response=response, json=data)
+    w.page.route("**/api/readings", hung)
+    w.page.evaluate("refreshDevices()")
+    word = lambda: card.locator(".vmc-head .state").inner_text()
+    w.check("said, with what to do", w.wait(lambda: word() == "Non risponde") and "app Shelly" in card.inner_text()
+            and card.locator(".vmc-gauge-value").count() == 0)
+    w.page.unroute("**/api/readings")
+    w.page.evaluate("refreshDevices()")
+    w.check("answering again: as before", w.wait(lambda: word() != "Non risponde")
+            and card.locator(".vmc-gauge-value").count() == 1)
 
 
 def test_a_light_switched_and_back(walk):

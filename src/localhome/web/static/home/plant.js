@@ -167,14 +167,20 @@ async function flipSwitch(toggle) {
 }
 
 // ------------------------------------------------------------- the VMC --
-// Its switch, five levels and a fine slider, a speed for a while (boost,
-// guests), the filters' reminder, and one choice for the rest of the
-// time: manual (the speed stays what you pick) or a ready-made program
-// (services/vmc_schedule.py runs it as a week of hours).
+// What it's doing at a glance - a dial filled to its speed, why it runs
+// so and what comes next, today's program as a strip - then its switch,
+// five levels and a fine slider, a speed for a while (boost, guests), one
+// choice for the rest of the time: manual (the speed stays what you pick)
+// or a ready-made program (services/vmc_schedule.py runs it as a week of
+// hours), each with its day drawn - and how long the filters have left.
 
 const VMC_ICONS = { min: "leaf", night: "moon", day: "sun", high: "breeze", boost: "wind" };
 const VMC_BOOST_MINUTES = [30, 60, 120];
 const VMC_GUESTS_MINUTES = 180;   // high, for guests: a dinner's length
+const VMC_EXTEND_MINUTES = 30;    // a speed for a while made longer, a tap at a time
+const VMC_MAX_MINUTES = 24 * 60;  // the longest the board takes (services/vmc_schedule.py)
+// The dial: three quarters of a circle open at the bottom, as a car's.
+const VMC_ARC = "M24.64 95.36A50 50 0 1 1 95.36 95.36";
 // Ready-made programs in the unit's own speeds: [from hour, speed] per day.
 const VMC_PROGRAMS = [
   { key: "day_night", all: [[0, "night"], [7, "day"], [22, "night"]] },
@@ -225,26 +231,111 @@ function vmcChoice(speed) {
   return match ? match.key : "custom";
 }
 
+// A speed in a word: its level's name, or "Custom" between levels.
+function vmcSpeedWord(speed, value) {
+  return speed.presets.some(p => p.value === value) ? vmcLevelName(speed, value) : tr("home.vmc_custom");
+}
+
+// The dial's filled part for a speed - none at all when it's off.
+function vmcArcStyle(value) {
+  const v = Math.max(0, Math.min(100, value || 0));
+  return `stroke-dasharray: ${v} 100; opacity: ${v > 0 ? 1 : 0}`;
+}
+
+// How far along the slider a speed is: from the slowest level to 100%.
+function vmcFill(speed, value) {
+  const lowest = Math.min(...speed.presets.map(p => p.value));
+  return `${(Math.max(0, Math.min(1, (value - lowest) / (100 - lowest || 1))) * 100).toFixed(1)}%`;
+}
+
+// A speed's shade on today's strip and on the programs: the season's
+// colour, stronger the faster it runs.
+function vmcShade(value) {
+  return `${value > 0 ? Math.round(24 + 0.76 * Math.min(100, value)) : 0}%`;
+}
+
+// The dial: filled up to the speed, a notch at each level, the speed in
+// the middle and its level's name under it; off, the power sign.
+function vmcGauge(speed, value, label, blank) {
+  const notches = speed.presets.map(p => {
+    const angle = (135 + 2.7 * p.value) * Math.PI / 180;
+    return `<circle class="vmc-notch" cx="${(60 + 50 * Math.cos(angle)).toFixed(2)}" cy="${(60 + 50 * Math.sin(angle)).toFixed(2)}" r="1.8"/>`;
+  }).join("");
+  const shown = value != null;
+  return `<div class="vmc-gauge" role="img" aria-label="${esc(shown ? tr("home.vmc_gauge", { pct: fmt(value, 0), level: label }) : label)}">
+      <svg class="vmc-ring" viewBox="0 0 120 120" aria-hidden="true"><path class="vmc-ring-track" d="${VMC_ARC}"/>
+        <path class="vmc-ring-fill" d="${VMC_ARC}" pathLength="100" style="${vmcArcStyle(shown ? value : 0)}"/>${notches}</svg>
+      <span class="vmc-gauge-text" aria-hidden="true">${shown ? `<span class="vmc-gauge-value">${fmt(value, 0)}<small>%</small></span>`
+        : `<span class="vmc-gauge-blank">${blank}</span>`}<span class="vmc-gauge-level">${esc(label)}</span></span>
+    </div>`;
+}
+
+// One day of a program as a thin strip, a stretch per speed - the
+// programs' previews.
+function vmcMiniDay(day) {
+  return `<span class="vmc-mini">${bands(day).map(b => `<span style="flex: ${b.end - b.start}; --lv: ${vmcShade(b.value)}"></span>`).join("")}</span>`;
+}
+
+// Today's program: each stretch in its shade, now a line across it, a
+// speed held for a while (by hand, or timed) striped from now to its end.
+function vmcToday(speed, week, holdUntil) {
+  const now = boardNow();
+  const day = week[DAYS[dayIndex(now)]];
+  const at = hours => `${(hours / 24 * 100).toFixed(2)}%`;
+  const hh = hour => `${String(hour).padStart(2, "0")}:00`;
+  const nowHours = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const stretches = bands(day);
+  const strip = stretches.map(b => `<span class="vmc-day-band" style="left: ${at(b.start)}; width: ${at(b.end - b.start)}; --lv: ${vmcShade(b.value)}"
+      title="${esc(`${hh(b.start)}–${hh(b.end)} · ${vmcLevelName(speed, b.value)}`)}"></span>`).join("");
+  let hold = "";
+  if (holdUntil) {
+    const end = boardDate(holdUntil);
+    const today = end.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+    const endHours = today ? end.getUTCHours() + end.getUTCMinutes() / 60 : 24;
+    if (endHours > nowHours) hold = `<span class="vmc-day-hold" style="left: ${at(nowHours)}; width: ${at(endHours - nowHours)}"></span>`;
+  }
+  const said = stretches.map(b => `${hh(b.start)}–${hh(b.end)} ${vmcLevelName(speed, b.value)}`).join(", ");
+  return `<div class="vmc-day" role="img" aria-label="${esc(tr("home.vmc_today_aria", { stretches: said }))}">
+      <span class="vmc-day-label">${esc(tr("home.vmc_today"))}</span>
+      <span class="vmc-day-strip">${strip}${hold}<span class="vmc-day-now" style="left: ${at(nowHours)}"></span></span>
+      <span class="vmc-day-hours" aria-hidden="true"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></span>
+    </div>`;
+}
+
+// Minutes left of a speed for a while.
+function vmcMinutesLeft(boost) {
+  return Math.max(1, Math.round((boardDate(boost.until).getTime() - boardNow().getTime()) / 60000));
+}
+
 function vmcTile(speed) {
   const reading = state.readings[speed.name] || {};
-  const value = reading.value;
+  const value = reading.value != null ? Math.round(reading.value) : null;
   const on = (state.readings[speed.paired_switch] || {}).is_on !== false;
   const { program, running, boost } = vmcRunning(speed);
+  const fact = (icon, html, extra = "") => `<div class="fact${extra}"><span class="fact-icon">${icon}</span><span class="fact-text">${html}</span></div>`;
+  // The fan turns faster as the speed goes up; its phase comes from the
+  // clock, so a refresh that redraws the card doesn't make it jump.
+  const turn = on && value > 0 ? Math.max(0.8, 90 / value) : 0;
+  const spin = turn ? ` style="--turn: ${turn.toFixed(2)}s; --phase: -${((Date.now() / 1000) % turn).toFixed(2)}s"` : "";
+  // Its name, and in one word where its speed comes from.
+  const head = (word, tone, live, end) => `<div class="vmc-head">
+      <span class="vmc-fan" data-spin="${!!turn}"${spin}>${ICONS.fan}</span>
+      <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}${speed.simulated ? ` <span class="sim">${esc(tr("home.simulated"))}</span>` : ""}</span>
+        <span class="state" data-tone="${tone}"${live ? " data-live" : ""}>${esc(word)}</span></span>
+      ${end}
+    </div>`;
+
   // Away: held at its night speed or off until "I'm back" - nothing to press.
   const held = state.vmc && state.vmc.status && state.vmc.status.away;
   if (held && held.device === speed.name) {
     const level = vmcLevelName(speed, held.value) + (held.value ? ` (${fmt(held.value, 0)}%)` : "");
-    const turning = on && value > 0 ? Math.max(0.8, 90 / value) : 0;
-    const spinning = turning ? ` style="--turn: ${turning.toFixed(2)}s; --phase: -${((Date.now() / 1000) % turning).toFixed(2)}s"` : "";
     return `<div class="tile tile-wide vmc vmc-held" id="vmc-card" data-device="${esc(speed.name)}" data-on="${on}">
       <div class="vmc-live">
-        <div class="vmc-head">
-          <span class="vmc-fan" data-spin="${!!turning}"${spinning}>${ICONS.fan}</span>
-          <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
-            <span class="tile-note">${esc(tr("home.st_away"))}</span></span>
-          <span class="tile-value">${!on ? "" : value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
-        </div>
-        <p class="vmc-auto-note">${ICONS.suitcase}<span>${esc(tr(held.mode === "off" ? "home.vmc_away_off" : "home.vmc_away_level", { level }))}</span></p>
+        ${head(tr("home.st_away"), "off", false, "")}
+        <div class="vmc-now"><div class="vmc-now-main">
+          ${vmcGauge(speed, on ? value : null, on && value != null ? vmcSpeedWord(speed, value) : tr("home.vmc_off"), ICONS.power)}
+          <div class="vmc-facts">${fact(ICONS.suitcase, esc(tr(held.mode === "off" ? "home.vmc_away_off" : "home.vmc_away_level", { level })), " fact-rule")}</div>
+        </div></div>
       </div>
     </div>`;
   }
@@ -252,6 +343,55 @@ function vmcTile(speed) {
   // A speed by its level's name, or "Custom 62%" between levels.
   const levelName = v => (speed.presets.some(p => p.value === v) ? vmcLevelName(speed, v) : tr("home.vmc_custom_level", { pct: fmt(v, 0) }));
   const auto = !boost && state.vmc && state.vmc.status && state.vmc.status.auto;
+  // The program's next change: when, and to what.
+  const next = running && running.until_at
+    ? { when: whenText(boardDate(running.until_at)), level: levelName(running.next_value).toLowerCase() } : null;
+
+  // Where the speed comes from: the program, a pick by hand (until the
+  // program's next change, or for good with none), a speed for a while,
+  // an automatic - or it's off, or the board can't reach it.
+  const source = reading.ok === false ? "unreachable" : !on ? "off" : boost ? "timed" : auto ? "auto"
+    : running && (value == null || running.value === value) ? "program" : running ? "hand" : "manual";
+  const words = { program: "vmc_src_program", hand: "vmc_src_hand", manual: "vmc_src_manual", timed: "vmc_src_timed",
+                  auto: "vmc_src_auto", off: "vmc_off", unreachable: "not_answering" };
+  const tone = source === "unreachable" ? "warn" : source === "off" ? "off" : "active";
+
+  // Why, and what comes next: a line or two beside the dial.
+  const facts = [];
+  if (source === "unreachable") {
+    facts.push(fact(ICONS.power, esc(tr("home.vmc_unreachable"))));
+  } else if (source === "off") {
+    // Switched off by hand while the program runs it: back on at its
+    // next change. Off by the program itself: what comes after.
+    if (running && running.value > 0 && running.until_at) {
+      facts.push(fact(ICONS.clock, esc(tr("home.vmc_back_on", { when: whenText(boardDate(running.until_at)) }))));
+    } else if (running && running.value === 0) {
+      facts.push(fact(ICONS.clock, esc(tr("home.vmc_off_program"))));
+      if (next) facts.push(fact(ICONS.flow, esc(tr("home.vmc_next", next))));
+    } else facts.push(fact(ICONS.power, esc(tr("home.vmc_off_hint"))));
+  } else if (source === "timed") {
+    facts.push(fact(ICONS.flow, esc(tr(running ? "home.vmc_then_program" : "home.vmc_then_before"))));
+  } else if (source === "auto") {
+    // An automatic change under way (services/vmc_auto.py): its reason.
+    facts.push(fact(auto.reason === "cooling" ? ICONS.moon : ICONS.drop, esc(tr(`home.vmc_auto_${auto.reason}`, {
+      zone: displayName(auto.zone || ""), rh: fmt(auto.humidity, 0), level: vmcLevelName(speed, auto.value).toLowerCase(),
+      out: fmt(auto.reason === "cooling" ? auto.outdoor : auto.outdoor_dew), in: fmt(auto.reason === "cooling" ? auto.indoor : auto.indoor_dew) })),
+      " fact-rule vmc-auto-note"));
+  } else if (source === "program") {
+    facts.push(next ? fact(ICONS.flow, esc(tr("home.vmc_next", next))) : fact(ICONS.clock, esc(tr("home.vmc_no_change"))));
+  } else if (source === "hand") {
+    facts.push(next ? fact(ICONS.clock, esc(tr("home.vmc_program_back", next))) : fact(ICONS.hand, esc(tr("home.vmc_stays"))));
+  } else {
+    facts.push(fact(ICONS.hand, `${esc(tr("home.vmc_stays"))}${program
+      ? ` <button class="btn-link" type="button" data-vmc-open-plan>${esc(tr("home.vmc_pick_program"))}</button>` : ""}`));
+  }
+  // Today's program, while there's one - a pick by hand or a speed for a
+  // while striped over it.
+  const today = running && program.week
+    ? vmcToday(speed, program.week, source === "timed" ? boost.until : source === "hand" ? running.until_at : null) : "";
+  const label = !on ? tr("home.vmc_off") : source === "unreachable" ? tr("home.not_answering")
+    : value != null ? vmcSpeedWord(speed, value) : "--";
+  const gauge = vmcGauge(speed, on && source !== "unreachable" ? value : null, label, on ? "--" : ICONS.power);
 
   // Off and on: a switch of its own - the levels are speeds, and any of
   // them (or the slider) switches it back on.
@@ -264,70 +404,50 @@ function vmcTile(speed) {
   const buttons = speed.presets.map(p => `<button class="vmc-preset" type="button" data-vmc="${p.value}" data-device="${esc(speed.name)}" aria-pressed="${on && value === p.value}">
       ${ICONS[VMC_ICONS[p.key]] || ""}<span class="vmc-preset-name">${esc(tr(`vmc_presets.${p.key}`))}</span><span class="vmc-preset-value">${fmt(p.value, 0)}%</span></button>`).join("");
   // The fine slider: from the slowest level - the minimum set in the
-  // admin panel - to 100%; 0 is the switch's. Sent when let go.
+  // admin panel - to 100%, a notch at each level; 0 is the switch's.
+  // Sent when let go.
   const lowest = Math.min(...speed.presets.map(p => p.value));
-  const shown = value != null ? Math.min(100, Math.max(lowest, Math.round(value))) : lowest;
+  const shown = value != null ? Math.min(100, Math.max(lowest, value)) : lowest;
   const fine = `<div class="vmc-fine">
-      <input type="range" min="${lowest}" max="100" step="1" value="${shown}" list="vmc-levels" data-vmc-fine data-device="${esc(speed.name)}" aria-label="${esc(tr("home.vmc_fine"))}" aria-valuetext="${fmt(shown, 0)}%">
-      <datalist id="vmc-levels">${speed.presets.map(p => `<option value="${p.value}"></option>`).join("")}</datalist>
+      <input type="range" min="${lowest}" max="100" step="1" value="${shown}" data-vmc-fine data-device="${esc(speed.name)}" style="--fill: ${vmcFill(speed, shown)}" aria-label="${esc(tr("home.vmc_fine"))}" aria-valuetext="${fmt(shown, 0)}%">
+      <div class="vmc-fine-ticks" aria-hidden="true">${speed.presets.map(p => `<i style="left: ${vmcFill(speed, p.value)}"></i>`).join("")}</div>
       <div class="vmc-fine-scale" aria-hidden="true"><span>${fmt(lowest, 0)}%</span><span>100%</span></div>
     </div>`;
 
-  // Why it runs at this speed, always under its name: the program, a hand
-  // pick until the program's next change, a timed speed, an automatic.
-  let why = "";
-  if (!on) {
-    why = running ? (running.value === 0 ? tr("home.vmc_off_program") : tr("home.vmc_off_until", { until: running.until || "" }))
-      : tr("home.vmc_off");
-  } else if (boost) {
-    why = tr("home.vmc_why_timed", { level: levelName(boost.value), until: until(boost.until) });
-  } else if (value != null) {
-    const level = levelName(Math.round(value));
-    if (auto) why = tr("home.vmc_why_auto", { level });
-    else if (running && running.value === Math.round(value)) {
-      why = running.until_at ? tr("home.vmc_why_program", { level, until: until(running.until_at) })
-        : tr("home.vmc_why_program_always", { level });
-    } else if (running && running.until_at) why = tr("home.vmc_why_hand_until", { level, until: until(running.until_at) });
-    else why = tr("home.vmc_why_hand", { level });
-  }
-
   // For a while: the maximum (a shower, cooking), or high for guests -
-  // then back to the program, or to before.
+  // then back to the program, or to before. Under way: how long it has
+  // left, half an hour more, or stop it now.
   const top = Math.max(...speed.presets.map(p => p.value));
   const high = (speed.presets.find(p => p.key === "high") || {}).value;
-  const timedRow = (icon, text, minutes, level) => `<div class="vmc-boost">${icon}<span class="vmc-boost-text">${esc(text)}</span>
+  const timedRow = (icon, text, minutes, level) => `<div class="vmc-boost"><span class="vmc-boost-icon">${icon}</span><span class="vmc-boost-text">${esc(text)}</span>
       <span class="vmc-boost-times">${minutes.map(m => `<button class="chip" type="button" data-vmc-boost="${m}" data-value="${level}" data-device="${esc(speed.name)}">${esc(m < 60 ? tr("home.vmc_minutes", { m }) : tr("home.vmc_hours", { h: m / 60 }))}</button>`).join("")}</span></div>`;
-  const timed = boost
-    ? `<div class="vmc-boost" data-active="true">${ICONS.wind}<span class="vmc-boost-text">${esc(tr("home.vmc_boost_running", { level: levelName(boost.value), until: until(boost.until) }))}</span>
-        <button class="chip" type="button" data-vmc-boost-cancel>${esc(tr("home.vmc_boost_cancel"))}</button></div>`
-    : timedRow(ICONS.wind, tr("home.vmc_boost_for", { level: vmcLevelName(speed, top) }), VMC_BOOST_MINUTES, top)
+  let timed;
+  if (boost) {
+    const left = vmcMinutesLeft(boost);
+    const longer = left + VMC_EXTEND_MINUTES <= VMC_MAX_MINUTES
+      ? `<button class="chip" type="button" data-vmc-boost-extend>${esc(tr("home.vmc_boost_extend", { m: VMC_EXTEND_MINUTES }))}</button>` : "";
+    timed = `<div class="vmc-boost" data-active="true"><span class="vmc-boost-icon">${ICONS.wind}</span>
+        <span class="vmc-boost-text">${esc(tr("home.vmc_boost_running", { level: levelName(boost.value), until: until(boost.until) }))}
+          <small>${esc(tr("home.vmc_boost_left", { left: fmtDuration(left / 60) }))}</small></span>
+        <span class="vmc-boost-times">${longer}<button class="chip" type="button" data-vmc-boost-cancel>${esc(tr("home.vmc_boost_cancel"))}</button></span></div>`;
+  } else {
+    timed = timedRow(ICONS.wind, tr("home.vmc_boost_for", { level: vmcLevelName(speed, top) }), VMC_BOOST_MINUTES, top)
       + (high ? timedRow(ICONS.breeze, tr("home.vmc_guests", { level: vmcLevelName(speed, high) }), [VMC_GUESTS_MINUTES], high) : "");
-
-  // An automatic change under way (services/vmc_auto.py): its reason.
-  const autoNote = auto
-    ? `<p class="vmc-auto-note">${auto.reason === "cooling" ? ICONS.moon : ICONS.drop}<span>${esc(tr(`home.vmc_auto_${auto.reason}`, {
-        zone: displayName(auto.zone || ""), rh: fmt(auto.humidity, 0), level: vmcLevelName(speed, auto.value).toLowerCase(),
-        out: fmt(auto.reason === "cooling" ? auto.outdoor : auto.outdoor_dew), in: fmt(auto.reason === "cooling" ? auto.indoor : auto.indoor_dew) }))}</span></p>`
-    : "";
-
-  // The filters, from two weeks before they're due (services/vmc_filters.py).
-  const filters = state.vmc && state.vmc.filters;
-  const filtersRow = filters && (filters.state === "soon" || filters.state === "due")
-    ? `<div class="vmc-filters" data-state="${filters.state}">${ICONS.filter}<span>${esc(filters.days_left > 0
-        ? tr("home.vmc_filters_soon", { n: filters.days_left })
-        : filters.days_left === 0 ? tr("home.vmc_filters_today") : tr("home.vmc_filters_due", { n: -filters.days_left }))}</span>
-        <button class="chip" type="button" data-vmc-filters-cleaned>${esc(tr("home.vmc_filters_cleaned"))}</button></div>`
-    : "";
+  }
 
   // The rest of the time: one choice, manual or a program, behind one
-  // line that opens. A week set elsewhere shows as "custom", only while
-  // it's the one running.
+  // line that opens - each program with its day drawn (weekdays and the
+  // weekend when they differ). A week set elsewhere shows as "custom",
+  // only while it's the one running.
   const choice = vmcChoice(speed);
   const choices = [
     { key: "manual", note: tr("home.vmc_tpl_manual_note") },
-    ...VMC_PROGRAMS.map(p => ({ key: p.key, note: tr(`home.vmc_tpl_${p.key}_note`) })),
-    ...(choice === "custom" ? [{ key: "custom", note: tr("home.vmc_tpl_custom_note") }] : []),
+    ...VMC_PROGRAMS.map(p => ({ key: p.key, note: tr(`home.vmc_tpl_${p.key}_note`), week: vmcProgramWeek(p, speed) })),
+    ...(choice === "custom" ? [{ key: "custom", note: tr("home.vmc_tpl_custom_note"), week: program.week }] : []),
   ];
+  const preview = week => (week.mon.every((v, h) => v === week.sat[h]) ? vmcMiniDay(week.mon)
+    : `<span class="vmc-mini-row"><small>${esc(tr("home.vmc_weekdays"))}</small>${vmcMiniDay(week.mon)}</span>
+       <span class="vmc-mini-row"><small>${esc(tr("home.vmc_weekend"))}</small>${vmcMiniDay(week.sat)}</span>`);
   const programNote = running
     ? (running.until_at
         ? tr("home.vmc_program_now", { level: vmcLevelName(speed, running.value), until: until(running.until_at),
@@ -335,37 +455,53 @@ function vmcTile(speed) {
         : tr("home.vmc_program_always", { level: vmcLevelName(speed, running.value) }))
     : tr("home.vmc_program_manual");
   const programs = program ? `<details class="vmc-plan" id="vmc-plan"${state.vmcPlanOpen ? " open" : ""}>
-      <summary><span class="sched-season-label">${esc(tr("home.vmc_program"))}</span>
+      <summary><span class="vmc-label">${esc(tr("home.vmc_program"))}</span>
         <span class="vmc-plan-name">${esc(tr(`home.vmc_tpl_${choice}`))}</span>${ICONS.chevron}</summary>
       <div class="vmc-programs" role="radiogroup" aria-label="${esc(tr("home.vmc_program"))}">
         ${choices.map(c => `<button class="vmc-template" type="button" role="radio" aria-checked="${c.key === choice}"
             data-vmc-choice="${c.key}" data-device="${esc(speed.name)}">
           <span class="vmc-template-name">${esc(tr(`home.vmc_tpl_${c.key}`))}</span>
+          ${c.week ? `<span class="vmc-template-days" aria-hidden="true">${preview(c.week)}</span>` : ""}
           <span class="vmc-template-note">${esc(c.note)}</span></button>`).join("")}
       </div>
       <p class="vmc-program-note">${ICONS.clock}<span>${esc(programNote)}</span></p>
     </details>` : "";
 
-  // The fan turns faster as the speed goes up; its phase comes from the
-  // clock, so a refresh that redraws the card doesn't make it jump.
-  const turn = on && value > 0 ? Math.max(0.8, 90 / value) : 0;
-  const spin = turn ? ` style="--turn: ${turn.toFixed(2)}s; --phase: -${((Date.now() / 1000) % turn).toFixed(2)}s"` : "";
-  return `<div class="tile tile-wide vmc" id="vmc-card" data-device="${esc(speed.name)}" data-on="${on}">
+  // The filters: how long they have left once a cleaning is recorded,
+  // and when that was, in small; a reminder from two weeks before
+  // they're due (services/vmc_filters.py).
+  const filters = state.vmc && state.vmc.filters;
+  const last = filters && filters.cleaned_on
+    ? `<small>${esc(tr("home.vmc_filters_last", { date: new Date(`${filters.cleaned_on}T12:00:00Z`)
+        .toLocaleDateString(LOCALE, { day: "numeric", month: "short", timeZone: "UTC" }) }))}</small>` : "";
+  let filtersRow = "";
+  if (filters && (filters.state === "soon" || filters.state === "due")) {
+    const n = filters.days_left;
+    filtersRow = `<div class="vmc-filters" data-state="${filters.state}">${ICONS.filter}<span>${esc(n > 1 ? tr("home.vmc_filters_soon", { n })
+        : n === 1 ? tr("home.vmc_filters_tomorrow") : n === 0 ? tr("home.vmc_filters_today")
+        : n === -1 ? tr("home.vmc_filters_yesterday") : tr("home.vmc_filters_due", { n: -n }))}${last}</span>
+        <button class="chip" type="button" data-vmc-filters-cleaned>${esc(tr("home.vmc_filters_cleaned"))}</button></div>`;
+  } else if (filters && filters.state === "ok" && filters.days_left != null) {
+    const life = Math.max(0, Math.min(100, filters.days_left / (filters.interval_days || 1) * 100));
+    filtersRow = `<div class="vmc-filter-life">${ICONS.filter}<span>${esc(tr("home.vmc_filters_ok", { n: filters.days_left }))}${last}</span>
+        <span class="vmc-life" style="--life: ${life.toFixed(0)}%" aria-hidden="true"></span></div>`;
+  }
+
+  return `<div class="tile tile-wide vmc" id="vmc-card" data-device="${esc(speed.name)}" data-on="${on}" data-source="${source}">
     <div class="vmc-live">
-      <div class="vmc-head">
-        <span class="vmc-fan" data-spin="${!!turn}"${spin}>${ICONS.fan}</span>
-        <span class="vmc-title"><span class="tile-name">${esc(displayName(speed.paired_switch))}</span>
-          <span class="tile-note">${esc(why)}</span></span>
-        <span class="tile-value">${!on ? "" : value != null ? `${fmt(value, 0)}<small>%</small>` : "--"}</span>
-        ${powerSwitch}
+      ${head(tr(`home.${words[source]}`), tone, source === "timed" || source === "auto", powerSwitch)}
+      <div class="vmc-now">
+        <div class="vmc-now-main">${gauge}<div class="vmc-facts">${facts.join("")}</div></div>
+        ${today}
       </div>
       <div class="vmc-controls">
+        <p class="vmc-label">${esc(tr("home.vmc_speed_heading"))}</p>
         <div class="vmc-presets" data-count="${speed.presets.length}" role="group" aria-label="${esc(tr("home.vmc_speed"))}">${buttons}</div>
         ${fine}
       </div>
-      <div class="vmc-side">${autoNote}${timed}${filtersRow}</div>
+      <div class="vmc-side"><p class="vmc-label">${esc(tr("home.vmc_for_a_while"))}</p>${timed}</div>
     </div>
-    ${programs}
+    ${programs}${filtersRow}
   </div>`;
 }
 
@@ -376,6 +512,15 @@ async function onPlantClick(event) {
   const speed = card && deviceByName(card.dataset.device);
   if (target.dataset.vmcChoice && target.getAttribute("aria-checked") === "true") return;
   if (target.dataset.switch) { await flipSwitch(target); return; }
+  // "Pick a program": its line opened, and brought into view.
+  if (target.hasAttribute("data-vmc-open-plan")) {
+    const plan = document.getElementById("vmc-plan");
+    if (plan) {
+      plan.open = true;
+      plan.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    return;
+  }
   pressNow(target);
   busy(target, true);
   asked.devices++;
@@ -389,6 +534,11 @@ async function onPlantClick(event) {
     } else if (target.dataset.vmcBoost && target.dataset.device) {
       await api("/api/vmc-schedule/boost", { device: target.dataset.device, value: Number(target.dataset.value),
                                              minutes: Number(target.dataset.vmcBoost) });
+    } else if (target.hasAttribute("data-vmc-boost-extend") && boosting) {
+      // Half an hour more: the same speed, asked again for what's left
+      // and 30 minutes - the board keeps what to go back to.
+      await api("/api/vmc-schedule/boost", { device: boosting.device, value: boosting.value,
+                                             minutes: Math.min(VMC_MAX_MINUTES, vmcMinutesLeft(boosting) + VMC_EXTEND_MINUTES) });
     } else if (target.hasAttribute("data-vmc-boost-cancel")) {
       await api("/api/vmc-schedule/boost/cancel", {});
     } else if (target.hasAttribute("data-vmc-filters-cleaned")) {
@@ -417,16 +567,21 @@ async function onPlantClick(event) {
   await refreshDevices(target);
 }
 
-// The fine slider: its number and the level it's on follow the finger;
-// the speed is sent when it's let go.
+// The fine slider: the dial, its number, its level's name and the level
+// it's on follow the finger; the speed is sent when it's let go.
 function onVmcSlide(event) {
   const fine = event.target.closest("[data-vmc-fine]");
   if (!fine) return;
   const card = fine.closest("#vmc-card");
+  const speed = deviceByName(fine.dataset.device);
   const v = Number(fine.value);
   fine.setAttribute("aria-valuetext", `${fmt(v, 0)}%`);
-  const shown = card.querySelector(".vmc-head .tile-value");
-  if (shown) shown.innerHTML = `${fmt(v, 0)}<small>%</small>`;
+  card.dataset.sliding = "true";
+  if (speed) fine.style.setProperty("--fill", vmcFill(speed, v));
+  const fill = card.querySelector(".vmc-ring-fill");
+  if (fill) fill.setAttribute("style", vmcArcStyle(v));
+  const text = card.querySelector(".vmc-gauge-text");
+  if (text && speed) text.innerHTML = `<span class="vmc-gauge-value">${fmt(v, 0)}<small>%</small></span><span class="vmc-gauge-level">${esc(vmcSpeedWord(speed, v))}</span>`;
   card.querySelectorAll(".vmc-preset[data-vmc]").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.vmc) === v)));
 }
 
@@ -441,6 +596,8 @@ async function onVmcSlideEnd(event) {
   } catch (e) {
     notify(errorText(e));
   }
+  const card = fine.closest("#vmc-card");
+  if (card) delete card.dataset.sliding;
   fine.blur();     // the board's value shows again from the next refresh
   await refreshDevices(fine);
 }

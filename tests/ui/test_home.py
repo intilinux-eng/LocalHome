@@ -317,7 +317,8 @@ def test_the_vmc_is_turned_off_by_its_switch_and_a_speed_or_the_switch_starts_it
     switch.click()
     assert eventually(page, lambda: is_on() is False)
     assert eventually(page, lambda: switch.get_attribute("aria-checked") == "false")
-    assert page.locator("#vmc-card .tile-note").inner_text() == "Spenta"
+    assert page.locator("#vmc-card .vmc-head .state").inner_text() == "Spenta"
+    assert page.locator("#vmc-card .vmc-gauge").get_attribute("aria-label") == "Spenta"
     page.locator("#plant-body button[data-vmc]", has_text="Notte").click()
     assert eventually(page, lambda: is_on() is True)
     assert eventually(page, lambda: switch.get_attribute("aria-checked") == "true")
@@ -329,12 +330,14 @@ def test_the_vmc_is_turned_off_by_its_switch_and_a_speed_or_the_switch_starts_it
 
 def test_five_levels_a_fine_slider_from_the_minimum_and_why_it_runs_so(open_page, api):
     """The levels with their percentages; the slider from the slowest
-    level to 100, sent when let go - a speed between levels is "custom";
-    the line under the name says why it runs at that speed."""
+    level to 100, sent when let go - a speed between levels is "made to
+    measure"; the dial says the speed and its level, the word under the
+    name where it comes from."""
     _reset_vmc(api)
     opened = _open_home(open_page)
     page = opened.page
     card = page.locator("#vmc-card")
+    gauge = card.locator(".vmc-gauge")
     names = [b.locator(".vmc-preset-name").inner_text() for b in card.locator("button[data-vmc]").all()]
     assert names == ["Minimo", "Notte", "Giorno", "Alto", "Massimo"]
     speed = card.get_attribute("data-device")
@@ -344,11 +347,11 @@ def test_five_levels_a_fine_slider_from_the_minimum_and_why_it_runs_so(open_page
     fine.evaluate("(el) => { el.value = 62; el.dispatchEvent(new Event('input', { bubbles: true }));"
                   " el.dispatchEvent(new Event('change', { bubbles: true })); }")
     assert eventually(page, lambda: _value(api, speed) == 62)
-    assert eventually(page, lambda: "Personalizzata 62%" in card.locator(".tile-note").inner_text())
-    assert "scelta a mano" in card.locator(".tile-note").inner_text()
+    assert eventually(page, lambda: gauge.get_attribute("aria-label") == "Velocità 62%, Su misura")
+    assert card.locator(".vmc-head .state").inner_text() == "Manuale", "no program: the speed stays"
     card.locator("button[data-vmc]", has_text="Alto").click()
     assert eventually(page, lambda: _value(api, speed) == 75)
-    assert eventually(page, lambda: card.locator(".tile-note").inner_text().startswith("Alto"))
+    assert eventually(page, lambda: gauge.get_attribute("aria-label") == "Velocità 75%, Alto")
     assert eventually(page, lambda: fine.input_value() == "75"), "the slider follows a level picked"
     assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
     assert opened.errors == []
@@ -687,6 +690,43 @@ def test_a_vmc_program_is_picked_and_manual_turns_it_off(open_page, api):
     page.click("#vmc-card [data-vmc-choice='manual']")
     assert eventually(page, lambda: _vmc(api)["schedule"]["enabled"] is False)
     assert _vmc(api)["schedule"]["week"]["mon"][10] == 25, "the week stays saved"
+
+
+def test_where_the_speed_comes_from_todays_program_and_half_an_hour_more(open_page, api):
+    """No program: "Manual", no day drawn, a way to pick one. A program: its
+    word and today's stretches; a speed picked by hand over it: "By hand",
+    striped to the program's next change; the maximum for a while: "For a
+    while", and half an hour more from the card - the board keeps what to
+    go back to."""
+    from datetime import datetime
+    _reset_vmc(api)
+    opened = _open_home(open_page)
+    page = opened.page
+    card = page.locator("#vmc-card")
+    word = lambda: card.locator(".vmc-head .state").inner_text()
+    speed = card.get_attribute("data-device")
+    assert word() == "Manuale" and card.locator(".vmc-day").count() == 0
+    card.locator("button[data-vmc-open-plan]").click()
+    assert eventually(page, lambda: page.locator("#vmc-plan").evaluate("d => d.open"))
+    week = {d: [25] * 7 + [50] * 15 + [25] * 2 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    api("/api/vmc-schedule", {"enabled": True, "target": speed, "week": week})
+    page.evaluate("refreshDevices()")
+    assert eventually(page, lambda: word() == "Programma")
+    assert card.locator(".vmc-day-band").count() == 3, "night, day, night"
+    assert card.locator(".vmc-day-hold").count() == 0
+    api(f"/api/sensors/{urllib.parse.quote(speed, safe='')}/set-value", {"value": 62})
+    page.evaluate("refreshDevices()")
+    assert eventually(page, lambda: word() == "A mano")
+    assert card.locator(".vmc-day-hold").count() == 1, "striped to the program's next change"
+    card.locator("button[data-vmc-boost='30']").click()
+    assert eventually(page, lambda: word() == "A tempo")
+    until = lambda: datetime.fromisoformat(_vmc(api)["status"]["override"]["until"])
+    first = until()
+    card.locator("button[data-vmc-boost-extend]").click()
+    assert eventually(page, lambda: (until() - first).total_seconds() >= 25 * 60)
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0
+    _reset_vmc(api)
+    assert opened.errors == []
 
 
 def test_a_week_saved_otherwise_shows_as_custom(open_page, api):

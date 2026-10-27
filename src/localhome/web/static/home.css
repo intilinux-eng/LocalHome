@@ -933,17 +933,30 @@ body[data-running="true"] .hero-season::before {
 .cover-note[data-tone="warn"] { color: var(--warn); }
 .cover-note[data-tone="bad"] { color: var(--bad); font-weight: 600; }
 
-/* The VMC: a card like a zone's, three big speeds with their icon and
-   level, a fan that turns as fast as it runs (home/plant.js vmcTile). */
+/* The VMC (home/plant.js vmcTile): a card like a zone's. On top what it's
+   doing - a dial filled to its speed with a notch at each level, the fan
+   turning as fast as it runs, where the speed comes from and what comes
+   next, today's program as a strip - then its levels as one segmented
+   control and a fine slider, a speed for a while, the program, and how
+   long the filters have left. */
 .vmc { border-radius: var(--radius); padding: 18px; gap: 16px; }
 /* One column that may narrow below its content (a phone's larger text):
    its rows shrink with the card instead of pushing past the screen. */
-.vmc-live { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.vmc-live { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .vmc svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vmc[data-on="true"] {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  background: radial-gradient(900px 260px at 0 0, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%), var(--surface);
+}
+
+/* The head: the fan, the name with where the speed comes from, the switch. */
 .vmc-head { display: flex; align-items: center; gap: 12px; }
-.vmc-title { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.vmc-title { display: grid; justify-items: start; gap: 5px; flex: 1; min-width: 0; }
 .vmc-head .tile-name { font-size: 1.12rem; font-weight: 650; }
-.vmc-head .tile-value { font-size: 2rem; font-weight: 300; }
+.vmc-head .state { padding: 3px 10px 3px 8px; font-size: 0.78rem; }
+/* Running is a VMC's normal: its dot pulses only for a while, or while an
+   automatic has it. */
+.vmc .state[data-tone="active"]:not([data-live])::before { animation: none; }
 .vmc-fan {
   flex: none;
   display: grid;
@@ -961,120 +974,156 @@ body[data-running="true"] .hero-season::before {
 }
 @keyframes turn { to { transform: rotate(360deg); } }
 .vmc[data-on="false"] .vmc-fan { background: var(--surface-2); color: var(--text-3); }
-.vmc[data-on="true"] {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
-  background: radial-gradient(900px 260px at 0 0, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%), var(--surface);
-}
+.vmc-power { flex: none; margin-left: 4px; }
 
-.vmc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.vmc-presets[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 359px) {
-  .vmc-presets[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Now: the dial beside why and what comes next, today's program under
+   them - a zone's readings' box. */
+.vmc-now { display: grid; align-content: center; gap: 14px; padding: 14px 16px 16px 12px; border-radius: 18px; background: var(--surface-2); }
+.vmc[data-on="true"] .vmc-now {
+  background: radial-gradient(150% 170% at 0% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 64%), var(--surface-2);
 }
+.vmc-now-main { display: flex; align-items: center; gap: 16px; }
+.vmc-now .vmc-day { padding-left: 4px; }
+.vmc-gauge { position: relative; flex: none; display: grid; place-items: center; width: 118px; height: 118px; }
+.vmc-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.vmc .vmc-ring-track { stroke: color-mix(in srgb, var(--text-3) 26%, transparent); stroke-width: 10; }
+.vmc .vmc-ring-fill { stroke: var(--accent); stroke-width: 10; transition: stroke-dasharray 0.6s ease, opacity 0.3s; }
+.vmc[data-sliding] .vmc-ring-fill { transition: none; }
+.vmc .vmc-notch { fill: var(--surface); stroke: none; }
+.vmc-gauge-text { position: relative; display: grid; justify-items: center; gap: 4px; margin-top: 6px; }
+.vmc-gauge-value { font-size: 2.15rem; font-weight: 300; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.vmc-gauge-value small { margin-left: 1px; font-size: 0.95rem; letter-spacing: 0; color: var(--text-3); }
+.vmc-gauge-blank { display: grid; place-items: center; height: 2.15rem; font-size: 1.6rem; font-weight: 300; color: var(--text-3); }
+.vmc-gauge-blank svg { width: 26px; height: 26px; }
+.vmc-gauge-level {
+  max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.68rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
+}
+.vmc[data-on="false"] .vmc-gauge-level { color: var(--text-3); }
+/* Not answering: no speed in the dial, its word in the head says why. */
+.vmc[data-source="unreachable"] .vmc-gauge-level { display: none; }
+.vmc[data-source="unreachable"] .vmc-gauge-blank { color: var(--warn); }
+.vmc-facts { flex: 1; min-width: 0; display: grid; gap: 12px; }
+.vmc-now .fact { font-size: 0.88rem; }
+.vmc-now .fact-icon { background: var(--surface); }
+.vmc-now .btn-link { display: block; margin: 6px 0 0; min-height: 0; text-align: left; }
+.vmc-now .fact-rule .fact-icon { background: var(--accent-soft); }
+.vmc[data-source="unreachable"] .vmc-now .fact { color: var(--text); font-weight: 600; }
+.vmc[data-source="unreachable"] .vmc-now .fact-icon { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn); }
+
+/* Today's program: a stretch per speed, darker the faster; now a line
+   across it; a speed held for a while striped to its end; the hours. */
+.vmc-day { display: grid; gap: 5px; }
+.vmc-day-label { font-size: 0.66rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+.vmc-day-strip { position: relative; height: 12px; }
+.vmc-day-band {
+  position: absolute; top: 0; bottom: 0; clip-path: inset(0 1px round 4px);
+  background: color-mix(in srgb, var(--accent) var(--lv), var(--surface-3));
+}
+.vmc-day-hold {
+  position: absolute; top: 0; bottom: 0; border-radius: 4px; pointer-events: none;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--surface) 75%, transparent) 0 2px, transparent 2px 5px);
+}
+.vmc-day-now { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--text); }
+.vmc-day-hours { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* A section's title inside the card: small capitals. */
+.vmc-label { margin: 0 0 8px 2px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+
+/* The levels: one segmented control, the speed it's at raised. Five in a
+   row on a phone too. */
+.vmc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 4px; border-radius: 18px; background: var(--surface-2); }
+.vmc-presets[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.vmc-presets[data-count="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .vmc-preset {
   display: grid;
   justify-items: center;
-  gap: 4px;
-  min-height: 96px;
-  padding: 14px 6px 12px;
-  border-radius: var(--radius-s);
-  border: 1.5px solid transparent;
-  background: var(--surface-2);
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 2px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
   color: var(--text-2);
   font: inherit;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
 }
-.vmc-preset svg { width: 28px; height: 28px; margin-bottom: 2px; }
-.vmc-preset-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.vmc-preset svg { width: 22px; height: 22px; margin-bottom: 1px; }
 /* Text made larger on the phone: a button narrows and a long name is cut
    short, rather than the card going past the screen's edge. */
-.vmc-preset { min-width: 0; }
 .vmc-preset-name, .vmc-preset-value { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vmc-preset-value { font-size: 0.8rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.vmc-preset:hover { border-color: var(--line); }
-.vmc-preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.vmc-preset[aria-pressed="true"] .vmc-preset-name,
-.vmc-preset[aria-pressed="true"] .vmc-preset-value { color: var(--accent); }
+.vmc-preset-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.vmc-preset-value { font-size: 0.74rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+/* Its ring on its own: the dark theme's shadow is "none", which a list of
+   shadows doesn't take. */
+.vmc-preset[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent), 0 1px 3px rgba(30, 25, 15, 0.1); }
+.vmc-preset[aria-pressed="true"] :is(.vmc-preset-name, .vmc-preset-value) { color: var(--accent); }
 .vmc-preset:disabled { opacity: 0.6; }
-
-
-/* The maximum for a while: three lengths, or what's running and Cancel. */
-.vmc-boost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; color: var(--text-3); }
-.vmc-boost > svg { flex: none; width: 20px; height: 20px; }
-.vmc-boost-text { font-size: 0.9rem; font-weight: 600; color: var(--text-2); }
-.vmc-boost-times { display: flex; gap: 6px; margin-left: auto; }
-.vmc-boost .chip { box-shadow: none; font-weight: 600; padding: 8px 14px; }
-.vmc-boost[data-active="true"] { padding: 6px 6px 6px 12px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--accent); }
-.vmc-boost[data-active="true"] .vmc-boost-text { color: var(--accent); flex: 1; }
-
-/* An automatic change under way, above the timed boost. */
-.vmc-auto-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius-s);
-                 background: var(--accent-soft); color: var(--accent); font-size: 0.86rem; font-weight: 600; line-height: 1.35; }
-.vmc-auto-note svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
-/* Away: just the head and what it's held at. */
-.vmc-held .vmc-auto-note { margin: 0; }
-@media (min-width: 760px) {
-  .vmc-held .vmc-live { grid-template-columns: 1fr; grid-template-areas: "head" "note"; row-gap: 12px; }
-  .vmc-held .vmc-auto-note { grid-area: note; }
+@media (hover: hover) {
+  .vmc-preset:not([aria-pressed="true"]):hover { background: color-mix(in srgb, var(--surface) 55%, transparent); }
 }
+
+/* The fine slider: filled up to the speed, a notch under each level. */
+.vmc-fine { display: grid; gap: 2px; margin-top: 12px; }
+.vmc-fine input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; }
+.vmc-fine input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) var(--fill, 0%), var(--surface-3) var(--fill, 0%));
+}
+.vmc-fine input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 24px; height: 24px; margin-top: -8px; border-radius: 50%;
+  border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.vmc-fine input[type="range"]::-moz-range-track { height: 8px; border-radius: 999px; background: var(--surface-3); }
+.vmc-fine input[type="range"]::-moz-range-progress { height: 8px; border-radius: 999px; background: var(--accent); }
+.vmc-fine input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); }
+.vmc[data-on="false"] .vmc-fine { --accent: var(--text-3); }
+.vmc-fine-ticks { position: relative; height: 5px; margin: 0 12px; }
+.vmc-fine-ticks i { position: absolute; top: 0; width: 2px; height: 5px; margin-left: -1px; border-radius: 1px; background: var(--text-3); opacity: 0.55; }
+.vmc-fine-scale { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* For a while: a row each - the maximum, guests - or the one under way,
+   with what it has left, half an hour more and stop. */
+.vmc-side { display: grid; gap: 8px; align-content: start; }
+.vmc-side .vmc-label { margin-bottom: 0; }
+.vmc-boost {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  min-height: 56px; padding: 8px 8px 8px 10px; border-radius: var(--radius-s); background: var(--surface-2);
+}
+.vmc-boost-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--surface); color: var(--text-2); }
+.vmc-boost-icon svg { width: 18px; height: 18px; }
+.vmc-boost-text { flex: 1 1 0; display: grid; gap: 1px; min-width: 4.5em; font-size: 0.9rem; font-weight: 600; line-height: 1.25; color: var(--text); }
+.vmc-boost-text small { font-size: 0.8rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.vmc-boost-times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; margin-left: auto; }
+.vmc-boost .chip { min-height: 40px; padding: 8px 11px; box-shadow: none; font-weight: 600; }
+/* Under way: its words first - on a phone the buttons go under them. */
+.vmc-boost[data-active="true"] { background: var(--accent-soft); }
+.vmc-boost[data-active="true"] .vmc-boost-text { min-width: 11em; }
+.vmc-boost[data-active="true"] .vmc-boost-icon { background: var(--accent); color: #fff; }
+.vmc-boost[data-active="true"] .vmc-boost-text { color: var(--accent); }
+
 /* The away sheet's VMC choice: night or off, one lit. */
 .away-vmc .btn[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
-/* Its own switch, at the end of the head. */
-.vmc-power { flex: none; margin-left: 4px; }
-/* Five levels in one row, phone too. */
-.vmc-controls { display: grid; gap: 14px; }
-.vmc-presets[data-count="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.vmc-presets[data-count="5"] .vmc-preset { min-height: 82px; padding: 12px 2px 10px; }
-.vmc-presets[data-count="5"] .vmc-preset svg { width: 24px; height: 24px; }
-.vmc-presets[data-count="5"] .vmc-preset-name { font-size: 0.82rem; }
-@media (max-width: 359px) {
-  /* A small phone: three and two, and a head that fits its switch. */
-  .vmc-presets[data-count="5"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .vmc-head { gap: 8px; }
-  .vmc-head .tile-value { font-size: 1.5rem; }
-  .vmc-fan { width: 40px; height: 40px; }
-  .vmc-fan svg { width: 24px; height: 24px; }
-}
-/* The fine slider: the levels as ticks, from the minimum to 100%. */
-.vmc-fine { display: grid; gap: 2px; }
-.vmc-fine input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); height: 28px; }
-.vmc-fine-scale { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.vmc[data-on="false"] .vmc-fine input[type="range"] { accent-color: var(--text-3); }
-.vmc-side { display: grid; gap: 10px; align-content: start; }
-.vmc-side .vmc-auto-note { margin: 0; }
-/* The filters: from two weeks before, louder once due. */
-.vmc-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; border-radius: var(--radius-s);
-               background: var(--surface-2); color: var(--text-2); font-size: 0.88rem; font-weight: 600; }
-.vmc-filters > svg { flex: none; width: 18px; height: 18px; }
-.vmc-filters > span { flex: 1; min-width: 0; }
-.vmc-filters[data-state="due"] { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn); }
-.vmc-filters .chip { box-shadow: none; font-weight: 600; padding: 8px 14px; }
-
-@media (min-width: 760px) {
-  .vmc-live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "head controls" "side controls"; column-gap: 28px; align-items: start; }
-  .vmc-head { grid-area: head; }
-  .vmc-controls { grid-area: controls; }
-  .vmc-side { grid-area: side; }
-}
-
-/* The program: manual, or one of the ready-made ones (home/plant.js vmcTile),
+/* The program: manual, or one of the ready-made ones with its day drawn,
    behind one line that opens. */
-.vmc-plan { padding-top: 12px; border-top: 1px solid var(--line); }
-.vmc-plan > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none; }
+.vmc-plan { padding-top: 4px; border-top: 1px solid var(--line); }
+.vmc-plan > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; }
 .vmc-plan > summary::-webkit-details-marker { display: none; }
-.vmc-plan > summary .sched-season-label { margin: 0; }
-.vmc-plan-name { flex: 1; font-weight: 600; color: var(--text); }
-.vmc-plan > summary .chevron { width: 20px; height: 20px; color: var(--text-3); transition: transform 0.2s; }
+.vmc-plan > summary .vmc-label { margin: 0; }
+.vmc-plan-name { flex: 1; min-width: 0; font-weight: 600; color: var(--text); }
+.vmc-plan > summary .chevron { flex: none; width: 20px; height: 20px; color: var(--text-3); transition: transform 0.2s; }
 .vmc-plan[open] > summary .chevron { transform: rotate(180deg); }
-.vmc-plan[open] > summary { margin-bottom: 10px; }
-.vmc-programs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr)); gap: 8px; margin-bottom: 10px; }
+.vmc-plan[open] > summary { margin-bottom: 8px; }
+.vmc-programs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; margin-bottom: 10px; }
 .vmc-template {
   display: grid;
-  gap: 2px;
-  align-content: center;
+  gap: 7px;
+  align-content: start;
   min-height: 58px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-radius: var(--radius-s);
   border: 1.5px solid var(--line);
   background: var(--surface);
@@ -1083,12 +1132,62 @@ body[data-running="true"] .hero-season::before {
   text-align: left;
 }
 .vmc-template-name { font-weight: 600; font-size: 0.9rem; }
+.vmc-template-days { display: grid; gap: 4px; }
 .vmc-template-note { font-size: 0.76rem; color: var(--text-3); line-height: 1.3; }
 .vmc-template[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .vmc-template[aria-checked="true"] .vmc-template-name { color: var(--accent); }
 .vmc-template:disabled { opacity: 0.6; }
-.vmc-program-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.86rem; color: var(--text-2); }
+.vmc-mini { display: flex; gap: 2px; height: 6px; }
+.vmc-mini > span { min-width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--accent) var(--lv), var(--surface-3)); }
+.vmc-mini-row { display: grid; grid-template-columns: 3.7em minmax(0, 1fr); align-items: center; gap: 6px; }
+.vmc-mini-row small { font-size: 0.66rem; color: var(--text-3); white-space: nowrap; }
+.vmc-program-note { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 0.86rem; color: var(--text-2); }
 .vmc-program-note svg { flex: none; width: 18px; height: 18px; color: var(--text-3); }
+
+/* The filters: how long they have left, quietly; from two weeks before
+   they're due a reminder with "cleaned today", amber once due. */
+.vmc-filter-life, .vmc-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 0.86rem; }
+.vmc-filter-life { padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-2); }
+.vmc-filter-life > svg, .vmc-filters > svg { flex: none; width: 18px; height: 18px; }
+.vmc-filter-life > svg { color: var(--text-3); }
+.vmc-filter-life > span:first-of-type, .vmc-filters > span { flex: 1; min-width: 0; display: grid; gap: 1px; }
+/* When they were last cleaned, in small under it. */
+:is(.vmc-filter-life, .vmc-filters) small { font-size: 0.76rem; font-weight: 500; color: var(--text-3); }
+.vmc-life { flex: 0 0 64px; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--ok) var(--life), var(--surface-3) var(--life)); }
+.vmc-filters { padding: 6px 6px 6px 12px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); color: var(--text); font-weight: 600; }
+.vmc-filters > svg { color: var(--warn); }
+.vmc-filters[data-state="due"] { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); color: var(--warn); }
+.vmc-filters .chip { box-shadow: none; font-weight: 600; padding: 8px 14px; }
+
+/* A small phone: five levels as three and two, a smaller dial and head. */
+@media (max-width: 359px) {
+  .vmc-presets[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vmc-presets[data-count="5"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .vmc-head { gap: 8px; }
+  .vmc-fan { width: 40px; height: 40px; }
+  .vmc-fan svg { width: 24px; height: 24px; }
+  .vmc-now { padding-right: 12px; }
+  .vmc-now-main { gap: 12px; }
+  .vmc-gauge { width: 100px; height: 100px; }
+  .vmc-gauge-value { font-size: 1.8rem; }
+}
+/* A wide card: what it's doing on the left, the controls on the right. */
+@media (min-width: 760px) {
+  .vmc-live {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "head head" "now controls" "now side";
+    column-gap: 28px;
+    align-items: start;
+  }
+  .vmc-head { grid-area: head; }
+  .vmc-now { grid-area: now; align-self: stretch; gap: 22px; padding: 18px 22px 20px 16px; }
+  .vmc-now-main { gap: 22px; }
+  .vmc-gauge { width: 140px; height: 140px; }
+  .vmc-gauge-value { font-size: 2.6rem; }
+  .vmc-controls { grid-area: controls; }
+  .vmc-side { grid-area: side; }
+  .vmc-held .vmc-live { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "now"; }
+}
 
 .switch {
   position: relative;
