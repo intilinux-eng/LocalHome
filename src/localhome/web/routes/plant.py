@@ -7,7 +7,7 @@ from __future__ import annotations
 from flask import Flask, jsonify
 
 from localhome.core.manager import DeviceManager
-from localhome.services.climate_map_store import OUTDOOR_SENSOR_NAME
+from localhome.services.climate_map_store import OUTDOOR_SENSOR_NAME, measured_outdoor
 from localhome.services.dehumidifier import DehumidifierSettingsStore, DehumidifierTimer
 from localhome.errors import InputError
 from localhome.services import vmc_speeds
@@ -45,7 +45,11 @@ def _vmc_auto_answer(app: Flask) -> dict:
     return {"settings": settings, "defaults": vmc_auto.DEFAULTS, "ranges": vmc_auto.RANGES,
             "zones": [{"name": z["name"], "cool_enabled": z["cool_enabled"]} for z in zones],
             "bathroom": bathroom["name"] if bathroom else None, "reference": reference["name"] if reference else None,
-            "vmc": _vmc_speed_device(manager) is not None, "outdoor": OUTDOOR_SENSOR_NAME in manager.pollers,
+            "vmc": _vmc_speed_device(manager) is not None,
+            # A simulated outdoor counts as none for them - said apart, as
+            # it's on the page all the same.
+            "outdoor": measured_outdoor(manager) is not None,
+            "outdoor_simulated": manager.driver_types.get(OUTDOOR_SENSOR_NAME) == "simulated",
             "speeds": _vmc_speeds_in_use(app, _vmc_speed_device(manager)),
             "under_way": app.config["VMC_SCHEDULE"].status().get("auto")}
 

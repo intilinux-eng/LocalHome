@@ -543,7 +543,7 @@ letture del contatore.</p>
   <tr><th>Colonna</th><th>Cosa c'è</th></tr>
   <tr><td>Mese</td><td>Sotto, la temperatura esterna media e i <strong>gradi giorno</strong> (GG): per ogni giorno, 20 °C
       meno la sua media quando è sotto i 20 °C. Più GG, più freddo. Compaiono quando la sonda esterna ha registrato tutti i
-      giorni del mese.</td></tr>
+      giorni del mese; una sonda <em>Simulata</em> non conta (i suoi valori sono inventati).</td></tr>
   <tr><td>Acceso (ore)</td><td>Le ore con almeno una zona aperta, contate una volta sola; sotto, quelle di ogni zona.
       «–»: LocalHome non registrava ancora le valvole; «ore di N giorni su M»: degli altri giorni non c'è registrazione
       (prima dell'installazione, o storico cancellato).</td></tr>
@@ -833,8 +833,8 @@ precedente; valgono subito per pulsanti, barra, programmi, "Massimo per", "Ospit
       spenta</td></tr>
 </table>
 <p>Conta la salita dell'umidità, non un valore fisso (d'estate il bagno è umido anche senza doccia): con la soglia dell'H&amp;T
-all'1% (sezione 5) si vede entro un paio di minuti. Le due estive vogliono la sonda esterna; i 16 °C sono quelli del bypass
-estivo della VMC (sezione 4).</p>
+all'1% (sezione 5) si vede entro un paio di minuti. Le due estive vogliono la sonda esterna vera: con una <em>Simulata</em> non partono, e
+<em>Aria troppo secca</em> guarda solo la stanza. I 16 °C sono quelli del bypass estivo della VMC (sezione 4).</p>
 </div>
 <p><strong>Filtri VMC</strong>: ogni quanti giorni pulirli (di serie 90) e l'ultima pulizia; la home dice in fondo al
 riquadro della VMC quanti giorni mancano e quando è stata l'ultima, e avvisa 14 giorni prima e quando è ora. Finché non si

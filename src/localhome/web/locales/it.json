@@ -916,6 +916,7 @@
     "vmc_auto_speed_humid": "Se va più veloce: {night}, mai spenta.",
     "vmc_auto_speed_cooling": "Se va più piano: {day}, mai Massimo.",
     "vmc_auto_needs_outdoor": "Serve la sonda esterna: collegala in Dispositivi.",
+    "vmc_auto_needs_real_outdoor": "La sonda esterna è simulata: questi due non partono con valori inventati. Serve quella vera, in Dispositivi.",
     "vmc_auto_needs_bathroom": "Scegli la zona del bagno.",
     "vmc_auto_zone_auto": "Automatica ({zone})",
     "vmc_auto_points": "punti",

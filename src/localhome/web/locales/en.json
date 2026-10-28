@@ -916,6 +916,7 @@
     "vmc_auto_speed_humid": "If faster: {night}, never off.",
     "vmc_auto_speed_cooling": "If slower: {day}, never Boost.",
     "vmc_auto_needs_outdoor": "Needs the outdoor sensor: connect it in Devices.",
+    "vmc_auto_needs_real_outdoor": "The outdoor sensor is simulated: these two don't run on made-up values. They need the real one, in Devices.",
     "vmc_auto_needs_bathroom": "Choose the bathroom's zone.",
     "vmc_auto_zone_auto": "Automatic ({zone})",
     "vmc_auto_points": "points",

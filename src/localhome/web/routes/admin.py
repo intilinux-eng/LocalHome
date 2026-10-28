@@ -22,13 +22,13 @@ from localhome.services.climate_map_store import (
     EXTRA_SENSOR_FIELDS,
     EXTRA_SWITCH_FIELDS,
     OUTDOOR_MODE_KEY,
-    OUTDOOR_SENSOR_NAME,
     VMC_MODE_KEY,
     SEASON_RULE_DEFAULTS,
     ClimateMapStore,
     configured_rule_switches,
     dehumidifier_water_zone,
     extra_roles,
+    measured_outdoor,
     snapshot_from_config,
 )
 from localhome.services.manual_override import ManualOverrideStore
@@ -59,7 +59,10 @@ def _usage_answer(app: Flask, year=None) -> dict:
     year = year if year in years else today.year
     thermostat = app.config["THERMOSTAT"]
     mode = thermostat.schedule_store.get_mode() if thermostat is not None else None
-    report = run_hours.year_report(history, zones, interval, meter, year, mode=mode, outdoor=OUTDOOR_SENSOR_NAME)
+    # The outdoor mean and degree days from a real sensor only: a simulated
+    # one's made-up air would pass for the plant's weather.
+    outdoor = measured_outdoor(app.config["MANAGER"])
+    report = run_hours.year_report(history, zones, interval, meter, year, mode=mode, outdoor=outdoor)
     now = report if year == today.year else run_hours.year_report(history, zones, interval, meter, today.year)
     return {"zones": [z["name"] for z in zones], "years": years, **report,
             "this_month_hours": now["months"][-1]["plant_hours"]}
@@ -74,7 +77,7 @@ def _usage_csv(app: Flask) -> tuple[str, str]:
     texts = app.config["TRANSLATIONS"]["climate_admin"]
     zones = _valve_zones(app.config["THERMOSTAT"])
     rows = run_hours.kept_months(app.config["HISTORY"], zones, app.config["HISTORY_POLL_INTERVAL"],
-                                 app.config["HEAT_METER"].get(), outdoor=OUTDOOR_SENSOR_NAME)
+                                 app.config["HEAT_METER"].get(), outdoor=measured_outdoor(app.config["MANAGER"]))
     decimal = texts["usage_csv_decimal"]
 
     def number(value, digits):

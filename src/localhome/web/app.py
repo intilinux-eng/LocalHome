@@ -30,6 +30,7 @@ from localhome.services.climate_map_store import (
     SEASON_MODES,
     apply_to_config,
     extra_roles,
+    measured_outdoor,
     open_climate_map,
     panel_season_rules,
 )
@@ -386,7 +387,8 @@ def create_app(config_path: str | None = None) -> Flask:
             manager, vmc_auto_settings,
             season=lambda: thermostat.schedule_store.get_mode() if thermostat else None,
             zones=lambda: _auto_zones(thermostat),
-            outdoor_sensor=OUTDOOR_SENSOR_NAME,
+            # A real one only: a simulated outdoor's made-up air counts as none.
+            outdoor_sensor=measured_outdoor(manager),
             device=lambda: _vmc_speed_device(manager),
             speeds=lambda device: _speeds_in_use(manager, vmc_speed_store, device),
         ),

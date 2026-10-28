@@ -50,6 +50,18 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 - **The VMC not answering** (its dimmer hung, as on 26 October): the card
   says so and what to do - restart it from the Shelly app - instead of a
   speed as if all were well.
+- `deploy_board.py --host`: the board at another address than
+  `<name>.local` - its Tailscale one, away from home or when the LAN
+  doesn't let the PC through.
+
+### Fixed
+- **A simulated outdoor sensor no longer moves the real VMC.** Its
+  made-up air was taken by the VMC's automatics that go by the outdoor
+  air - "Aria fuori più umida" and "Raffrescamento notturno" in summer,
+  "Aria troppo secca" in winter - and made the outdoor mean and degree
+  days in Consumi. Now it counts as no sensor there: the admin says the
+  summer two need the real one. On the page it's still shown, marked
+  "simulato".
 
 ## 1.2.0 - 2026-10-26
 

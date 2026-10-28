@@ -757,7 +757,7 @@ async function loadVmcAuto() {
     <div class="vmc-auto-rule">
       <strong>${t("vmc_auto_summer")}</strong>
       <p class="hint-text">${t("vmc_auto_summer_help")}</p>
-      ${data.outdoor ? "" : `<p class="hint-text admin-error">${t("vmc_auto_needs_outdoor")}</p>`}
+      ${data.outdoor ? "" : `<p class="hint-text admin-error">${t(data.outdoor_simulated ? "vmc_auto_needs_real_outdoor" : "vmc_auto_needs_outdoor")}</p>`}
       <div class="vmc-auto-sub" data-rule="humid">
         ${check("humid", "vmc_auto_humid")}
         ${speed("humid")}

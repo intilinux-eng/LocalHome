@@ -272,6 +272,18 @@ SIMULATED_OUTDOOR_MONTHLY_C = [8, 9, 11, 14, 18, 23, 26, 26, 22, 18, 13, 9]
 SIMULATED_OUTDOOR_SWING_C = 5.0
 
 
+def measured_outdoor(manager) -> str | None:
+    """The outdoor sensor's name when there's one that measures - None
+    without one, and for a simulated one: its made-up air may be shown
+    (marked so), but must never move the real VMC (services/vmc_auto.py)
+    or make the degree days of a real plant (services/run_hours.py)."""
+    if OUTDOOR_SENSOR_NAME not in manager.pollers:
+        return None
+    if getattr(manager, "driver_types", {}).get(OUTDOOR_SENSOR_NAME) == "simulated":
+        return None
+    return OUTDOOR_SENSOR_NAME
+
+
 def effective_extra_mode(section: dict | None, id_key: str, mode_key: str, default: str) -> str:
     """What a fixed role actually runs as. `section` None means the panel
     has never saved that section: `default` - see extra_roles(). A
