@@ -36,6 +36,11 @@ def _config(tmp_path, text=CONFIG):
 
 @pytest.mark.parametrize("values, message", [
     ({"hysteresis_c": 5}, "between"),
+    ({"frost_on_c": 0}, "between"),     # starting at 0° protects nothing
+    ({"frost_off_c": 20}, "between"),   # stopping at 20° is heating, not frost protection
+    ({"frost_protection": "yes"}, "one of"),
+    ({"frost_on_c": 9, "frost_off_c": 8}, "above"),   # it would never stop
+    ({"frost_on_c": 10}, "above"),      # nor past the stop's default, 9
     ({"history_max_db_mb": 10}, "between"),
     ({"language": "fr"}, "one of"),
     ({"sensor_failsafe_hours": "soon"}, "number"),

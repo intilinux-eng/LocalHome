@@ -24,8 +24,22 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
     weekend when they differ).
 - The filters: how long they have left and when they were last cleaned,
   under the card, once a cleaning is recorded.
+- The administrator's guide follows: the VMC's new card (section 4),
+  frost protection (sections 3 and 20, told apart from the VMC's own),
+  the VMC not answering and frost protection in "Cosa vedi, cosa fare".
+- No "Codice sorgente" link at the bottom of the home page while the
+  repository is private - a link nobody else could open. `web.source_url`
+  in config.yaml still puts one there.
 
 ### Added
+- **Frost protection**, off unless turned on: admin panel → Plant, with
+  the thermostat's tuning - on or off, the room temperature it starts at
+  (7° unless set) and the one it stops at (9°). On, in winter only, a
+  room down to its start has its valve opened whatever else holds it
+  closed - switched off, away, an hour with no target - until it's back
+  up to its stop; never in summer (the water is cold), never on a sensor
+  that isn't answering. A zone it heats says "Antigelo: scalda fino a 9°".
+  Like the rest of the thermostat's tuning, it applies after a restart.
 - **Inside beside outside.** The "Fuori" tile at the top says, under its
   humidity, the zones' temperatures from lowest to highest ("dentro
   21,5–22,7°") - not their mean, which no room has: the bathrooms are

@@ -401,6 +401,89 @@ def test_an_interlock_owning_the_valve_in_the_other_mode_does_not_exempt_it_from
     assert switch.calls == ["off"]
 
 
+# ------------------------------------------------------ frost protection -----
+
+FROSTY_MONDAY = datetime(2026, 1, 12, 8, 0)
+
+
+def _frosty(tmp_path, temp, mode="heat", target=None, away=False):
+    """A zone at `temp`, its week all `target` (None: switched off),
+    frost protection on from 7° to 9°."""
+    zones = [Zone(name="Rooms", sensor="Rooms Temp", valve="Rooms Valve")]
+    switch = FakeSwitch()
+    readings = {"Rooms Temp": {"ok": True, "temperature_c": temp}}
+    manager = FakeManager(readings=readings, switches={"Rooms Valve": switch})
+    store = ScheduleStore(str(tmp_path / "schedules.json"))
+    store.set_mode(mode)
+    week = ScheduleStore.empty_week()
+    for day in week:
+        week[day] = [target] * 24
+    store.set_week("Rooms", week)
+    if away:
+        store.set_away_until(FROSTY_MONDAY + timedelta(days=7))
+    controller = ThermostatController(manager, store, zones, hysteresis_c=0.5, frost_on_c=7.0, frost_off_c=9.0)
+    return controller, switch, readings
+
+
+def test_frost_protection_is_off_unless_turned_on(tmp_path):
+    controller, switch, _ = _frosty(tmp_path, 4.0)
+    controller.frost_on_c = None   # as a board has it unless the admin panel turns it on
+    controller.tick(now=FROSTY_MONDAY)
+    assert "on" not in switch.calls and not controller.is_frost_active("Rooms")
+    assert ThermostatController(None, None, []).frost_on_c is None
+
+
+def test_frost_protection_heats_a_switched_off_room_from_its_start_to_its_stop(tmp_path):
+    controller, switch, readings = _frosty(tmp_path, 7.0)
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on"] and controller.is_frost_active("Rooms")
+    readings["Rooms Temp"]["temperature_c"] = 8.5   # between: keeps heating
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on"]
+    readings["Rooms Temp"]["temperature_c"] = 9.0
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on", "off"] and not controller.is_frost_active("Rooms")
+    readings["Rooms Temp"]["temperature_c"] = 8.0   # between, coming down: still off
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on", "off"]
+
+
+def test_frost_protection_stops_above_where_it_starts_whatever_it_was_given():
+    controller = ThermostatController(None, None, [], hysteresis_c=0.5, frost_on_c=8.0, frost_off_c=7.0)
+    assert controller.frost_off_c == 8.5
+
+
+def test_frost_protection_leaves_a_room_above_its_start_off(tmp_path):
+    controller, switch, _ = _frosty(tmp_path, 7.5)
+    controller.tick(now=FROSTY_MONDAY)
+    assert "on" not in switch.calls and not controller.is_frost_active("Rooms")
+
+
+def test_frost_protection_heats_while_away_too(tmp_path):
+    controller, switch, readings = _frosty(tmp_path, 6.5, target=21.0, away=True)
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on"], "away holds it closed - not down to frost"
+    readings["Rooms Temp"]["temperature_c"] = 9.0
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on", "off"], "and closed again at its stop, the week's 21° notwithstanding"
+
+
+def test_frost_protection_never_in_cooling(tmp_path):
+    # The water is cold in summer: opening the valve would make it worse.
+    controller, switch, _ = _frosty(tmp_path, 5.0, mode="cool")
+    controller.tick(now=FROSTY_MONDAY)
+    assert "on" not in switch.calls and not controller.is_frost_active("Rooms")
+
+
+def test_frost_protection_not_on_a_silent_sensor(tmp_path):
+    controller, switch, readings = _frosty(tmp_path, 6.0)
+    controller.tick(now=FROSTY_MONDAY)
+    assert switch.calls == ["on"]
+    readings["Rooms Temp"] = {"ok": False}
+    controller.tick(now=FROSTY_MONDAY)
+    assert not controller.is_frost_active("Rooms"), "no reading: nothing to go by"
+
+
 # ------------------------------------------------------ failing hardware -----
 
 def test_a_valve_command_that_fails_is_tried_again_next_tick(tmp_path):

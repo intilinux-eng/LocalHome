@@ -79,7 +79,7 @@
     <footer class="foot">
       <a href="/climate-admin">{{ t.home.admin_link }}</a>
       <span class="foot-version">{{ t.home.version_label }} {{ version }}</span>
-      <a href="{{ source_url }}" target="_blank" rel="noopener">{{ t.home.source_link }}</a>
+      {% if source_url %}<a href="{{ source_url }}" target="_blank" rel="noopener">{{ t.home.source_link }}</a>{% endif %}
     </footer>
   </div>
 

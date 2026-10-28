@@ -9,4 +9,6 @@ __version__ = "1.2.0"
 # LocalHome is under the AGPL-3.0: whoever runs a modified copy for others
 # to use over the network must offer them its source, so a modified copy
 # points this at its own (web.source_url in config.yaml).
-SOURCE_URL = "https://github.com/intilinux-eng/LocalHome"
+# Empty while the repository is private - a link nobody else could open,
+# so the page shows none. Made public: "https://github.com/intilinux-eng/LocalHome".
+SOURCE_URL = ""

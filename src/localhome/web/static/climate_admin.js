@@ -2529,7 +2529,8 @@ async function confirmSeason(button) {
 
 // Shown in the Plant group, next to the zones; the rest under Board ->
 // Settings. One form all the same: saveSettings() sends every field.
-const PLANT_SETTING_KEYS = new Set(["hysteresis_c", "economy_tolerance_c", "thermostat_poll_seconds", "sensor_failsafe_hours"]);
+const PLANT_SETTING_KEYS = new Set(["hysteresis_c", "economy_tolerance_c", "frost_protection", "frost_on_c", "frost_off_c",
+  "thermostat_poll_seconds", "sensor_failsafe_hours"]);
 
 async function loadSettings() {
   try {
@@ -2621,6 +2622,14 @@ function formatDay(ts) {
   return new Date(ts * 1000).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
 }
 
+// A choice in words where it has them (frost protection's "Spento" and
+// "Acceso"), as it is otherwise (a language's "it").
+function choiceWord(key, choice) {
+  const path = `climate_admin.setting_${key}_${choice}`;
+  const word = tr(path);
+  return word === path ? choice : word;
+}
+
 function settingFieldHtml(s) {
   const label = tr(`climate_admin.setting_${s.key}`);
   const help = tr(`climate_admin.setting_${s.key}_help`);
@@ -2629,14 +2638,14 @@ function settingFieldHtml(s) {
   const placeholder = s.source === "config" ? s.config_value : s.default;
   if (s.type === "text") return textSettingHtml(s, label, help, source, value, placeholder);
   const input = s.type === "choice"
-    ? `<select data-setting="${s.key}"><option value="">${escapeHtml(tr("climate_admin.settings_inherit", { value: placeholder }))}</option>`
-      + s.choices.map(c => `<option value="${c}"${value === c ? " selected" : ""}>${c}</option>`).join("") + `</select>`
+    ? `<select data-setting="${s.key}"><option value="">${escapeHtml(tr("climate_admin.settings_inherit", { value: choiceWord(s.key, placeholder) }))}</option>`
+      + s.choices.map(c => `<option value="${c}"${value === c ? " selected" : ""}>${escapeHtml(choiceWord(s.key, c))}</option>`).join("") + `</select>`
     : `<input type="number" data-setting="${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${value}" placeholder="${placeholder}">`;
   return `
     <div class="admin-field">
       <label>${escapeHtml(label)} <span class="setting-range">${s.type === "choice" ? "" : `${s.min}–${s.max}`}</span></label>
       ${input}
-      <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.value, source }))}</em></span>
+      <span class="hint-text setting-help">${escapeHtml(help)} <em>${escapeHtml(tr("climate_admin.settings_now", { value: s.type === "choice" ? choiceWord(s.key, s.value) : s.value, source }))}</em></span>
       ${s.key === "sensor_failsafe_hours" ? failsafeExampleHtml(Number(s.value)) : ""}
       ${s.key === "economy_tolerance_c" ? toleranceExampleHtml() : ""}
       ${s.key === "history_max_db_mb" ? historyDiskHtml(s) + historyUsageHtml(Number(s.capped_to || s.value)) : ""}

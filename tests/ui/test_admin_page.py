@@ -329,6 +329,13 @@ def test_the_plants_tuning_and_the_boards_settings_are_one_form(open_page, api):
     page.evaluate("for (const id of ['plant-settings', 'settings']) document.getElementById(id).open = true")
     assert eventually(page, lambda: page.locator("#plant-settings-form [data-setting='hysteresis_c']").count() == 1)
     assert page.locator("#settings-form [data-setting='hysteresis_c']").count() == 0
+    # Frost protection with the thermostat's tuning: off unless turned on,
+    # from 7° to 9°.
+    frost = page.locator("#plant-settings-form select[data-setting='frost_protection']")
+    assert frost.count() == 1 and frost.input_value() == ""
+    assert [o.inner_text() for o in frost.locator("option").all()] == ["come config.yaml (Spento)", "Spento", "Acceso"]
+    assert page.get_attribute("#plant-settings-form [data-setting='frost_on_c']", "placeholder") == "7"
+    assert page.get_attribute("#plant-settings-form [data-setting='frost_off_c']", "placeholder") == "9"
     assert page.locator("#settings-form [data-setting='history_retention_days']").count() == 1
     page.fill("[data-setting='history_retention_days']", "20")
     page.fill("[data-setting='hysteresis_c']", "0.7")

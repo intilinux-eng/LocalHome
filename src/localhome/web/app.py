@@ -302,6 +302,10 @@ def create_app(config_path: str | None = None) -> Flask:
             zones,
             hysteresis_c=thermostat_cfg.get("hysteresis_c", 0.5),
             economy_tolerance_c=thermostat_cfg.get("economy_tolerance_c", 0.5),
+            # Off unless turned on ("on" from the admin panel; YAML reads a
+            # bare on as true).
+            frost_on_c=thermostat_cfg.get("frost_on_c", 7.0) if thermostat_cfg.get("frost_protection") in (True, "on") else None,
+            frost_off_c=thermostat_cfg.get("frost_off_c", 9.0),
             poll_interval_seconds=thermostat_cfg.get("poll_interval_seconds", 60),
             sensor_failsafe_hours=thermostat_cfg.get("sensor_failsafe_hours", 3.0),
             silence_file=config.resolve("sensor_silence.json"),

@@ -493,6 +493,22 @@ def test_the_outdoor_reading_says_todays_low_and_high(open_page):
     assert page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
 
 
+def test_a_zone_heated_by_frost_protection_says_so(open_page, api):
+    """Frost protection is off unless the admin panel turns it on. On, a
+    zone down to its start is heated whatever else holds it (off, away, no
+    target): its card says why, and up to what."""
+    climate = api("/api/climate/zones")
+    assert climate["frost_protection"] is None and all(z["frost"] is False for z in climate["zones"])
+    opened = _open_home(open_page)
+    page = opened.page
+    page.evaluate("""() => { state.climate.frost_protection = { on_c: 7, off_c: 9 };
+      state.climate.zones[0].frost = true; renderZones(); }""")
+    name = page.evaluate("state.climate.zones[0].name")
+    state = _card(page, name).locator(".zone-head .state")
+    assert state.inner_text() == "Antigelo: scalda fino a 9°" and state.get_attribute("data-tone") == "active"
+    assert page.evaluate(UNTRANSLATED_JS) == [] and page.evaluate(OVERFLOW_JS) <= 0 and opened.errors == []
+
+
 def test_inside_beside_outside_the_zones_lowest_to_highest(open_page, api):
     """Asked on the board: inside next to outside. Not a mean of the zones -
     no room has it, the bathrooms are colder and the rooms warm with the

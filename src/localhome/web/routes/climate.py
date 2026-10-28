@@ -142,6 +142,9 @@ def register(app: Flask) -> None:
                 "override": {"target": override["target"],
                              "until": override["until"].isoformat() if override["until"] else None} if override else None,
                 "sensor_failsafe_active": thermostat.is_failsafe_active(zone.name),
+                # Heated because it's down to the frost threshold, whatever
+                # else would keep it closed (off, away, no target).
+                "frost": thermostat.is_frost_active(zone.name),
                 "sensor_unreachable_hours": thermostat.unreachable_hours(zone.name),
                 "sensor_failsafe_hours": thermostat.sensor_failsafe_hours,
                 # Set when an interlock drives this zone's valve right now
@@ -161,6 +164,10 @@ def register(app: Flask) -> None:
             # from it - an economy target that much more on the saving side.
             hysteresis_c=thermostat.hysteresis_c,
             economy_tolerance_c=thermostat.economy_tolerance_c,
+            # Frost protection, heating only - null while it's off: a room
+            # down to on_c is heated whatever else holds it, up to off_c.
+            frost_protection={"on_c": thermostat.frost_on_c, "off_c": thermostat.frost_off_c}
+            if thermostat.frost_on_c is not None else None,
             # What the season does besides the zones: every switch that
             # follows it, and what it does in each season.
             season_effects={"rules": app.config["SEASON_RULES"](), "links": app.config["SEASON_LINKS"]()},

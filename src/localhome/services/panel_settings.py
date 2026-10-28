@@ -43,6 +43,14 @@ SETTINGS = {
                      "min": 0.1, "max": 2.0, "step": 0.1, "default": 0.5},
     "economy_tolerance_c": {"section": "thermostat", "option": "economy_tolerance_c", "type": "float",
                             "min": 0, "max": 1.5, "step": 0.5, "default": 0.5},
+    # Frost protection: a safety net for the cases nobody expects (a house
+    # left cold for weeks), so off unless the installer turns it on.
+    "frost_protection": {"section": "thermostat", "option": "frost_protection", "type": "choice",
+                         "choices": ["off", "on"], "default": "off"},
+    "frost_on_c": {"section": "thermostat", "option": "frost_on_c", "type": "float",
+                   "min": 3, "max": 12, "step": 0.5, "default": 7},
+    "frost_off_c": {"section": "thermostat", "option": "frost_off_c", "type": "float",
+                    "min": 4, "max": 15, "step": 0.5, "default": 9},
     "thermostat_poll_seconds": {"section": "thermostat", "option": "poll_interval_seconds", "type": "int",
                                 "min": 10, "max": 600, "step": 10, "default": 60},
     "sensor_failsafe_hours": {"section": "thermostat", "option": "sensor_failsafe_hours", "type": "float",
@@ -115,6 +123,12 @@ def validate(values: dict, ceilings: dict | None = None, clamp: bool = False) ->
             logger.warning("Setting %s: %s is outside %s-%s - using the nearest", key, value, spec["min"], high)
             number = min(max(number, spec["min"]), high)
         clean[key] = int(round(number)) if spec["type"] == "int" else round(number, 2)
+    # Frost protection stops above where it starts, or it would never stop.
+    on_c = clean.get("frost_on_c", SETTINGS["frost_on_c"]["default"])
+    off_c = clean.get("frost_off_c", SETTINGS["frost_off_c"]["default"])
+    if ("frost_on_c" in clean or "frost_off_c" in clean) and off_c <= on_c:
+        raise InputError("setting_frost_order", f"frost_off_c ({off_c}) must be above frost_on_c ({on_c})",
+                         min=on_c, max=off_c)
     return clean
 
 

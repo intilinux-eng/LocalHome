@@ -46,7 +46,7 @@ web:
   port: 5000          # default: 5000
   language: "en"       # optional, default: "en" - see "Language" below
   site_name: "LocalHome"  # optional - the name shown on the dashboard, max 24 characters
-  source_url: "https://github.com/intilinux-eng/LocalHome"  # optional - the "Source code" link at the bottom of the home page; a modified copy points it at its own source (AGPL-3.0)
+  source_url: "https://example.org/my-localhome"  # optional - the "Source code" link at the bottom of the home page, to this copy's source (AGPL-3.0); without it the program's own, none while its repository is private
   auth:                # optional, off by default - see "Web auth" below
     secrets_file: "secrets_web.json"
 
@@ -268,6 +268,9 @@ thermostat:
   mode: "heat"                # "heat" or "cool" - shared by every zone; also changeable from the dashboard
   hysteresis_c: 0.5            # how far from the target the valve restarts - default shown
   economy_tolerance_c: 0.5     # an economy target restarts this much further, on the saving side - default shown
+  frost_protection: "off"      # "on": heat a room down to frost_on_c whatever holds it, up to frost_off_c - default shown
+  frost_on_c: 7                # frost protection starts at this room temperature - default shown
+  frost_off_c: 9               # ... and stops at this one, above the start - default shown
   schedules_file: "schedules.json"   # where the weekly grids + mode are persisted - default shown
   poll_interval_seconds: 60    # how often the control loop re-evaluates - default shown
   zones:
@@ -304,6 +307,14 @@ zones API gives each zone's `tier`, `valve_opens_at` and
 system's water is either hot or cold for everyone at once - the
 dashboard's mode toggle changes it seasonally without editing
 config.yaml.
+
+**Frost protection** is a safety net for the cases nobody expects - a
+house left cold for weeks - and is off unless `frost_protection` is
+`"on"`. Then, in `heat` mode only, a zone down to `frost_on_c` has its
+valve opened whatever else holds it closed - switched off, away, an hour
+with no target - until it's back up to `frost_off_c`. Never in `cool`
+mode (the water is cold), never on a sensor that isn't answering. The
+zones API says `frost: true` on a zone it's heating.
 
 **One schedule per season.** Each zone has a separate weekly grid for
 heating and for cooling, and the thermostat follows whichever matches
@@ -863,6 +874,7 @@ still happens to agree with the newly-computed state.
 
 The admin panel's **Settings** section changes the operating parameters
 without touching this file: `thermostat.hysteresis_c`, `thermostat.economy_tolerance_c`,
+`thermostat.frost_protection`, `thermostat.frost_on_c`, `thermostat.frost_off_c`,
 `thermostat.poll_interval_seconds`, `thermostat.sensor_failsafe_hours`,
 `history.retention_days`, `history.max_db_mb`, `web.language` and
 `web.site_name`. Each has a safe range (a value outside it is refused;

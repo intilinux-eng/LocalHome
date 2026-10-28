@@ -100,6 +100,12 @@ function zoneStatus(zone, climate) {
   if (zone.sensor_waiting) return { tone: "off", text: tr("home.st_first_report") };
   if (!zone.sensor_ok && zone.temperature_c == null) return { tone: "warn", text: tr("home.st_waiting") };
   if (!zone.sensor_ok) return { tone: "warn", text: tr("home.st_stale") };
+  // Down to frost protection's start: heated whatever else would hold it -
+  // switched off, away, an hour with no target - up to its stop
+  // temperature (services/thermostat.py).
+  if (zone.frost && climate.frost_protection) {
+    return { tone: "active", text: tr("home.st_frost", { stop: fmtTarget(climate.frost_protection.off_c) }), active: true };
+  }
   if (climate.away_until) return { tone: "off", text: tr("home.st_away") };
   if (zone.target_c == null) return { tone: "off", text: tr("home.st_off") };
   if (zone.valve_on) return { tone: "active", text: tr(mode === "cool" ? "home.st_cooling" : "home.st_heating"), active: true };

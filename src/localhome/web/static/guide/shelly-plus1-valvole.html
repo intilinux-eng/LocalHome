@@ -152,6 +152,8 @@ software lo forniamo noi.</p>
   <tr><td>Obiettivo</td><td>La temperatura che una zona deve avere in quell'ora.</td></tr>
   <tr><td>Comfort ed Economy</td><td>I due livelli di obiettivo: Economy fa pause più lunghe e consuma meno (sezione 2).</td></tr>
   <tr><td>Isteresi</td><td>Quanto la stanza si allontana dall'obiettivo prima che la valvola riparta (sezione 2).</td></tr>
+  <tr><td>Antigelo</td><td>Una sicurezza delle stanze, spenta di serie: d'inverno apre la valvola di una stanza scesa a
+      7 °C anche se è spenta o si è fuori casa (sezione 20). Non è l'antigelo della VMC (sezione 4).</td></tr>
   <tr><td>Comando a tempo</td><td>LocalHome dice allo Shelly "acceso per 15 minuti" e lo ripete: se la scheda si ferma, lo
       Shelly spegne da solo (sezione 6).</td></tr>
   <tr><td>Broker MQTT</td><td>Il "centralino" sulla scheda attraverso cui si parlano gli Shelly e LocalHome.</td></tr>
@@ -285,7 +287,8 @@ faceva · <span class="swatch" style="background:#e5e7eb"></span>chiusa: Shelly 
   <tr><td>VMC (Dimmer)</td><td colspan="2">il suo programma e le sue velocità (sezione 4), uguali nelle due stagioni</td></tr>
 </table>
 <p><strong>Fuori casa</strong>, in tutte e due le stagioni: valvole chiuse, deumidificatore spento, bypass come vuole la
-stagione, VMC a Minimo, Notte o spenta.</p>
+stagione, VMC a Minimo, Notte o spenta. Con l'<em>Antigelo</em> acceso, d'inverno una stanza scesa alla sua soglia si
+scalda comunque (sezione 20).</p>
 <h3>Se la scheda si ferma, se manca la corrente</h3>
 <table class="three">
   <tr><th>Shelly</th><th>La scheda si ferma</th><th>Torna la corrente (Shelly riacceso)</th></tr>
@@ -306,13 +309,21 @@ come: sezione 6.</p>
 
 <h2 id="s4">4. VMC</h2>
 <ul>
-  <li><strong>Dalla home</strong>: cinque livelli - Minimo, Notte, Giorno, Alto, Massimo - e una barra per la regolazione fine.
-      Sotto il nome il riquadro dice sempre perché va a quella velocità.</li>
-  <li><strong>Per un po'</strong>: Massimo per 30 minuti, 1 o 2 ore, o <em>Ospiti</em> (Alto per 3 ore); poi torna com'era.</li>
-  <li><strong>Programma</strong> (nel riquadro della VMC): Manuale, Giorno e notte (giorno 7–22), Fuori per lavoro, Mattina e
-      sera intense, Personalizzato. Cambia velocità solo all'inizio della fascia dopo: una scelta a mano resta fino ad allora.</li>
+  <li><strong>Dalla home</strong>, il riquadro <em>Ventilazione</em>: un quadrante con la velocità e il suo livello
+      (<em>Su misura</em> tra due livelli); sotto il nome, in una parola, da dove viene: <em>Programma</em>, <em>A mano</em>,
+      <em>Manuale</em>, <em>A tempo</em>, <em>Automatico</em>, <em>Spenta</em>, <em>Non risponde</em>, <em>Fuori casa</em>;
+      accanto, cosa succede dopo (es. "Poi giorno domani alle 07:00") e, col programma, la striscia di oggi con l'ora
+      segnata. Sotto, cinque livelli - Minimo, Notte, Giorno, Alto, Massimo - e una barra per la regolazione fine.</li>
+  <li><strong>Per un po'</strong>: Massimo per 30 minuti, 1 o 2 ore, o <em>Ospiti</em> (Alto per 3 ore); in corso dice quanto
+      manca, <em>+30 min</em> lo allunga, <em>Annulla</em> lo ferma; poi torna com'era.</li>
+  <li><strong>Programma</strong> (in fondo al riquadro): Manuale, Giorno e notte (giorno 7–22), Fuori per lavoro, Mattina e
+      sera intense, Personalizzato, ognuno con la sua giornata disegnata. Cambia velocità solo all'inizio della fascia dopo: una
+      scelta a mano resta fino ad allora.</li>
   <li><strong>Percentuali</strong> dei livelli (di serie 10, 25, 50, 75, 100%), <strong>automatismi</strong> (spenti di serie) e
-      <strong>filtri</strong> (avviso 14 giorni prima): sezione 20. La AERA 320 gira anche al 5%, a 0% si spegne.</li>
+      <strong>filtri</strong> (in fondo al riquadro quanto manca e l'ultima pulizia, avviso 14 giorni prima): sezione 20. La
+      AERA 320 gira anche al 5%, a 0% si spegne.</li>
+  <li><strong>Non risponde</strong>: la scheda non raggiunge il Dimmer (successo il 26 ottobre 2026, col segnale debole: si è
+      bloccato). La VMC resta alla velocità che aveva; riavvialo dall'app Shelly (sezione 22).</li>
   <li><strong>Fuori casa</strong>: Minimo, Notte (di serie) o Spenta, scelta nel foglio. Vince su tutto, dall'app Shelly torna
       com'era entro un minuto, al rientro riprende il suo programma. Spenta risparmia, ma l'aria ristagna.</li>
   <li>Se la scheda si ferma o si riavvia, la VMC resta alla velocità che aveva: nessun timer, ventilare non è mai un rischio.
@@ -328,8 +339,9 @@ con i suoi sensori: LocalHome non lo comanda e non lo vede.</p>
   <tr><td>Bypass estivo (free cooling)</td><td>Una serranda manda l'aria attorno allo scambiatore, senza recuperare calore. Si apre
       da sola con <strong>dentro più di 22 °C, dentro più caldo che fuori e fuori più di 16 °C</strong> (l'aria fresca della notte
       raffresca), oppure con dentro meno di 22 °C e fuori più caldo (l'aria tiepida scalda).</td></tr>
-  <tr><td>Antigelo</td><td>Con l'esterno troppo freddo protegge lo scambiatore: può girare un solo ventilatore. Non è un guasto, né di
-      LocalHome: torna da sola quando fuori si scalda.</td></tr>
+  <tr><td>Antigelo (della VMC)</td><td>Con l'esterno troppo freddo protegge lo scambiatore: può girare un solo ventilatore. Non
+      è un guasto, né di LocalHome: torna da sola quando fuori si scalda. È un'altra cosa dall'<em>Antigelo</em> delle stanze
+      (sezione 20).</td></tr>
   <tr><td>Manutenzione</td><td>Filtri della VMC e delle bocchette almeno ogni 3 mesi, scambiatore ogni anno (sostituzione ogni 6),
       tubazioni ogni 3 anni. Acqua tiepida e sapone neutro, niente getti in pressione.</td></tr>
 </table>
@@ -794,6 +806,11 @@ Massimo (sezione 20) sono quelle vere.</p>
   <tr><th>Impostazione</th><th>Di serie e cosa fa</th></tr>
   <tr><td>Isteresi</td><td>0,5 °C: la fascia gialla della sezione 2. È il passo degli H&amp;T: meno non serve.</td></tr>
   <tr><td>Tolleranza Economy</td><td>0,5 °C in più di fascia per gli obiettivi Economy; 0 = come il Comfort.</td></tr>
+  <tr><td>Antigelo</td><td><strong>Spento</strong>. Una sicurezza per i casi limite - una casa lasciata fredda a lungo: in
+      uso normale non scatta mai. Acceso, solo d'inverno, una stanza scesa a <em>Si accende a</em> (7 °C) ha la valvola aperta
+      anche se è spenta, fuori casa o in un'ora senza obiettivo, fino a <em>Si spegne a</em> (9 °C, sempre sopra: il
+      soffitto radiante scalda anche dopo). Mai d'estate (l'acqua è fredda), mai col sensore muto. La zona dice
+      "Antigelo: scalda fino a 9°".</td></tr>
   <tr><td>Chiusura di sicurezza</td><td>3 ore, dopo le 4 senza invii: la valvola del sensore muto si chiude (minimo 1 ora).</td></tr>
   <tr><td>Controllo termostato</td><td>60 s. Le modifiche dalla home valgono comunque subito.</td></tr>
 </table>
@@ -819,8 +836,9 @@ precedente; valgono subito per pulsanti, barra, programmi, "Massimo per", "Ospit
 all'1% (sezione 5) si vede entro un paio di minuti. Le due estive vogliono la sonda esterna; i 16 °C sono quelli del bypass
 estivo della VMC (sezione 4).</p>
 </div>
-<p><strong>Filtri VMC</strong>: ogni quanti giorni pulirli (di serie 90) e l'ultima pulizia; la home avvisa 14 giorni prima e
-quando è ora. Finché non si segna una pulizia, nessun avviso.</p>
+<p><strong>Filtri VMC</strong>: ogni quanti giorni pulirli (di serie 90) e l'ultima pulizia; la home dice in fondo al
+riquadro della VMC quanti giorni mancano e quando è stata l'ultima, e avvisa 14 giorni prima e quando è ora. Finché non si
+segna una pulizia, niente.</p>
 <div class="keep">
 <h3>Deumidificatore: admin → Stagione → Deumidificatore</h3>
 <table>
@@ -858,6 +876,11 @@ nell'app non arriva niente.</div>
   <tr><td><span class="pill check">Batteria scarica</span></td><td>Cambia le pile: niente da azzerare</td><td>al 10%</td></tr>
   <tr><td>Deumidificatore spento dopo un black-out</td><td>È voluto (sezione 3): riaccendilo dalla home</td>
       <td>al ritorno della corrente</td></tr>
+  <tr><td>La VMC <span class="pill bad">Non risponde</span> (risponde al ping, non ai comandi)</td><td>Il Dimmer è bloccato:
+      riavvialo dall'app Shelly. Se ricapita, guarda il suo segnale (admin → <em>Dispositivi</em>, sezione 16): intorno a
+      -80 dBm un ripetitore vicino alla VMC lo risolve</td><td>1–2 minuti</td></tr>
+  <tr><td>Una zona spenta, o fuori casa, con la valvola aperta e "Antigelo"</td><td>È l'antigelo (sezione 20): la stanza è scesa
+      alla sua soglia. Si richiude da sola alla temperatura di spegnimento</td><td>subito</td></tr>
   <tr><td>"Timer di sicurezza" in <em>Successo nelle ultime 72 ore</em></td><td>La scheda è stata ferma o irraggiungibile
       oltre il comando a tempo (sezione 6): guarda corrente e rete</td><td>al ritorno</td></tr>
 </table>
@@ -930,7 +953,7 @@ tecnica la corrente massima per canale e quella totale del modulo. La linea, l'i
 li dimensiona l'elettricista come per qualunque circuito di casa.</p>
 </div>
 
-<footer>LocalHome - 13 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.
+<footer>LocalHome - 28 ottobre 2026. Provata con Shelly 1 Gen3 (firmware 2.0.1), Plus 1 (1.7.5), H&amp;T Gen3 e Dimmer Gen3.
 Dati dell'H&amp;T Gen3 dalla <a href="https://kb.shelly.cloud/knowledge-base/shelly-h-t-gen3">scheda Shelly</a>.</footer>
 </main>
 </body>

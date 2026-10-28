@@ -14,6 +14,12 @@ on the saving side only - longer pauses, a little less heating or
 cooling, never more. Comfort stays as close to its target as the sensor
 lets it.
 
+Frost protection, off unless turned on, heating only: a room down to its
+start temperature has its valve opened whatever else holds it closed -
+switched off, away, an hour with no target - until it's back up to its
+stop temperature. Never in cooling (the water is cold), never on a sensor
+that isn't answering.
+
 Each zone is just an existing `climate` sensor + `switch` valve, already
 known to the DeviceManager under those names - no new device kind. What's
 new here is the schedule (a target temperature per hour of the week, per
@@ -461,12 +467,20 @@ class ThermostatController:
         sensor_failsafe_hours: float = 3.0,
         silence_file: str | None = None,
         economy_tolerance_c: float = 0.5,
+        frost_on_c: float | None = None,
+        frost_off_c: float = 9.0,
     ):
         self.manager = manager
         self.schedule_store = schedule_store
         self.zones = zones
         self.hysteresis_c = hysteresis_c
         self.economy_tolerance_c = economy_tolerance_c
+        # Frost protection: None is off. It stops above where it starts, or
+        # it would never stop (the admin panel checks it too).
+        self.frost_on_c = frost_on_c
+        self.frost_off_c = max(frost_off_c, frost_on_c + hysteresis_c) if frost_on_c is not None else frost_off_c
+        # The zones frost protection is heating right now - see frost_needed().
+        self._frost: set[str] = set()
         self.poll_interval_seconds = poll_interval_seconds
         self.sensor_failsafe_hours = sensor_failsafe_hours
         self._valve_open: dict[str, bool] = {}
@@ -597,7 +611,13 @@ class ThermostatController:
                 # exactly when it runs unattended.
                 if self.valve_owned_by_interlock(zone.valve, mode):
                     continue
-                self._apply(zone, False)
+                # Closed - unless the room is down to the frost threshold.
+                reading = self.manager.sensor_reading(zone.sensor) if zone.sensor_configured else {}
+                frost = (reading.get("ok") and "temperature_c" in reading
+                         and self.frost_needed(zone.name, reading["temperature_c"], mode))
+                if not frost:
+                    self._frost.discard(zone.name)
+                self._apply(zone, bool(frost))
                 continue
             if mode == "cool" and not zone.cool_enabled:
                 # Excluded from cooling (condensation risk): never opened
@@ -611,16 +631,19 @@ class ThermostatController:
                     continue
                 # _apply() checks the valve's real state, so one opened by
                 # hand (or by anything else) closes again at the next tick.
+                self._frost.discard(zone.name)
                 self._apply(zone, False)
                 continue
             if not zone.sensor_configured:
                 # Its sensor still to configure: nothing to go by, so its
                 # valve (if there's one) stays closed. Not a silence -
                 # nothing is there to fall silent.
+                self._frost.discard(zone.name)
                 self._apply(zone, False)
                 continue
             reading = self.manager.sensor_reading(zone.sensor)
             if not reading.get("ok") or "temperature_c" not in reading:
+                self._frost.discard(zone.name)
                 self._on_sensor_unreachable(zone, elapsed)
                 continue
             self._on_sensor_recovered(zone)
@@ -631,7 +654,9 @@ class ThermostatController:
             if target is not None:
                 applied[zone.name] = target
             desired = self.decide(zone.name, reading["temperature_c"], target, mode)
-            self._apply(zone, desired)
+            # Asked every tick, so it keeps its own memory of being on.
+            frost = self.frost_needed(zone.name, reading["temperature_c"], mode)
+            self._apply(zone, desired or frost)
 
     def _on_sensor_unreachable(self, zone: Zone, elapsed: float) -> None:
         hours = self._silence.add(zone.name, elapsed) / 3600
@@ -737,6 +762,34 @@ class ThermostatController:
             if current <= stops_at:
                 return False
         return previously_open  # between the two - keep doing whatever it was doing
+
+    def frost_needed(self, zone_name: str, current_c: float, mode: str) -> bool:
+        """Frost protection, when it's on, heating only: whether a room is
+        down to its start temperature - on there, off again at its stop
+        temperature, as it was between. Whatever else would hold its valve
+        closed: a pipe or a ceiling panel left to freeze costs more than
+        the heating."""
+        if mode != "heat" or self.frost_on_c is None:
+            self._frost.discard(zone_name)
+            return False
+        current = round(current_c, 2)
+        was = zone_name in self._frost
+        if current <= self.frost_on_c:
+            now = True
+        elif current >= self.frost_off_c:
+            now = False
+        else:
+            now = was
+        if now != was:
+            logger.info("Zone %r at %.1f°C: frost protection %s its valve (on at %.1f°C, off at %.1f°C)",
+                        zone_name, current, "opens" if now else "no longer holds", self.frost_on_c, self.frost_off_c)
+        (self._frost.add if now else self._frost.discard)(zone_name)
+        return now
+
+    def is_frost_active(self, zone_name: str) -> bool:
+        """Whether frost protection is heating this zone right now - its
+        card says so (web/routes/climate.py)."""
+        return zone_name in self._frost
 
     def _apply(self, zone: Zone, desired_open: bool) -> None:
         if not zone.valve_configured:
