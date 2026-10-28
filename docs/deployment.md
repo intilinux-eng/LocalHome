@@ -175,6 +175,7 @@ changed, restarts and waits for the page to answer:
 pip install -e .[deploy]                         # once, on the PC
 python tools/deploy_board.py antonio             # over the network (antonio.local)
 python tools/deploy_board.py antonio --usb       # over the USB cable
+python tools/deploy_board.py antonio --host 100.x.y.z  # at another address: its Tailscale one, away from home
 python tools/deploy_board.py antonio --check     # what it would do, changing nothing
 python tools/deploy_board.py antonio --rollback  # back to the version before
 python tools/deploy_board.py antonio --resync    # a board from before the history was rewritten (25 Oct 2026)

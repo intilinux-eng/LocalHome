@@ -132,13 +132,16 @@ class Board:
 
 
 class SshBoard(Board):
-    def __init__(self, name: str, password: str):
+    def __init__(self, name: str, password: str, host: str | None = None):
         try:
             import paramiko
         except ImportError:
             raise SystemExit("the network needs paramiko: pip install -e .[deploy]  (or use --usb)")
         self.name = name
-        address = resolve_ipv4(f"{name}.local")
+        # Its .local name, or an address given - its Tailscale one, away
+        # from home or when the LAN doesn't let this PC through. Either
+        # way it has to answer with its name before anything is touched.
+        address = host or resolve_ipv4(f"{name}.local")
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
@@ -147,7 +150,7 @@ class SshBoard(Board):
         except paramiko.AuthenticationException:
             raise SystemExit(f"{name}: wrong password")
         except OSError as exc:
-            raise SystemExit(f"{name}.local ({address}) doesn't answer SSH: {exc}")
+            raise SystemExit(f"{host or name + '.local'} ({address}) doesn't answer SSH: {exc}")
 
     def run(self, command, stdin=None, timeout=300):
         channel_in, channel_out, channel_err = self.client.exec_command(command, timeout=timeout)
@@ -229,10 +232,11 @@ def main() -> int:
                              "send the whole branch and move the board onto it")
     parser.add_argument("--service", default="localhome", help="the systemd service (default: localhome)")
     parser.add_argument("--port", type=int, default=5000, help="the web page's port (default: 5000)")
+    parser.add_argument("--host", help="reach it at this address instead of <board>.local - its Tailscale address, say")
     args = parser.parse_args()
 
     password = os.environ.get("LH_SSH_PW") or getpass.getpass(f"{args.board}'s password: ")
-    board = AdbBoard(args.board) if args.usb else SshBoard(args.board, password)
+    board = AdbBoard(args.board) if args.usb else SshBoard(args.board, password, args.host)
     try:
         return deploy(board, password, args)
     finally:
