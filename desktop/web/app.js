@@ -106,17 +106,19 @@ function timeNow() { return new Date(boardWallMs()).toISOString().slice(11, 16);
 // ----------------------------------------------------------- the comfort --
 // As on the home page (comfort.js, branch feature/comfort-indicator): the
 // temperature against what the program wants now, the humidity in its band.
+// With no program there's no temperature to miss: only a room really cold or
+// hot for the season is said, 22° with the heating off in winter isn't.
 const COMFORT_RH = { dry: 30, humid: 60, veryHumid: 70 };
-const COMFORT_DEFAULT = { heat: 20, cool: 26 };
 const COMFORT_BAND = { heat: { lo: -1, hi: 1.5, far: 2.5 }, cool: { lo: -2, hi: 1, far: 2.5 } };
+const COMFORT_FREE = { heat: { base: 21, lo: -3, hi: 3, far: 2.5 }, cool: { base: 25, lo: -3, hi: 3, far: 2.5 } };
 const DIAL = { size: 240, inner: 34, outer: 102 };
 
 function comfortOf(zone, climate) {
   if (zone.temperature_c == null || !zone.sensor_ok) return null;
   const mode = climate.mode === "cool" ? "cool" : "heat";
   const hasTarget = zone.target_c != null && !climate.away_until;
-  const base = hasTarget ? zone.target_c : COMFORT_DEFAULT[mode];
-  const band = COMFORT_BAND[mode];
+  const band = hasTarget ? COMFORT_BAND[mode] : COMFORT_FREE[mode];
+  const base = hasTarget ? zone.target_c : band.base;
   const gap = Math.round((zone.temperature_c - base) * 10) / 10;
   let temp = "ok";
   if (gap < band.lo) temp = gap < band.lo - band.far + 1 ? "cold" : "cool";

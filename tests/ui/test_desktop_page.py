@@ -189,9 +189,12 @@ def test_a_comfort_word_follows_the_readings(window):
         const climate = { mode: "heat", away_until: null };
         const of = (t, rh, target, cool) => comfortWord(comfortOf(
             { temperature_c: t, humidity_pct: rh, target_c: target, sensor_ok: true, cool_enabled: cool }, climate));
-        return [of(20.4, 47, 20, true), of(18.6, 52, 20, true), of(16.8, 74, null, true), of(21, 27, 20, true)];
+        return [of(20.4, 47, 20, true), of(18.6, 52, 20, true), of(22, 49, 20, true), of(21, 27, 20, true),
+                // No program: seen on the production board, 22° and 49% with the heating off.
+                of(22, 49, null, true), of(18, 49, null, true), of(24.5, 49, null, true), of(16, 74, null, true)];
     }""")
-    assert said == ["Confortevole", "Fresco", "Freddo e molto umido", "Aria secca"]
+    assert said == ["Confortevole", "Fresco", "Caldo", "Aria secca",
+                    "Confortevole", "Confortevole", "Caldo", "Freddo e molto umido"]
 
 
 def test_the_vmc_by_its_levels_and_for_a_while(window):
