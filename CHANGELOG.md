@@ -55,6 +55,10 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   doesn't let the PC through.
 
 ### Fixed
+- **A sensor on USB-C that stops reporting now shows on the home page too.**
+  Silent for 30 minutes, the admin panel said so, while the home page went on
+  with "Tutto a posto" until its reading went stale, hours later. Battery
+  sensors don't change: late after 4 hours, when their reading goes stale.
 - **A simulated outdoor sensor no longer moves the real VMC.** Its
   made-up air was taken by the VMC's automatics that go by the outdoor
   air - "Aria fuori più umida" and "Raffrescamento notturno" in summer,

@@ -612,6 +612,33 @@ def test_a_problem_is_said_as_a_resident_would_take_it(open_page):
     assert opened.errors == []
 
 
+def test_a_sensor_only_late_is_said_and_said_once(open_page):
+    """A sensor on USB-C silent for half an hour: only "late" for hours, until
+    its reading goes stale - the home page says so as the admin panel does."""
+    opened = _open_home(open_page)
+    page = opened.page
+    told = {"problems": [{"code": "device_report_late", "subject": f"{ZONE_A} Sensor", "detail": "31 min"},
+                         {"code": "device_reports_missed", "subject": f"{ZONE_A} Sensor"}]}
+    page.route("**/api/problems", lambda route: route.fulfill(json={"ok": True, **told}))
+    page.evaluate("refreshProblems()")
+    assert eventually(page, lambda: page.inner_text("#health-text") == "1 da controllare")
+    page.click("#health")
+    text = page.locator("#sheet").inner_text()
+    assert f"Il sensore di {ZONE_A} non risponde." in text
+    assert "invii persi" not in text, "its reports missed follow from it"
+    page.click("#sheet-close")
+
+    # Past its reading's life, "not answering" too: still one line.
+    told["problems"] = [{"code": "device_offline", "subject": f"{ZONE_A} Sensor", "detail": "x"},
+                        {"code": "device_report_late", "subject": f"{ZONE_A} Sensor", "detail": "4 h"}]
+    page.evaluate("refreshProblems()")
+    page.wait_for_timeout(300)
+    assert page.inner_text("#health-text") == "1 da controllare"
+    page.click("#health")
+    assert page.locator("#sheet").inner_text().count("non risponde") == 1
+    assert opened.errors == []
+
+
 def test_each_band_of_the_week_says_its_temperature(open_page, api):
     """Colours alone don't tell 24° from 25°: each band's first hour says
     it, and a stroke moves the labels with it."""

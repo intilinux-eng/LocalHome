@@ -296,12 +296,14 @@ function problemText(problem) {
 }
 
 // A device that doesn't answer is one line: its reports missed, its
-// lateness, follow from it.
-const FOLLOWS_OFFLINE = new Set(["device_reports_missed", "device_report_late"]);
-
+// lateness, follow from it. Late with nothing worse said of it (a sensor on
+// USB-C, silent for half an hour), the lateness is that line.
 function residentProblems(problems) {
-  const offline = new Set(problems.filter(p => RESIDENT_PROBLEMS[p.code] === "home.problem_offline").map(p => p.subject));
-  return problems.filter(p => !(FOLLOWS_OFFLINE.has(p.code) && offline.has(p.subject)));
+  const subjects = codes => new Set(problems.filter(p => codes.includes(p.code)).map(p => p.subject));
+  const down = subjects(["device_offline", "integration_failed"]);
+  const late = subjects(["device_report_late"]);
+  return problems.filter(p => !(p.code === "device_report_late" && down.has(p.subject))
+                              && !(p.code === "device_reports_missed" && (down.has(p.subject) || late.has(p.subject))));
 }
 
 function openHealth() {
