@@ -38,3 +38,7 @@ dist/
 
 # Logs
 *.log
+
+# The Windows app's build output
+desktop/bin/
+desktop/obj/
