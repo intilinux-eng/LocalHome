@@ -70,6 +70,7 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 | Devices | `drivers/<brand>/` - registered with `@register_driver`, see `core/registry.py` |
 | Board setup and deploy | `deploy/` (service, `tune-board.sh`, watchdogs), `tools/deploy_board.py` |
 | The installer's guide | `static/guide/shelly-plus1-valvole.html` |
+| The Windows app (separate, on the existing API: no change on the board) | `desktop/` - see its README; its page in `desktop/web/`, tested by `tests/ui/test_desktop_page.py` |
 
 ## Commands
 
