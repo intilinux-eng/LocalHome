@@ -1,8 +1,9 @@
 # LocalHome for the Windows desktop
 
 A small window and a tray icon for a LocalHome board: the zones with their
-comfort, outside, the house's power, the VMC's levels and timed speed, the
-shutters; a Windows notice when a zone turns on, when there's something to
+comfort and a temperature for a while, outside, the house's power, the VMC's
+levels and timed speed, the shutters, "away", the dehumidifier in summer; a
+Windows notice when a zone turns on, when there's something to
 check, when the board can't be reached.
 
 **It's a separate app: nothing on the board changes.** No new endpoint, no
@@ -41,8 +42,11 @@ the browser.
 The program only passes on the requests the window needs, listed in
 `MainForm.cs` (`Reads`, `Commands`) and logged when refused: reading the zones,
 problems, devices, readings, VMC program, shutters and clock; setting the VMC's
-speed, turning it on, its timed speed; moving a shutter. So it can't switch off
-the VMC, change a schedule or a season, or reach the admin panel. The other
+speed, turning it on, its timed speed; moving a shutter; a zone's temperature
+for a while, and back to its program; away and back; the dehumidifier on and off.
+So it can't switch off the VMC, change a schedule or a season, or reach the admin
+panel. A zone's temperature and "away" take two taps: the first only chooses,
+nothing is sent until the time is picked. The other
 switches of the board aren't shown at all. Its lists don't tell one device from
 another: `sensors/<name>/on` and `set-value` are limited to the VMC by the page,
 which has no button for anything else.

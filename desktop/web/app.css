@@ -27,6 +27,7 @@ a { color: inherit; }
 .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .brand b { font-size: 15px; }
 .brand p { color: var(--text-2); font-size: 12.5px; margin-top: 1px; }
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
 .health { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 4px 9px; border-radius: 99px;
   background: var(--surface); box-shadow: var(--shadow); font-size: 12px; color: var(--text-2); }
 .health i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
@@ -43,9 +44,21 @@ a { color: inherit; }
 #body.is-old button { pointer-events: none; }
 
 .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.zone { display: block; padding: 9px 11px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow);
-  text-decoration: none; }
-.zone:hover { background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.zone { padding: 9px 11px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+.zone[data-pending] { grid-column: 1 / -1; }
+.zone-main { display: block; text-decoration: none; border-radius: 8px; }
+.zone-main:hover .zone-head b { text-decoration: underline; }
+.adjust { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-2); }
+.adjust b { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.step { flex: none; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: var(--surface-2); font-size: 15px; line-height: 1; }
+.step:hover { background: color-mix(in srgb, var(--text) 9%, var(--surface-2)); }
+.held { margin-top: 5px; font-size: 11.5px; }
+.say-more { font-size: 12px; color: var(--text-2); }
+.away .row:first-child { margin-top: 0; }
+.away b { color: var(--text); }
+.chips { flex-wrap: wrap; justify-content: flex-end; }
+.chip[hidden] { display: none; }
 .zone-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 20px; }
 .zone-head b { font-weight: 650; }
 .zone-head small { font-size: 10.5px; color: var(--text-3); }

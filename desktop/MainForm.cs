@@ -28,7 +28,7 @@ namespace LocalHome.Desktop
         static readonly Regex Reads = new Regex(
             @"^/api/(climate/zones|problems|devices|readings|vmc-schedule|covers|server-time)$");
         static readonly Regex Commands = new Regex(
-            @"^/api/(vmc-schedule/boost(/cancel)?|covers/[^/]+/action/(open|stop|close)|sensors/[^/]+/(set-value|on))$");
+            @"^/api/(vmc-schedule/boost(/cancel)?|covers/[^/]+/action/(open|stop|close)|sensors/[^/]+/(set-value|on)|climate/zones/[^/]+/override(/cancel)?|climate/away(/cancel)?|dehumidifier/(on|off))$");
 
         readonly Settings settings;
         readonly string dataDir;

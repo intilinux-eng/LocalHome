@@ -17,10 +17,17 @@ const REPEAT_PROBLEM_MS = 30 * 60000;  // a problem coming and going says so onc
 const READ_MS = 12000;
 const COMMAND_MS = 16000;
 const KEEP_KEY = "localhome.desktop";
+// A zone's temperature for a while: half a degree a tap, what the board takes,
+// and where a zone with no target now starts from.
+const TARGET = { min: 5, max: 35, step: 0.5, start: { heat: 21, cool: 25 } };
+const HOLD_HOURS = [2, 4, 8, 24];
+const AWAY_HOURS = [24, 72, 168];
 
 const now = {
   climate: null, devices: null, readings: {}, vmc: null, covers: {}, problems: [],
   clock: null, clockAt: 0, lastGood: null, failingSince: null, acting: 0,
+  pending: {},       // zone -> the temperature being chosen, nothing sent yet
+  awayOpen: false,   // "away" asked: how long, nothing sent yet
 };
 // What the notices compare with. Kept across a reload of the page, gone when
 // the program closes: the program starting says again what's still wrong.
@@ -69,7 +76,7 @@ async function api(path, body) {
     const res = await fetch(path, options);
     const data = await res.json().catch(() => ({ ok: false }));
     if (!res.ok || data.ok === false) {
-      const error = new Error(data.error || tr("refused"));
+      const error = new Error(tr("refused"));
       error.data = data;
       error.unreachable = !!data.unreachable;
       throw error;
@@ -147,6 +154,48 @@ function comfortDot(c) {
 
 // ------------------------------------------------------------ the drawing --
 
+function zoneAdjustable(zone, climate) {
+  return zone.sensor_configured !== false && zone.valve_configured !== false && !climate.away_until
+    && !(climate.mode === "cool" && zone.cool_enabled === false);
+}
+
+// "until 18:00", "until tomorrow at 07:00", "until Monday at 07:00".
+function untilWords(iso) {
+  if (!iso) return tr("until_changed");
+  const time = iso.slice(11, 16);
+  const day = ms => Math.floor(ms / 86400000);
+  const days = day(wallMs(iso)) - day(boardWallMs());
+  if (days <= 0) return tr("until_at", { time });
+  if (days === 1) return tr("until_tomorrow", { time });
+  const weekday = new Date(wallMs(iso)).toLocaleDateString(LANG, { weekday: "long", timeZone: "UTC" });
+  return tr("until_day", { day: weekday, time });
+}
+
+function stepper(value) {
+  const button = (delta, sign, label) => `<button class="step" type="button" data-step="${delta}" aria-label="${esc(tr(label))}" title="${esc(tr(label))}">${sign}</button>`;
+  return `<div class="adjust">${button(-TARGET.step, "−", "colder")}<span>${value}</span>${button(TARGET.step, "+", "warmer")}</div>`;
+}
+
+// Below a zone's readings: its target, half a degree either way. A tap sends
+// nothing: only the time picked after it does, so a slip changes nothing.
+function adjustHtml(zone, climate) {
+  const said = zone.target_c != null ? tr("target", { target: fmtTarget(zone.target_c) }) : tr("zone_off");
+  if (!zoneAdjustable(zone, climate)) {
+    const excluded = climate.mode === "cool" && zone.cool_enabled === false;
+    return `<p class="zone-target">${esc(excluded ? tr("zone_excluded") : said)}</p>`;
+  }
+  const pending = now.pending[zone.name];
+  if (pending != null) {
+    return `${stepper(`<b>${fmtTarget(pending)}</b>`)}
+      <div class="row"><span>${esc(tr("hold_for"))}</span><span class="chips">
+        ${HOLD_HOURS.map(h => `<button class="chip" type="button" data-hold="${h}">${esc(tr("hours", { h }))}</button>`).join("")}
+        <button class="chip" type="button" data-pending-cancel>${esc(tr("pending_cancel"))}</button></span></div>`;
+  }
+  const held = zone.override ? `<div class="row held"><span>${esc(untilWords(zone.override.until))}</span>
+      <button class="chip" type="button" data-resume>${esc(tr("resume"))}</button></div>` : "";
+  return `${stepper(esc(said))}${held}`;
+}
+
 function zoneHtml(zone, climate) {
   const pill = zone.valve_on === true ? `<span class="pill">${esc(tr(climate.mode === "cool" ? "pill_cool" : "pill_heat"))}</span>`
     : zone.sensor_simulated ? `<small>${esc(tr("simulated"))}</small>` : "";
@@ -159,10 +208,50 @@ function zoneHtml(zone, climate) {
     const c = comfortOf(zone, climate);
     const p = c && comfortDot(c);
     inside = `<div class="zone-values"><span class="zone-t">${fmt(zone.temperature_c)}°</span>${zone.humidity_pct != null ? `<span class="zone-rh">${fmt(zone.humidity_pct, 0)}%</span>` : ""}</div>
-      <p class="zone-target">${esc(zone.target_c != null ? tr("target", { target: fmtTarget(zone.target_c) }) : tr("zone_off"))}</p>
       ${c ? `<div class="comfort" data-level="${c.level}"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.6"/><circle class="dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.6"/></svg><span>${esc(comfortWord(c))}</span></div>` : ""}`;
   }
-  return `<a class="zone" href="#" data-open="/" data-zone="${esc(zone.name)}"><div class="zone-head"><b>${esc(zone.name)}</b>${pill}</div>${inside}</a>`;
+  const adjust = zone.sensor_configured === false || zone.valve_configured === false ? "" : adjustHtml(zone, climate);
+  return `<div class="zone" data-zone="${esc(zone.name)}"${now.pending[zone.name] != null ? ' data-pending="true"' : ""}>
+    <a class="zone-main" href="#" data-open="/"><div class="zone-head"><b>${esc(zone.name)}</b>${pill}</div>${inside}</a>${adjust}</div>`;
+}
+
+// Away, as the home page says it: every zone off until the way back. The VMC
+// follows the choice last made on the home page, said here before it's picked.
+function awayHtml(climate) {
+  if (climate.away_until) {
+    return `<div class="row"><span><b>${esc(tr("away_title"))}</b><small>${esc(untilWords(climate.away_until))}</small></span>
+      <button class="chip" type="button" data-away-back>${esc(tr("away_back"))}</button></div>`;
+  }
+  if (!now.awayOpen) return "";
+  const choice = now.vmc && now.vmc.schedule && now.vmc.schedule.away_choice;
+  const speed = vmcSpeed();
+  const preset = speed && speed.presets.find(p => p.key === choice);
+  const vmc = !speed ? "" : choice === "off" ? tr("away_vmc_off") : preset ? tr("away_vmc_level", { level: tr(`vmc_${preset.key}`) }) : "";
+  return `<div class="card-head"><b>${esc(tr("away_title"))}</b></div>
+    <p class="say-more">${esc(tr("away_what"))}${vmc ? ` ${esc(vmc)}` : ""}</p>
+    <div class="row"><span>${esc(tr("hold_for"))}</span><span class="chips">
+      ${AWAY_HOURS.map(h => `<button class="chip" type="button" data-away-hours="${h}">${esc(tr(`away_${h}`))}</button>`).join("")}
+      <button class="chip" type="button" data-away-cancel>${esc(tr("pending_cancel"))}</button></span></div>`;
+}
+
+// In its season: on for a while or until the air is dry enough; with the air
+// dry enough it can't be switched on, and says so.
+function dehumHtml(d) {
+  const on = d.on === true;
+  const dry = !on && d.humidity != null && d.humidity < d.start_from;
+  const stop = Math.round(d.stop_below), start = Math.round(d.start_from);
+  const until = d.until_at ? untilWords(d.until_at) : "";
+  const word = on ? (d.mode === "target" || d.mode === "auto" ? tr("dehum_on_target", { stop, until }) : until ? tr("dehum_on_until", { until }) : tr("on"))
+    : dry ? tr("dehum_dry", { rh: fmt(d.humidity, 0), start }) : tr("off");
+  let controls = "";
+  if (on) controls = `<span></span><button class="chip" type="button" data-dehum-off>${esc(tr("dehum_off"))}</button>`;
+  else if (!dry) {
+    controls = `<span>${esc(tr("hold_for"))}</span><span class="chips">
+      ${(d.durations || []).map(h => `<button class="chip" type="button" data-dehum-hours="${h}">${esc(tr("hours", { h }))}</button>`).join("")}
+      ${d.until_target ? `<button class="chip" type="button" data-dehum-target>${esc(tr("dehum_until_target", { stop }))}</button>` : ""}</span>`;
+  }
+  return `<div class="card-head"><b>${esc(tr("dehum"))}</b>${d.humidity != null && !dry ? `<span>${fmt(d.humidity, 0)}%</span>` : ""}</div>
+    <p class="say-more">${esc(word)}</p>${controls ? `<div class="row">${controls}</div>` : ""}`;
 }
 
 function factsHtml() {
@@ -177,10 +266,6 @@ function factsHtml() {
     const budget = meter.power_budget;
     const level = !budget ? "ok" : power.power_w >= budget.trip_risk_w ? "bad" : power.power_w >= budget.available_power_w ? "warn" : "ok";
     out.push(`<div class="fact" data-level="${level}"><small>${esc(tr("power"))}</small><b>${fmt(power.power_w, 0)} W</b></div>`);
-  }
-  const dehum = now.climate && now.climate.dehumidifier;
-  if (dehum && dehum.allowed !== false && now.climate.mode === "cool") {
-    out.push(`<div class="fact"><small>${esc(tr("dehum"))}</small><b>${esc(tr(dehum.on ? "on" : "off"))}</b></div>`);
   }
   return out.join("");
 }
@@ -293,6 +378,14 @@ function drawClimate() {
   const climate = now.climate;
   document.body.dataset.season = climate.mode === "cool" ? "cool" : "heat";
   put($("zones"), climate.zones.map(z => zoneHtml(z, climate)).join(""));
+  $("away-chip").hidden = !!climate.away_until || now.awayOpen;
+  const away = awayHtml(climate);
+  $("away").hidden = !away;
+  put($("away"), away);
+  const dehum = climate.dehumidifier;
+  const showDehum = !!dehum && climate.mode === "cool" && !climate.away_until;
+  $("dehum").hidden = !showDehum;
+  if (showDehum) put($("dehum"), dehumHtml(dehum));
   const season = tr(climate.mode === "cool" ? "summer" : "winter");
   const on = climate.zones.filter(z => z.valve_on === true).map(z => z.name);
   const kind = climate.mode === "cool" ? "cool" : "heat";
@@ -494,7 +587,7 @@ async function command(button, work) {
     now.acting--;
     group.forEach(b => { b.disabled = false; b.removeAttribute("aria-busy"); });
     // What's drawn may hold the waiting button: drawn again from the answer.
-    ["vmc", "covers"].forEach(id => { delete $(id).dataset.drawn; });
+    ["vmc", "covers", "zones", "away", "dehum"].forEach(id => { delete $(id).dataset.drawn; });
   }
   await refresh();
 }
@@ -520,6 +613,54 @@ function onVmc(button) {
   } else if (button.dataset.power) {
     command(button, () => api(`/api/sensors/${encodeURIComponent(button.dataset.power)}/on`, {}));
   }
+}
+
+function onZone(button) {
+  const name = button.closest(".zone").dataset.zone;
+  const zone = now.climate.zones.find(z => z.name === name);
+  if (!zone) return;
+  const path = `/api/climate/zones/${encodeURIComponent(name)}/override`;
+  if (button.dataset.step) {
+    const delta = Number(button.dataset.step);
+    const clamp = v => Math.max(TARGET.min, Math.min(TARGET.max, Math.round(v / TARGET.step) * TARGET.step));
+    const current = now.pending[name] != null ? now.pending[name] : zone.target_c;
+    // A zone off starts from a usual temperature, whichever button was pressed.
+    now.pending[name] = current == null ? TARGET.start[now.climate.mode === "cool" ? "cool" : "heat"] : clamp(current + delta);
+    drawClimate();
+  } else if (button.hasAttribute("data-pending-cancel")) {
+    delete now.pending[name];
+    drawClimate();
+  } else if (button.dataset.hold) {
+    command(button, async () => {
+      await api(path, { target: now.pending[name], hours: Number(button.dataset.hold) });
+      delete now.pending[name];
+    });
+  } else if (button.hasAttribute("data-resume")) {
+    command(button, () => api(`${path}/cancel`, {}));
+  }
+}
+
+function onAway(button) {
+  if (button.id === "away-chip") {
+    now.awayOpen = true;
+    drawClimate();
+  } else if (button.hasAttribute("data-away-cancel")) {
+    now.awayOpen = false;
+    drawClimate();
+  } else if (button.dataset.awayHours) {
+    command(button, async () => {
+      await api("/api/climate/away", { hours: Number(button.dataset.awayHours) });
+      now.awayOpen = false;
+    });
+  } else if (button.hasAttribute("data-away-back")) {
+    command(button, () => api("/api/climate/away/cancel", {}));
+  }
+}
+
+function onDehum(button) {
+  if (button.hasAttribute("data-dehum-off")) command(button, () => api("/api/dehumidifier/off", {}));
+  else if (button.hasAttribute("data-dehum-target")) command(button, () => api("/api/dehumidifier/on", { until: "target" }));
+  else if (button.dataset.dehumHours) command(button, () => api("/api/dehumidifier/on", { hours: Number(button.dataset.dehumHours) }));
 }
 
 function onCover(button) {
@@ -551,15 +692,25 @@ document.addEventListener("click", event => {
   }
   const button = event.target.closest("button");
   if (!button || button.disabled) return;
-  if (button.closest("#vmc")) onVmc(button);
+  if (button.closest("#zones")) onZone(button);
+  else if (button.closest("#away") || button.id === "away-chip") onAway(button);
+  else if (button.closest("#dehum")) onDehum(button);
+  else if (button.closest("#vmc")) onVmc(button);
   else if (button.dataset.cover) onCover(button);
 });
 
-// Brought back from the tray: the state now, not the last read.
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+// Brought back from the tray: the state now, not the last read - and nothing
+// half chosen from before.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    now.pending = {};
+    now.awayOpen = false;
+  } else refresh();
+});
 
 document.documentElement.lang = LANG;
 $("say").textContent = tr("wait");
 $("health-text").textContent = tr("wait");
 $("open-full").textContent = tr("open_full");
+$("away-chip").textContent = tr("away_title");
 refresh();

@@ -70,6 +70,9 @@ class Window:
         self.problems = []       # what /api/problems says (the shutter off the network would)
         self.valves = None       # zone -> valve_on, when made up
         self.down = False
+        self.climate = None      # fields of /api/climate/zones made up
+        self.answers = {}        # commands answered here: path -> its answer
+        self.sent = []           # the commands that reached this point
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.add_init_script(HOST)
         if clock:
@@ -93,21 +96,33 @@ class Window:
         if self.down:
             route.fulfill(status=502, json={"ok": False, "unreachable": True})
             return
+        if request.method == "POST":
+            self.sent.append((path, request.post_data_json))
+            if path in self.answers:
+                route.fulfill(json=self.answers[path])
+                return
         if path == "/api/problems":
             route.fulfill(json={"ok": True, "problems": self.problems})
             return
         answer = route.fetch(url=self.board + path)
-        if path == "/api/climate/zones" and self.valves is not None:
+        if path == "/api/climate/zones" and (self.valves is not None or self.climate):
             data = answer.json()
             for zone in data["zones"]:
-                if zone["name"] in self.valves:
+                if self.valves and zone["name"] in self.valves:
                     zone["valve_on"] = self.valves[zone["name"]]
+            data.update(self.climate or {})
             route.fulfill(response=answer, json=data)
             return
         route.fulfill(response=answer)
 
     def api(self, path):
         return self.page.request.get(self.board + path).json()
+
+    def zone(self, name=ROOMS):
+        return next(z for z in self.api("/api/climate/zones")["zones"] if z["name"] == name)
+
+    def card(self, name=ROOMS):
+        return self.page.locator(f'.zone[data-zone="{name}"]')
 
     def told(self, kind=None):
         messages = self.page.evaluate("window.__told")
@@ -144,6 +159,11 @@ def window(browser, board):
         # The page keeps reading until it's gone: its requests under way end here.
         w.context.unroute_all(behavior="ignoreErrors")
         w.context.close()
+    # The board as the next test expects it: no change by hand, at home.
+    request = browser.new_context().request
+    for name in (ROOMS, BATHS):
+        request.post(f"{board}/api/climate/zones/{name}/override/cancel", data={})
+    request.post(f"{board}/api/climate/away/cancel", data={})
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
@@ -158,7 +178,7 @@ def test_it_shows_what_the_board_has(window, scheme, lang):
     # Only what the view is for: another switch of the board has no button.
     assert "Lampada" not in text
     # No text left as its key.
-    assert not re.search(r"\b(c_|t_|rh_|src_|vmc_|notify_)[a-z_]+\b", text)
+    assert not re.search(r"\b(c_|t_|rh_|src_|vmc_|notify_|hold_|away_|dehum_|until_)[a-z_]+\b", text)
     assert w.page.locator('[data-zone="Stanze"] .comfort').count() == 1
     w.sane()
 
@@ -338,9 +358,148 @@ def test_a_command_with_the_board_gone_is_said_and_the_button_comes_back(window)
     w.sane()
 
 
+def test_a_zone_warmer_for_a_while_only_once_the_time_is_picked(window):
+    w = window()
+    card = w.card()
+    assert w.zone()["target_c"] is None, "the simulated zones have no program"
+    assert "Spenta" in card.locator(".adjust").inner_text()
+
+    # A zone off starts from a usual temperature: nothing sent yet.
+    card.locator('button[data-step="0.5"]').click()
+    assert card.locator(".adjust b").inner_text() == "21°"
+    card.locator('button[data-step="0.5"]').click()
+    card.locator('button[data-step="0.5"]').click()
+    card.locator('button[data-step="-0.5"]').click()
+    assert card.locator(".adjust b").inner_text() == "21,5°"
+    assert w.sent == [] and w.zone()["override"] is None
+
+    # Still chosen after a reading of the board redraws the card.
+    w.refresh()
+    w.page.wait_for_timeout(400)
+    assert card.locator(".adjust b").inner_text() == "21,5°"
+
+    card.locator('button[data-hold="2"]').click()
+    card.locator("button[data-resume]").wait_for()
+    assert w.sent == [(f"/api/climate/zones/{ROOMS}/override", {"target": 21.5, "hours": 2})]
+    assert w.zone()["override"]["target"] == 21.5
+    assert "Obiettivo 21,5°" in card.inner_text() and "fino" in card.inner_text()
+
+    # Changed again, from what it's at now.
+    card.locator('button[data-step="-0.5"]').click()
+    assert card.locator(".adjust b").inner_text() == "21°"
+    card.locator("button[data-pending-cancel]").click()
+    assert w.zone()["override"]["target"] == 21.5, "cancelled: nothing changed"
+
+    card.locator("button[data-resume]").click()
+    w.page.wait_for_function("""!document.querySelector('[data-zone="Stanze"] button[data-resume]')""")
+    assert w.zone()["override"] is None
+    assert w.page.locator("[aria-busy='true']").count() == 0
+    w.sane()
+
+
+def test_a_target_at_the_end_of_the_range_stays_there(window):
+    w = window()
+    w.page.evaluate("now.pending['Stanze'] = 34.5; drawClimate()")
+    card = w.card()
+    card.locator('button[data-step="0.5"]').click()
+    card.locator('button[data-step="0.5"]').click()
+    assert card.locator(".adjust b").inner_text() == "35°"
+    w.sane()
+
+
+def test_a_command_refused_by_the_board_keeps_the_choice_and_says_so(window):
+    w = window()
+    card = w.card()
+    card.locator('button[data-step="0.5"]').click()
+    w.down = True
+    card.locator('button[data-hold="4"]').click()
+    w.page.wait_for_selector("#note:not([hidden])")
+    w.down = False
+    w.refresh()
+    w.page.wait_for_selector("#body:not(.is-old)")
+    assert card.locator('button[data-hold="4"]').is_enabled(), "the choice is still there to try again"
+    w.sane()
+
+
+def test_away_and_back_with_nothing_sent_until_its_length_is_picked(window):
+    w = window()
+    w.page.wait_for_selector("#vmc .levels")
+    w.page.click("#away-chip")
+    assert w.page.is_visible("#away button[data-away-hours]")
+    assert "spengono" in w.page.inner_text("#away")
+    assert w.sent == []
+    w.page.click("#away button[data-away-cancel]")
+    assert w.page.is_visible("#away-chip") and w.page.locator("#away").is_hidden()
+    assert w.sent == []
+
+    w.page.click("#away-chip")
+    w.page.click('#away button[data-away-hours="24"]')
+    w.page.wait_for_selector("#away button[data-away-back]")
+    assert w.sent == [("/api/climate/away", {"hours": 24})]
+    assert w.api("/api/climate/zones")["away_until"]
+    assert "fino a domani" in w.page.inner_text("#away")
+    assert "fuori casa" in w.page.inner_text("#say")
+    # Nothing to change on a zone meanwhile: the board would refuse it.
+    assert w.card().locator("button.step").count() == 0
+    assert w.page.locator("#away-chip").is_hidden()
+
+    w.page.click("#away button[data-away-back]")
+    w.page.wait_for_selector("#away-chip:not([hidden])")
+    assert w.api("/api/climate/zones")["away_until"] is None
+    assert w.card().locator("button.step").count() == 2
+    w.sane()
+
+
+DEHUM = {"on": False, "humidity": 66, "start_from": 55, "stop_below": 50, "durations": [1, 2, 4], "until_target": True,
+         "mode": None, "until_at": None}
+
+
+def test_the_dehumidifier_in_its_season(window):
+    w = window()
+    w.page.wait_for_selector("#vmc .levels")
+    assert w.page.locator("#dehum").is_hidden(), "winter: not for now"
+
+    w.climate = {"mode": "cool", "dehumidifier": DEHUM}
+    w.refresh()
+    w.page.wait_for_selector('#dehum button[data-dehum-hours="2"]')
+    w.answers["/api/dehumidifier/on"] = {"ok": True}
+    w.page.click('#dehum button[data-dehum-hours="2"]')
+    w.page.wait_for_function("!document.querySelector('#dehum button[aria-busy]')")
+    assert w.sent[-1] == ("/api/dehumidifier/on", {"hours": 2})
+    w.page.click("#dehum button[data-dehum-target]")
+    w.page.wait_for_function("!document.querySelector('#dehum button[aria-busy]')")
+    assert w.sent[-1] == ("/api/dehumidifier/on", {"until": "target"})
+
+    w.climate = {"mode": "cool", "dehumidifier": dict(DEHUM, on=True, until_at="2030-01-01T18:00")}
+    w.refresh()
+    w.page.wait_for_selector("#dehum button[data-dehum-off]")
+    w.answers["/api/dehumidifier/off"] = {"ok": True}
+    w.page.click("#dehum button[data-dehum-off]")
+    w.page.wait_for_function("!document.querySelector('#dehum button[aria-busy]')")
+    assert w.sent[-1] == ("/api/dehumidifier/off", {})
+
+    # The air dry enough: said, nothing to press.
+    w.climate = {"mode": "cool", "dehumidifier": dict(DEHUM, humidity=48)}
+    w.refresh()
+    w.page.wait_for_function("document.querySelector('#dehum').innerText.includes('48%')")
+    assert w.page.locator("#dehum button").count() == 0
+    w.sane()
+
+
+def test_a_zone_left_out_of_cooling_has_nothing_to_change_in_summer(window):
+    w = window()
+    w.climate = {"mode": "cool"}
+    w.refresh()
+    w.page.wait_for_function("document.body.dataset.season === 'cool'")
+    assert w.card(BATHS).locator("button.step").count() == 0
+    assert "raffrescamento" in w.card(BATHS).inner_text().lower()
+    assert w.card(ROOMS).locator("button.step").count() == 2
+    w.sane()
+
+
 def test_a_zone_opens_the_full_page_in_the_browser(window):
     w = window()
-    w.page.click('[data-zone="Stanze"]')
+    w.page.click('[data-zone="Stanze"] .zone-main')
     opened = [m for m in w.page.evaluate("window.__told") if m["type"] == "open"]
     assert opened == [{"type": "open", "path": "/"}]
     w.sane()
@@ -349,9 +508,12 @@ def test_a_zone_opens_the_full_page_in_the_browser(window):
 def test_the_lists_of_allowed_requests_leave_out_the_rest():
     for path in ("/api/climate/zones", "/api/problems", "/api/covers"):
         assert READS.match(path)
-    for path in ("/api/covers/all/action/close", "/api/vmc-schedule/boost", "/api/sensors/VMC/set-value"):
+    for path in ("/api/covers/all/action/close", "/api/vmc-schedule/boost", "/api/sensors/VMC/set-value",
+                 "/api/climate/zones/Stanze/override", "/api/climate/zones/Stanze/override/cancel",
+                 "/api/climate/away", "/api/climate/away/cancel", "/api/dehumidifier/on", "/api/dehumidifier/off"):
         assert COMMANDS.match(path)
     for path in ("/api/sensors/VMC/off", "/api/climate/mode", "/api/system/restart", "/api/covers/all/action/delete",
+                 "/api/climate/zones/Stanze/schedule", "/api/dehumidifier/settings",
                  "/api/climate-admin/diagnostics.zip"):
         assert not READS.match(path) and not COMMANDS.match(path), path
 

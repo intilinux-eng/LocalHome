@@ -12,8 +12,9 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 - **LocalHome for the Windows desktop** (`desktop/`): a separate app, with a
   small window and a tray icon, that needs no change on the board and uses
   only the API it already has, at an IP and port set in the app. The zones
-  with their comfort, outside, the house's power, the VMC's levels and timed
-  speed, the shutters; a Windows notice when a zone turns on, when there's
+  with their comfort and a temperature for a while, outside, the house's
+  power, the VMC's levels and timed speed, the shutters, "away", the
+  dehumidifier in summer; a Windows notice when a zone turns on, when there's
   something to check, when the board can't be reached.
 
 ### Changed

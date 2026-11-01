@@ -12,12 +12,17 @@
 <body>
   <header class="top">
     <div class="brand"><b>LocalHome</b><p id="say"></p></div>
-    <span class="health" id="health" data-level="unknown"><i></i><span id="health-text"></span></span>
+    <div class="top-right">
+      <span class="health" id="health" data-level="unknown"><i></i><span id="health-text"></span></span>
+      <button class="chip" type="button" id="away-chip" hidden></button>
+    </div>
   </header>
   <ul class="alerts" id="alerts" role="status" hidden></ul>
   <main id="body">
+    <section class="card away" id="away" hidden></section>
     <section class="zones" id="zones"></section>
     <section class="facts" id="facts"></section>
+    <section class="card" id="dehum" hidden></section>
     <section class="card vmc" id="vmc" hidden></section>
     <section class="card covers" id="covers" hidden></section>
   </main>
