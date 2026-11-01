@@ -52,11 +52,14 @@ namespace LocalHome.Desktop
                 var settings = Settings.Load(dataDir);
                 var address = Program.Option(args, "--address");
                 if (address != null) settings.Address = Settings.NormalizeAddress(address);
+                var name = Program.Option(args, "--name");
+                if (name != null) settings.BoardName = name;
                 if (string.IsNullOrEmpty(settings.Address))
                 {
-                    using (var ask = new AddressForm(settings.Address))
+                    using (var ask = new BoardForm(settings.BoardName, settings.Address))
                     {
                         if (ask.ShowDialog() != DialogResult.OK) return 0;
+                        settings.BoardName = ask.BoardName;
                         settings.Address = ask.Address;
                     }
                 }

@@ -17,15 +17,17 @@ namespace LocalHome.Desktop
         public static string AlwaysOnTop => T("Sempre in primo piano", "Always on top");
         public static string NotifyZones => T("Avvisa quando si accende una zona", "Tell me when a zone turns on");
         public static string StartWithWindows => T("Avvia con Windows", "Start with Windows");
-        public static string BoardAddress => T("Indirizzo della scheda…", "Board address…");
-        public static string OpenFull => T("Apri LocalHome nel browser", "Open LocalHome in the browser");
+        public static string BoardSettings => T("Impostazioni della scheda…", "Board settings…");
+        public static string OpenFull => T("Apri la pagina completa nel browser", "Open the full page in the browser");
         public static string Exit => T("Esci", "Exit");
 
-        public static string AddressTitle => T("Indirizzo della scheda", "Board address");
-        public static string AddressHelp => T(
-            "L'indirizzo IP e la porta di LocalHome, ad esempio 192.168.1.20:5000.",
-            "LocalHome's IP address and port, for example 192.168.1.20:5000.");
-        public static string AddressSave => T("Prova e salva", "Test and save");
+        public static string BoardTitle => T("Impostazioni della scheda", "Board settings");
+        public static string BoardName => T("Nome (facoltativo)", "Name (optional)");
+        public static string BoardAddress => T("Indirizzo", "Address");
+        public static string BoardAddressHelp => T(
+            "IP e porta, o il nome di rete: 192.168.1.20:5000, scheda.local. Senza porta si usa la 5000.",
+            "IP and port, or its network name: 192.168.1.20:5000, board.local. With no port, 5000.");
+        public static string BoardSave => T("Prova e salva", "Test and save");
         public static string Cancel => T("Annulla", "Cancel");
         public static string AddressInvalid => T("Questo non sembra un indirizzo.", "That doesn't look like an address.");
         public static string AddressNoAnswer(string a) => T(

@@ -1,4 +1,4 @@
-// What this PC remembers: the board's address and the window's choices - in
+// What this PC remembers: the board's name and address, the window's choices - in
 // the user's own folder, so nothing about this app lives on the board.
 using System;
 using System.IO;
@@ -10,6 +10,7 @@ namespace LocalHome.Desktop
     {
         public const int DefaultPort = 5000;
 
+        public string BoardName { get; set; }
         public string Address { get; set; }
         public bool TopMost { get; set; }
         public bool NotifyZones { get; set; } = true;
@@ -20,6 +21,9 @@ namespace LocalHome.Desktop
         public int Height { get; set; }
 
         string file;
+
+        // What the window and its notices call the board.
+        public string ShownName() => string.IsNullOrWhiteSpace(BoardName) ? "LocalHome" : BoardName.Trim();
 
         public static string DefaultDataDir =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalHome Desktop");

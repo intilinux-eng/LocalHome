@@ -61,7 +61,7 @@ def board(start_server):
 class Window:
     """The window: the page, what the board is made to say, what the tray was told."""
 
-    def __init__(self, browser, board, width=360, height=780, scheme="light", lang="it", clock=False):
+    def __init__(self, browser, board, width=360, height=780, scheme="light", lang="it", clock=False, name="Casa"):
         self.board = board
         self.context = browser.new_context(viewport={"width": width, "height": height}, color_scheme=scheme)
         self.page = self.context.new_page()
@@ -78,7 +78,7 @@ class Window:
         if clock:
             self.page.clock.install()
         self.context.route(f"{ORIGIN}/**", self.serve)
-        self.page.goto(f"{ORIGIN}/index.html?lang={lang}&board=192.0.2.1:5000")
+        self.page.goto(f"{ORIGIN}/index.html?lang={lang}&board=192.0.2.1:5000&name={urllib.parse.quote(name)}")
         self.page.wait_for_selector(".zone")
 
     def serve(self, route):
@@ -289,7 +289,7 @@ def test_something_to_check_is_told_then_that_its_solved(window):
     w.page.wait_for_function("window.__told.some(m => m.kind === 'problem')")
     notice = w.told("problem")[0]
     assert "La valvola di Stanze non risponde." in notice["text"], notice
-    assert notice["title"] == "LocalHome: da controllare", "its lateness follows from it: one thing"
+    assert notice["title"] == "Casa: da controllare", "its lateness follows from it: one thing"
     assert w.last_status()["level"] == "warn"
     assert "1 da controllare" in w.page.inner_text("#health")
     assert "non risponde" in w.page.inner_text("#alerts")
@@ -494,6 +494,39 @@ def test_a_zone_left_out_of_cooling_has_nothing_to_change_in_summer(window):
     assert w.card(BATHS).locator("button.step").count() == 0
     assert "raffrescamento" in w.card(BATHS).inner_text().lower()
     assert w.card(ROOMS).locator("button.step").count() == 2
+    w.sane()
+
+
+def test_the_board_is_called_by_its_name(window):
+    w = window(name="Antonio <b>casa</b>")
+    assert w.page.inner_text("#brand") == "Antonio <b>casa</b>", "shown as it's written, not as a page's code"
+    assert w.page.title() == "Antonio <b>casa</b>"
+    assert "Apri Antonio" in w.page.inner_text("#open-full")
+    w.problems = [{"code": "device_offline", "subject": "Stanze Valve"}]
+    w.refresh()
+    w.page.wait_for_function("window.__told.some(m => m.kind === 'problem')")
+    assert w.told("problem")[0]["title"].startswith("Antonio <b>casa</b>:")
+    w.sane()
+
+
+def test_a_long_name_stays_on_its_line_and_no_name_is_localhome(window):
+    w = window(name="Una scheda con un nome lungo quaranta car")
+    assert w.page.locator("#brand").bounding_box()["height"] < 30
+    w.sane()
+    w = window(name="")
+    assert w.page.inner_text("#brand") == "LocalHome"
+
+
+def test_the_gear_asks_the_program_for_the_settings(window):
+    w = window()
+    w.page.click("#settings")
+    assert {"type": "settings"} in w.page.evaluate("window.__told")
+    w.sane()
+
+
+def test_what_was_seen_of_one_board_says_nothing_of_another(window):
+    w = window()
+    w.page.evaluate("KEEP_KEY").index("192.0.2.1:5000")
     w.sane()
 
 

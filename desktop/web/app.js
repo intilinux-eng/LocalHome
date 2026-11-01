@@ -8,6 +8,7 @@
 const params = new URLSearchParams(location.search);
 const LANG = TEXTS[params.get("lang")] ? params.get("lang") : "it";
 const BOARD = params.get("board") || "";
+const NAME = params.get("name") || "LocalHome";
 const SHOWN_MS = 20000;            // on screen: as the home page reads it
 const HIDDEN_MS = 60000;           // in the tray: enough for the notices
 const FAILING_MS = 15000;          // the board not answering: tried this often
@@ -16,7 +17,7 @@ const DOWN_NOTICE_MS = 3 * 60000;  // a short gap (a restart) isn't worth a noti
 const REPEAT_PROBLEM_MS = 30 * 60000;  // a problem coming and going says so once
 const READ_MS = 12000;
 const COMMAND_MS = 16000;
-const KEEP_KEY = "localhome.desktop";
+const KEEP_KEY = `localhome.desktop.${BOARD}`;   // another board starts from nothing
 // A zone's temperature for a while: half a degree a tap, what the board takes,
 // and where a zone with no target now starts from.
 const TARGET = { min: 5, max: 35, step: 0.5, start: { heat: 21, cool: 25 } };
@@ -462,17 +463,17 @@ function noticeProblems(problems) {
   if (fresh.length) {
     seen.owedFixed = true;
     tell({ type: "notify", kind: "problem", level: "warn", text: fresh.map(problemText).join("\n"),
-           title: fresh.length === 1 ? tr("notify_check") : tr("notify_check_many", { count: fresh.length }) });
+           title: fresh.length === 1 ? tr("notify_check", { name: NAME }) : tr("notify_check_many", { name: NAME, count: fresh.length }) });
   } else if (!problems.length && seen.owedFixed) {
     seen.owedFixed = false;
-    tell({ type: "notify", kind: "fixed", level: "info", title: tr("notify_fixed"), text: tr("notify_fixed_text") });
+    tell({ type: "notify", kind: "fixed", level: "info", title: tr("notify_fixed", { name: NAME }), text: tr("notify_fixed_text") });
   }
 }
 
 function tip(climate, level) {
-  if (level === "off") return `LocalHome: ${tr("unreachable_chip").toLowerCase()}`;
+  if (level === "off") return `${NAME}: ${tr("unreachable_chip").toLowerCase()}`;
   const zones = climate.zones.filter(z => z.temperature_c != null).map(z => `${z.name} ${fmt(z.temperature_c)}°`);
-  return zones.length ? zones.join(" · ") : "LocalHome";
+  return zones.length ? zones.join(" · ") : NAME;
 }
 
 // ---------------------------------------------------------------- reading --
@@ -497,7 +498,7 @@ async function refresh() {
     noticeZones(climate);
     noticeProblems(now.problems);
     if (now.failingSince && seen.owedBack) {
-      tell({ type: "notify", kind: "back", level: "info", title: tr("notify_back"), text: tr("notify_back_text") });
+      tell({ type: "notify", kind: "back", level: "info", title: tr("notify_back", { name: NAME }), text: tr("notify_back_text") });
       seen.owedBack = false;
     }
     now.failingSince = null;
@@ -553,7 +554,7 @@ function boardGone() {
   if (at - now.failingSince >= DOWN_NOTICE_MS && !seen.owedBack) {
     seen.owedBack = true;
     keepSeen();
-    tell({ type: "notify", kind: "down", level: "off", title: tr("notify_down"), text: tr("notify_down_text", { board: BOARD }) });
+    tell({ type: "notify", kind: "down", level: "off", title: tr("notify_down", { name: NAME }), text: tr("notify_down_text", { board: BOARD }) });
   }
   // Old values are never passed off as current: faded, and said.
   $("body").classList.add("is-old");
@@ -692,7 +693,8 @@ document.addEventListener("click", event => {
   }
   const button = event.target.closest("button");
   if (!button || button.disabled) return;
-  if (button.closest("#zones")) onZone(button);
+  if (button.id === "settings") tell({ type: "settings" });
+  else if (button.closest("#zones")) onZone(button);
   else if (button.closest("#away") || button.id === "away-chip") onAway(button);
   else if (button.closest("#dehum")) onDehum(button);
   else if (button.closest("#vmc")) onVmc(button);
@@ -711,6 +713,13 @@ document.addEventListener("visibilitychange", () => {
 document.documentElement.lang = LANG;
 $("say").textContent = tr("wait");
 $("health-text").textContent = tr("wait");
-$("open-full").textContent = tr("open_full");
+document.title = NAME;
+$("brand").textContent = NAME;
+$("brand").title = NAME;
+$("open-full").textContent = tr("open_full", { name: NAME });
+// The settings are the program's: with no program around it, no button.
+$("settings").hidden = !(window.chrome && window.chrome.webview);
+$("settings").title = tr("settings");
+$("settings").setAttribute("aria-label", tr("settings"));
 $("away-chip").textContent = tr("away_title");
 refresh();

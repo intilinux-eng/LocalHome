@@ -16,8 +16,10 @@ this app is what has to follow.
 1. Run `LocalHome-Setup.exe`. It installs for this user only, with no
    administrator rights. Windows may warn about it the first time, as it's not
    signed: *More info*, *Run anyway*.
-2. Give it the board's address, for example `192.168.1.20:5000`. It's tried
-   before it's saved.
+2. Give it the board's address: IP and port (`192.168.1.20:5000`) or its
+   network name (`board.local`), with 5000 if no port is given. It's tried before
+   it's saved. A name is optional: it's what the window and its notices call the
+   board, otherwise LocalHome.
 
 Closing the window leaves it in the tray, because the notices are its point. A
 left click on the icon brings it back; a right click opens the menu:
@@ -27,7 +29,7 @@ left click on the icon brings it back; a right click opens the menu:
 | Always on top | The window stays over the others |
 | Tell me when a zone turns on | Those notices on or off; the others always come |
 | Start with Windows | On after installing; off and it only runs when opened |
-| Board address… | Another IP or port |
+| Board settings… | The board's name and address, also from the gear in the window |
 | Exit | Closes it until it's opened again |
 
 To remove it: Windows' *Installed apps*, LocalHome, Uninstall. This takes away
@@ -82,5 +84,5 @@ To run the build without installing it:
 bin/Release/net48/LocalHome.exe --data-dir <a folder> --address <ip:port>
 ```
 
-`--tray` starts it hidden, as Windows does. `--data-dir` keeps a trial's settings
+`--tray` starts it hidden, as Windows does; `--name` sets the board's name. `--data-dir` keeps a trial's settings
 apart from the installed copy's, and lets both run at once.

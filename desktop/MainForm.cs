@@ -44,6 +44,7 @@ namespace LocalHome.Desktop
         DateTime lastStatus = DateTime.UtcNow;
         string level = "";
         bool quitting;
+        bool askingBoard;
 
         public MainForm(Settings settings, string dataDir, bool startHidden)
         {
@@ -51,7 +52,7 @@ namespace LocalHome.Desktop
             this.dataDir = dataDir;
             this.startHidden = startHidden;
 
-            Text = "LocalHome";
+            Text = settings.ShownName();
             AutoScaleMode = AutoScaleMode.Dpi;
             baseIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             Icon = baseIcon;
@@ -63,7 +64,7 @@ namespace LocalHome.Desktop
             Controls.Add(web);
 
             BuildTray();
-            SetLevel("off", "LocalHome");
+            SetLevel("off", settings.ShownName());
             Log("start, board " + settings.Address);
 
             watchdog.Tick += (s, e) => Watch();
@@ -134,7 +135,7 @@ namespace LocalHome.Desktop
         void LoadPage()
         {
             lastStatus = DateTime.UtcNow;
-            web.CoreWebView2?.Navigate($"{Origin}index.html?lang={Texts.Language}&board={Uri.EscapeDataString(settings.Address)}");
+            web.CoreWebView2?.Navigate($"{Origin}index.html?lang={Texts.Language}&board={Uri.EscapeDataString(settings.Address)}&name={Uri.EscapeDataString(settings.ShownName())}");
         }
 
         async void OnRequest(object sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -237,6 +238,10 @@ namespace LocalHome.Desktop
                 case "open":
                     OpenInBrowser(Field("path"));
                     break;
+                case "settings":
+                    // After this message: a dialog held open inside it would hold the page.
+                    BeginInvoke((Action)ChangeBoard);
+                    break;
             }
         }
 
@@ -272,7 +277,7 @@ namespace LocalHome.Desktop
 
         void SetLevel(string newLevel, string tip)
         {
-            tray.Text = Cut(string.IsNullOrEmpty(tip) ? "LocalHome" : tip, 63);
+            tray.Text = Cut(string.IsNullOrEmpty(tip) ? settings.ShownName() : tip, 63);
             if (newLevel == level) return;
             Log($"state: {newLevel} ({tray.Text})");
             level = newLevel;
@@ -327,7 +332,7 @@ namespace LocalHome.Desktop
                 Setup.SetStartWithWindows(on);
                 ((ToolStripMenuItem)s).Checked = on;
             }) { Checked = Setup.StartsWithWindows });
-            menu.Items.Add(new ToolStripMenuItem(Texts.BoardAddress, null, (s, e) => ChangeAddress()));
+            menu.Items.Add(new ToolStripMenuItem(Texts.BoardSettings, null, (s, e) => ChangeBoard()));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem(Texts.Exit, null, (s, e) => Quit()));
             menu.Opening += (s, e) => showItem.Text = Visible ? Texts.Hide : Texts.Show;
@@ -337,15 +342,28 @@ namespace LocalHome.Desktop
             tray.Visible = true;
         }
 
-        void ChangeAddress()
+        // Asked from the window and from the tray: one at a time. Hidden, the
+        // window can't own it: it opens by itself.
+        void ChangeBoard()
         {
-            using (var ask = new AddressForm(settings.Address))
+            if (askingBoard) return;
+            askingBoard = true;
+            try
             {
-                if (ask.ShowDialog(this) != DialogResult.OK) return;
-                settings.Address = ask.Address;
-                settings.Save();
-                Log("board now " + settings.Address);
-                LoadPage();
+                using (var ask = new BoardForm(settings.BoardName, settings.Address))
+                {
+                    if ((Visible ? ask.ShowDialog(this) : ask.ShowDialog()) != DialogResult.OK) return;
+                    settings.BoardName = ask.BoardName;
+                    settings.Address = ask.Address;
+                    settings.Save();
+                    Text = settings.ShownName();
+                    Log($"board now {settings.ShownName()}, {settings.Address}");
+                    LoadPage();
+                }
+            }
+            finally
+            {
+                askingBoard = false;
             }
         }
 
