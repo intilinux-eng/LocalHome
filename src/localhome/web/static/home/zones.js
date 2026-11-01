@@ -178,6 +178,7 @@ function fillZone(card, zone, climate) {
           <div class="reading-label">${ICONS.drop}${esc(humidityWord(zone.humidity_pct))}</div></div>` : ""}
       </div>
       ${todayRangeHtml(zone)}
+      ${comfortChipHtml(zone, climate)}
     </div>`;
   // The extras, one a row with its icon: on the right of the readings, or
   // under them in two columns on a narrow card. The target and what the
@@ -667,6 +668,10 @@ async function onZoneClick(event) {
   const zone = state.climate.zones.find(z => z.name === card.dataset.zone);
   if (!zone) return;
   let action = button.dataset.action;
+  if (action === "comfort") {
+    openComfort(zone);
+    return;
+  }
   if (action === "temps-pick") {
     const i = Number(button.dataset.pick);
     state.tempsPick[zone.name] = state.tempsPick[zone.name] === i ? undefined : i;

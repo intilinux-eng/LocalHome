@@ -557,6 +557,42 @@ body[data-running="true"] .hero-season::before {
 .outdoor .tr-track { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, var(--surface)), var(--accent)); }
 @media (max-width: 819px) { .outdoor .tr-end small { display: none; } .outdoor .tr-track { min-width: 28px; } }
 
+/* The room's comfort in a word under its readings (home/comfort.js): a
+   small dial with its dot, the word, a tap for the sheet. Green when it's
+   comfortable, amber when it's a bit off, red when it's well off. */
+.comfort { --lv: var(--ok); display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 8px 0 0;
+  border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; font-size: 0.9rem;
+  font-weight: 600; text-align: left; cursor: pointer; }
+.comfort[data-level="mild"] { --lv: var(--warn); }
+.comfort[data-level="warn"] { --lv: var(--bad); }
+.comfort span { flex: 1; color: color-mix(in srgb, var(--lv) 70%, var(--text)); }
+.comfort > svg:last-child { width: 16px; height: 16px; fill: none; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round; }
+.comfort-mini { flex: none; width: 18px; height: 18px; }
+.comfort-mini circle:first-child { fill: none; stroke: var(--text-3); stroke-width: 1.2; }
+.comfort-mini .cm-dot { fill: var(--lv); stroke: none; }
+.comfort:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+/* Its sheet: the dial, the readings beside it, why and what to do. */
+.comfort-lead::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
+.comfort-lead[data-level="mild"]::before { background: var(--warn); }
+.comfort-lead[data-level="warn"]::before { background: var(--bad); }
+.comfort-sheet { display: grid; gap: var(--space-m); justify-items: center; margin: 4px 0 6px; padding: 14px;
+  border-radius: var(--radius-s); background: var(--surface-2); }
+.comfort-dial { width: 100%; max-width: 320px; height: auto; overflow: visible; }
+.cd-ring { fill: none; stroke: var(--text-3); stroke-width: 1.5; }
+.cd-zone { fill: color-mix(in srgb, var(--ok) 16%, transparent); stroke: color-mix(in srgb, var(--ok) 55%, transparent); stroke-width: 1.2; }
+.cd-cross { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.cd-axis { fill: var(--text-2); font-size: 11px; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; }
+.cd-other circle { fill: var(--surface-3); stroke: var(--text-3); stroke-width: 1.2; }
+.cd-other text { fill: var(--text-3); font-size: 11px; }
+.cd-dot { fill: var(--ok); stroke: var(--surface-2); stroke-width: 3; }
+.cd-dot[data-level="mild"] { fill: var(--warn); }
+.cd-dot[data-level="warn"] { fill: var(--bad); }
+.cs-values { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; }
+.cs-value { display: grid; justify-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+.cs-value small { font-size: 0.66rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+.cs-value b { font-size: 1.25rem; font-weight: 500; }
+
 .zone-facts { display: grid; gap: var(--space-m); min-width: 0; }
 @container (max-width: 439px) {
   .zone-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-m); }

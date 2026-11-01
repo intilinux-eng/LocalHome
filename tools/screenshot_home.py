@@ -21,7 +21,10 @@ made-up Turin days, each of its views as outdoor_<view>_*.png - the
 window), vmc (the VMC's card alone in each of its cases, as
 vmc_<case>_*.png: manual, a program, a speed picked by hand over it, the
 maximum for a while, an automatic (a shower), off, the filters' reminder,
-the programs open, away). Needs the browser tests' setup: pip install -e
+the programs open, away), comfort (the comfort word on the rooms' card and
+its sheet in each of COMFORT_CASES, as comfort_<case>_card_*.png and
+comfort_<case>_sheet_*.png - the readings made up in what the page is
+told). Needs the browser tests' setup: pip install -e
 ".[dev,ui]", playwright install chromium.
 """
 from __future__ import annotations
@@ -53,7 +56,7 @@ NAMES = {
            "covers": ("Living room", "Kitchen", "Bedroom", "Study")},
 }
 WEEK = {d: [24.0] * 7 + [23.0] * 17 for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
-STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin", "outdoor", "vmc"]
+STATES = ["hourly", "details", "manual", "off", "held", "away", "covers", "admin", "outdoor", "vmc", "comfort"]
 OUTDOOR_VIEWS = ["24h", "days", "weeks", "months", "years"]
 # The VMC's "day and night" program, as the home page's ready-made one:
 # night until 7, day until 22.
@@ -148,6 +151,57 @@ def vmc_cases(page, call, out: Path, width: int, scheme: str, bathroom: str) -> 
             call("/api/climate/away/cancel", {})
         plain()
         call("/api/climate-admin/vmc-filters", {"interval_days": 90, "cleaned_on": None})
+
+
+# The comfort cases: the season, then each zone's temperature, humidity,
+# target and valve - the first zone the rooms, the second the bathrooms.
+COMFORT_CASES = {
+    "ok_winter": ("heat", (20.4, 47, 20.0, False), (21.6, 55, 21.0, False)),
+    "cool_winter": ("heat", (18.6, 52, 20.0, True), (21.2, 58, 21.0, False)),
+    "humid_winter": ("heat", (20.2, 66, 20.0, False), (21.4, 63, 21.0, False)),
+    "cold_humid": ("heat", (16.8, 74, None, False), (17.5, 71, None, False)),
+    "dry_winter": ("heat", (21.0, 27, 20.0, False), (22.0, 31, 21.0, False)),
+    "shower": ("heat", (20.6, 49, 20.0, False), (23.1, 83, 21.0, False)),
+    "humid_summer": ("cool", (26.4, 67, 24.0, True), (26.9, 64, None, False)),
+    "ok_summer": ("cool", (24.4, 52, 24.0, False), (25.6, 55, None, False)),
+}
+
+
+def dew_point(t: float, rh: float) -> float:
+    """Magnus' formula, as the board's."""
+    g = math.log(rh / 100) + 17.62 * t / (243.12 + t)
+    return round(243.12 * g / (17.62 - g), 1)
+
+
+def comfort_cases(page, call, out: Path, width: int, scheme: str, rooms: str) -> None:
+    """The comfort word on the rooms' card and its sheet, in each case: the
+    zones' readings made up in what the page is told, the board left alone."""
+    real = call("/api/climate/zones")
+    told: dict = {}
+    page.route("**/api/climate/zones", lambda route: route.fulfill(json=told["climate"]))
+    for case, (mode, *zones) in COMFORT_CASES.items():
+        climate = json.loads(json.dumps(real))
+        climate["mode"] = mode
+        for zone, (t, rh, target, valve) in zip(climate["zones"], zones):
+            zone.update(temperature_c=t, humidity_pct=rh, target_c=target, valve_on=valve, sensor_ok=True,
+                        dew_point_c=dew_point(t, rh), tier="comfort" if target is not None else None)
+        told["climate"] = climate
+        page.evaluate("refreshClimate()")
+        page.wait_for_timeout(900)
+        # The bathrooms after a shower, the rooms otherwise.
+        which = climate["zones"][1]["name"] if case == "shower" else rooms
+        card = page.locator(f'.zone[data-zone="{which}"]')
+        path = out / f"comfort_{case}_card_{width}_{scheme}.png"
+        card.locator(".zone-live").screenshot(path=str(path))
+        print(path)
+        card.locator('button[data-action="comfort"]').click()
+        page.wait_for_selector("#sheet .comfort-dial", timeout=5000)
+        page.wait_for_timeout(300)
+        path = out / f"comfort_{case}_sheet_{width}_{scheme}.png"
+        page.screenshot(path=str(path))
+        print(path)
+        page.click("#sheet-close")
+    page.unroute("**/api/climate/zones")
 
 
 def covers_config(names: dict) -> str:
@@ -251,6 +305,11 @@ def main() -> None:
                             continue
                         elif state == "vmc":
                             vmc_cases(page, call, args.out, width, scheme, names["baths"])
+                            page.close()
+                            continue
+                        elif state == "comfort":
+                            page.set_viewport_size({"width": width, "height": 1100})
+                            comfort_cases(page, call, args.out, width, scheme, rooms)
                             page.close()
                             continue
                         elif state == "covers":

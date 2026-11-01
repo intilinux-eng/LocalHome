@@ -12,7 +12,7 @@
 
    Its script in parts (static/home/), loaded in this order: core - this
    one: the board's API, the texts, the board's clock, numbers, a zone's
-   week and its next change - then zones, zone-details, hero, plant,
+   week and its next change - then zones, zone-details, comfort, hero, plant,
    house, start. Plain scripts sharing one scope: a part uses what the
    others declare once the page is running; listening and refreshing
    start in start.js, loaded last. */
