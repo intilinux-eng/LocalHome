@@ -1,0 +1,11 @@
+#!/bin/sh
+# Its data - configuration, history, readings - are never removed with the
+# package, purged or not: they're the home's, not the program's.
+set -e
+if [ "$1" = purge ] && [ -d /var/lib/localhome ]; then
+    echo "LocalHome: its data stay in /var/lib/localhome - remove them by hand if they're no longer wanted."
+fi
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+exit 0

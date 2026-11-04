@@ -1,3 +1,6 @@
 # Shell scripts run on the Linux board: keep LF even in a Windows checkout,
 # or a repo copied over from Windows fails with a "command not found" error.
 *.sh text eol=lf
+
+# The Debian package's scripts and units run on the board, as they are.
+packaging/deb/** text eol=lf

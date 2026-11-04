@@ -1,0 +1,61 @@
+#!/bin/sh
+# After the files are in place, at each install and update: its user and data
+# folder, a first configuration - or the one of a board installed by hand,
+# copied over - then the board's tuning and the service started.
+set -e
+DATA=/var/lib/localhome
+OWNER=arduino
+
+[ "$1" = configure ] || exit 0
+
+if ! id -u "$OWNER" >/dev/null 2>&1; then
+    adduser --system --group --home "$DATA" --no-create-home "$OWNER"
+fi
+mkdir -p "$DATA"
+
+if [ ! -f "$DATA/config.yaml" ]; then
+    # A board installed by hand (git): its configuration, history and backups
+    # come with it - copied, the old folder stays where it is.
+    old=""
+    for dir in /home/$OWNER/localhome/config /home/$OWNER/progetto/config; do
+        if [ -f "$dir/config.yaml" ]; then old=$dir; break; fi
+    done
+    if [ -n "$old" ]; then
+        echo "LocalHome: copying the configuration of the git install ($old)"
+        systemctl stop localhome.service 2>/dev/null || true
+        cp -a "$old/." "$DATA/"
+    else
+        cp /usr/share/localhome/config.example.yaml "$DATA/config.yaml"
+    fi
+fi
+# The board's own broker, as docs/arduino-uno-q.md's step 5 sets it.
+if [ ! -f "$DATA/mqtt_broker.json" ]; then
+    cp /usr/share/localhome/mqtt_broker.example.json "$DATA/mqtt_broker.json"
+fi
+chown -R "$OWNER:$OWNER" "$DATA"
+
+# The hand-installed service would hide this package's own.
+if [ -f /etc/systemd/system/localhome.service ]; then
+    mv /etc/systemd/system/localhome.service /etc/systemd/system/localhome.service.pre-deb
+    rm -f /etc/systemd/system/localhome.service.d/localhome-watchdog.conf
+    rmdir /etc/systemd/system/localhome.service.d 2>/dev/null || true
+    echo "LocalHome: the hand-installed service is set aside (/etc/systemd/system/localhome.service.pre-deb)"
+fi
+
+TUNE_BOARD=1
+TUNE_LEAN=0
+[ -f /etc/default/localhome ] && . /etc/default/localhome
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl restart mosquitto.service 2>/dev/null || true
+    if [ "$TUNE_BOARD" = 1 ]; then
+        lean=""
+        [ "$TUNE_LEAN" = 1 ] && lean=--lean
+        # The tuning is worth having, not worth failing the install over.
+        sh /usr/lib/localhome/deploy/tune-board.sh $lean || echo "LocalHome: the board's tuning stopped with an error - run it again by hand: sudo sh /usr/lib/localhome/deploy/tune-board.sh" >&2
+    fi
+    systemctl enable localhome.service >/dev/null 2>&1
+    systemctl restart localhome.service
+fi
+exit 0

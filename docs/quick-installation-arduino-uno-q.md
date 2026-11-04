@@ -430,11 +430,16 @@ If `Arduino_RouterBridge` isn't listed, install it - its dependencies
 `DebugLog`) come with it:
 
 ```bash
-arduino-cli lib install "Arduino_RouterBridge@0.4.3"
+arduino-cli lib install "Arduino_RouterBridge@0.4.4"     # core 1.1.0; with core 1.0.0: @0.4.3
 arduino-cli lib list               # Arduino_RouterBridge 0.4.3 and its dependencies
 ```
 
-Verified with `Arduino_RouterBridge` 0.4.3 (with `Arduino_RPClite`
+**The library has to match the core** (`arduino-cli core list`): with
+core 1.1.0 (a board updated in November 2026) the sketch built with
+0.4.3 stops at start - the matrix stays dark, the red LED blinks and
+the admin panel says the sketch isn't loaded; 0.4.4 works. Already
+installed: `arduino-cli lib upgrade`, then 11c with `--clean`.
+Verified with `Arduino_RouterBridge` 0.4.3 on core 1.0.0 (with `Arduino_RPClite`
 0.3.0 on one board; a fresh install today brings 0.3.1).
 
 **c. Build and load the sketch** - one build at a time: two

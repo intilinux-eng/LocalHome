@@ -69,6 +69,7 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 | Board health, boots, diagnostics | `services/system_status.py`, `services/diagnostics.py`, `services/maintenance.py` |
 | Devices | `drivers/<brand>/` - registered with `@register_driver`, see `core/registry.py` |
 | Board setup and deploy | `deploy/` (service, `tune-board.sh`, watchdogs), `tools/deploy_board.py` |
+| The Debian package (compiled, for boards installed without git) | `packaging/deb/` - see its README; built by `tools/build_deb.py` in Docker under WSL2 |
 | The installer's guide | `static/guide/shelly-plus1-valvole.html` |
 | The Windows app (separate, on the existing API: no change on the board) | `desktop/` - see its README; its page in `desktop/web/`, tested by `tests/ui/test_desktop_page.py` |
 
@@ -81,6 +82,7 @@ pytest -m ui -n 6                              # browser tests (Playwright), ~1 
 pytest -m enduser -n 6                         # the end-user suite alone, ~20 s
 python tools/screenshot_home.py OUT --state all  # the home page in each state
 python tools/check_board.py antonio --log      # a running board, read-only
+python tools/build_deb.py --check             # the board's .deb (arm64), then tried in a clean Debian
 python -m ruff check --select F <files>        # undefined names, unused imports
 ```
 

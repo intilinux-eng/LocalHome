@@ -1,0 +1,7 @@
+#!/bin/sh
+# Removed (not updated): LocalHome stops and doesn't start with the board.
+set -e
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    systemctl disable --now localhome.service >/dev/null 2>&1 || true
+fi
+exit 0

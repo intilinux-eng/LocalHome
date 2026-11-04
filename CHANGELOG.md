@@ -9,6 +9,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 ## Unreleased
 
 ### Added
+- **A Debian package for the boards** (`packaging/deb/`, `tools/build_deb.py`):
+  one file installs or updates LocalHome - program, service, broker
+  configuration, the board's tuning - with its data in `/var/lib/localhome`,
+  kept when it's removed. LocalHome's modules are compiled: the package
+  carries none of its Python source. Built on a PC in Docker under WSL2.
 - **LocalHome for the Windows desktop** (`desktop/`): a separate app, with a
   small window and a tray icon, that needs no change on the board and uses
   only the API it already has, at a name and address set in the app. The zones

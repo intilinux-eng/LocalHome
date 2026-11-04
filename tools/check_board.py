@@ -181,13 +181,17 @@ def check_values(c: Check, zones: list[dict], clock: dict) -> None:
         print(f"  the history not checked: LocalHome up {up / 60:.0f} min, its first write is due after "
               f"{HISTORY_DUE_SECONDS // 60}")
         return
+    readings = c.get("/api/readings").get("readings", {})
+    if database.get("newest_ts") is None and not any((r or {}).get("ok") for r in readings.values()):
+        # A new board with nothing configured yet: no sample to record.
+        print("  the history not checked: no device answering yet, nothing to record")
+        return
     # Its figures are counted every few minutes (what was waiting written
     # first): its newest sample against when they were counted.
     counted_at = now - (database.get("stats_age_seconds") or 0)
     newest = database.get("newest_ts") or 0
     c.ok("the history writing", counted_at - newest <= 6 * 60,
          f"newest sample {(counted_at - newest) / 60:.0f} min before its figures were counted")
-    readings = c.get("/api/readings").get("readings", {})
     midnight = now - (now + clock.get("utc_offset_minutes", 0) * 60) % 86400
     for zone in zones:
         sensor, valve = zone["sensor"], zone["valve"]

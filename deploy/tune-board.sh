@@ -9,21 +9,35 @@
 # worth running again after a LocalHome update; every step prints how to
 # undo it.
 #
-#   sudo sh deploy/tune-board.sh           # the essentials, for every board
-#   sudo sh deploy/tune-board.sh --lean    # also remove what LocalHome doesn't use
+#   sudo sh deploy/tune-board.sh                     # the essentials, for every board
+#   sudo sh deploy/tune-board.sh --lean              # also remove what LocalHome doesn't use
+#   sudo sh deploy/tune-board.sh --security-updates  # Debian's security fixes install by themselves
 #
 # --lean additionally turns off Arduino App Lab and its Docker runtime,
-# the firmware updater (fwupd), removes App Lab's unused Docker images and
-# empties the package cache: ~270 MB of RAM and ~2.3 GB of disk back,
-# which matters most on the 2 GB / 16 GB UNO Q. App Lab can't be used on
-# the board until they're turned back on (the undo line is printed). The
-# USB rescue access (adbd) and the Linux-MCU bridge (arduino-router) stay.
+# the firmware updater (fwupd), removes App Lab's unused Docker images,
+# the Chromium browser (only a desktop uses it) and empties the package
+# cache: ~270 MB of RAM and ~2.7 GB of disk back, which matters most on
+# the 2 GB / 16 GB UNO Q. App Lab can't be used on the board until
+# they're turned back on (the undo line is printed). The USB rescue
+# access (adbd) and the Linux-MCU bridge (arduino-router) stay.
+#
+# --security-updates: Debian's security fixes, and nothing else, install
+# themselves at night - never a reboot by itself. A board installed from
+# LocalHome's package reads both from /etc/default/localhome (SECURITY_UPDATES,
+# TUNE_LEAN).
 #
 # See docs/arduino-uno-q.md and docs/deployment.md#tune-the-board-for-long-unattended-running.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 LEAN=0
-[ "$1" = "--lean" ] && LEAN=1
+SECURITY_UPDATES=0
+[ -f /etc/default/localhome ] && SECURITY_UPDATES=$(. /etc/default/localhome; echo "${SECURITY_UPDATES:-0}")
+for arg in "$@"; do
+    case "$arg" in
+        --lean) LEAN=1 ;;
+        --security-updates) SECURITY_UPDATES=1 ;;
+    esac
+done
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run it with sudo: sudo sh deploy/tune-board.sh" >&2
@@ -45,16 +59,66 @@ EOF
 systemctl restart systemd-journald
 echo "   undo: rm /etc/systemd/journald.conf.d/localhome-volatile.conf && systemctl restart systemd-journald"
 
-echo "== 2. No background update downloads"
-# Nothing installs by itself on a stock image (no unattended-upgrades),
-# but these download package/firmware lists every day. Update by hand
-# when you choose: sudo apt update && sudo apt upgrade
-for timer in apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer; do
-    if systemctl list-unit-files "$timer" >/dev/null 2>&1; then
-        systemctl disable --now "$timer" 2>/dev/null || true
+if [ "$SECURITY_UPDATES" = 1 ]; then
+    echo "== 2. Updates: Debian's security fixes by themselves, at night - nothing else"
+    # A board on the home network all day is worth keeping patched, and
+    # Debian's security fixes are small and made to install unattended.
+    # Everything else waits for whoever looks after the board - Arduino's
+    # kernel and Linux-MCU bridge above all (sudo apt upgrade, then this
+    # script again). Never a reboot by itself: a new kernel waits for one
+    # chosen. The rest of the year's flash writes don't notice it: Debian
+    # stable's own lists don't change, only the security ones are fetched.
+    if ! dpkg -s unattended-upgrades >/dev/null 2>&1; then
+        if [ -n "${DPKG_MAINTSCRIPT_PACKAGE:-}" ]; then
+            # Run by a package's install, apt is busy with it: nothing can be
+            # installed now (LocalHome's package brings it as a dependency).
+            echo "   unattended-upgrades isn't installed: sudo apt install unattended-upgrades, then run this again"
+        else
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -q unattended-upgrades >/dev/null
+        fi
     fi
-done
-echo "   undo: systemctl enable --now apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer"
+    cat > /etc/apt/apt.conf.d/52localhome-security-only <<'EOF'
+// LocalHome board: only Debian's security fixes install by themselves -
+// see deploy/tune-board.sh. #clear drops the stock list (stable updates too).
+#clear Unattended-Upgrade::Origins-Pattern;
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+    "origin=Debian,codename=${distro_codename},label=Debian-Security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+    # At night, not twice a day at random: lists at 02:30, the fixes at 03:30.
+    for timer in apt-daily:02:30 apt-daily-upgrade:03:30; do
+        mkdir -p "/etc/systemd/system/${timer%%:*}.timer.d"
+        printf '# LocalHome board - see deploy/tune-board.sh.\n[Timer]\nOnCalendar=\nOnCalendar=*-*-* %s\nRandomizedDelaySec=20m\nPersistent=true\n' \
+            "${timer#*:}" > "/etc/systemd/system/${timer%%:*}.timer.d/localhome.conf"
+    done
+    systemctl daemon-reload
+    systemctl enable --now apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1
+    if systemctl list-unit-files fwupd-refresh.timer >/dev/null 2>&1; then
+        systemctl disable --now fwupd-refresh.timer 2>/dev/null || true
+    fi
+    echo "   on: Debian security fixes at 03:30, no automatic reboot"
+    echo "   what it did: cat /var/log/unattended-upgrades/unattended-upgrades.log"
+    echo "   undo: rm /etc/apt/apt.conf.d/52localhome-security-only /etc/systemd/system/apt-daily*.timer.d/localhome.conf && systemctl disable --now apt-daily.timer apt-daily-upgrade.timer"
+else
+    echo "== 2. No background update downloads"
+    # Nothing installs by itself on a stock image (no unattended-upgrades),
+    # but these download package/firmware lists every day. Update by hand
+    # when you choose: sudo apt update && sudo apt upgrade
+    for timer in apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer; do
+        if systemctl list-unit-files "$timer" >/dev/null 2>&1; then
+            systemctl disable --now "$timer" 2>/dev/null || true
+        fi
+    done
+    # Turned off after having been on: nothing left to install by itself.
+    rm -f /etc/apt/apt.conf.d/52localhome-security-only
+    echo "   undo: systemctl enable --now apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer"
+fi
 
 echo "== 3. MQTT broker log into the journal (RAM)"
 # mosquitto ships logging every connection to a file on the eMMC - the
@@ -184,7 +248,11 @@ EOF
 elif [ -f "$UNIT" ]; then
     echo "   this LocalHome is too old to say it's alive - update it, then run this again"
 else
-    echo "   no localhome.service installed - nothing to do"
+    if [ -f /usr/lib/systemd/system/localhome.service ]; then
+        echo "   on: LocalHome's package has it in its own service already"
+    else
+        echo "   no localhome.service installed - nothing to do"
+    fi
 fi
 
 echo "== 9. No power saving anywhere"
@@ -310,8 +378,18 @@ if [ "$LEAN" = 1 ]; then
         fi
     done
     systemctl mask fwupd.service >/dev/null 2>&1 || true   # otherwise D-Bus starts it again on demand
-    apt-get clean
-    echo "   undo: systemctl unmask fwupd && systemctl enable --now arduino-app-cli arduino-cloud-connector docker containerd"
+    # The browser of a desktop the board doesn't show (~400 MB), and what
+    # only it needed.
+    if dpkg -s chromium >/dev/null 2>&1; then
+        if [ -n "${DPKG_MAINTSCRIPT_PACKAGE:-}" ]; then
+            echo "   Chromium is still installed: apt is busy with a package now - run this again by hand to remove it"
+        else
+            DEBIAN_FRONTEND=noninteractive apt-get purge -y -q --autoremove 'chromium*' >/dev/null
+            echo "   Chromium removed"
+        fi
+    fi
+    [ -n "${DPKG_MAINTSCRIPT_PACKAGE:-}" ] || apt-get clean
+    echo "   undo: systemctl unmask fwupd && systemctl enable --now arduino-app-cli arduino-cloud-connector docker containerd; apt install chromium"
 fi
 
 echo "== Result"

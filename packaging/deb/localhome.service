@@ -1,0 +1,34 @@
+# LocalHome, as the .deb installs it: the program in /opt/localhome, its data in
+# /var/lib/localhome. Everything deploy/tune-board.sh adds to a hand-installed
+# service is here already - restarted when it stops saying it's alive or
+# outgrows its memory, each such restart noted for the admin panel.
+[Unit]
+Description=LocalHome
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=120
+TimeoutStartSec=180
+User=arduino
+Group=arduino
+Environment=LOCALHOME_CONFIG=/var/lib/localhome/config.yaml
+WorkingDirectory=/var/lib/localhome
+ExecStart=/opt/localhome/venv/bin/localhome
+ExecStopPost=+/bin/sh /usr/lib/localhome/deploy/watchdog/localhome-service-stopped.sh
+Restart=always
+RestartSec=5
+; Short of memory, the kernel sacrifices anything else first; LocalHome runs
+; in about 120 MB, four times that is a leak, not work.
+OOMScoreAdjust=-500
+MemoryMax=512M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/localhome
+
+[Install]
+WantedBy=multi-user.target

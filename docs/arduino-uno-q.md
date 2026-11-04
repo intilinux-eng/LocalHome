@@ -170,6 +170,7 @@ the installed version.
 |---|---|---|
 | System log into RAM (30 MB) | journald's write amplification was most of the eMMC writes (~5 GB/day) | `rm /etc/systemd/journald.conf.d/localhome-volatile.conf && systemctl restart systemd-journald` |
 | No background update downloads (`apt-daily`, `fwupd-refresh`) | nothing installs by itself anyway; they only download lists daily | `systemctl enable --now apt-daily.timer apt-daily-upgrade.timer fwupd-refresh.timer` |
+| ... or, with `--security-updates` (the Debian package's default, `SECURITY_UPDATES=1` in `/etc/default/localhome`): Debian's security fixes, and nothing else, install themselves at 03:30 - never a reboot | a board on the home network all day stays patched; Arduino's kernel and bridge still wait for you (`sudo apt upgrade`, then tune-board again) | `rm /etc/apt/apt.conf.d/52localhome-security-only /etc/systemd/system/apt-daily*.timer.d/localhome.conf`, then the line above |
 | mosquitto log into the system log | the last log still written to the eMMC | set `log_dest file /var/log/mosquitto/mosquitto.log` in `/etc/mosquitto/mosquitto.conf` |
 | No graphical desktop | no monitor attached; ~80 MB of RAM | `systemctl set-default graphical.target && systemctl enable --now lightdm` |
 | ext4 `lazytime,commit=60` on `/` and LocalHome's disk, at every boot | reading a file no longer writes it; one journal commit a minute instead of every 5 s | `systemctl disable --now localhome-flash-mounts.service`, then `mount -o remount,nolazytime,commit=5` each |
@@ -183,6 +184,7 @@ doesn't use, recommended on the 2 GB board:
 | Arduino App Lab (`arduino-app-cli`, `arduino-cloud-connector`) and Docker (`docker`, `containerd`) | ~200 MB RAM | `systemctl enable --now arduino-app-cli arduino-cloud-connector docker containerd` |
 | App Lab's Docker images | ~2.3 GB disk | re-downloaded by App Lab when turned back on |
 | Firmware updater (`fwupd`) | ~70 MB RAM | `systemctl unmask fwupd` |
+| The Chromium browser - only a desktop uses it | ~400 MB disk | `sudo apt install chromium` |
 | Package download cache | ~100 MB disk | - |
 
 Kept on purpose: `adbd` (USB access - your way in if the Wi-Fi is ever

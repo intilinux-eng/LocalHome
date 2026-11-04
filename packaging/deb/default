@@ -1,0 +1,13 @@
+# LocalHome's package: what it does besides installing itself.
+#
+# TUNE_BOARD=1 runs deploy/tune-board.sh at each install and update - the
+# tuning a board running unattended on flash storage needs. 0 leaves the
+# system as it is (run it by hand: sudo sh /usr/lib/localhome/deploy/tune-board.sh).
+TUNE_BOARD=1
+# TUNE_LEAN=1 also removes what LocalHome doesn't use (Arduino App Lab and its
+# Docker): see the script's --lean.
+TUNE_LEAN=0
+# SECURITY_UPDATES=1: Debian's security fixes, and nothing else, install by
+# themselves at night, never with a reboot (tune-board.sh's step 2). 0: nothing
+# installs by itself, every update by hand.
+SECURITY_UPDATES=1

@@ -1,0 +1,13 @@
+Package: localhome
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: LocalHome
+Installed-Size: @SIZE@
+Depends: python3 (>= 3.13), python3 (<< 3.14), mosquitto, avahi-daemon, libnss-mdns, adduser, unattended-upgrades
+Section: misc
+Priority: optional
+Description: Heating, cooling and ventilation of a home, run on the board itself
+ LocalHome drives the zones' valves, the dehumidifier and the VMC through
+ Shelly devices over MQTT, with a home page for the residents and an admin
+ panel for the installer. Its data stay in /var/lib/localhome, also when the
+ package is removed.
