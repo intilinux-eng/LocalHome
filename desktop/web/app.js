@@ -532,6 +532,7 @@ async function refresh() {
       if (shown) drawOther();
     }
     $("body").classList.remove("is-old");
+    $("plant").classList.remove("is-old");
     setHealth(level, level === "ok" ? tr("all_good") : tr("to_check", { count: now.problems.length }));
     setAlerts(now.problems.map(problemText), "warn");
     $("updated").textContent = tr("updated", { time: now.lastGood });
@@ -540,6 +541,10 @@ async function refresh() {
     if (shown && !now.acting) {
       detailAfterRefresh();
       loadSparks();
+      if (plantShown()) {
+        drawPlant();
+        loadPlant(false);
+      }
     }
     next(shown ? SHOWN_MS : HIDDEN_MS);
   } catch (e) {
@@ -584,6 +589,7 @@ function boardGone() {
   }
   // Old values are never passed off as current: faded, and said.
   $("body").classList.add("is-old");
+  $("plant").classList.add("is-old");
   $("say").textContent = tr("unknown_now");
   setHealth("off", tr("unreachable_chip"));
   setAlerts([now.lastGood ? tr("unreachable_since", { board: BOARD, time: now.lastGood }) : tr("unreachable", { board: BOARD })], "off");
@@ -710,7 +716,48 @@ function onCover(button) {
   });
 }
 
+// ------------------------------------------------------------------ tabs --
+// The house to live in it, the plant to check it. The choice is kept for the
+// next start; a page with nothing to keep starts on the house.
+const TAB_KEY = "localhome.desktop.tab";
+
+function setTab(tab, focus) {
+  const plantTab = tab === "plant";
+  document.body.dataset.tab = plantTab ? "plant" : "house";
+  $("plant").hidden = !plantTab;
+  $("house-view").hidden = plantTab;
+  ["house", "plant"].forEach(t => {
+    const button = $(`tab-${t}`);
+    button.setAttribute("aria-selected", String(t === document.body.dataset.tab));
+    button.tabIndex = t === document.body.dataset.tab ? 0 : -1;
+  });
+  if (focus) $(`tab-${document.body.dataset.tab}`).focus();
+  try { localStorage.setItem(TAB_KEY, document.body.dataset.tab); } catch (e) { /* only forgets */ }
+  hideTip();
+  window.scrollTo(0, 0);
+  if (plantTab && now.climate) {
+    drawPlant();
+    loadPlant(false);
+  }
+}
+
+document.addEventListener("keydown", event => {
+  if (event.ctrlKey && (event.key === "1" || event.key === "2")) {
+    event.preventDefault();
+    setTab(event.key === "1" ? "house" : "plant", true);
+  } else if (event.target.closest && event.target.closest("#tabs") && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    event.preventDefault();
+    setTab(plantShown() ? "house" : "plant", true);
+  }
+});
+
 document.addEventListener("click", event => {
+  // Only the tab bar's buttons: the body carries data-tab too.
+  const tabButton = event.target.closest("#tabs [role='tab']");
+  if (tabButton) {
+    setTab(tabButton.dataset.tab);
+    return;
+  }
   const opener = event.target.closest("[data-open]");
   if (opener) {
     event.preventDefault();
@@ -762,7 +809,14 @@ $("settings").hidden = !(window.chrome && window.chrome.webview);
 $("size").hidden = $("settings").hidden;
 sizeButton();
 wireDetail();
+wirePlant();
 document.body.dataset.view = "house";
+$("tab-house-text").textContent = tr("tab_house");
+$("tab-plant-text").textContent = tr("tab_plant");
+$("tabs").setAttribute("aria-label", tr("tabs"));
+let firstTab = "house";
+try { firstTab = localStorage.getItem(TAB_KEY) === "plant" ? "plant" : "house"; } catch (e) { /* the house */ }
+setTab(firstTab);
 $("settings").title = tr("settings");
 $("settings").setAttribute("aria-label", tr("settings"));
 $("away-chip").textContent = tr("away_title");

@@ -10,7 +10,12 @@
      away, a zone's charts a click away. Everything it knows comes from the
      board's API, passed on by the program around it (MainForm.cs). -->
 <body>
-  <div class="shell">
+  <!-- The two tabs: the house for living in it, the plant for checking it. -->
+  <nav class="tabs" id="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-house" data-tab="house" aria-selected="true" aria-controls="house-view"><i class="ic" aria-hidden="true">&#xE80F;</i><span id="tab-house-text"></span></button>
+    <button type="button" role="tab" id="tab-plant" data-tab="plant" aria-selected="false" aria-controls="plant"><i class="ic" aria-hidden="true">&#xE9D9;</i><span id="tab-plant-text"></span><b class="tab-badge" id="tab-plant-badge" hidden></b></button>
+  </nav>
+  <div class="shell" id="house-view" role="tabpanel">
     <div class="house">
       <header class="top">
         <div class="brand"><b id="brand"></b><p id="say"></p></div>
@@ -46,9 +51,19 @@
       <div class="detail-body" id="detail-body"></div>
     </aside>
   </div>
+  <!-- The plant (plant.js): each device's state and the main settings, read only. -->
+  <main class="plant" id="plant" role="tabpanel" aria-labelledby="tab-plant" hidden>
+    <div class="plant-hero" id="plant-hero"></div>
+    <div class="tiles" id="plant-tiles"></div>
+    <div class="plant-grid">
+      <section class="plant-card" id="plant-devices"></section>
+      <section class="plant-card plant-config" id="plant-config"></section>
+    </div>
+  </main>
   <div class="tip" id="tip" role="tooltip" hidden></div>
   <script src="texts.js"></script>
   <script src="charts.js"></script>
+  <script src="plant.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

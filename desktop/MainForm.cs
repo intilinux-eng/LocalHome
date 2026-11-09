@@ -32,8 +32,12 @@ namespace LocalHome.Desktop
 
         // The charts read what the board keeps already: a sensor's history,
         // the zones' hours and lows and highs, the outdoor days, the energy.
+        // The "Impianto" tab reads the devices' health and the main settings:
+        // only GETs that change nothing and hold no secret. The zips,
+        // shelly-check, usage and dataset.csv stay out: they hold secrets,
+        // contact the devices or write on the board.
         static readonly Regex Reads = new Regex(
-            @"^/api/(climate/(zones|run-hours|temps|outdoor)|problems|devices|readings|vmc-schedule|covers|server-time|sensors/[^/]+/history|energy/(?!import$)[^/]+)$");
+            @"^/api/(climate/(zones|run-hours|temps|outdoor)|problems|devices|readings|vmc-schedule|covers|server-time|system-status|dehumidifier/settings|sensors/[^/]+/history|energy/(?!import$)[^/]+|climate-admin/(shelly-health(/revision)?|broker(-status)?|map|extra-(switches|sensors|dimmers)|settings|vmc-(speeds|auto)|led-matrix|maintenance|dataset))$");
         static readonly Regex Commands = new Regex(
             @"^/api/(vmc-schedule/boost(/cancel)?|covers/[^/]+/action/(open|stop|close)|sensors/[^/]+/(set-value|on)|climate/zones/[^/]+/override(/cancel)?|climate/away(/cancel)?|dehumidifier/(on|off))$");
 

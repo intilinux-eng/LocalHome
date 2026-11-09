@@ -168,7 +168,9 @@ class Window:
             self.asked.append(f"{urllib.parse.unquote(path)}?{split.query}")
             made_up = next((f for pattern, f in self.gets.items() if fnmatch.fnmatchcase(urllib.parse.unquote(path), pattern)), None)
             if made_up:
-                route.fulfill(json=made_up(urllib.parse.parse_qs(split.query)))
+                answer = made_up(urllib.parse.parse_qs(split.query))
+                status, body = answer if isinstance(answer, tuple) else (200, answer)
+                route.fulfill(status=status, json=body)
                 return
         if request.method == "POST":
             self.sent.append((path, request.post_data_json))
@@ -726,16 +728,155 @@ def test_the_footer_opens_the_full_page_in_the_browser(window):
     w.sane()
 
 
+# ------------------------------------------------------------- the plant tab --
+
+# What the board knows and the tab must never show: a Shelly id (it ends in
+# the device's MAC), the Wi-Fi's name, a MAC, an address, the board's serial,
+# the broker's user, who changed the season.
+SECRETS = ["shellyhtg3-a1b2c3d4e5f6", "CasaWiFi-5G", "aa:bb:cc:dd:ee:ff", "192.168.1.99", "SER-123456", "mqtt-utente",
+           "iPhone (192.168.1.40)"]
+
+
+def with_secrets(path, data):
+    """The board's answers with every private value in them."""
+    if path == "/api/climate-admin/shelly-health":
+        data["devices"] = [{
+            "id": SECRETS[0], "name": f"{ROOMS} Sensor", "names": [f"{ROOMS} Sensor"], "ssid": SECRETS[1],
+            "error": f"no RPC reply from '{SECRETS[0]}'", "errors": [SECRETS[0]], "battery": True, "battery_pct": 9,
+            "wifi_rssi_dbm": -82, "model": "S3SN-0U12A", "firmware": "1.4.2", "update": None, "settings_wrong": [],
+            "assessment": {"state": "attention", "notes": [{"code": "weak_signal", "avg": -82}],
+                           "reasons": [{"code": "battery_low", "detail": 9}, {"code": "device_errors", "detail": SECRETS[0]}]},
+            "stats": {"reports_24h": 11, "missed_24h": 1, "missed_7d": 2, "signal_24h": {"avg": -81, "min": -86},
+                      "signal_7d": {"avg": -80, "min": -88}}}]
+    elif path == "/api/system-status":
+        network = data.setdefault("network", {}) or {}
+        network.update(hostname=SECRETS[4], mdns_name=SECRETS[4], wifi={
+            "ssid": SECRETS[1], "mac": SECRETS[2], "ip": SECRETS[3], "gateway": SECRETS[3], "signal_percent": 70, "band": "2.4 GHz", "channel": 6})
+        data["network"] = network
+        host = data.setdefault("host", {}) or {}
+        host.setdefault("hardware", {})["serial"] = SECRETS[4]
+        data["host"] = host
+    elif path in ("/api/climate-admin/broker", "/api/climate-admin/broker-status"):
+        data.update(host=SECRETS[3], username=SECRETS[5], error=f"connect to {SECRETS[3]} failed")
+    elif path == "/api/climate-admin/map":
+        for zone in data.get("zones") or []:
+            zone["sensor_device_id"] = zone["valve_device_id"] = SECRETS[0]
+    elif path == "/api/climate/zones":
+        data["mode_changed"] = {"at": int(time.time()) - 3600, "by": SECRETS[6], "from": "cool"}
+    elif path == "/api/readings":
+        data["readings"][f"{BATHS} Valve"] = {"name": f"{BATHS} Valve", "ok": False, "seconds_since_update": 700,
+                                               "error": f"no RPC reply from '{SECRETS[0]}'"}
+    elif path == "/api/devices":
+        # The two the test looks at are real Shellys here, not simulated ones.
+        for device in data["sensors"]:
+            if device["name"] in (f"{ROOMS} Sensor", f"{BATHS} Valve"):
+                device["simulated"] = False
+    return data
+
+
+def open_plant(w):
+    w.page.click("#tab-plant")
+    w.page.wait_for_selector(f'[data-dv="{ROOMS} Sensor"]')
+
+
+def test_the_plant_tab_never_shows_ids_addresses_or_network_names(window):
+    w = window(width=1100, edit=with_secrets)
+    open_plant(w)
+    w.page.wait_for_function("() => !!plant.data.health && !!plant.data.system && !!plant.data.broker")
+    # Every device opened: nothing private anywhere, the reasons said in words.
+    for key in w.page.eval_on_selector_all("[data-dv]", "els => els.map(e => e.dataset.dv)"):
+        w.page.click(f'[data-dv="{key}"]')
+    text = w.page.inner_text("#plant")
+    for secret in SECRETS:
+        assert secret not in text, secret
+    assert "Batteria scarica (+1)" in text
+    assert "Segnale debole: -82 dBm" in text, "a note, not a fault"
+    assert not re.search(r"\bpl_[a-z_]+\b", text), "no text left as its key"
+    w.sane()
+
+
+def test_the_plant_tab_only_reads(window):
+    w = window(width=1100)
+    open_plant(w)
+    w.page.click("[data-plant-refresh]")
+    w.page.wait_for_function("() => !!plant.data.system && !plant.busy")
+    w.page.click(f'[data-dv="{ROOMS} Valve"]')
+    w.page.click("details[data-card='season'] summary")
+    assert not w.sent, "the plant tab sends nothing"
+    asked = {a.split("?")[0] for a in w.asked}
+    assert "/api/climate-admin/shelly-health" in asked and "/api/system-status" in asked
+    w.sane()
+
+
+def bagni_valve_down(path, data):
+    if path == "/api/readings":
+        data["readings"][f"{BATHS} Valve"] = {"name": f"{BATHS} Valve", "ok": False, "seconds_since_update": 900}
+    elif path == "/api/devices":
+        next(d for d in data["sensors"] if d["name"] == f"{BATHS} Valve")["simulated"] = False
+    return data
+
+
+def test_the_plant_tab_says_first_what_to_fix(window):
+    w = window(edit=bagni_valve_down)
+    w.problems = [{"code": "device_offline", "subject": f"{BATHS} Valve"}]
+    w.refresh()
+    open_plant(w)
+    w.page.wait_for_function("document.querySelector('.hero h1').textContent.includes('1 cosa da sistemare')")
+    assert w.page.inner_text("#tab-plant-badge") == "1", "the tab says it too"
+    assert w.page.locator(".todo li").count() == 1
+    assert w.page.get_attribute(f'[data-dv="{BATHS} Valve"]', "aria-expanded") == "false"
+    assert w.page.locator(f'.dv[data-level="bad"] [data-dv="{BATHS} Valve"]').count() == 1
+    w.page.click('[data-plant-filter="fix"]')
+    levels = w.page.eval_on_selector_all(".dv", "els => els.map(e => e.dataset.level)")
+    assert set(levels) <= {"bad", "warn", "todo"}, "only what needs fixing"
+    assert w.page.locator(f'[data-dv="{BATHS} Valve"]').count() == 1
+    w.page.click('[data-plant-filter="all"]')
+    assert w.page.locator(".dv").count() > 1
+    w.sane()
+
+
+def older_board(query):
+    return 404, {"ok": False}
+
+
+def test_an_older_board_without_the_admin_reads_still_has_its_plant_tab(window):
+    w = window(gets={"/api/climate-admin/*": older_board, "/api/system-status": older_board,
+                     "/api/dehumidifier/settings": older_board})
+    open_plant(w)
+    w.page.wait_for_function("() => plant.missing.health === true")
+    text = w.page.inner_text("#plant")
+    assert "Questa scheda non dà ancora il controllo degli Shelly" in text
+    assert w.page.locator("details[data-card='season']").count() == 1, "what the house already reads is shown"
+    w.sane()
+
+
+def test_the_tabs_by_the_keyboard_and_kept_for_the_next_start(window):
+    w = window()
+    w.page.keyboard.press("Control+2")
+    assert w.page.is_visible("#plant") and not w.page.is_visible("#house-view")
+    assert w.page.get_attribute("#tab-plant", "aria-selected") == "true"
+    w.page.reload()
+    w.page.wait_for_selector('#tab-plant[aria-selected="true"]')
+    w.page.wait_for_selector(f'[data-dv="{ROOMS} Sensor"]')
+    w.page.keyboard.press("Control+1")
+    assert w.page.is_visible("#house-view") and not w.page.is_visible("#plant")
+    w.sane()
+
+
 def test_the_lists_of_allowed_requests_leave_out_the_rest():
     for path in ("/api/climate/zones", "/api/problems", "/api/covers", "/api/sensors/Stanze Sensor/history",
-                 "/api/climate/run-hours", "/api/climate/temps", "/api/climate/outdoor", "/api/energy/Contatore"):
+                 "/api/climate/run-hours", "/api/climate/temps", "/api/climate/outdoor", "/api/energy/Contatore",
+                 "/api/system-status", "/api/climate-admin/shelly-health", "/api/climate-admin/shelly-health/revision",
+                 "/api/climate-admin/settings", "/api/climate-admin/broker-status", "/api/dehumidifier/settings"):
         assert READS.match(path)
     for path in ("/api/covers/all/action/close", "/api/vmc-schedule/boost", "/api/sensors/VMC/set-value",
                  "/api/climate/zones/Stanze/override", "/api/climate/zones/Stanze/override/cancel",
                  "/api/climate/away", "/api/climate/away/cancel", "/api/dehumidifier/on", "/api/dehumidifier/off"):
         assert COMMANDS.match(path)
     for path in ("/api/sensors/VMC/off", "/api/climate/mode", "/api/system/restart", "/api/covers/all/action/delete",
-                 "/api/climate/zones/Stanze/schedule", "/api/dehumidifier/settings", "/api/energy/import",
+                 "/api/climate/zones/Stanze/schedule", "/api/energy/import",
+                 "/api/climate-admin/maintenance/backup.zip", "/api/climate-admin/dataset.csv", "/api/climate-admin/usage",
+                 "/api/climate-admin/shelly-check", "/api/climate-admin/covers", "/api/covers/Tapparella Cucina/status",
                  "/api/climate-admin/diagnostics.zip"):
         assert not READS.match(path) and not COMMANDS.match(path), path
 

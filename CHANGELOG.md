@@ -33,6 +33,15 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
     when the temperature goes up or down.
   - Windows 11's look: Mica behind the window, a title bar that follows
     light or dark mode, Windows' own font and icons.
+  - A second tab, "Impianto", for the installer. It shows each device's state
+    and the main settings, and it only reads. A verdict and a to-do list come
+    first. The devices follow, by zone, plant, outside, energy and shutters,
+    with their signal, battery and last report. A click on a device opens
+    its details, with 7 days of battery and signal for a battery sensor. The
+    settings follow in cards: season and rules, zones and devices,
+    thermostat, VMC, dehumidifier, board and system. A value shows where it
+    comes from: the panel, config.yaml or the default. The tab never shows a
+    device id, a network name, an address or the raw text of an error.
 
 ### Changed
 - **The VMC's card, redrawn.** What it's doing reads at a glance:
