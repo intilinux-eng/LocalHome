@@ -20,6 +20,8 @@ namespace LocalHome.Desktop
         public static string BoardSettings => T("Impostazioni della scheda…", "Board settings…");
         public static string OpenFull => T("Apri la pagina completa nel browser", "Open the full page in the browser");
         public static string Exit => T("Esci", "Exit");
+        public static string InIcon => T("Nell'icona", "In the icon");
+        public static string OnlyState => T("Solo il colore dello stato", "Only the colour of the state");
 
         public static string BoardTitle => T("Impostazioni della scheda", "Board settings");
         public static string BoardName => T("Nome (facoltativo)", "Name (optional)");

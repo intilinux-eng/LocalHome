@@ -21,6 +21,18 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   power, the VMC's levels and timed speed, the shutters, "away", the
   dehumidifier in summer; a Windows notice when a zone turns on, when there's
   something to check, when the board can't be reached.
+  - A click on a zone, on "Fuori" or on "Consumo" opens its charts in the app.
+    The charts show the temperature and the humidity for 6 hours, 24 hours or
+    7 days, with the valve's openings under them. They also show the lows and
+    highs of each day, the hours of heating and the energy of each day.
+  - In a wide window, the house and the charts are side by side. The cards
+    keep their width and do not fill the screen.
+  - The tray icon can show the temperature of a zone or of outside as a
+    number. Its colour shows the state.
+  - Each zone's card shows its last 24 hours as a small line, and an arrow
+    when the temperature goes up or down.
+  - Windows 11's look: Mica behind the window, a title bar that follows
+    light or dark mode, Windows' own font and icons.
 
 ### Changed
 - **The VMC's card, redrawn.** What it's doing reads at a glance:

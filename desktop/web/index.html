@@ -7,34 +7,48 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <!-- The compact window: the house at a glance, the VMC and the shutters a tap
-     away. Everything it knows comes from the board's API, passed on by the
-     program around it (MainForm.cs). -->
+     away, a zone's charts a click away. Everything it knows comes from the
+     board's API, passed on by the program around it (MainForm.cs). -->
 <body>
-  <header class="top">
-    <div class="brand"><b id="brand"></b><p id="say"></p></div>
-    <div class="top-right">
-      <div class="top-line">
-        <span class="health" id="health" data-level="unknown"><i></i><span id="health-text"></span></span>
-        <button class="gear" type="button" id="settings" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg></button>
-      </div>
-      <button class="chip" type="button" id="away-chip" hidden></button>
+  <div class="shell">
+    <div class="house">
+      <header class="top">
+        <div class="brand"><b id="brand"></b><p id="say"></p></div>
+        <div class="top-right">
+          <div class="top-line">
+            <span class="health" id="health" data-level="unknown"><i></i><span id="health-text"></span></span>
+            <button class="gear" type="button" id="size" hidden><i class="ic widen" aria-hidden="true">&#xE740;</i><i class="ic narrow" aria-hidden="true">&#xE73F;</i></button>
+            <button class="gear" type="button" id="settings" hidden><i class="ic" aria-hidden="true">&#xE713;</i></button>
+          </div>
+          <button class="chip" type="button" id="away-chip" hidden></button>
+        </div>
+      </header>
+      <ul class="alerts" id="alerts" role="status" hidden></ul>
+      <main id="body">
+        <section class="card away" id="away" hidden></section>
+        <section class="zones" id="zones"></section>
+        <section class="facts" id="facts"></section>
+        <section class="card" id="dehum" hidden></section>
+        <section class="card vmc" id="vmc" hidden></section>
+        <section class="card covers" id="covers" hidden></section>
+      </main>
+      <p class="note" id="note" role="status" hidden></p>
+      <footer class="foot">
+        <span id="updated"></span>
+        <a href="#" id="open-full" data-open="/"></a>
+      </footer>
     </div>
-  </header>
-  <ul class="alerts" id="alerts" role="status" hidden></ul>
-  <main id="body">
-    <section class="card away" id="away" hidden></section>
-    <section class="zones" id="zones"></section>
-    <section class="facts" id="facts"></section>
-    <section class="card" id="dehum" hidden></section>
-    <section class="card vmc" id="vmc" hidden></section>
-    <section class="card covers" id="covers" hidden></section>
-  </main>
-  <p class="note" id="note" role="status" hidden></p>
-  <footer class="foot">
-    <span id="updated"></span>
-    <a href="#" id="open-full" data-open="/"></a>
-  </footer>
+    <!-- A zone, outside or the power over time (charts.js): instead of the
+         house in a narrow window, beside it in a wide one. -->
+    <aside class="detail" id="detail">
+      <div class="detail-head" id="detail-head"></div>
+      <div class="range" id="detail-range"></div>
+      <div class="detail-body" id="detail-body"></div>
+    </aside>
+  </div>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
   <script src="texts.js"></script>
+  <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

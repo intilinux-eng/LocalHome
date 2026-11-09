@@ -4,9 +4,13 @@ to the board - and refused unless MainForm.cs's lists allow it, so a request
 the page makes and the program wouldn't pass fails here. The program's half
 (window.chrome.webview) is a stand-in that keeps what it's told.
 """
+import fnmatch
 import json
+import math
 import re
+import time
 import urllib.parse
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -41,6 +45,65 @@ window.chrome = window.chrome || {};
 window.chrome.webview = { postMessage: m => window.__told.push(JSON.parse(JSON.stringify(m))) };
 """
 TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
+# What sticks out of the window, when something does: named, to find it.
+WIDER_JS = """() => { const w = document.documentElement.clientWidth;
+  return [...document.querySelectorAll('body *')].filter(e => getComputedStyle(e).position !== 'fixed'
+    && e.getBoundingClientRect().right > w + 0.5).slice(-6)
+    .map(e => `${e.tagName.toLowerCase()}.${String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : e.className)} `
+      + `(${Math.round(e.getBoundingClientRect().right - w)} px): ${(e.textContent || '').trim().slice(0, 60)}`); }"""
+METER = "Contatore"
+
+
+def made_up_history(query):
+    """A sensor's history as the board answers it: a value every 5 minutes
+    (each hour in 7 days), up to now."""
+    span, step = {"6h": (6 * 3600, 300), "24h": (86400, 300), "7d": (7 * 86400, 3600)}[query.get("range", ["24h"])[0]]
+    end = int(time.time())
+    shapes = {"temperature_c": lambda i: 20 + math.sin(i / 20), "humidity_pct": lambda i: 50 + 5 * math.cos(i / 15),
+              "is_on": lambda i: 1.0 if (i // 24) % 3 == 0 else 0.0, "power_w": lambda i: 400 + 300 * math.sin(i / 10)}
+    return {"ok": True, "series": {field: [{"ts": end - span + i * step, "value": round(shapes[field](i), 2)}
+                                           for i in range(span // step)] for field in query["field"]}}
+
+
+def made_up_days(count, **fields):
+    today = date.today()
+    return [dict({"day": (today - timedelta(days=count - 1 - i)).isoformat()}, **{k: f(i) for k, f in fields.items()})
+            for i in range(count)]
+
+
+def outdoor_days(query):
+    noon = int(time.time()) - 43200
+    return {"ok": True, "configured": True, "days": made_up_days(
+        12, mean=lambda i: 11 + i / 4, min=lambda i: 8 + i / 5, max=lambda i: 15 + i / 3,
+        min_at=lambda i: noon, max_at=lambda i: noon)}
+
+
+def energy(query):
+    days = made_up_days(7, kwh=lambda i: 5 + i, peak_w=lambda i: 2000 + 100 * i, peak_ts=lambda i: int(time.time()))
+    return {"ok": True, "today": days[-1], "yesterday": days[-2], "week": {"from": days[0]["day"], "kwh": 56, "days": days},
+            "month": {"from": days[0]["day"], "kwh": 56, "days": days}}
+
+
+def zone_temps(query):
+    noon = int(time.time()) - 43200
+    return {"ok": True, "days": [d["day"] for d in made_up_days(7)],
+            "zones": {z: [{"min": 19.5 + i / 10, "max": 21.5 + i / 10, "min_at": noon, "max_at": noon} for i in range(7)]
+                      for z in (ROOMS, BATHS)}}
+
+
+# The charts' readings, made up: a new board has kept nothing yet.
+CHARTS = {"/api/sensors/*/history": made_up_history, "/api/climate/outdoor": outdoor_days, f"/api/energy/{METER}": energy,
+          "/api/climate/temps": zone_temps}
+
+
+def with_outside_and_meter(path, data):
+    """The board with an outdoor sensor and a power meter besides."""
+    if path == "/api/readings":
+        data["readings"]["Outdoor Sensor"] = {"ok": True, "temperature_c": 9.5, "humidity_pct": 80}
+        data["readings"][METER] = {"ok": True, "power_w": 640}
+    elif path == "/api/devices":
+        data["sensors"].append({"name": METER, "kind": "power_meter", "power_budget": None})
+    return data
 
 
 def allowed_lists():
@@ -61,7 +124,8 @@ def board(start_server):
 class Window:
     """The window: the page, what the board is made to say, what the tray was told."""
 
-    def __init__(self, browser, board, width=360, height=780, scheme="light", lang="it", clock=False, name="Casa"):
+    def __init__(self, browser, board, width=360, height=780, scheme="light", lang="it", clock=False, name="Casa",
+                 gets=None, edit=None):
         self.board = board
         self.context = browser.new_context(viewport={"width": width, "height": height}, color_scheme=scheme)
         self.page = self.context.new_page()
@@ -73,6 +137,9 @@ class Window:
         self.climate = None      # fields of /api/climate/zones made up
         self.answers = {}        # commands answered here: path -> its answer
         self.sent = []           # the commands that reached this point
+        self.asked = []          # the readings asked, with their query
+        self.gets = gets or {}   # readings answered here: path pattern -> function(query) -> the answer
+        self.edit = edit         # function(path, data) -> data: the board's answer changed on the way
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.add_init_script(HOST)
         if clock:
@@ -96,6 +163,13 @@ class Window:
         if self.down:
             route.fulfill(status=502, json={"ok": False, "unreachable": True})
             return
+        if request.method == "GET":
+            split = urllib.parse.urlsplit(request.url)
+            self.asked.append(f"{urllib.parse.unquote(path)}?{split.query}")
+            made_up = next((f for pattern, f in self.gets.items() if fnmatch.fnmatchcase(urllib.parse.unquote(path), pattern)), None)
+            if made_up:
+                route.fulfill(json=made_up(urllib.parse.parse_qs(split.query)))
+                return
         if request.method == "POST":
             self.sent.append((path, request.post_data_json))
             if path in self.answers:
@@ -112,6 +186,9 @@ class Window:
                     zone["valve_on"] = self.valves[zone["name"]]
             data.update(self.climate or {})
             route.fulfill(response=answer, json=data)
+            return
+        if self.edit and request.method == "GET":
+            route.fulfill(response=answer, json=self.edit(path, answer.json()))
             return
         route.fulfill(response=answer)
 
@@ -137,7 +214,7 @@ class Window:
     def sane(self):
         assert not self.errors, self.errors
         assert not self.refused, f"the program wouldn't pass: {self.refused}"
-        assert self.page.evaluate(OVERFLOW_JS) <= 0
+        assert self.page.evaluate(OVERFLOW_JS) <= 0, self.page.evaluate(WIDER_JS)
 
     def speed(self):
         devices = self.api("/api/devices")["sensors"]
@@ -533,23 +610,132 @@ def test_what_was_seen_of_one_board_says_nothing_of_another(window):
     w.sane()
 
 
-def test_a_zone_opens_the_full_page_in_the_browser(window):
+def test_a_zone_opens_its_charts_and_the_way_back(window):
+    w = window(gets=CHARTS)
+    w.page.click(f'[data-zone="{ROOMS}"] .zone-main')
+    w.page.wait_for_selector('#detail svg[data-chart="temp"]')
+    assert not w.page.is_visible(".house"), "a narrow window shows the charts instead of the house"
+    assert ROOMS in w.page.inner_text("#detail-head")
+    assert w.page.locator('#detail svg[data-chart="rh"]').count() == 1
+    assert w.page.locator("#detail .run").count() > 0, "the valve's openings under the temperature"
+    assert w.page.locator('#detail svg[data-chart="lows"]').count() == 1
+    assert not [m for m in w.page.evaluate("window.__told") if m["type"] == "open"], "no browser opened"
+
+    # The pointer on a line: the time's values, the humidity's too.
+    box = w.page.locator('svg[data-chart="temp"]').bounding_box()
+    w.page.mouse.move(box["x"] + box["width"] * 0.6, box["y"] + 50)
+    tip = w.page.inner_text("#tip")
+    assert "°" in tip and "%" in tip
+    assert w.page.locator('svg[data-chart="rh"] .cross[visibility="visible"]').count() == 1
+
+    w.page.click('[data-range="7d"]')
+    w.page.wait_for_function("detail.key.endsWith('|7d') && !detail.loading")
+    assert any("/history?" in a and "range=7d" in a for a in w.asked)
+    w.sane()
+
+    w.page.click("[data-back]")
+    assert w.page.is_visible(".house") and not w.page.is_visible("#detail")
+    w.sane()
+
+
+def test_the_temperature_outside_beside_a_zone_only_when_asked(window):
+    w = window(gets=CHARTS, edit=with_outside_and_meter)
+    w.page.wait_for_selector('.fact[data-detail="outdoor"]')
+    w.page.click(f'[data-zone="{ROOMS}"] .zone-main')
+    w.page.wait_for_selector('#detail svg[data-chart="temp"]')
+    assert w.page.locator('svg[data-chart="temp"] .line.s-out').count() == 0
+    w.page.click("[data-detail-outside]")
+    assert w.page.locator('svg[data-chart="temp"] .line.s-out').count() == 1
+    assert w.page.get_attribute("[data-detail-outside]", "aria-pressed") == "true"
+    w.sane()
+
+
+def test_outside_and_the_power_open_their_charts(window):
+    w = window(gets=CHARTS, edit=with_outside_and_meter)
+    w.page.wait_for_selector('.fact[data-detail="outdoor"]')
+    w.page.click('.fact[data-detail="outdoor"]')
+    w.page.wait_for_selector('#detail svg[data-chart="days"]')
+    assert w.page.locator('svg[data-chart="days"] .range').count() == 12, "only the days the board has"
+    w.sane()
+    w.page.click("[data-back]")
+    w.page.click('.fact[data-detail="power"]')
+    w.page.wait_for_selector('#detail svg[data-chart="kwh"]')
+    assert w.page.locator('svg[data-chart="kwh"] .bar').count() == 7
+    assert "kWh" in w.page.inner_text("#detail")
+    w.sane()
+
+
+def test_a_wide_window_keeps_the_house_at_its_width_and_a_zone_beside_it(window):
+    w = window(width=1100, gets=CHARTS)
+    w.page.wait_for_selector('#detail svg[data-chart="temp"]')
+    assert w.page.is_visible(".house") and not w.page.is_visible("[data-back]")
+    assert w.page.locator(".house").bounding_box()["width"] <= 400, "the cards don't stretch across the window"
+    assert w.card(ROOMS).get_attribute("data-selected") == "true"
+    w.card(BATHS).locator(".zone-main").click()
+    w.page.wait_for_function(f"document.getElementById('detail-head').innerText.includes('{BATHS}')")
+    assert w.card(BATHS).get_attribute("data-selected") == "true"
+    assert w.card(ROOMS).get_attribute("data-selected") is None
+    w.sane()
+
+
+def test_the_window_asks_the_program_for_room_for_its_charts(window):
     w = window()
-    w.page.click('[data-zone="Stanze"] .zone-main')
+    w.page.click("#size")
+    asked = [m for m in w.page.evaluate("window.__told") if m["type"] == "size"]
+    assert asked == [{"type": "size", "wide": True}]
+
+
+def test_the_tray_is_told_the_temperatures_it_may_show(window):
+    w = window(edit=with_outside_and_meter)
+    w.page.wait_for_function("window.__told.some(m => m.type === 'status' && m.figures && m.figures.length === 3)")
+    figures = w.last_status()["figures"]
+    assert {f["key"] for f in figures} == {f"zone:{ROOMS}", f"zone:{BATHS}", "outdoor"}
+    assert next(f for f in figures if f["key"] == "outdoor")["value"] == 9.5
+
+
+def test_a_zone_card_has_its_last_day_and_which_way_it_goes(window):
+    w = window(gets=CHARTS)
+    w.page.wait_for_selector(f'[data-zone="{ROOMS}"] svg.spark')
+    assert w.page.locator(f'[data-zone="{ROOMS}"] .spark-run').count() > 0, "the valve's openings under the line"
+    said = w.page.evaluate("""() => {
+        const t = Math.floor(Date.now() / 1000);
+        sparks.data.X = { temp: [{ ts: t - 3600, value: 20.1 }, { ts: t, value: 20.6 }], runs: [] };
+        const up = trendHtml("X");
+        sparks.data.X.temp[1].value = 20.2;
+        return [up, trendHtml("X")];
+    }""")
+    assert 'data-way="up"' in said[0] and "+0,5°" in said[0]
+    assert said[1] == "", "a tenth of a degree is no way at all"
+    w.sane()
+
+
+def test_a_zone_that_heats_glows(window):
+    w = window()
+    w.valves = {ROOMS: True}
+    w.refresh()
+    w.page.wait_for_selector(f'[data-zone="{ROOMS}"][data-on="true"]')
+    assert w.card(BATHS).get_attribute("data-on") is None
+    w.sane()
+
+
+def test_the_footer_opens_the_full_page_in_the_browser(window):
+    w = window()
+    w.page.click("#open-full")
     opened = [m for m in w.page.evaluate("window.__told") if m["type"] == "open"]
     assert opened == [{"type": "open", "path": "/"}]
     w.sane()
 
 
 def test_the_lists_of_allowed_requests_leave_out_the_rest():
-    for path in ("/api/climate/zones", "/api/problems", "/api/covers"):
+    for path in ("/api/climate/zones", "/api/problems", "/api/covers", "/api/sensors/Stanze Sensor/history",
+                 "/api/climate/run-hours", "/api/climate/temps", "/api/climate/outdoor", "/api/energy/Contatore"):
         assert READS.match(path)
     for path in ("/api/covers/all/action/close", "/api/vmc-schedule/boost", "/api/sensors/VMC/set-value",
                  "/api/climate/zones/Stanze/override", "/api/climate/zones/Stanze/override/cancel",
                  "/api/climate/away", "/api/climate/away/cancel", "/api/dehumidifier/on", "/api/dehumidifier/off"):
         assert COMMANDS.match(path)
     for path in ("/api/sensors/VMC/off", "/api/climate/mode", "/api/system/restart", "/api/covers/all/action/delete",
-                 "/api/climate/zones/Stanze/schedule", "/api/dehumidifier/settings",
+                 "/api/climate/zones/Stanze/schedule", "/api/dehumidifier/settings", "/api/energy/import",
                  "/api/climate-admin/diagnostics.zip"):
         assert not READS.match(path) and not COMMANDS.match(path), path
 

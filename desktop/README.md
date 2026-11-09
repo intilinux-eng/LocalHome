@@ -6,6 +6,23 @@ levels and timed speed, the shutters, "away", the dehumidifier in summer; a
 Windows notice when a zone turns on, when there's something to
 check, when the board can't be reached.
 
+A click on a zone, on "Fuori" or on "Consumo" opens its charts:
+- the temperature and the humidity for 6 hours, 24 hours or 7 days, with the
+  valve's openings under them;
+- the outside temperature beside a zone's, when you ask for it;
+- the lows and highs of each day, and the hours of heating of each day;
+- the power, and the energy of each day.
+
+Put the pointer on a chart to see its values at that time.
+
+Each zone's card shows its last 24 hours as a small line, with the valve's
+openings under it. An arrow shows when the temperature went up or down by 0.2°
+or more in the last hour. A zone that heats has the colour of the season.
+
+On Windows 11 (22H2 and later), the window has Mica: the desktop's colour
+shows through it, as in Windows' own Settings. The title bar follows Windows'
+light or dark mode, and the icons are Windows' own (Segoe Fluent Icons).
+
 **It's a separate app: nothing on the board changes.** No new endpoint, no
 setting in the admin panel, nothing deployed. It talks to the API the board
 already has, at the address it's given (IP and port). If a board's API changes,
@@ -26,6 +43,7 @@ left click on the icon brings it back; a right click opens the menu:
 
 | In the menu | What it does |
 |---|---|
+| In the icon | The temperature that the icon shows: a zone, outside, or only the colour |
 | Always on top | The window stays over the others |
 | Tell me when a zone turns on | Those notices on or off; the others always come |
 | Start with Windows | On after installing; off and it only runs when opened |
@@ -35,15 +53,24 @@ left click on the icon brings it back; a right click opens the menu:
 To remove it: Windows' *Installed apps*, LocalHome, Uninstall. This takes away
 the program and its settings, and touches nothing on the board.
 
-The icon's dot says how things are: green all fine, orange a zone on, amber
-something to check, grey the board out of reach. A zone opens the full page in
-the browser.
+The icon's colour shows the state: green all fine, orange a zone on, amber
+something to check, grey the board out of reach. By default the icon shows the
+temperature of the first zone as a number, in a tile of that colour. When the
+board is out of reach, the icon shows no number, because an old value is not
+the value now.
+
+In a narrow window, the charts replace the house; the arrow goes back. Make
+the window wider (the button beside the gear, or drag its edge) and the house
+and the charts are side by side. The house keeps its width. The link at the
+bottom opens the full page in the browser.
 
 ## What it can and can't do
 
 The program only passes on the requests the window needs, listed in
 `MainForm.cs` (`Reads`, `Commands`) and logged when refused: reading the zones,
-problems, devices, readings, VMC program, shutters and clock; setting the VMC's
+problems, devices, readings, VMC program, shutters and clock; for the charts,
+reading a sensor's history, the zones' hours and lows and highs, the outdoor
+days and the energy; setting the VMC's
 speed, turning it on, its timed speed; moving a shutter; a zone's temperature
 for a while, and back to its program; away and back; the dehumidifier on and off.
 So it can't switch off the VMC, change a schedule or a season, or reach the admin
@@ -61,7 +88,7 @@ which has no button for anything else.
   that exists only inside the program; what it asks under `/api/` is passed on to
   the board from here, so the board doesn't have to allow calls from elsewhere.
 - `web/`: the page. Its own script and words, on purpose: it loads nothing from
-  the board. `texts.js` is Italian and English, the problems' words copied from
+  the board. `charts.js` draws the charts in plain SVG, with no library. `texts.js` is Italian and English, the problems' words copied from
   LocalHome's locale files.
 - It keeps its settings, its log (`app.log`) and WebView2's folder in
   `%LOCALAPPDATA%\LocalHome Desktop`. The log says what was sent, refused and
