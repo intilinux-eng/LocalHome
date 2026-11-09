@@ -98,6 +98,12 @@ python -m ruff check --select F <files>        # undefined names, unused imports
 - A use case found in real use becomes a test in `test_end_user.py`.
 - Files use CRLF line endings on this machine; edit with tools that keep them.
 - Small, single-purpose commits.
+- Write project text in ASD-STE100 (Simplified Technical English), at
+  about 80%. This applies to docs, comments, commit messages, CHANGELOG and
+  the English UI texts. Use short sentences (20 words for an instruction,
+  25 for a description), one instruction per sentence and the active voice.
+  Use one word for one meaning and not more than three nouns in a row.
+  Italian texts use the same principles. Technical names stay as they are.
 
 ## Care
 
