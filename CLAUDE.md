@@ -13,6 +13,48 @@ tests use two, more only as a margin; boards with 2 GB (carlucci) or 4 GB
 (antonio) of RAM, LocalHome capped at 512 MB by its service
 (`deploy/tune-board.sh`); the history capped at 300 MB by default.
 
+## How to work
+
+Adapted from [Andrej Karpathy's guidelines](https://github.com/multica-ai/andrej-karpathy-skills)
+for this project. They put care before speed: for a trivial change, use
+judgement.
+
+1. **Think before you write code.** Say your assumptions. When a request can
+   mean two things, name both and ask: do not choose in silence. When a
+   simpler way exists, say so. When something is not clear, stop and ask.
+   The user writes short requests in Italian. Ask first when the answer
+   decides something on a real board (antonio, a device, a restart) or
+   something that is the user's to decide (a commit, a push, a deploy).
+   *Example:* "non mi piace che si allarga a tutta finestra" can mean the
+   cards stretch across a wide window, or a click on a zone opens the
+   browser. Name both meanings before you choose one.
+2. **Simplicity first.** Write the smallest change that does what was asked.
+   Add no feature, option or abstraction that nobody asked for, and no error
+   handling for a case that cannot happen. When 200 lines can be 50, write 50.
+   *Example:* a chart that shows only noise (a battery's percentage, which
+   moves with each voltage reading) is removed. Do not add smoothing options
+   to it: one line with the median says more.
+3. **Surgical changes.** Change only what the request needs. Do not improve,
+   reformat or refactor the code next to it; match the style of the file.
+   Remove only what your own change left unused. Other dead code: tell the
+   user, do not delete it. Every changed line must trace back to the request.
+   *Example:* a `sed` that turns a file's CRLF line endings into LF is your
+   own mess: put them back in the same change.
+4. **A goal that you can check.** Before you start, turn the task into checks:
+   - a bug: a test that shows it, then the fix that makes it pass;
+   - a feature: its test in the right suite (a resident's use case goes in
+     `tests/ui/test_end_user.py`);
+   - a refactor: the same tests pass before and after.
+
+   For a task in steps, write the plan as "step - check". Work until the
+   checks pass, then report how they went, failures included.
+   *Example:* a page that scrolls sideways in a test is not a guess about
+   the layout. Make the test name the element that sticks out, measure it,
+   then fix the cause (there it was an entrance animation, not a width).
+
+The rules work when diffs hold fewer changes nobody asked for, code needs
+fewer rewrites, and questions come before the work, not after a mistake.
+
 ## Spend context on the change, not on finding it
 
 - **Find, then read.** Search for the function, the route or the text key
