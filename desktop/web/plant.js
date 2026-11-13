@@ -456,7 +456,7 @@ function deviceHtml(r) {
       <span class="dv-value">${esc(rowValue(r))}</span>
       <span class="dv-meta">${signalHtml(rowSignal(r))}${batteryHtml(rowBattery(r))}</span>
       ${pill(s.level, s.word, s.dashed)}
-      <i class="ic chev" aria-hidden="true"></i>
+      ${icon("\uE70D", "chev")}
     </button>${open ? `<div class="dv-body">${deviceFacts(r)}</div>` : ""}</div>`;
 }
 
@@ -585,7 +585,7 @@ function card(key, glyph, title, summary, rows, note) {
   const open = !plant.closed.has(key);
   return `<details class="set" data-card="${key}"${open ? " open" : ""}>
     <summary><span class="set-icon">${icon(glyph)}</span><span class="set-title"><b>${esc(title)}</b><small>${esc(summary || "")}</small></span>
-      <i class="ic chev" aria-hidden="true"></i></summary>
+      ${icon("\uE70D", "chev")}</summary>
     <div class="set-rows">${rows.join("")}${note ? `<p class="plant-note">${esc(note)}</p>` : ""}</div></details>`;
 }
 

@@ -237,9 +237,10 @@ button.fact:hover { background: color-mix(in srgb, var(--text) 8%, var(--surface
 .tip b { margin-left: auto; padding-left: 10px; font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------- Windows 11's own look */
-/* Windows' icons: Segoe Fluent Icons on Windows 11, MDL2 Assets on 10. */
-.ic { display: inline-block; font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets"; font-style: normal; font-weight: normal;
-  font-size: 15px; line-height: 1; speak: never; }
+/* The icons: the page's SVG sprite, sized by the font size like a glyph. */
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ic { display: inline-block; flex: none; width: 1em; height: 1em; font-size: 15px; vertical-align: -0.15em;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .step .ic { font-size: 11px; }
 .covers .ic { font-size: 12px; }
 .all .ic { font-size: 11px; }

@@ -178,8 +178,11 @@ function untilWords(iso) {
 }
 
 // Windows' own icons (Segoe Fluent Icons), by their code.
-function icon(code) {
-  return `<i class="ic" aria-hidden="true">${code}</i>`;
+// Each icon by its Segoe Fluent Icons code, drawn from the page's own SVG
+// sprite (index.html): the same on Windows and Linux.
+function icon(code, extra = "") {
+  const id = code.charCodeAt(0).toString(16).toUpperCase();
+  return `<svg class="ic${extra ? ` ${extra}` : ""}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 }
 
 function stepper(value) {
