@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=LocalHome
+GenericName=Home automation
+GenericName[it]=Domotica
+Comment=The house at a glance: zones, VMC, shutters, the plant's state
+Comment[it]=La casa a colpo d'occhio: zone, VMC, tapparelle, lo stato dell'impianto
+Exec=localhome-desktop
+Icon=localhome-desktop
+Terminal=false
+Categories=Utility;
+Keywords=home;climate;thermostat;VMC;shelly;casa;clima;
+StartupWMClass=localhome-desktop
+SingleMainWindow=true

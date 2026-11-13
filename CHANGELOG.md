@@ -14,6 +14,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   configuration, the board's tuning - with its data in `/var/lib/localhome`,
   kept when it's removed. LocalHome's modules are compiled: the package
   carries none of its Python source. Built on a PC in Docker under WSL2.
+- **LocalHome for the Linux desktop** (`desktop/linux/`, package
+  `localhome-desktop`): the Windows app's page in a Qt window, with a tray
+  icon and the desktop's notices, for KDE and the other desktops. The same
+  tabs, charts and limits as the Windows app; it needs no change on the
+  board. The app's icons are now SVG, the same on both systems.
 - **LocalHome for the Windows desktop** (`desktop/`): a separate app, with a
   small window and a tray icon, that needs no change on the board and uses
   only the API it already has, at a name and address set in the app. The zones

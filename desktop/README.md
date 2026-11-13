@@ -1,4 +1,4 @@
-# LocalHome for the Windows desktop
+# LocalHome for the Windows and Linux desktop
 
 A small window and a tray icon for a LocalHome board: the zones with their
 comfort and a temperature for a while, outside, the house's power, the VMC's
@@ -114,7 +114,8 @@ which has no button for anything else.
   that exists only inside the program; what it asks under `/api/` is passed on to
   the board from here, so the board doesn't have to allow calls from elsewhere.
 - `web/`: the page. Its own script and words, on purpose: it loads nothing from
-  the board. `charts.js` draws the charts in plain SVG, with no library;
+  the board. Its icons are an SVG sprite in `index.html`, the same on Windows
+  and Linux. `charts.js` draws the charts in plain SVG, with no library;
   `plant.js` is the Impianto tab. `texts.js` is Italian and English, the problems' words copied from
   LocalHome's locale files.
 - It keeps its settings, its log (`app.log`) and WebView2's folder in
@@ -140,3 +141,34 @@ bin/Release/net48/LocalHome.exe --data-dir <a folder> --address <ip:port>
 
 `--tray` starts it hidden, as Windows does; `--name` sets the board's name. `--data-dir` keeps a trial's settings
 apart from the installed copy's, and lets both run at once.
+
+## On Linux (KDE and others)
+
+The same page in a Qt window, with a tray icon and the desktop's own notices
+(`desktop/linux/`). It does the same as the Windows app, with the same lists of
+requests (a test keeps them equal) and the same tabs. On first start it asks for
+the board's address, then starts at each login (the tray menu turns that off).
+
+```bash
+python3 desktop/linux/build_deb.py                      # dist/localhome-desktop_<version>_all.deb
+sudo apt install ./dist/localhome-desktop_<version>_all.deb
+```
+
+One package for every processor, built in seconds with `dpkg-deb`: plain Python
+and the page. Qt comes from the system (`python3-pyqt6.qtwebengine`, Debian 13
+and Ubuntu 24.04 or newer). To try it from the repository, with those packages
+installed: `python3 desktop/linux/localhome-desktop.py --data-dir /tmp/lh-trial`.
+
+How it differs from the Windows app:
+- The page comes from a small server on this PC (`core.PageServer`, on
+  127.0.0.1 only). It answers only the window: each of the window's requests
+  carries a token made at each start, which no other program has.
+- The page speaks to the program through Qt's web channel, with the same
+  messages as `window.chrome.webview` on Windows.
+- Its settings are in `~/.config/localhome-desktop/`, its log in
+  `~/.local/state/localhome-desktop/app.log`, the start at login in
+  `~/.config/autostart/localhome-desktop.desktop`. Removing the package leaves
+  them, as they are each user's.
+- On Wayland, the desktop places the window: only its size is kept.
+
+Tests of the part without Qt: `pytest tests/test_desktop_linux.py`.
