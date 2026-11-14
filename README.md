@@ -250,8 +250,40 @@ From a board fresh out of its box to a running installation in about 15
 minutes. The full, verified walk-through - every command, what it
 prints, and what to do when it doesn't - is
 **[docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md)**.
-In short, with the board on your Wi-Fi and its name set (Arduino App Lab
-does both at first boot), over `ssh arduino@<name>.local`:
+First, connect the board to your Wi-Fi and set its name: Arduino App Lab
+does both at first boot.
+
+### With the Debian package (recommended)
+
+One file installs everything: the program, its service, the broker's
+configuration, the board's tuning and Debian's security updates. The same
+command updates it, and the data in `/var/lib/localhome` stays.
+LocalHome's modules travel compiled. How to build the package and what it
+contains: [packaging/deb/README.md](packaging/deb/README.md).
+
+```bash
+# 1. On the PC: build the package (Docker; see packaging/deb/README.md)
+python tools/build_deb.py --check      # dist/localhome_<version>_arm64.deb
+
+# 2. Copy it to the board
+scp dist/localhome_<version>_arm64.deb arduino@<name>.local:
+
+# 3. On the board (ssh arduino@<name>.local): the time zone, then the package
+sudo timedatectl set-timezone Europe/Rome     # the board ships in UTC
+sudo apt install -y ./localhome_<version>_arm64.deb
+
+# 4. The LED matrix - not in the package yet: the sketch's library (only if
+#    `arduino-cli lib list` doesn't show it already), then build and load it
+arduino-cli lib install "Arduino_RouterBridge@0.4.4"   # core 1.1.0; with core 1.0.0: @0.4.3
+arduino-cli compile --upload -b arduino:zephyr:unoq /usr/lib/localhome/deploy/led-matrix/localhome_matrix
+```
+
+To update the board later: `python tools/install_deb.py <name>` from the
+PC, with the newest package in `dist/`.
+
+### From git (to develop, or to try a branch)
+
+Over `ssh arduino@<name>.local`:
 
 ```bash
 # 1. Time zone - the board ships in UTC, and schedules run on its clock
@@ -283,11 +315,16 @@ sudo sh deploy/tune-board.sh
 
 # 8. The LED matrix: the sketch's library (only if `arduino-cli lib list`
 #    doesn't show it already), then build and load it - one build at a time
-arduino-cli lib install "Arduino_RouterBridge@0.4.3"
+arduino-cli lib install "Arduino_RouterBridge@0.4.4"   # core 1.1.0; with core 1.0.0: @0.4.3
 arduino-cli compile --upload -b arduino:zephyr:unoq deploy/led-matrix/localhome_matrix
 ```
 
-Then open `http://<name>.local:5000/climate-admin`: name the page; the
+A board installed from git updates with `tools/deploy_board.py`, not with
+the package.
+
+### Then, for both
+
+Open `http://<name>.local:5000/climate-admin`: name the page; the
 zones - Stanze and Bagni - and every Shelly of the plant are already
 there, each to configure: type in each one's id as it goes in, one at a
 time, and restart from the panel. On each Shelly: MQTT server `<name>.local:1883`,
@@ -324,8 +361,8 @@ Adding a driver is a self-contained change - see
 
 What comes next, most of it already measured for in the house's record:
 
-- **A Debian package** - `apt install` on a new board, then updates
-  from the admin panel through an apt repository.
+- **Updates from the admin panel** - the Debian package through an apt
+  repository, with the LED matrix's sketch inside the package.
 - **Starting and stopping ahead of time** - the radiant ceiling keeps
   heating for an hour after its valve closes: when to open and close it,
   from how fast this house warms and cools.
