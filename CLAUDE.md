@@ -38,8 +38,8 @@ judgement.
    reformat or refactor the code next to it; match the style of the file.
    Remove only what your own change left unused. Other dead code: tell the
    user, do not delete it. Every changed line must trace back to the request.
-   *Example:* a `sed` that turns a file's CRLF line endings into LF is your
-   own mess: put them back in the same change.
+   *Example:* a `sed` that changes a file's line endings is your own mess:
+   put them back in the same change.
 4. **A goal that you can check.** Before you start, turn the task into checks:
    - a bug: a test that shows it, then the fix that makes it pass;
    - a feature: its test in the right suite (a resident's use case goes in
@@ -111,11 +111,14 @@ fewer rewrites, and questions come before the work, not after a mistake.
 | Board health, boots, diagnostics | `services/system_status.py`, `services/diagnostics.py`, `services/maintenance.py` |
 | Devices | `drivers/<brand>/` - registered with `@register_driver`, see `core/registry.py` |
 | Board setup and deploy | `deploy/` (service, `tune-board.sh`, watchdogs), `tools/deploy_board.py` |
-| The Debian package (compiled, for boards installed without git) | `packaging/deb/` - see its README; built by `tools/build_deb.py` in Docker under WSL2 |
+| The Debian package (compiled, for boards installed without git) | `packaging/deb/` - see its README; built by `tools/build_deb.py` in Docker |
 | The installer's guide | `static/guide/shelly-plus1-valvole.html` |
-| The Windows app (separate, on the existing API: no change on the board) | `desktop/` - see its README; its page in `desktop/web/`, tested by `tests/ui/test_desktop_page.py` |
+| The desktop apps (separate, on the existing API: no change on the board) | `desktop/` - see its README; the shared page in `desktop/web/`, tested by `tests/ui/test_desktop_page.py`; Windows in `desktop/*.cs`, Linux (Qt, `.deb`) in `desktop/linux/` |
 
 ## Commands
+
+The development PC runs Linux (Ubuntu, KDE). Run these in the project's
+`.venv`: `source .venv/bin/activate`.
 
 ```bash
 python run.py                                  # the dashboard locally (config/config.yaml)
@@ -125,6 +128,7 @@ pytest -m enduser -n 6                         # the end-user suite alone, ~20 s
 python tools/screenshot_home.py OUT --state all  # the home page in each state
 python tools/check_board.py antonio --log      # a running board, read-only
 python tools/build_deb.py --check             # the board's .deb (arm64), then tried in a clean Debian
+python3 desktop/linux/build_deb.py             # the Linux desktop app's .deb
 python -m ruff check --select F <files>        # undefined names, unused imports
 ```
 
@@ -138,7 +142,8 @@ python -m ruff check --select F <files>        # undefined names, unused imports
   `__version__` in `localhome/__init__.py` and pyproject.toml (a test keeps
   them equal), Unreleased moved under `## X.Y.Z - date`, a tag `vX.Y.Z`.
 - A use case found in real use becomes a test in `test_end_user.py`.
-- Files use CRLF line endings on this machine; edit with tools that keep them.
+- Files use LF line endings; keep them. (Until November 2026 the work was
+  on Windows, with CRLF in the working tree: the repository has LF.)
 - Small, single-purpose commits.
 - Write project text in ASD-STE100 (Simplified Technical English), at
   about 80%. This applies to docs, comments, commit messages, CHANGELOG and
