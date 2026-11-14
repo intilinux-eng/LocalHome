@@ -14,6 +14,11 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   configuration, the board's tuning - with its data in `/var/lib/localhome`,
   kept when it's removed. LocalHome's modules are compiled: the package
   carries none of its Python source. Built on a PC in Docker under WSL2.
+- **LocalHome for the Linux desktop** (`desktop/linux/`, package
+  `localhome-desktop`): the Windows app's page in a Qt window, with a tray
+  icon and the desktop's notices, for KDE and the other desktops. The same
+  tabs, charts and limits as the Windows app; it needs no change on the
+  board. The app's icons are now SVG, the same on both systems.
 - **LocalHome for the Windows desktop** (`desktop/`): a separate app, with a
   small window and a tray icon, that needs no change on the board and uses
   only the API it already has, at a name and address set in the app. The zones
@@ -21,6 +26,27 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
   power, the VMC's levels and timed speed, the shutters, "away", the
   dehumidifier in summer; a Windows notice when a zone turns on, when there's
   something to check, when the board can't be reached.
+  - A click on a zone, on "Fuori" or on "Consumo" opens its charts in the app.
+    The charts show the temperature and the humidity for 6 hours, 24 hours or
+    7 days, with the valve's openings under them. They also show the lows and
+    highs of each day, the hours of heating and the energy of each day.
+  - In a wide window, the house and the charts are side by side. The cards
+    keep their width and do not fill the screen.
+  - The tray icon can show the temperature of a zone or of outside as a
+    number. Its colour shows the state.
+  - Each zone's card shows its last 24 hours as a small line, and an arrow
+    when the temperature goes up or down.
+  - Windows 11's look: Mica behind the window, a title bar that follows
+    light or dark mode, Windows' own font and icons.
+  - A second tab, "Impianto", for the installer. It shows each device's state
+    and the main settings, and it only reads. A verdict and a to-do list come
+    first. The devices follow, by zone, plant, outside, energy and shutters,
+    with their signal, battery and last report. A click on a device opens
+    its details, with 7 days of battery and signal for a battery sensor. The
+    settings follow in cards: season and rules, zones and devices,
+    thermostat, VMC, dehumidifier, board and system. A value shows where it
+    comes from: the panel, config.yaml or the default. The tab never shows a
+    device id, a network name, an address or the raw text of an error.
 
 ### Changed
 - **The VMC's card, redrawn.** What it's doing reads at a glance:

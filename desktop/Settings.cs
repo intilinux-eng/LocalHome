@@ -15,6 +15,8 @@ namespace LocalHome.Desktop
         public bool TopMost { get; set; }
         public bool NotifyZones { get; set; } = true;
         public bool ToldAboutTray { get; set; }
+        // The tray icon's number: "auto" the first zone, "" none, else a zone or outside.
+        public string TrayFigure { get; set; } = "auto";
         public int X { get; set; } = int.MinValue;
         public int Y { get; set; } = int.MinValue;
         public int Width { get; set; }

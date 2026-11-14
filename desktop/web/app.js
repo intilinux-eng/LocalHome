@@ -9,6 +9,9 @@ const params = new URLSearchParams(location.search);
 const LANG = TEXTS[params.get("lang")] ? params.get("lang") : "it";
 const BOARD = params.get("board") || "";
 const NAME = params.get("name") || "LocalHome";
+// The program puts Windows 11's Mica behind the page when it can: the page
+// is then see-through, its cards a light veil on it.
+document.documentElement.dataset.backdrop = params.get("backdrop") === "mica" ? "mica" : "";
 const SHOWN_MS = 20000;            // on screen: as the home page reads it
 const HIDDEN_MS = 60000;           // in the tray: enough for the notices
 const FAILING_MS = 15000;          // the board not answering: tried this often
@@ -174,9 +177,17 @@ function untilWords(iso) {
   return tr("until_day", { day: weekday, time });
 }
 
+// Windows' own icons (Segoe Fluent Icons), by their code.
+// Each icon by its Segoe Fluent Icons code, drawn from the page's own SVG
+// sprite (index.html): the same on Windows and Linux.
+function icon(code, extra = "") {
+  const id = code.charCodeAt(0).toString(16).toUpperCase();
+  return `<svg class="ic${extra ? ` ${extra}` : ""}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+}
+
 function stepper(value) {
   const button = (delta, sign, label) => `<button class="step" type="button" data-step="${delta}" aria-label="${esc(tr(label))}" title="${esc(tr(label))}">${sign}</button>`;
-  return `<div class="adjust">${button(-TARGET.step, "−", "colder")}<span>${value}</span>${button(TARGET.step, "+", "warmer")}</div>`;
+  return `<div class="adjust">${button(-TARGET.step, icon("\uE738"), "colder")}<span>${value}</span>${button(TARGET.step, icon("\uE710"), "warmer")}</div>`;
 }
 
 // Below a zone's readings: its target, half a degree either way. A tap sends
@@ -210,12 +221,13 @@ function zoneHtml(zone, climate) {
   } else {
     const c = comfortOf(zone, climate);
     const p = c && comfortDot(c);
-    inside = `<div class="zone-values"><span class="zone-t">${fmt(zone.temperature_c)}°</span>${zone.humidity_pct != null ? `<span class="zone-rh">${fmt(zone.humidity_pct, 0)}%</span>` : ""}</div>
+    inside = `<div class="zone-values"><span class="zone-t">${fmt(zone.temperature_c)}°</span>${zone.humidity_pct != null ? `<span class="zone-rh">${fmt(zone.humidity_pct, 0)}%</span>` : ""}${trendHtml(zone.name)}</div>
+      ${sparkSvg(zone.name)}
       ${c ? `<div class="comfort" data-level="${c.level}"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.6"/><circle class="dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.6"/></svg><span>${esc(comfortWord(c))}</span></div>` : ""}`;
   }
   const adjust = zone.sensor_configured === false || zone.valve_configured === false ? "" : adjustHtml(zone, climate);
-  return `<div class="zone" data-zone="${esc(zone.name)}"${now.pending[zone.name] != null ? ' data-pending="true"' : ""}>
-    <a class="zone-main" href="#" data-open="/"><div class="zone-head"><b>${esc(zone.name)}</b>${pill}</div>${inside}</a>${adjust}</div>`;
+  return `<div class="zone" data-zone="${esc(zone.name)}"${now.pending[zone.name] != null ? ' data-pending="true"' : ""}${zone.valve_on === true ? ' data-on="true"' : ""}>
+    <a class="zone-main" href="#" data-detail="zone" data-name="${esc(zone.name)}" title="${esc(tr("ch_open"))}"><div class="zone-head"><b>${esc(zone.name)}</b>${pill}</div>${inside}</a>${adjust}</div>`;
 }
 
 // Away, as the home page says it: every zone off until the way back. The VMC
@@ -259,16 +271,16 @@ function dehumHtml(d) {
 
 function factsHtml() {
   const out = [];
-  const outdoor = now.readings["Outdoor Sensor"];
+  const outdoor = now.readings[OUTDOOR];
   if (outdoor && outdoor.temperature_c != null) {
-    out.push(`<div class="fact"><small>${esc(tr("outside"))}</small><b>${fmt(outdoor.temperature_c)}°</b>${outdoor.humidity_pct != null ? `<span>${fmt(outdoor.humidity_pct, 0)}%</span>` : ""}</div>`);
+    out.push(`<button class="fact" type="button" data-detail="outdoor" title="${esc(tr("ch_open"))}"><small>${esc(tr("outside"))}</small><b>${fmt(outdoor.temperature_c)}°</b>${outdoor.humidity_pct != null ? `<span>${fmt(outdoor.humidity_pct, 0)}%</span>` : ""}</button>`);
   }
   const meter = now.devices && now.devices.sensors.find(d => d.kind === "power_meter");
   const power = meter && now.readings[meter.name];
   if (power && power.power_w != null) {
     const budget = meter.power_budget;
     const level = !budget ? "ok" : power.power_w >= budget.trip_risk_w ? "bad" : power.power_w >= budget.available_power_w ? "warn" : "ok";
-    out.push(`<div class="fact" data-level="${level}"><small>${esc(tr("power"))}</small><b>${fmt(power.power_w, 0)} W</b></div>`);
+    out.push(`<button class="fact" type="button" data-level="${level}" data-detail="power" data-name="${esc(meter.name)}" title="${esc(tr("ch_open"))}"><small>${esc(tr("power"))}</small><b>${fmt(power.power_w, 0)} W</b></button>`);
   }
   return out.join("");
 }
@@ -317,11 +329,7 @@ function vmcHtml(speed) {
   return `${head}<div class="levels" role="group" aria-label="${esc(tr("levels"))}">${levels}</div>${timed}`;
 }
 
-const ARROWS = {
-  open: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>`,
-  stop: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
-  close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
-};
+const ARROWS = { open: icon("\uE70E"), stop: icon("\uEE95"), close: icon("\uE70D") };
 
 // "Tapparella Cucina", "Tapparella Soggiorno": the word they share goes.
 function coverLabel(name, names) {
@@ -375,6 +383,7 @@ function drawOther() {
   $("covers").hidden = !names.length;
   if (names.length) put($("covers"), coversHtml(names));
   put($("facts"), factsHtml());
+  markSelected();
 }
 
 function drawClimate() {
@@ -394,6 +403,7 @@ function drawClimate() {
   const kind = climate.mode === "cool" ? "cool" : "heat";
   const what = climate.away_until ? tr("away") : on.length ? tr(`running_${kind}`, { zones: on.join(", ") }) : tr(`idle_${kind}`);
   $("say").textContent = `${season} · ${what}`;
+  markSelected();
 }
 
 // -------------------------------------------------- what's wrong, in words --
@@ -475,7 +485,18 @@ function noticeProblems(problems) {
 function tip(climate, level) {
   if (level === "off") return `${NAME}: ${tr("unreachable_chip").toLowerCase()}`;
   const zones = climate.zones.filter(z => z.temperature_c != null).map(z => `${z.name} ${fmt(z.temperature_c)}°`);
+  const outside = now.readings[OUTDOOR];
+  if (outside && outside.temperature_c != null) zones.push(`${tr("outside")} ${fmt(outside.temperature_c)}°`);
   return zones.length ? zones.join(" · ") : NAME;
+}
+
+// What the tray's icon may show, as a number: a zone's temperature, outside's.
+function figures(climate) {
+  const out = climate.zones.filter(z => z.temperature_c != null && z.sensor_ok)
+    .map(z => ({ key: `zone:${z.name}`, label: z.name, value: z.temperature_c }));
+  const outside = now.readings[OUTDOOR];
+  if (outside && outside.temperature_c != null) out.push({ key: "outdoor", label: tr("outside"), value: outside.temperature_c });
+  return out;
 }
 
 // ---------------------------------------------------------------- reading --
@@ -491,7 +512,9 @@ async function refresh() {
   clearTimeout(timer);
   const shown = !document.hidden;
   try {
-    const [climate, problemsAnswer, clock] = await Promise.all([api("/api/climate/zones"), api("/api/problems"), api("/api/server-time")]);
+    const [climate, problemsAnswer, clock, readings] = await Promise.all([api("/api/climate/zones"), api("/api/problems"),
+      api("/api/server-time"), api("/api/readings")]);
+    now.readings = readings.readings || {};
     now.clock = clock;
     now.clockAt = Date.now();
     now.climate = climate;
@@ -512,10 +535,20 @@ async function refresh() {
       if (shown) drawOther();
     }
     $("body").classList.remove("is-old");
+    $("plant").classList.remove("is-old");
     setHealth(level, level === "ok" ? tr("all_good") : tr("to_check", { count: now.problems.length }));
     setAlerts(now.problems.map(problemText), "warn");
     $("updated").textContent = tr("updated", { time: now.lastGood });
-    tell({ type: "status", level: climate.zones.some(z => z.valve_on === true) && level === "ok" ? "busy" : level, tip: tip(climate, level) });
+    tell({ type: "status", level: climate.zones.some(z => z.valve_on === true) && level === "ok" ? "busy" : level, tip: tip(climate, level),
+           figures: figures(climate) });
+    if (shown && !now.acting) {
+      detailAfterRefresh();
+      loadSparks();
+      if (plantShown()) {
+        drawPlant();
+        loadPlant(false);
+      }
+    }
     next(shown ? SHOWN_MS : HIDDEN_MS);
   } catch (e) {
     boardGone();
@@ -524,9 +557,8 @@ async function refresh() {
 }
 
 async function readTheRest() {
-  const [devices, readings, vmc] = await Promise.all([api("/api/devices"), api("/api/readings"), api("/api/vmc-schedule").catch(() => null)]);
+  const [devices, vmc] = await Promise.all([api("/api/devices"), api("/api/vmc-schedule").catch(() => null)]);
   now.devices = devices;
-  now.readings = readings.readings || {};
   now.vmc = vmc;
   if (devices.covers && devices.covers.length) await readCovers();
 }
@@ -560,6 +592,7 @@ function boardGone() {
   }
   // Old values are never passed off as current: faded, and said.
   $("body").classList.add("is-old");
+  $("plant").classList.add("is-old");
   $("say").textContent = tr("unknown_now");
   setHealth("off", tr("unreachable_chip"));
   setAlerts([now.lastGood ? tr("unreachable_since", { board: BOARD, time: now.lastGood }) : tr("unreachable", { board: BOARD })], "off");
@@ -686,16 +719,70 @@ function onCover(button) {
   });
 }
 
+// ------------------------------------------------------------------ tabs --
+// The house to live in it, the plant to check it. The choice is kept for the
+// next start; a page with nothing to keep starts on the house.
+const TAB_KEY = "localhome.desktop.tab";
+
+function setTab(tab, focus) {
+  const plantTab = tab === "plant";
+  document.body.dataset.tab = plantTab ? "plant" : "house";
+  $("plant").hidden = !plantTab;
+  $("house-view").hidden = plantTab;
+  ["house", "plant"].forEach(t => {
+    const button = $(`tab-${t}`);
+    button.setAttribute("aria-selected", String(t === document.body.dataset.tab));
+    button.tabIndex = t === document.body.dataset.tab ? 0 : -1;
+  });
+  if (focus) $(`tab-${document.body.dataset.tab}`).focus();
+  try { localStorage.setItem(TAB_KEY, document.body.dataset.tab); } catch (e) { /* only forgets */ }
+  hideTip();
+  window.scrollTo(0, 0);
+  if (plantTab && now.climate) {
+    drawPlant();
+    loadPlant(false);
+  }
+}
+
+document.addEventListener("keydown", event => {
+  if (event.ctrlKey && (event.key === "1" || event.key === "2")) {
+    event.preventDefault();
+    setTab(event.key === "1" ? "house" : "plant", true);
+  } else if (event.target.closest && event.target.closest("#tabs") && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    event.preventDefault();
+    setTab(plantShown() ? "house" : "plant", true);
+  }
+});
+
 document.addEventListener("click", event => {
+  // Only the tab bar's buttons: the body carries data-tab too.
+  const tabButton = event.target.closest("#tabs [role='tab']");
+  if (tabButton) {
+    setTab(tabButton.dataset.tab);
+    return;
+  }
   const opener = event.target.closest("[data-open]");
   if (opener) {
     event.preventDefault();
     tell({ type: "open", path: opener.dataset.open });
     return;
   }
+  const charts = event.target.closest("[data-detail]");
+  if (charts) {
+    event.preventDefault();
+    openDetail(charts.dataset.detail, charts.dataset.name);
+    return;
+  }
   const button = event.target.closest("button");
   if (!button || button.disabled) return;
   if (button.id === "settings") tell({ type: "settings" });
+  else if (button.id === "size") tell({ type: "size", wide: !WIDE.matches });
+  else if (button.hasAttribute("data-back")) closeDetail();
+  else if (button.dataset.range) setRange(button.dataset.range);
+  else if (button.hasAttribute("data-detail-outside")) {
+    detail.outside = !detail.outside;
+    drawDetail();
+  }
   else if (button.closest("#zones")) onZone(button);
   else if (button.closest("#away") || button.id === "away-chip") onAway(button);
   else if (button.closest("#dehum")) onDehum(button);
@@ -719,8 +806,20 @@ document.title = NAME;
 $("brand").textContent = NAME;
 $("brand").title = NAME;
 $("open-full").textContent = tr("open_full", { name: NAME });
-// The settings are the program's: with no program around it, no button.
+// The settings and the window's size are the program's: with no program
+// around it, no buttons.
 $("settings").hidden = !(window.chrome && window.chrome.webview);
+$("size").hidden = $("settings").hidden;
+sizeButton();
+wireDetail();
+wirePlant();
+document.body.dataset.view = "house";
+$("tab-house-text").textContent = tr("tab_house");
+$("tab-plant-text").textContent = tr("tab_plant");
+$("tabs").setAttribute("aria-label", tr("tabs"));
+let firstTab = "house";
+try { firstTab = localStorage.getItem(TAB_KEY) === "plant" ? "plant" : "house"; } catch (e) { /* the house */ }
+setTab(firstTab);
 $("settings").title = tr("settings");
 $("settings").setAttribute("aria-label", tr("settings"));
 $("away-chip").textContent = tr("away_title");

@@ -1,10 +1,49 @@
-# LocalHome for the Windows desktop
+# LocalHome for the Windows and Linux desktop
 
 A small window and a tray icon for a LocalHome board: the zones with their
 comfort and a temperature for a while, outside, the house's power, the VMC's
 levels and timed speed, the shutters, "away", the dehumidifier in summer; a
 Windows notice when a zone turns on, when there's something to
 check, when the board can't be reached.
+
+A click on a zone, on "Fuori" or on "Consumo" opens its charts:
+- the temperature and the humidity for 6 hours, 24 hours or 7 days, with the
+  valve's openings under them;
+- the outside temperature beside a zone's, when you ask for it;
+- the lows and highs of each day, and the hours of heating of each day;
+- the power, and the energy of each day.
+
+Put the pointer on a chart to see its values at that time.
+
+The second tab, **Impianto** (Ctrl+2; Ctrl+1 goes back to the house), is for
+whoever installed the system. It only reads: to change something, its
+"Pannello completo" button opens the board's own admin panel in the browser.
+- At the top: a verdict ("Tutto in ordine", or how many things to fix) and the
+  list of what to do, from the board's own problems.
+- Six tiles: the devices, the MQTT broker, the board, the history, the
+  season, the last backup.
+- The devices by their place: each zone's sensor and valve, the plant, outside,
+  energy, shutters. A device that does not answer or needs attention says why
+  in a word. A click opens its details: model, firmware, signal with its 24-hour
+  and 7-day means, battery, reports, restarts. A battery sensor also shows its
+  last 7 days of battery and signal.
+- The settings in cards: season and rules, zones and devices, thermostat, VMC,
+  dehumidifier, board and system. A value shows where it comes from (the
+  panel, config.yaml, the default) or that it differs from the factory value.
+
+The tab never shows a device id (it holds the device's MAC), the Wi-Fi's name,
+an address, the board's serial, the broker's user or the raw text of an
+error. It reads the heavy endpoints rarely: the board's status every 2 minutes,
+the Shellys' health only when it changes, the settings every 10 minutes, and
+nothing while the window is in the tray.
+
+Each zone's card shows its last 24 hours as a small line, with the valve's
+openings under it. An arrow shows when the temperature went up or down by 0.2°
+or more in the last hour. A zone that heats has the colour of the season.
+
+On Windows 11 (22H2 and later), the window has Mica: the desktop's colour
+shows through it, as in Windows' own Settings. The title bar follows Windows'
+light or dark mode, and the icons are Windows' own (Segoe Fluent Icons).
 
 **It's a separate app: nothing on the board changes.** No new endpoint, no
 setting in the admin panel, nothing deployed. It talks to the API the board
@@ -26,6 +65,7 @@ left click on the icon brings it back; a right click opens the menu:
 
 | In the menu | What it does |
 |---|---|
+| In the icon | The temperature that the icon shows: a zone, outside, or only the colour |
 | Always on top | The window stays over the others |
 | Tell me when a zone turns on | Those notices on or off; the others always come |
 | Start with Windows | On after installing; off and it only runs when opened |
@@ -35,15 +75,28 @@ left click on the icon brings it back; a right click opens the menu:
 To remove it: Windows' *Installed apps*, LocalHome, Uninstall. This takes away
 the program and its settings, and touches nothing on the board.
 
-The icon's dot says how things are: green all fine, orange a zone on, amber
-something to check, grey the board out of reach. A zone opens the full page in
-the browser.
+The icon's colour shows the state: green all fine, orange a zone on, amber
+something to check, grey the board out of reach. By default the icon shows the
+temperature of the first zone as a number, in a tile of that colour. When the
+board is out of reach, the icon shows no number, because an old value is not
+the value now.
+
+In a narrow window, the charts replace the house; the arrow goes back. Make
+the window wider (the button beside the gear, or drag its edge) and the house
+and the charts are side by side. The house keeps its width. The link at the
+bottom opens the full page in the browser.
 
 ## What it can and can't do
 
 The program only passes on the requests the window needs, listed in
 `MainForm.cs` (`Reads`, `Commands`) and logged when refused: reading the zones,
-problems, devices, readings, VMC program, shutters and clock; setting the VMC's
+problems, devices, readings, VMC program, shutters and clock; for the charts,
+reading a sensor's history, the zones' hours and lows and highs, the outdoor
+days and the energy; for the Impianto tab, reading the board's status, the
+Shellys' health, the broker, the zone map, the extra devices, the settings,
+the VMC's speeds and automatic adjustments, the dehumidifier's settings, the
+LED matrix, the backups and the house record (never the zips, which hold
+secrets, nor the reads that contact a device or write on the board); setting the VMC's
 speed, turning it on, its timed speed; moving a shutter; a zone's temperature
 for a while, and back to its program; away and back; the dehumidifier on and off.
 So it can't switch off the VMC, change a schedule or a season, or reach the admin
@@ -61,7 +114,9 @@ which has no button for anything else.
   that exists only inside the program; what it asks under `/api/` is passed on to
   the board from here, so the board doesn't have to allow calls from elsewhere.
 - `web/`: the page. Its own script and words, on purpose: it loads nothing from
-  the board. `texts.js` is Italian and English, the problems' words copied from
+  the board. Its icons are an SVG sprite in `index.html`, the same on Windows
+  and Linux. `charts.js` draws the charts in plain SVG, with no library;
+  `plant.js` is the Impianto tab. `texts.js` is Italian and English, the problems' words copied from
   LocalHome's locale files.
 - It keeps its settings, its log (`app.log`) and WebView2's folder in
   `%LOCALAPPDATA%\LocalHome Desktop`. The log says what was sent, refused and
@@ -86,3 +141,34 @@ bin/Release/net48/LocalHome.exe --data-dir <a folder> --address <ip:port>
 
 `--tray` starts it hidden, as Windows does; `--name` sets the board's name. `--data-dir` keeps a trial's settings
 apart from the installed copy's, and lets both run at once.
+
+## On Linux (KDE and others)
+
+The same page in a Qt window, with a tray icon and the desktop's own notices
+(`desktop/linux/`). It does the same as the Windows app, with the same lists of
+requests (a test keeps them equal) and the same tabs. On first start it asks for
+the board's address, then starts at each login (the tray menu turns that off).
+
+```bash
+python3 desktop/linux/build_deb.py                      # dist/localhome-desktop_<version>_all.deb
+sudo apt install ./dist/localhome-desktop_<version>_all.deb
+```
+
+One package for every processor, built in seconds with `dpkg-deb`: plain Python
+and the page. Qt comes from the system (`python3-pyqt6.qtwebengine`, Debian 13
+and Ubuntu 24.04 or newer). To try it from the repository, with those packages
+installed: `python3 desktop/linux/localhome-desktop.py --data-dir /tmp/lh-trial`.
+
+How it differs from the Windows app:
+- The page comes from a small server on this PC (`core.PageServer`, on
+  127.0.0.1 only). It answers only the window: each of the window's requests
+  carries a token made at each start, which no other program has.
+- The page speaks to the program through Qt's web channel, with the same
+  messages as `window.chrome.webview` on Windows.
+- Its settings are in `~/.config/localhome-desktop/`, its log in
+  `~/.local/state/localhome-desktop/app.log`, the start at login in
+  `~/.config/autostart/localhome-desktop.desktop`. Removing the package leaves
+  them, as they are each user's.
+- On Wayland, the desktop places the window: only its size is kept.
+
+Tests of the part without Qt: `pytest tests/test_desktop_linux.py`.
