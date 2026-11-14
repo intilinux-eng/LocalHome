@@ -338,6 +338,30 @@ Nothing under `config/` other than the `*.example.*` files is ever
 committed - see [.gitignore](.gitignore): your device ids, keys and
 passwords stay out of git.
 
+## On the desktop: Windows and Linux
+
+A small window and a tray icon for the board, beside the browser: the zones
+and their charts, outside, the power, the VMC, the shutters, "away", and a
+second tab with each device's state and the main settings, read only. A
+notice comes when a zone turns on, when there's something to check, when the
+board can't be reached. The apps use only the board's existing API: nothing
+on the board changes.
+
+- **Linux** (KDE and the other desktops): a Debian package, one for every
+  processor. Qt comes from the system.
+
+  ```bash
+  python3 desktop/linux/build_deb.py          # dist/localhome-desktop_<version>_all.deb
+  sudo apt install ./dist/localhome-desktop_<version>_all.deb
+  ```
+
+- **Windows**: one file, `LocalHome-Setup.exe`, that installs for the user
+  with no administrator rights. Build it on Windows with `dotnet build -c
+  Release` in `desktop/`.
+
+At the first start, each app asks for the board's address (`<name>.local:5000`).
+How they work: [desktop/README.md](desktop/README.md).
+
 ## Beyond Shelly
 
 The climate runs on Shellys; underneath, the drivers are generic.
@@ -400,6 +424,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 - [docs/shelly-gen3.md](docs/shelly-gen3.md) - **Shelly Gen3 over local MQTT: field notes** (H&T on batteries, the dimmer, the network)
 - [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation
 - [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: limits, tuning, updating
+- [packaging/deb/README.md](packaging/deb/README.md) - the board's Debian package: building it, what it installs, updating
+- [desktop/README.md](desktop/README.md) - the Windows and Linux apps
 - [docs/configuration.md](docs/configuration.md) - every `config.yaml` option, and the admin panel
 - [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, Meross, eWeLink, simulated)
 - [docs/deployment.md](docs/deployment.md) - Docker, systemd, addressing by name, pinned versions
