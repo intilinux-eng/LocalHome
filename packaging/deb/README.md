@@ -8,7 +8,8 @@ them.
 
 ## Building it
 
-On a Windows PC with WSL2 and Docker in it (no pipeline, nothing else):
+On a Linux PC with Docker (your user in the `docker` group), or on a Windows
+PC with WSL2 and Docker in it - no pipeline, nothing else:
 
 ```bash
 python tools/build_deb.py                      # arm64, for a board: dist/localhome_<version>_arm64.deb
@@ -20,7 +21,7 @@ It takes the files git knows, committed or not; a package built from changes
 not committed has `.dirty` in its version. The build runs in `debian:trixie`,
 the board's own Debian (Python 3.13), for the board's processor through QEMU:
 what's compiled there runs on the board. The first arm64 build registers QEMU
-with WSL's kernel, again after WSL restarts.
+with the kernel, again after a reboot (or after WSL restarts, on Windows).
 
 A module Cython can't compile goes as bytecode instead, still without its
 source; the build lists them (today `services/run_hours.py`, for one starred
