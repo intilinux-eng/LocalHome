@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localhome"
-version = "1.2.0"
+version = "1.3.0"
 description = "The heating, cooling and ventilation of a real two-zone apartment, run locally by an Arduino UNO Q and Shelly devices over MQTT - adaptable to your home."
 readme = "README.md"
 requires-python = ">=3.10"

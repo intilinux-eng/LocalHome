@@ -43,6 +43,10 @@ def git(*args: str) -> str:
 def version() -> str:
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     base = re.search(r'^version = "([^"]+)"', text, re.M).group(1)
+    # A release: its tag on this commit and nothing changed - the plain version.
+    clean = not git("status", "--porcelain").strip()
+    if clean and f"v{base}" in git("tag", "--points-at", "HEAD").split():
+        return base
     commit = git("log", "-1", "--format=%h %cd", "--date=format:%Y%m%d%H%M").split()
     # Built from changes not committed: when, too - each such build is newer
     # than the last, so apt takes it as an update.

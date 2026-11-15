@@ -8,12 +8,19 @@ Before 1.0.0, entries are grouped by the date they landed on `main`.
 
 ## Unreleased
 
+## 1.3.0 - 2026-11-15
+
+Each board installs and updates from one Debian package, and the house
+comes to the desktop: an app for Windows and one for Linux. Both packages
+are attached to the release on GitHub, in one folder (`tools/release.py`).
+
 ### Added
 - **A Debian package for the boards** (`packaging/deb/`, `tools/build_deb.py`):
   one file installs or updates LocalHome - program, service, broker
   configuration, the board's tuning - with its data in `/var/lib/localhome`,
   kept when it's removed. LocalHome's modules are compiled: the package
-  carries none of its Python source. Built on a PC in Docker under WSL2.
+  carries none of its Python source. Built on a PC in Docker (Linux, or WSL2
+  on Windows).
 - **LocalHome for the Linux desktop** (`desktop/linux/`, package
   `localhome-desktop`): the Windows app's page in a Qt window, with a tray
   icon and the desktop's notices, for KDE and the other desktops. The same
