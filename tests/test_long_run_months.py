@@ -13,6 +13,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "accelerated_months.py"
@@ -58,7 +59,13 @@ def test_two_weeks_across_new_year_leave_nothing_growing(tmp_path):
     assert report["problems"] == [], done.stdout
     daily = report["daily"]
     assert (daily[0]["date"], daily[-1]["date"]) == ("2026-12-24", "2027-01-06")
-    assert daily[-1]["daily_runs"] >= 3 * 13, "each valve's and the plant's day kept, every day"
+    # A day is summed once the history covers it whole. The first counts only
+    # if the first sample came at its midnight: on a slow machine (CI) it
+    # comes a step later, and that day is partial, as on a board's first day.
+    late = daily[0]["oldest"] - datetime(2026, 12, 24).timestamp() if daily[0]["oldest"] else None
+    whole_days = 13 if late is not None and late <= 0 else 12
+    assert daily[-1]["daily_runs"] >= 3 * whole_days, \
+        f"each valve's and the plant's day kept, every day (first sample {late} s after day 1 began)"
     assert report["answers"]["/api/climate/zones"]["count"] >= 14 * 8 * 2, "two pages, all along"
     assert report["refused"] == [] and report["errors"] == []
 
