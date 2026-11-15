@@ -9,6 +9,7 @@ Each run goes in a process of its own: it moves its clock with every
 time.sleep in the process, and a thread another test left running (CI's
 Python 3.10 had hundreds) pushed it on by days, slowed every answer and
 filled what the run measures with its own errors."""
+import importlib.util
 import json
 import subprocess
 import sys
@@ -72,3 +73,29 @@ def test_what_grows_a_little_at_every_cycle_is_found(tmp_path):
     report = json.loads(done.stdout.strip().splitlines()[-1])
     assert any(p.startswith("memory:") for p in report["problems"]), report["summary"]
     assert any("leaky_tick.py" in where for where in report["growth"]), report["summary"]
+
+
+def _months():
+    spec = importlib.util.spec_from_file_location("accelerated_months", TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _report(real, cpu):
+    """Nine quiet days, watched from the fourth: only a day's time changes."""
+    day = lambda d: {"day": d, "date": f"2026-12-{24 + d}", "real_seconds": real(d), "cpu_seconds": cpu(d),
+                     "rss_mb": 80.0, "rows": 1000, "files": {}, "oldest": None, "daily_runs": 3, "daily_temps": 3}
+    return {"daily": [day(d) for d in range(9)], "watch_from": 2, "threads": {"after_start": 5, "end": 5},
+            "growth_total": None, "traced": False, "retention": 4, "answers": {}, "refused": [], "errors": []}
+
+
+def test_a_day_slower_only_by_the_clock_on_the_wall_is_no_growth():
+    """On a shared machine (CI) the wall clock runs on while other tests
+    take the processor: only the run's own processor time tells a day
+    that costs more."""
+    months = _months()
+    busy_neighbours = _report(real=lambda d: 0.5 + d * 0.2, cpu=lambda d: 0.8)
+    assert months.problems(busy_neighbours) == []
+    really_slower = _report(real=lambda d: 1.0, cpu=lambda d: 0.5 + d * 0.2)
+    assert any(p.startswith("a day's cost") for p in months.problems(really_slower))

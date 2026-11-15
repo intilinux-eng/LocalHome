@@ -368,7 +368,7 @@ class Run:
 
     # -- measuring -------------------------------------------------------
 
-    def measure(self, day: int, today: datetime, real_seconds: float) -> dict:
+    def measure(self, day: int, today: datetime, real_seconds: float, cpu_seconds: float) -> dict:
         db = self.home / "data" / "history.db"
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
         try:
@@ -381,7 +381,8 @@ class Run:
         files = {str(p.relative_to(self.home)): p.stat().st_size for p in self.home.rglob("*") if p.is_file()}
         gc.collect()                                # what's alive, not what waits to be collected
         return {"day": day, "date": today.strftime("%Y-%m-%d"),
-                "real_seconds": round(real_seconds, 2), "threads": threading.active_count(),
+                "real_seconds": round(real_seconds, 2), "cpu_seconds": round(cpu_seconds, 2),
+                "threads": threading.active_count(),
                 "rss_mb": _rss_mb(), "traced_kb": round(tracemalloc.get_traced_memory()[0] / 1024)
                 if tracemalloc.is_tracing() else None,
                 "objects": len(gc.get_objects()), "rows": rows, "oldest": oldest, **summaries,
@@ -424,7 +425,7 @@ class Run:
             watch_from = min(self.retention + 2, self.days // 2)
             snapshot_from = None
             for day in range(self.days):
-                t0 = time.perf_counter()
+                t0, cpu0 = time.perf_counter(), time.process_time()
                 today = datetime.fromtimestamp(self.clock.now).replace(hour=0, minute=0, second=0, microsecond=0)
                 tomorrow = (today + timedelta(days=1)).timestamp()
                 plans = self.plans(day, today)
@@ -448,7 +449,7 @@ class Run:
                     snapshot_from = tracemalloc.take_snapshot()
                 self.answer_days.append((day, {path: _day_stats(*entry) for path, entry in self.today_answers.items()}))
                 self.today_answers = {}
-                self.daily.append(self.measure(day, today, time.perf_counter() - t0))
+                self.daily.append(self.measure(day, today, time.perf_counter() - t0, time.process_time() - cpu0))
             gc.collect()
             snapshot_end = tracemalloc.take_snapshot() if tracemalloc.is_tracing() else None
             growth = []
@@ -523,7 +524,7 @@ TRACE_FRAMES = 3
 MEMORY_GROWTH_PER_DAY = 32 * 1024        # Python's own, traced
 RSS_GROWTH_PER_DAY = 0.5                 # MB, the process's, untraced: the allocator's own ups and downs on top
 FILE_GROWTH_PER_DAY = 2 * 1024           # any file but the history
-COST_GROWTH = 1.5                        # a day's real time, the last days against the first watched
+COST_GROWTH = 1.5                        # a day's processor time, the last days against the first watched
 ANSWER_GROWTH = 2.0                      # an answer's median time, likewise
 
 
@@ -586,8 +587,11 @@ def problems(report: dict) -> list[str]:
                              f"+{per_day:.2f} MB a day (at most {RSS_GROWTH_PER_DAY})")
         if last["rows"] > first["rows"] * 1.25:
             found.append(f"history: {first['rows']} -> {last['rows']} rows with {report['retention']} days kept")
-        early = sum(d["real_seconds"] for d in watched[:third]) / third
-        late = sum(d["real_seconds"] for d in watched[-third:]) / third
+        # The process's own processor time, not the wall clock's: on a shared
+        # machine (CI, the tests run side by side) the wall clock runs on while
+        # others have the processor, and a day looked dearer than it was.
+        early = sum(d["cpu_seconds"] for d in watched[:third]) / third
+        late = sum(d["cpu_seconds"] for d in watched[-third:]) / third
         if late > early * COST_GROWTH and late - early > 0.2:
             found.append(f"a day's cost: {early:.2f} s at first, {late:.2f} s at the end")
     if daily:
