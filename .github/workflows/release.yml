@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
-      - run: sudo apt-get install -y python3-pil         # Pillow, for the app's icons
+      - run: sudo apt-get update && sudo apt-get install -y python3-pil   # Pillow, for the app's icons
       - run: python3 desktop/linux/build_deb.py
       - uses: actions/upload-artifact@v4
         with:
