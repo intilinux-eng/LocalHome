@@ -283,7 +283,7 @@ def test_a_hot_cpu_is_a_problem():
 
 
 def test_nmcli_fields_keep_escaped_colons():
-    assert system_status._nmcli_fields(r"GENERAL.HWADDR:14\:B5\:CD\:EF\:1F\:A9") == ["GENERAL.HWADDR", "14:B5:CD:EF:1F:A9"]
+    assert system_status._nmcli_fields(r"GENERAL.HWADDR:02\:00\:5E\:10\:00\:01") == ["GENERAL.HWADDR", "02:00:5E:10:00:01"]
     assert system_status._nmcli_fields(r"yes:Casa\:Ospiti:72") == ["yes", "Casa:Ospiti", "72"]
 
 
@@ -302,12 +302,12 @@ def test_network_status_reads_the_active_wifi():
         "DEVICE,TYPE,STATE": ["wlan0:wifi:connected", "docker0:bridge:connected (externally)", "lo:loopback:connected"],
         "ACTIVE,SSID,SIGNAL,FREQ,CHAN,SECURITY": ["no:Neighbour:40:2437 MHz:6:WPA2", "yes:Casa-WiFi:89:5500 MHz:100:WPA2"],
         "IP4.ADDRESS,IP4.GATEWAY,GENERAL.HWADDR": ["IP4.ADDRESS[1]:192.168.1.28/24", "IP4.GATEWAY:192.168.1.1",
-                                                  r"GENERAL.HWADDR:14\:B5\:CD\:EF\:1F\:A9"],
+                                                  r"GENERAL.HWADDR:02\:00\:5E\:10\:00\:01"],
     })
 
     wifi = system_status.network_status(run)["wifi"]
 
-    assert wifi == {"device": "wlan0", "ip": "192.168.1.28", "gateway": "192.168.1.1", "mac": "14:B5:CD:EF:1F:A9",
+    assert wifi == {"device": "wlan0", "ip": "192.168.1.28", "gateway": "192.168.1.1", "mac": "02:00:5E:10:00:01",
                     "ssid": "Casa-WiFi", "signal_percent": 89, "band": "5 GHz", "channel": 100, "security": "WPA2"}
 
 
