@@ -14,6 +14,7 @@ build registers QEMU with the kernel (until a reboot, or until WSL restarts).
 import argparse
 import datetime
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -92,7 +93,8 @@ def main() -> int:
 
     # arm64 runs through QEMU, registered with the kernel - gone at a reboot,
     # or whenever WSL stops (it does when left idle), so looked for before each use.
-    if args.arch == "arm64":
+    # An arm64 machine (CI's arm64 runner) runs it as it is: no QEMU.
+    if args.arch == "arm64" and platform.machine() not in ("aarch64", "arm64"):
         registered = subprocess.run([*shell, "test", "-e", "/proc/sys/fs/binfmt_misc/qemu-aarch64"]).returncode == 0
         if not registered:
             print("registering QEMU for arm64 (until a reboot)")

@@ -17,6 +17,12 @@ python tools/build_deb.py --check              # then installed, started, update
 python tools/build_deb.py --arch amd64 --test  # this PC's processor: the unit tests against the compiled modules
 ```
 
+A release builds itself on GitHub: pushing a tag `vX.Y.Z` runs
+`.github/workflows/release.yml`. It builds this package on an arm64 machine
+(no QEMU) and tries it with `--check`, builds the two desktop apps, and
+attaches all three files to the release with their SHA256SUMS. To build them
+again for a tag already there: Actions, "Release files", Run workflow.
+
 It takes the files git knows, committed or not; a package built from changes
 not committed has `.dirty` in its version. The build runs in `debian:trixie`,
 the board's own Debian (Python 3.13), for the board's processor through QEMU:

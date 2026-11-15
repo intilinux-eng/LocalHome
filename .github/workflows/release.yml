@@ -1,0 +1,92 @@
+name: Release files
+
+# A release's three files, built on GitHub's machines and attached to its
+# release, in one set with their SHA256SUMS:
+# - the board's package (arm64), on an arm64 machine - no QEMU - and tried
+#   on a clean Debian (build_deb.py --check);
+# - the Linux desktop app's package;
+# - the Windows app's installer, on a Windows machine.
+# It runs when a tag vX.Y.Z is pushed, or by hand for a tag already there
+# (Actions, "Release files", Run workflow): an existing release gets its
+# files replaced by this set.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to build, e.g. v1.3.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  board:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0          # the tags, for the package's version
+      - run: python3 tools/build_deb.py --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: board
+          path: dist/localhome_*_arm64.deb
+          if-no-files-found: error
+
+  desktop-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - run: sudo apt-get install -y python3-pil         # Pillow, for the app's icons
+      - run: python3 desktop/linux/build_deb.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: dist/localhome-desktop_*_all.deb
+          if-no-files-found: error
+
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - run: dotnet build -c Release
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/LocalHome-Setup.exe
+          if-no-files-found: error
+
+  release:
+    needs: [board, desktop-linux, desktop-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --title "LocalHome ${TAG#v}" \
+              --notes "All the changes: [CHANGELOG.md](https://github.com/${GH_REPO}/blob/${TAG}/CHANGELOG.md)."
+          fi
