@@ -20,7 +20,7 @@ adapt it to yours from there - [is it for your home?](#is-it-for-your-home)
 <p align="center">
   <img src="docs/photos/arduino-uno-q-led-matrix.jpg" alt="The Arduino UNO Q running LocalHome, its LED matrix showing the home's state" width="440">
   &nbsp;
-  <img src="docs/screenshots/home-phone.png" alt="The home page on a phone: what the climate is doing, each zone, the ventilation" width="230">
+  <img src="docs/tour/home-phone.png" alt="The home page on a phone: what the climate is doing, each zone, the ventilation" width="230">
 </p>
 
 It's also a field reference for anyone using **Shelly Gen3 devices over
@@ -198,18 +198,22 @@ router.
 
 ## Screenshots
 
-Captured against the simulated devices - what the demo shows
-([`tools/screenshot_home.py`](tools/screenshot_home.py) makes them again).
+From the real home in Turin, on the board in daily use, with everything
+private replaced. **[The tour](docs/tour.md)** shows every screen: the home
+page, each section of the admin panel, the desktop apps.
 
-| On a phone | In the dark | The shutters |
-|---|---|---|
-| ![The home page on a phone: the climate at a glance, each zone with its target and schedule, the plant](docs/screenshots/home-phone.png) | ![The same page in the dark scheme](docs/screenshots/home-phone-dark.png) | ![The shutters' card: all at once on top, then each one with where it is - open, part way, closing, not answering](docs/screenshots/shutters.png) |
+| The home page, on a phone | In the dark |
+|---|---|
+| ![The home page on a phone: the season, what the house does now, the outdoor temperature, the rooms' zone with its target and program](docs/tour/home-phone.png) | ![The same page in the dark scheme](docs/tour/home-phone-dark.png) |
 
-![The home page on a desktop: the rooms' zone in detail, with its weekly schedule painted by the hour](docs/screenshots/home-desktop.png)
-*A zone in detail: its target, what the schedule does next, and the week painted by the hour.*
+![The home page on a PC: both zones, each with its weekly program painted by the hour](docs/tour/home-desktop.png)
+*Each zone with its week painted by the hour: tap or drag to change it.*
 
-![The admin panel's overview: the state of the installation, the season, the zones, the devices, the board](docs/screenshots/admin.png)
-*The admin panel, for the installer.*
+![The admin panel's overview: the state of the installation, the season, the zones, the devices, the board, the LED matrix](docs/tour/admin-overview.png)
+*The admin panel, for the installer: six tiles tell whether all is fine.*
+
+![The Linux desktop app: the house on the left, a zone's charts on the right](docs/tour/desktop-linux-charts.png)
+*The desktop app (Linux and Windows): the house in a window, with a tray icon and notices.*
 
 ## Built on the Arduino UNO Q
 
@@ -425,6 +429,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 - [docs/quick-installation-arduino-uno-q.md](docs/quick-installation-arduino-uno-q.md) - a new Arduino UNO Q from the box to a running installation
 - [docs/arduino-uno-q.md](docs/arduino-uno-q.md) - the reference installation: limits, tuning, updating
 - [packaging/deb/README.md](packaging/deb/README.md) - the board's Debian package: building it, what it installs, updating
+- [docs/tour.md](docs/tour.md) - **a tour in pictures**: the home page, each section of the admin panel, the desktop apps
 - [desktop/README.md](desktop/README.md) - the Windows and Linux apps
 - [docs/configuration.md](docs/configuration.md) - every `config.yaml` option, and the admin panel
 - [docs/integrations/](docs/integrations/) - per-brand guides (MQTT, Tuya, Meross, eWeLink, simulated)
