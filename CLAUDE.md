@@ -68,6 +68,9 @@ fewer rewrites, and questions come before the work, not after a mistake.
   - a look at the page → `python tools/screenshot_home.py OUT --state all`
     (widths, `--dark`); one-off screenshot scripts only for a state it
     doesn't have - and then add the state to the tool;
+  - the docs' pictures from a real board → `python tools/screenshot_board.py
+    antonio docs/tour --rename Gabriele=Cameretta --desktop`: only GETs reach
+    the board, private values are replaced and checked;
   - a board after a deploy → `python tools/check_board.py antonio --log`:
     read-only (the browser lets only GETs through), every endpoint, both
     pages, the log since the start. Driving a real board's devices is
